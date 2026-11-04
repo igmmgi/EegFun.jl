@@ -1,13 +1,8 @@
 # === DEFAULT KEYWORD ARGUMENTS ===
 const PLOT_FILTER_KWARGS = Dict{Symbol,Tuple{Any,String}}(
-    # Axis limits
     :ylim => ((-100, 5), "Y-axis limits in dB as (min, max) tuple"),
     :xlim => (nothing, "X-axis limits in Hz as (min, max) tuple. If nothing, automatically determined"),
-
-    # Display parameters
     :display_plot => (true, "Whether to display the plot"),
-
-    # Plot styling
     :plot_title => ("Filter Frequency Response", "Plot title"),
     :show_title => (true, "Whether to show the plot title"),
     :plot_title_position => (
@@ -17,110 +12,113 @@ const PLOT_FILTER_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :plot_title_align => ((:center, :top), "Alignment of the inner plot title"),
     :xlabel => ("Frequency (Hz)", "X-axis label"),
     :ylabel => ("Magnitude (dB)", "Y-axis label"),
-
-    # Font sizes
     :plot_title_fontsize => (24, "Font size for title"),
     :label_fontsize => (22, "Font size for axis labels"),
     :tick_fontsize => (20, "Font size for tick labels"),
-
-    # Grid
     :xgrid => (false, "Whether to show x-axis grid"),
     :ygrid => (false, "Whether to show y-axis grid"),
     :xminorgrid => (false, "Whether to show x-axis minor grid"),
     :yminorgrid => (false, "Whether to show y-axis minor grid"),
-
-    # Line styling
     :linewidth => (4, "Line width for response curves"),
     :color => (nothing, "Color for response curves"),
-
-    # Reference lines
     :reference_lines => ([-3, -6], "Reference lines in dB to display"),
     :reference_color => (:gray, "Color for reference lines"),
     :reference_linestyle => (:dash, "Line style for reference lines"),
-
-    # Plot parameters
     :n_points => (2000, "Number of frequency points for response calculation"),
     :xscale => (Makie.Symlog10(10.0), "X-axis scale type"),
 )
 
-# === FILTER VISUALIZATION ===
+function _build_freq_grid(n_points::Int, fs::Float64)
+    freqs = Vector{Float64}(undef, n_points + 1)
+    w = Vector{Float64}(undef, n_points + 1)
+    freqs[1] = 0.0
+    w[1] = 0.0
+    log_grid = range(log10(0.01), log10(fs / 2); length = n_points)
+    w_scale = 2π / fs
+    @inbounds for i = 1:n_points
+        f = exp10(log_grid[i])
+        freqs[i+1] = f
+        w[i+1] = f * w_scale
+    end
+    return freqs, w
+end
+
+function _fir_mag_db(b::Vector{Float64}, w::Vector{Float64}, is_filtfilt::Bool)::Vector{Float64}
+    n_w = length(w)
+    n_taps = length(b)
+    mag_db = Vector{Float64}(undef, n_w)
+    @inbounds for i = 1:n_w
+        w_k = w[i]
+        acc_re = 0.0
+        acc_im = 0.0
+        for k = 1:n_taps
+            c = cis(-w_k * (k - 1))
+            bk = b[k]
+            acc_re = muladd(bk, real(c), acc_re)
+            acc_im = muladd(bk, imag(c), acc_im)
+        end
+        m = hypot(acc_re, acc_im)
+        is_filtfilt && (m *= m)
+        mag_db[i] = 20.0 * log10(m)
+    end
+    return mag_db
+end
+
+function _complex_to_db(resp::AbstractVector, is_filtfilt::Bool)::Vector{Float64}
+    mag_db = Vector{Float64}(undef, length(resp))
+    @inbounds for i in eachindex(resp)
+        m = abs(resp[i])
+        is_filtfilt && (m *= m)
+        mag_db[i] = 20.0 * log10(m)
+    end
+    return mag_db
+end
 
 """
-    plot_filter_response(filter_info::FilterInfo; kwargs...)
+    plot_filter_response(filter_info::FilterInfo; filter_func::Function = filtfilt, kwargs...) -> NamedTuple
 
-Plot the frequency response and impulse response of a digital filter.
-
-# Arguments
-- `filter_info::FilterInfo`: Filter information struct
-- `kwargs...`: Additional keyword arguments
+Plot the frequency response (dB) and impulse response of a digital `FilterInfo`.
 
 $(_generate_kwargs_doc(PLOT_FILTER_KWARGS))
-
-# Returns
-- `fig`: Makie Figure object
-- `ax`: Tuple of Makie Axis objects (dB, impulse)
 """
-function plot_filter_response(
-    filter_info::FilterInfo;
-    filter_func::Function = filtfilt,  # Default to zero-phase filtering
-    kwargs...,
-)
-    # Merge user kwargs with defaults
+function plot_filter_response(filter_info::FilterInfo; filter_func::Function = filtfilt, kwargs...)
     plot_kwargs = _merge_plot_kwargs(PLOT_FILTER_KWARGS, _normalize_plot_kwargs(kwargs))
 
-    # Determine x-axis limits based on filter type and cutoff
     xlim = plot_kwargs[:xlim]
     if isnothing(xlim)
-        if filter_info.cutoff_freq < 2
-            xlim = (0, filter_info.cutoff_freq * 10)
-        else
-            xlim = (0, filter_info.sample_rate / 2)
-        end
+        xlim = filter_info.cutoff_freq < 2 ? (0.0, filter_info.cutoff_freq * 10) : (0.0, filter_info.sample_rate / 2)
+    end
+
+    xscale = plot_kwargs[:xscale]
+    if xscale === :linear
+        xscale = identity
+    elseif xscale === :log || xscale === :log10
+        xscale = log10
+        xlim[1] == 0 && (xlim = (0.01, xlim[2]))
     end
 
     _set_window_title("Filter Response")
     fig = _eegfun_figure(size = (1200, 600))
     show_title = plot_kwargs[:show_title]
 
-    # Base axis properties
-    base_props = (
+    font_props = (
+        titlesize = plot_kwargs[:plot_title_fontsize],
+        xlabelsize = plot_kwargs[:label_fontsize],
+        ylabelsize = plot_kwargs[:label_fontsize],
+        xticklabelsize = plot_kwargs[:tick_fontsize],
+        yticklabelsize = plot_kwargs[:tick_fontsize],
+    )
+
+    ax_db = Axis(
+        fig[1, 1];
+        font_props...,
         xlabel = plot_kwargs[:xlabel],
+        ylabel = plot_kwargs[:ylabel],
         title = show_title && !isnothing(plot_kwargs[:plot_title]) ? plot_kwargs[:plot_title] : "",
-        titlesize = plot_kwargs[:plot_title_fontsize],
-        xlabelsize = plot_kwargs[:label_fontsize],
-        ylabelsize = plot_kwargs[:label_fontsize],
-        xticklabelsize = plot_kwargs[:tick_fontsize],
-        yticklabelsize = plot_kwargs[:tick_fontsize],
+        xscale = xscale,
+        limits = (xlim, plot_kwargs[:ylim]),
     )
-
-    # Convert xscale symbol to function if needed
-    xscale = plot_kwargs[:xscale]
-    if xscale == :linear
-        xscale = identity
-    elseif xscale in (:log, :log10)
-        xscale = log10
-        # Adjust x-limits for log scale (can't include 0)
-        if xlim[1] == 0
-            xlim = (0.01, xlim[2])  # Use small positive value instead of 0
-        end
-    end
-
-    # Add xscale from kwargs
-    xscale_props = (xscale = xscale,)
-
-    # Create two axes: dB magnitude response + impulse response
-    ax_db = Axis(fig[1, 1]; base_props..., xscale_props..., ylabel = plot_kwargs[:ylabel], limits = (xlim, plot_kwargs[:ylim]))
-    ax_imp = Axis(
-        fig[1, 2];
-        xlabel = "Time (samples)",
-        ylabel = "Amplitude",
-        title = show_title ? "Impulse Response" : "",
-        titlesize = plot_kwargs[:plot_title_fontsize],
-        xlabelsize = plot_kwargs[:label_fontsize],
-        ylabelsize = plot_kwargs[:label_fontsize],
-        xticklabelsize = plot_kwargs[:tick_fontsize],
-        yticklabelsize = plot_kwargs[:tick_fontsize],
-    )
+    ax_imp = Axis(fig[1, 2]; font_props..., xlabel = "Time (samples)", ylabel = "Amplitude", title = show_title ? "Impulse Response" : "")
 
     for a in (ax_db, ax_imp)
         _set_axis_grid!(
@@ -132,40 +130,18 @@ function plot_filter_response(
         )
     end
 
-    # Simple logarithmic frequency spacing
-    n_points = plot_kwargs[:n_points]
-    freqs = exp10.(range(log10(0.01), log10(filter_info.sample_rate / 2), length = n_points))
-    freqs = [0.0; freqs]  # Add DC point
+    freqs, w = _build_freq_grid(Int(plot_kwargs[:n_points]), Float64(filter_info.sample_rate))
 
-    w = 2π * freqs / filter_info.sample_rate
-
-    # Get frequency response
-    if filter_info.filter_object isa Vector  # FIR filter coefficients
-        n = 0:(length(filter_info.filter_object)-1)
-        resp = [sum(filter_info.filter_object .* exp.(-im * w_k * n)) for w_k in w]
-    else  # Other filter types
-        resp = freqresp(filter_info.filter_object, w)
+    is_filtfilt = filter_func === filtfilt
+    fobj = filter_info.filter_object
+    if fobj isa Vector{Float64}
+        mag_db = _fir_mag_db(fobj, w, is_filtfilt)
+    else
+        mag_db = _complex_to_db(freqresp(fobj, w), is_filtfilt)
     end
 
-    # Calculate magnitude response
-    mag_linear = abs.(resp)
-
-    # If using filtfilt, the filter is applied twice (forward + backward)
-    # This squares the magnitude response (doubles the dB attenuation)
-    if filter_func == filtfilt
-        mag_linear = mag_linear .^ 2
-    end
-
-    mag_db = 20 * log10.(mag_linear)
-
-    # Plot dB magnitude response
-    line_col_db = _resolve_theme_linecolor(ax_db, plot_kwargs[:color])
-    lines!(ax_db, freqs, mag_db, color = line_col_db, linewidth = plot_kwargs[:linewidth])
-
-    # Add vertical line at cutoff frequency
+    lines!(ax_db, freqs, mag_db, color = _resolve_theme_linecolor(ax_db, plot_kwargs[:color]), linewidth = plot_kwargs[:linewidth])
     vlines!(ax_db, [filter_info.cutoff_freq], color = :red, linestyle = :dash, linewidth = 2)
-
-    # Add reference lines
     hlines!(
         ax_db,
         plot_kwargs[:reference_lines],
@@ -174,47 +150,28 @@ function plot_filter_response(
         alpha = 0.5,
     )
 
-    # Calculate and plot impulse response
-    # Create a unit impulse with samples before and after
-    # For FIR filters, ensure impulse is long enough for filtfilt (needs >= 3× filter length)
-    if filter_info.filter_method == "fir" && filter_info.filter_object isa Vector
-        fir_len = length(filter_info.filter_object)
-        n_samples_before = max(200, fir_len * 2)
-        n_samples_after = max(200, fir_len * 2)
+    is_fir = filter_info.filter_method === :fir || fobj isa Vector
+    if is_fir && !is_filtfilt
+        impulse_response = fobj
+        time_samples = (-(length(impulse_response)÷2)):((length(impulse_response)-1)÷2)
     else
-        n_samples_before = 200
-        n_samples_after = 200
-    end
-    n_total = n_samples_before + n_samples_after + 1
-    impulse = zeros(n_total)
-    impulse[n_samples_before+1] = 1.0  # Unit impulse at t=0
-
-    # Apply the specified filter function to get impulse response
-    if filter_info.filter_method == "fir"
-        # For FIR, also need to account for filtfilt
-        if filter_func == filtfilt
-            # Apply filtfilt to get the actual impulse response
-            impulse_response = filtfilt(filter_info.filter_object, impulse)
-            time_samples = (-n_samples_before):n_samples_after
-        else
-            # Single-pass: just show the coefficients
-            impulse_response = filter_info.filter_object
-            time_samples = (-(length(impulse_response)÷2)):((length(impulse_response)-1)÷2)
-        end
-    else  # IIR filter
-        impulse_response = filter_func(filter_info.filter_object, impulse)
-        time_samples = (-n_samples_before):n_samples_after
+        n_half = is_fir ? max(200, length(fobj) * 2) : 200
+        impulse = zeros(Float64, 2 * n_half + 1)
+        impulse[n_half+1] = 1.0
+        impulse_response = is_fir ? filtfilt(fobj, impulse) : filter_func(fobj, impulse)
+        time_samples = (-n_half):n_half
     end
 
-    # Plot impulse response
-    line_col_imp = _resolve_theme_linecolor(ax_imp, plot_kwargs[:color])
-    lines!(ax_imp, time_samples, impulse_response, color = line_col_imp, linewidth = plot_kwargs[:linewidth])
-
-    # Add zero line for reference
+    lines!(
+        ax_imp,
+        time_samples,
+        impulse_response,
+        color = _resolve_theme_linecolor(ax_imp, plot_kwargs[:color]),
+        linewidth = plot_kwargs[:linewidth],
+    )
     hlines!(ax_imp, [0], color = plot_kwargs[:reference_color], linestyle = plot_kwargs[:reference_linestyle], alpha = 0.5)
 
     plot_kwargs[:display_plot] && _display_figure(fig)
     _set_window_title("Makie")
-
     return (fig = fig, axes = [ax_db, ax_imp])
 end

@@ -22,281 +22,22 @@ const PLOT_CHANNEL_SUMMARY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :label_fontsize => (14, "Font size for axis labels."),
     :tick_fontsize => (12, "Font size for tick labels."),
     :xtick_rotation => (π / 4, "Rotation angle for x-axis tick labels."),
-
-    # Grid
     :xgrid => (false, "Whether to show x-axis grid"),
     :ygrid => (false, "Whether to show y-axis grid"),
     :xminorgrid => (false, "Whether to show x-axis minor grid"),
     :yminorgrid => (false, "Whether to show y-axis minor grid"),
 )
 
-
-"""
-    plot_channel_summary!(fig::Figure, ax::Axis, dat::DataFrame, col::Symbol; kwargs...)
-    plot_channel_summary(dat::DataFrame, col::Symbol; kwargs...)
-
-Plot a bar chart summarizing a specific metric per channel from a DataFrame.
-
-Assumes the DataFrame `dat` contains at least two columns:
-- `:channel`: Containing channel names or identifiers (will be used for x-axis labels).
-- `col`: The column specified by the `col` argument, containing the values to plot.
-
-$(SIGNATURES)
-
-# Arguments
-- `fig::Figure`: The Makie Figure object to plot on (mutating version only)
-- `ax::Axis`: The Makie Axis object to plot on (mutating version only)
-- `dat::DataFrame`: DataFrame containing channel summary data.
-- `col::Symbol`: The symbol representing the column in `dat` to plot on the y-axis.
-
-$(_generate_kwargs_doc(PLOT_CHANNEL_SUMMARY_KWARGS))
-
-# Returns
-- **Mutating version**: `ax::Axis` - The modified Makie Axis object
-- **Non-mutating version**: `(fig::Figure, ax::Axis)` - The created figure and axis objects
-
-# Examples
-```julia
-# Non-mutating version (creates new figure)
-fig, ax = plot_channel_summary(summary_df, :kurtosis)
-
-# Mutating version (plots on existing figure)
-fig = Figure()
-ax = Axis(fig[1, 1])
-plot_channel_summary!(fig, ax, summary_df, :kurtosis)
-
-# Customize appearance
-fig, ax = plot_channel_summary(summary_df, :kurtosis, 
-    bar_color = :red, 
-    title = "Custom Title",
-    sort_values = true)
-
-# With averaging and error bars
-fig, ax = plot_channel_summary(summary_df, :kurtosis,
-    average_over = :epoch,
-    error_color = :blue,
-    error_linewidth = 3)
-```
-"""
-function plot_channel_summary!(
-    fig::Figure,
+function _configure_channel_summary_axis!(
     ax::Axis,
-    dat::DataFrame,
-    col::Union{Symbol,AbstractString};
-    channel_selection = channels(),
-    kwargs...,
+    channel_names::Vector{String},
+    col::Symbol,
+    plot_kwargs::Dict{Symbol,Any},
+    n_epochs::Union{Int,Nothing},
 )
-    col = Symbol(col)
-    # Merge user kwargs with defaults and validate
-    plot_kwargs = _merge_plot_kwargs(PLOT_CHANNEL_SUMMARY_KWARGS, _normalize_plot_kwargs(kwargs))
-
-    # Check if required columns exist
-    if :channel ∉ propertynames(dat) || col ∉ propertynames(dat)
-        @minimal_error("DataFrame must contain :channel and :$col columns.")
-    end
-
-    # Apply channel selection
-    chan_func = _to_channel_func(channel_selection)
-    mask = chan_func(Symbol.(dat.channel))
-    dat = dat[mask, :]
-
-    # If averaging is requested, compute mean and std
-    n_epochs = nothing
-    if !isnothing(plot_kwargs[:average_over])
-
-        if plot_kwargs[:average_over] ∉ propertynames(dat)
-            @minimal_error("Column :$(plot_kwargs[:average_over]) not found in DataFrame for averaging.")
-        end
-
-        # Count unique values in the averaging column to get number of epochs
-        n_epochs = length(unique(dat[!, plot_kwargs[:average_over]]))
-
-        # Group by channel and compute statistics
-        grouped = groupby(dat, :channel)
-        dat = combine(grouped, col => mean => :mean, col => std => :std, col => length => :n_samples)
-        dat.margin_of_error = 1.96 .* (dat.std ./ sqrt.(dat.n_samples))
-    end
-
-    # Optionally sort data
-    if plot_kwargs[:sort_values]
-        sort_column = !isnothing(plot_kwargs[:average_over]) ? :mean : col
-        dat = sort(dat, sort_column, rev = true)
-    end
-
-    # Extract plotting variables after sorting
-    channel_names = String.(dat.channel)
-    if !isnothing(plot_kwargs[:average_over])
-        values_to_plot = dat.mean
-        margin_of_error = dat.margin_of_error
-    else
-        values_to_plot = dat[!, col]
-        margin_of_error = nothing
-    end
-
-    # Configure the axis
-    _configure_axis!(ax, channel_names, col, plot_kwargs, n_epochs)
-
-    # Create the bar plot
-    barplot!(
-        ax,
-        1:length(values_to_plot),
-        values_to_plot,
-        color = plot_kwargs[:bar_color],
-        width = plot_kwargs[:bar_width],
-        alpha = plot_kwargs[:bar_alpha],
-    )
-
-    if !isnothing(plot_kwargs[:average_over]) # add error bars
-        errorbars!(
-            ax,
-            1:length(values_to_plot),
-            values_to_plot,
-            margin_of_error,
-            color = plot_kwargs[:error_color],
-            linewidth = plot_kwargs[:error_linewidth],
-        )
-    end
-
-    return ax
-end
-
-"""
-    plot_channel_summary(dat::DataFrame, col::Symbol; kwargs...)
-
-Plot a bar chart summarizing a specific metric per channel. Creates a new figure.
-
-See `plot_channel_summary!` for full documentation of arguments and keyword arguments.
-
-# Returns
-- `(fig::Figure, ax::Axis)` - The created figure and axis objects
-"""
-function plot_channel_summary(dat::DataFrame, col::Union{Symbol,AbstractString}; channel_selection = channels(), kwargs...)
-    col = Symbol(col)
-    # Merge user kwargs with defaults and validate
-    plot_kwargs = _merge_plot_kwargs(PLOT_CHANNEL_SUMMARY_KWARGS, _normalize_plot_kwargs(kwargs))
-
-    fig = _eegfun_figure()
-    ax = Axis(fig[1, 1])
-    plot_channel_summary!(fig, ax, dat, col; channel_selection = channel_selection, plot_kwargs...)
-
-    if plot_kwargs[:display_plot]
-        _set_window_title("Channel Summary")
-        _display_figure(fig)
-    end
-    return (fig = fig, axes = [ax])
-end
-
-plot_channel_summary(dat::AbstractVector{<:DataFrame}, col::Union{Symbol,AbstractString}; kwargs...) =
-    plot_channel_summary.(dat, Symbol(col); kwargs...)
-function plot_channel_summary(
-    dat::DataFrame,
-    col::AbstractVector{<:Union{Symbol,AbstractString}};
-    channel_selection = channels(),
-    kwargs...,
-)
-    cols_sym = Symbol.(col)
-    plot_kwargs = _merge_plot_kwargs(PLOT_CHANNEL_SUMMARY_KWARGS, _normalize_plot_kwargs(kwargs))
-    fig = _eegfun_figure()
-    axes = _plot_multiple_columns!(fig, dat, cols_sym, plot_kwargs; channel_selection = channel_selection)
-    if plot_kwargs[:display_plot]
-        _set_window_title("Channel Summary")
-        _display_figure(fig)
-    end
-    return (fig = fig, axes = axes)
-end
-
-plot_channel_summary(dat::AbstractVector{<:DataFrame}, col::AbstractVector{<:Union{Symbol,AbstractString}}; kwargs...) =
-    plot_channel_summary.(dat, Ref(Symbol.(col)); kwargs...)
-
-
-"""
-    _plot_multiple_columns!(fig::Figure, dat::DataFrame, col::Vector{Symbol}, plot_kwargs::Dict)
-
-Internal helper function to plot multiple channel summary columns in a grid layout.
-
-Creates a grid of subplots where each column in `col` gets its own subplot showing
-a bar chart of that metric across all channels.
-
-# Arguments
-- `fig::Figure`: The Makie Figure object to plot on
-- `dat::DataFrame`: DataFrame containing channel summary data
-- `col::Vector{Symbol}`: Vector of column symbols to plot
-- `plot_kwargs::Dict`: Dictionary containing plotting parameters
-
-# Grid Layout
-- If `plot_kwargs[:dims]` is `nothing`, uses `_best_rect()` to determine optimal grid dimensions
-- If `plot_kwargs[:dims]` is provided, uses the specified (rows, cols) tuple
-- Plots are arranged in row-major order (left to right, top to bottom)
-- Stops plotting when all columns are processed, even if grid has empty spaces
-"""
-function _plot_multiple_columns!(
-    fig::Figure,
-    dat::DataFrame,
-    col::AbstractVector{Symbol},
-    plot_kwargs::Dict;
-    channel_selection = channels(),
-)
-    n_cols = length(col)
-    axes = Axis[]
-    n_cols == 0 && return axes
-
-    if isnothing(plot_kwargs[:dims])
-        rs, cs = _best_rect(n_cols)
-    else
-        dims = plot_kwargs[:dims]
-        if !isa(dims, Tuple) || length(dims) != 2 || !all(isa.(dims, Int)) || any(dims .<= 0)
-            @minimal_error("dims must be a tuple of two positive integers (rows, cols), got: $dims")
-        end
-        rs, cs = dims
-    end
-
-    count = 1
-    for r = 1:rs
-        for c = 1:cs
-            ax = Axis(fig[r, c])
-            plot_channel_summary!(fig, ax, dat, col[count]; channel_selection = channel_selection, plot_kwargs...)
-            push!(axes, ax)
-            count += 1
-            if count > n_cols
-                return axes
-            end
-        end
-    end
-    return axes
-end
-
-
-"""
-    _configure_axis!(ax::Axis, channel_names::Vector{String}, col::Symbol, plot_kwargs::Dict, n_epochs::Union{Int,Nothing})
-
-Internal helper function to configure axis properties for channel summary plots.
-
-Sets up all axis properties including labels, ticks, titles, fonts, and grid styling
-based on the provided plotting parameters.
-
-# Arguments
-- `ax::Axis`: The Makie Axis object to configure
-- `channel_names::Vector{String}`: Names of channels for x-axis tick labels
-- `col::Symbol`: Column name being plotted (used for y-axis label)
-- `plot_kwargs::Dict`: Dictionary containing plotting parameters
-- `n_epochs::Union{Int,Nothing}`: Number of epochs (used for error bar labels when averaging)
-
-# Configuration Details
-- **Y-axis label**: Uses custom label if provided, otherwise generates dynamic label based on column name and averaging settings
-- **X-axis ticks**: Sets channel names as tick labels
-- **Fonts**: Configures title, axis label, and tick label font sizes
-- **Grid**: Sets grid visibility, width, and transparency
-- **Rotation**: Applies x-axis tick label rotation
-"""
-function _configure_axis!(ax::Axis, channel_names::Vector{String}, col::Symbol, plot_kwargs::Dict, n_epochs::Union{Int,Nothing})
-    # Set ylabel - use custom if provided, otherwise use dynamic default
-    if plot_kwargs[:ylabel] != ""
-        ax.ylabel = plot_kwargs[:ylabel]
-    else
-        ax.ylabel = !isnothing(plot_kwargs[:average_over]) ? "$(String(col)) (± 95% CI n=$n_epochs)" : "$(String(col))"
-    end
-
-    # Configure ticks and labels
+    ax.ylabel =
+        plot_kwargs[:ylabel] != "" ? plot_kwargs[:ylabel] :
+        (!isnothing(plot_kwargs[:average_over]) ? "$(String(col)) (± 95% CI n=$n_epochs)" : String(col))
     ax.xticks = (1:length(channel_names), channel_names)
     ax.xticklabelrotation = plot_kwargs[:xtick_rotation]
     ax.xlabel = plot_kwargs[:xlabel]
@@ -308,8 +49,6 @@ function _configure_axis!(ax::Axis, channel_names::Vector{String}, col::Symbol, 
     ax.ylabelsize = plot_kwargs[:label_fontsize]
     ax.xticklabelsize = plot_kwargs[:tick_fontsize]
     ax.yticklabelsize = plot_kwargs[:tick_fontsize]
-
-    # Configure grid using the new axis styling function
     _set_axis_grid!(
         ax;
         xgrid = plot_kwargs[:xgrid],
@@ -318,3 +57,138 @@ function _configure_axis!(ax::Axis, channel_names::Vector{String}, col::Symbol, 
         yminorgrid = plot_kwargs[:yminorgrid],
     )
 end
+
+function _plot_channel_summary_impl!(ax::Axis, dat::DataFrame, col::Symbol, channel_selection, plot_kwargs::Dict{Symbol,Any})
+    (:channel in propertynames(dat) && col in propertynames(dat)) || @minimal_error("DataFrame must contain :channel and :$col columns.")
+
+    raw_channels = dat[!, :channel]
+    chan_syms = eltype(raw_channels) === Symbol ? raw_channels : Symbol.(raw_channels)
+    mask = _to_channel_func(channel_selection)(chan_syms)
+    all_selected = all(mask)
+
+    avg_col = plot_kwargs[:average_over]
+    n_epochs = nothing
+    margin_of_error = nothing
+
+    if !isnothing(avg_col)
+        avg_col in propertynames(dat) || @minimal_error("Column :$avg_col not found in DataFrame for averaging.")
+        sub_dat = all_selected ? dat : dat[mask, :]
+        n_epochs = length(unique(sub_dat[!, avg_col]))
+        grouped = groupby(sub_dat, :channel)
+        comb = combine(grouped, col => mean => :mean, col => std => :std, col => length => :n_samples)
+        channel_names = String.(comb[!, :channel])
+        values_to_plot = comb[!, :mean]
+        margin_of_error = 1.96 .* (comb[!, :std] ./ sqrt.(comb[!, :n_samples]))
+    else
+        ch_sel = all_selected ? raw_channels : raw_channels[mask]
+        channel_names = String.(ch_sel)
+        raw_vals = dat[!, col]
+        values_to_plot = all_selected ? raw_vals : raw_vals[mask]
+    end
+
+    if plot_kwargs[:sort_values]
+        perm = sortperm(values_to_plot; rev = true)
+        channel_names = channel_names[perm]
+        values_to_plot = values_to_plot[perm]
+        !isnothing(margin_of_error) && (margin_of_error = margin_of_error[perm])
+    end
+
+    _configure_channel_summary_axis!(ax, channel_names, col, plot_kwargs, n_epochs)
+
+    xs = 1:length(values_to_plot)
+    barplot!(ax, xs, values_to_plot, color = plot_kwargs[:bar_color], width = plot_kwargs[:bar_width], alpha = plot_kwargs[:bar_alpha])
+    if !isnothing(margin_of_error)
+        errorbars!(ax, xs, values_to_plot, margin_of_error, color = plot_kwargs[:error_color], linewidth = plot_kwargs[:error_linewidth])
+    end
+    return ax
+end
+
+function _plot_multiple_columns!(
+    fig::Figure,
+    dat::DataFrame,
+    cols::AbstractVector{Symbol},
+    plot_kwargs::Dict{Symbol,Any};
+    channel_selection = channels(),
+)
+    n_cols = length(cols)
+    axes = Axis[]
+    n_cols == 0 && return axes
+
+    if isnothing(plot_kwargs[:dims])
+        rs, cs = _best_rect(n_cols)
+    else
+        dims = plot_kwargs[:dims]
+        (dims isa Tuple{Int,Int} && dims[1] > 0 && dims[2] > 0) ||
+            @minimal_error("dims must be a tuple of two positive integers (rows, cols), got: $dims")
+        rs, cs = dims
+    end
+
+    idx = 1
+    for r = 1:rs, c = 1:cs
+        ax = Axis(fig[r, c])
+        _plot_channel_summary_impl!(ax, dat, cols[idx], channel_selection, plot_kwargs)
+        push!(axes, ax)
+        idx += 1
+        idx > n_cols && return axes
+    end
+    return axes
+end
+
+"""
+    plot_channel_summary!(fig::Figure, ax::Axis, dat::DataFrame, col; channel_selection=channels(), kwargs...) -> Axis
+    plot_channel_summary(dat::DataFrame, col; channel_selection=channels(), kwargs...) -> NamedTuple
+
+Plot per-channel summary bar charts (with optional `average_over` 95% CI error bars and multi-column grids) from a summary `DataFrame`.
+
+$(_generate_kwargs_doc(PLOT_CHANNEL_SUMMARY_KWARGS))
+"""
+function plot_channel_summary!(
+    fig::Figure,
+    ax::Axis,
+    dat::DataFrame,
+    col::Union{Symbol,AbstractString};
+    channel_selection = channels(),
+    kwargs...,
+)
+    plot_kwargs = _merge_plot_kwargs(PLOT_CHANNEL_SUMMARY_KWARGS, _normalize_plot_kwargs(kwargs))
+    return _plot_channel_summary_impl!(ax, dat, Symbol(col), channel_selection, plot_kwargs)
+end
+
+"""
+    plot_channel_summary(dat::DataFrame, col; channel_selection=channels(), kwargs...) -> NamedTuple
+
+Create a figure and plot per-channel summary bar charts (single or multi-column). See [`plot_channel_summary!`](@ref) for keyword options.
+"""
+function plot_channel_summary(dat::DataFrame, col::Union{Symbol,AbstractString}; channel_selection = channels(), kwargs...)
+    plot_kwargs = _merge_plot_kwargs(PLOT_CHANNEL_SUMMARY_KWARGS, _normalize_plot_kwargs(kwargs))
+    fig = _eegfun_figure()
+    ax = Axis(fig[1, 1])
+    _plot_channel_summary_impl!(ax, dat, Symbol(col), channel_selection, plot_kwargs)
+    if plot_kwargs[:display_plot]
+        _set_window_title("Channel Summary")
+        _display_figure(fig)
+    end
+    return (fig = fig, axes = [ax])
+end
+
+plot_channel_summary(dat::AbstractVector{<:DataFrame}, col::Union{Symbol,AbstractString}; kwargs...) =
+    plot_channel_summary.(dat, Symbol(col); kwargs...)
+
+function plot_channel_summary(
+    dat::DataFrame,
+    col::AbstractVector{<:Union{Symbol,AbstractString}};
+    channel_selection = channels(),
+    kwargs...,
+)
+    plot_kwargs = _merge_plot_kwargs(PLOT_CHANNEL_SUMMARY_KWARGS, _normalize_plot_kwargs(kwargs))
+    fig = _eegfun_figure()
+    axes = _plot_multiple_columns!(fig, dat, Symbol.(col), plot_kwargs; channel_selection = channel_selection)
+    if plot_kwargs[:display_plot]
+        _set_window_title("Channel Summary")
+        _display_figure(fig)
+    end
+    return (fig = fig, axes = axes)
+end
+
+plot_channel_summary(dat::AbstractVector{<:DataFrame}, col::AbstractVector{<:Union{Symbol,AbstractString}}; kwargs...) =
+    plot_channel_summary.(dat, Ref(Symbol.(col)); kwargs...)

@@ -1,5 +1,4 @@
 const PLOT_DATABROWSER_KWARGS = Dict{Symbol,Tuple{Any,String}}(
-
     # Figure and layout
     :figure_size => ((1300, 800), "Figure size as (width, height)"),
     :figure_padding => ((50, 30, 50, 50), "Figure padding as (left, right, bottom, top)"),
@@ -42,12 +41,8 @@ const PLOT_DATABROWSER_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :display_plot => (true, "Whether to display the plot"),
 )
 
-# Base type for data states
-"""Base type for databrowser data states."""
 abstract type AbstractDataState end
 
-# Data Browser: Continuous Data
-"""Vertical marker line (trigger, EOG) on the databrowser axis."""
 mutable struct Marker
     data::Any
     line::Any
@@ -58,23 +53,20 @@ mutable struct Marker
     Marker(data, line, text, name, visible, observers = Any[]) = new(data, line, text, name, visible, observers)
 end
 
-
-"""Track user-selected time regions in the databrowser."""
 mutable struct SelectionState
     active::Observable{Bool}
     bounds::Observable{Tuple{Float64,Float64}}
     visible::Observable{Bool}
     rectangle::Makie.Poly
-    selected_regions::Observable{Vector{Tuple{Float64,Float64}}}  # Store multiple regions
-    region_plots::Vector{Makie.Poly}  # Store plot objects for each region
+    selected_regions::Observable{Vector{Tuple{Float64,Float64}}}
+    region_plots::Vector{Makie.Poly}
     function SelectionState(ax, plot_kwargs)
         poly_element =
             poly!(ax, [Point2f(0.0, 0.0)], color = (plot_kwargs[:selection_color], plot_kwargs[:selection_alpha]), visible = false)
-        new(Observable(false), Observable((0.0, 0.0)), Observable(false), poly_element, Observable([]), [])
+        new(Observable(false), Observable((0.0, 0.0)), Observable(false), poly_element, Observable(Tuple{Float64,Float64}[]), Makie.Poly[])
     end
 end
 
-"""Observable high-pass / low-pass filter toggle state."""
 mutable struct FilterState
     hp_active::Observable{Bool}
     lp_active::Observable{Bool}
@@ -100,13 +92,11 @@ mutable struct FilterState
     )
 end
 
-"""Label + action pair for a databrowser toggle button."""
 struct ToggleConfig
     label::String
     action::Function
 end
 
-"""Databrowser view settings: x/y range, offsets, butterfly mode, scale."""
 mutable struct ViewState
     xrange::Observable{UnitRange{Int64}}
     yrange::Observable{UnitRange{Int64}}
@@ -120,7 +110,7 @@ mutable struct ViewState
         offset_scale = plot_kwargs[:channel_offset_scale]
         offset_margin = plot_kwargs[:channel_offset_margin]
         offset =
-            n_channels > 1 ? LinRange(offset_scale * offset_margin, -offset_scale * offset_margin, n_channels + 2)[2:(end-1)] :
+            n_channels > 1 ? collect(LinRange(offset_scale * offset_margin, -offset_scale * offset_margin, n_channels + 2)[2:(end-1)]) :
             zeros(n_channels)
         new(
             Observable(1:n_samples),
@@ -135,16 +125,15 @@ mutable struct ViewState
     end
 end
 
-"""Track channel visibility, selection, labels, and line objects."""
 mutable struct ChannelState
     labels::Vector{Symbol}
     visible::Vector{Bool}
     selected::Vector{Bool}
     data_labels::Dict{Symbol,Makie.Text}
     data_lines::Dict{Symbol,Any}
-    original_lines::Dict{Symbol,Any}    # ICA ghost: pre-removal signal
-    subtracted_lines::Dict{Symbol,Any}  # ICA ghost: removed artefact
-    draw_observers::Vector{Any}  # observables/observers created by `_draw`; disconnected on redraw
+    original_lines::Dict{Symbol,Any}
+    subtracted_lines::Dict{Symbol,Any}
+    draw_observers::Vector{Any} # Disconnected on redraw to avoid stacking listeners
     function ChannelState(channel_labels::Vector{Symbol})
         new(
             channel_labels,
@@ -159,64 +148,42 @@ mutable struct ChannelState
     end
 end
 
-# Concrete data state implementations
-"""Databrowser state wrapping continuous EEG data."""
 mutable struct ContinuousDataState <: AbstractDataState
     current::Observable{EegData}
     original::EegData
     filter_state::FilterState
-    function ContinuousDataState(data::EegData, plot_kwargs)
-        new(Observable(copy(data)), data, FilterState(plot_kwargs))
-    end
+    ContinuousDataState(data::EegData, plot_kwargs) = new(Observable(copy(data)), data, FilterState(plot_kwargs))
 end
 
-"""Databrowser state wrapping epoched EEG data."""
 mutable struct EpochedDataState <: AbstractDataState
     current::Observable{EegData}
     original::EegData
     filter_state::FilterState
     current_epoch::Observable{Int}
-    function EpochedDataState(data::EegData, plot_kwargs)
-        new(Observable(copy(data)), data, FilterState(plot_kwargs), Observable(1))
-    end
+    EpochedDataState(data::EegData, plot_kwargs) = new(Observable(copy(data)), data, FilterState(plot_kwargs), Observable(1))
 end
 
-"""
-    ExtraChannelInfo
-
-A mutable struct to store additional channel information for the data browser.
-Contains names, types, data dictionaries, and temporal alignment metadata.
-"""
 mutable struct ExtraChannelInfo
     channels::Vector{Symbol}
     data_lines::Dict{Symbol,Any}
     data_labels::Dict{Symbol,Makie.Text}
-    fig::Union{Nothing,Figure}          # owning figure for legend placement
-    legend::Union{Nothing,Any}          # current Legend object (replaced on redraw)
+    fig::Union{Nothing,Figure}
+    legend::Union{Nothing,Any}
     draw_observers::Vector{Any}
     ExtraChannelInfo() = new(Symbol[], Dict{Symbol,Any}(), Dict{Symbol,Makie.Text}(), nothing, nothing, Any[])
 end
 
-"""
-Visual state tracker for dynamic Independent Component Analysis (ICA) artifact removal.
-
-`activation_cache` holds, per epoch (key `1` for continuous data), the activations of the removed
-components (samples × removed components) for a sample range around the visible window, so scrolling
-does not recompute them. It is invalidated whenever `removed_components` differs from `activation_key`.
-"""
+# `activation_cache` holds removed-component activations (samples × removed components) per epoch
+# with one window-width margin on each side so scrolling reuses cached activations.
 mutable struct IcaVisualState
     original::Union{Nothing,InfoIca}
     removed_components::Vector{Int}
     is_active::Bool
     activation_cache::Dict{Int,Tuple{UnitRange{Int},Matrix{Float64}}}
     activation_key::Vector{Int}
-
-    function IcaVisualState(ica::Union{Nothing,InfoIca})
-        new(ica, Int[], !isnothing(ica), Dict{Int,Tuple{UnitRange{Int},Matrix{Float64}}}(), Int[])
-    end
+    IcaVisualState(ica::Union{Nothing,InfoIca}) = new(ica, Int[], !isnothing(ica), Dict{Int,Tuple{UnitRange{Int},Matrix{Float64}}}(), Int[])
 end
 
-"""Top-level composite state for the interactive data browser."""
 mutable struct DataBrowserState{T<:AbstractDataState}
     view::ViewState
     channels::ChannelState
@@ -228,11 +195,10 @@ mutable struct DataBrowserState{T<:AbstractDataState}
     extra_channel::ExtraChannelInfo
     reference_state::Symbol
     custom_reference_channels::Vector{Symbol}
-    channel_repair_history::Vector{Tuple{Vector{Symbol},Symbol,Any}}  # (channels, method, original_data) - stack for multiple undos
-    analysis_settings::Observable{AnalysisSettings}  # Observable analysis settings
+    channel_repair_history::Vector{Tuple{Vector{Symbol},Symbol,Any}}
+    analysis_settings::Observable{AnalysisSettings}
     plot_kwargs::Dict{Symbol,Any}
 
-    # Constructor
     function DataBrowserState{T}(;
         view::ViewState,
         channels::ChannelState,
@@ -255,219 +221,161 @@ mutable struct DataBrowserState{T<:AbstractDataState}
             extra_channel,
             init_ref,
             init_custom,
-            [],  # empty repair history
-            Observable(AnalysisSettings()),  # Initialize with empty settings
+            Tuple{Vector{Symbol},Symbol,Any}[],
+            Observable(AnalysisSettings()),
             plot_kwargs,
         )
     end
 end
 
-# Type aliases 
 const ContinuousDataBrowserState = DataBrowserState{ContinuousDataState}
 const EpochedDataBrowserState = DataBrowserState{EpochedDataState}
 
-# Analysis settings functions
-"""
-    _update_analysis_settings!(state::DataBrowserState)
-
-Update the analysis settings observable with current state.
-"""
 function _update_analysis_settings!(state::DataBrowserState)
-    # Get current filter settings
-    hp_freq = state.data.filter_state.hp_active[] ? state.data.filter_state.hp_freq[] : 0.0
-    lp_freq = state.data.filter_state.lp_active[] ? state.data.filter_state.lp_freq[] : 0.0
+    fs = state.data.filter_state
+    hp_freq = fs.hp_active[] ? fs.hp_freq[] : 0.0
+    lp_freq = fs.lp_active[] ? fs.lp_freq[] : 0.0
 
-    # Get repaired channels and their method
     repaired_channels = Symbol[]
     for (channels, _, _) in state.channel_repair_history
         append!(repaired_channels, channels)
     end
-    # If multiple repairs occurred, record the most recently applied method
     repair_method = isempty(state.channel_repair_history) ? :none : last(state.channel_repair_history)[2]
 
-    # Get selected regions
-    selected_regions = copy(state.selection.selected_regions[])
-
-    # Update the observable
     state.analysis_settings[] = AnalysisSettings(
         hp_freq,
         lp_freq,
         state.reference_state,
         repaired_channels,
         repair_method,
-        selected_regions,
+        copy(state.selection.selected_regions[]),
         copy(state.ica.removed_components),
     )
 end
 
-"""Mark rows in `df` whose `:time` falls within any of `selected_regions`."""
+function _mark_regions_col!(mask::BitVector, times::AbstractVector{<:Real}, selected_regions::Vector{Tuple{Float64,Float64}})
+    @inbounds for (t0, t1) in selected_regions
+        for i in eachindex(times, mask)
+            t = times[i]
+            (t >= t0 && t <= t1) && (mask[i] = true)
+        end
+    end
+    return mask
+end
+
 function _mark_regions!(df::DataFrame, selected_regions::Vector{Tuple{Float64,Float64}})
     mask = falses(nrow(df))
-    for (t0, t1) in selected_regions
-        mask .|= (df.time .>= t0) .& (df.time .<= t1)
-    end
+    !isempty(selected_regions) && _mark_regions_col!(mask, df.time, selected_regions)
     df[!, :selected_region] = mask
 end
 
-"""Add a boolean `:selected_region` column marking user-selected time regions."""
 _add_selected_regions!(dat::EegData, regions::Vector{Tuple{Float64,Float64}}) = _mark_regions!(dat.data, regions)
+_add_selected_regions!(dat::EpochData, regions::Vector{Tuple{Float64,Float64}}) = foreach(df -> _mark_regions!(df, regions), dat.data)
 
-function _add_selected_regions!(dat::EpochData, regions::Vector{Tuple{Float64,Float64}})
-    foreach(df -> _mark_regions!(df, regions), dat.data)
-end
-
-# Data browser state creation
-"""Construct a `DataBrowserState` from data, layout, axis, and optional ICA."""
 function _create_browser_state(dat::T, channel_labels, ax, ica, plot_kwargs) where {T<:EegData}
     if !haskey(plot_kwargs, :show_cleaned_ica) || !(plot_kwargs[:show_cleaned_ica] isa Observable)
         val = get(plot_kwargs, :show_cleaned_ica, false)
         plot_kwargs[:show_cleaned_ica] = Observable{Bool}(val isa Observable ? val[] : val)
     end
     state_type = _data_state_type(T)
-    initial_window = _get_initial_window_size(dat)
     return DataBrowserState{state_type}(
-        view = ViewState(length(channel_labels), initial_window, plot_kwargs),
+        view = ViewState(length(channel_labels), _get_initial_window_size(dat), plot_kwargs),
         channels = ChannelState(channel_labels),
-        data = state_type(dat, plot_kwargs),  # Pass kwargs to data state constructor
+        data = state_type(dat, plot_kwargs),
         selection = SelectionState(ax, plot_kwargs),
         ica_original = ica,
         plot_kwargs = plot_kwargs,
     )
 end
 
-"""Return the initial x-range window size for the data browser."""
 _get_initial_window_size(dat::ContinuousData) = min(5000, n_samples(dat))
 _get_initial_window_size(dat::ErpData) = n_samples(dat)
 _get_initial_window_size(dat::EpochData) = nrow(dat.data[1])
 
-"""Map an `EegData` subtype to its corresponding `AbstractDataState` type."""
 _data_state_type(::Type{ContinuousData}) = ContinuousDataState
 _data_state_type(::Type{EpochData}) = EpochedDataState
 _data_state_type(::Type{ErpData}) = ContinuousDataState
 
-"""Return the current DataFrame for the active data state."""
 _get_current_data(state::ContinuousDataState) = state.current[].data
 _get_current_data(state::EpochedDataState) = state.current[].data[state.current_epoch[]]
-"""Check whether a column exists in the current data."""
-_has_column(state::ContinuousDataState, col::Symbol) = col in propertynames(state.current[].data)
-_has_column(state::EpochedDataState, col::Symbol) = col in propertynames(state.current[].data[state.current_epoch[]])
+_has_column(state::ContinuousDataState, col::Symbol) = hasproperty(state.current[].data, col)
+_has_column(state::EpochedDataState, col::Symbol) = hasproperty(state.current[].data[state.current_epoch[]], col)
 
-######
-# UI #
-######
-"""Create core UI widgets (toggles, menus, markers) shared by all data types."""
+# =============================================================================
+# UI
+# =============================================================================
+
 function _setup_ui_base(fig, ax, state, dat, ica = nothing)
-
     deregister_interaction!(ax, :rectanglezoom)
     _set_axes!(ax, state)
-
-    # Mouse and keyboard events
     _handle_mouse_events!(ax, state)
     _handle_keyboard_events!(fig, ax, state)
 
-    # Create toggles/markers/menus
     state.markers = _init_markers(ax, state)
     toggles = _create_toggles(fig, ax, state, dat)
     labels_menu = _create_labels_menu(fig, ax, state)
     reference_menu = _create_reference_menu(fig, state, dat)
 
-    # Create optional menus (ica/extra channels)
-    ica_menu = nothing
-    if !isnothing(ica) && state.ica.is_active
-        ica_menu = _create_ica_menu(fig, ax, state, ica)
-    end
-
-    extra_menu = nothing
-    extra_labels_result = extra_labels(state.data.original)
-    if !isnothing(extra_labels_result) && !isempty(extra_labels_result)
-        extra_menu = _create_extra_channel_menu(fig, ax, state, dat)
-    end
+    ica_menu = (!isnothing(ica) && state.ica.is_active) ? _create_ica_menu(fig, ax, state, ica) : nothing
+    extra_lbls = extra_labels(state.data.original)
+    extra_menu = (!isnothing(extra_lbls) && !isempty(extra_lbls)) ? _create_extra_channel_menu(fig, ax, state, dat) : nothing
 
     return (toggles, labels_menu, reference_menu, ica_menu, extra_menu)
 end
 
-# Unified setup_ui method using multiple dispatch for the epoch menu
-"""Assemble all UI controls into the figure grid."""
 function _setup_ui(fig, ax, state::DataBrowserState{<:AbstractDataState}, dat, ica = nothing, plot_kwargs = nothing)
-    # Get common UI elements
     toggles, labels_menu, reference_menu, ica_menu, extra_menu = _setup_ui_base(fig, ax, state, dat, ica)
-
-    # Get type-specific epoch menu (or nothing)
     epoch_menu = _get_epoch_menu(fig, ax, state)
-
-    # Build the grid components
     _build_grid_components!(fig, dat, state, toggles, labels_menu, reference_menu, ica_menu, extra_menu, epoch_menu)
-
-    # Apply theme
     hideydecorations!(ax, label = true)
-
     return state
 end
 
-"""Build toggle buttons for butterfly, markers, and filter controls."""
 function _create_toggles(fig, ax, state, dat)
-    configs = [ToggleConfig("Butterfly Plot", (active) -> _butterfly_plot!(ax, state))]
+    configs = [ToggleConfig("Butterfly Plot", _ -> _butterfly_plot!(ax, state))]
 
-    # Add marker toggles based on configuration
-    marker_toggle_configs = [(:trigger, "Trigger"), (:is_vEOG, "vEOG"), (:is_hEOG, "hEOG")]
-
-    for (marker_symbol, toggle_label) in marker_toggle_configs
+    for (marker_symbol, toggle_label) in ((:trigger, "Trigger"), (:is_vEOG, "vEOG"), (:is_hEOG, "hEOG"))
         if _has_column(state.data, marker_symbol)
             state.marker_visibility[marker_symbol] = false
-            push!(configs, ToggleConfig(toggle_label, (active) -> _toggle_marker_visibility!(ax, state, marker_symbol, active)))
+            push!(configs, ToggleConfig(toggle_label, active -> _toggle_marker_visibility!(ax, state, marker_symbol, active)))
         end
     end
 
-    # Add filter toggles if available
     if state.data.original.analysis_info.hp_filter == 0.0
-        push!(configs, ToggleConfig("HP-Filter", (active) -> _apply_hp_filter!(state, active)))
+        push!(configs, ToggleConfig("HP-Filter", active -> _apply_hp_filter!(state, active)))
     end
     if state.data.original.analysis_info.lp_filter == 0.0
-        push!(configs, ToggleConfig("LP-Filter", (active) -> _apply_lp_filter!(state, active)))
+        push!(configs, ToggleConfig("LP-Filter", active -> _apply_lp_filter!(state, active)))
     end
 
-    # Create toggles
-    toggles_grid = []
+    toggles_grid = Vector{Any}[]
     for config in configs
         tog = Toggle(fig)
-        on(tog.active) do active
-            config.action(active)
-        end
+        on(config.action, tog.active)
 
         if config.label == "Trigger"
             btn = Button(fig, label = "Trigger", halign = :left)
-            on(btn.clicks) do _
-                _show_trigger_menu(state, ax, :trigger)
-            end
-            push!(toggles_grid, [tog, btn])
+            on(_ -> _show_trigger_menu(state, ax, :trigger), btn.clicks)
+            push!(toggles_grid, Any[tog, btn])
         elseif config.label == "HP-Filter" || config.label == "LP-Filter"
             btn = Button(fig, label = config.label, halign = :left)
             filter_type = config.label == "HP-Filter" ? :hp : :lp
-            on(btn.clicks) do _
-                _show_single_filter_menu(state, dat, filter_type)
-            end
-            push!(toggles_grid, [tog, btn])
+            on(_ -> _show_single_filter_menu(state, dat, filter_type), btn.clicks)
+            push!(toggles_grid, Any[tog, btn])
         else
-            lbl = Label(fig, config.label, fontsize = 14, halign = :left)
-            push!(toggles_grid, [tog, lbl])
+            push!(toggles_grid, Any[tog, Label(fig, config.label, fontsize = 14, halign = :left)])
         end
     end
 
-    # Return as grid layout
     return permutedims(reduce(hcat, toggles_grid))
-
 end
 
-"""Toggle visibility for a marker type by name and track visibility in state."""
 function _toggle_marker_visibility!(ax, state, marker_symbol::Symbol, active::Bool)
     state.marker_visibility[marker_symbol] = active
     marker_index = findfirst(m -> m.name == marker_symbol, state.markers)
-    if !isnothing(marker_index)
-        _plot_vertical_lines!(ax, state.markers[marker_index], active)
-    end
+    !isnothing(marker_index) && _plot_vertical_lines!(ax, state.markers[marker_index], active)
 end
 
-"""Popup: select which triggers to display."""
 function _show_trigger_menu(state, ax, marker_symbol)
     trigger_col = if state.data isa ContinuousDataState
         state.data.original.data[!, marker_symbol]
@@ -476,152 +384,101 @@ function _show_trigger_menu(state, ax, marker_symbol)
     end
     unique_triggers = sort(unique(filter(!iszero, trigger_col)))
 
-    if !haskey(state.plot_kwargs, :active_triggers)
-        state.plot_kwargs[:active_triggers] = Set(unique_triggers)
+    active_set = get!(state.plot_kwargs, :active_triggers) do
+        Set(unique_triggers)
     end
-    active_set = state.plot_kwargs[:active_triggers]
 
     menu_fig = _eegfun_figure(size = (600, 600))
     Label(menu_fig[1, 1], "Select Triggers to Display", fontsize = 18, halign = :center)
 
     scroll_area = menu_fig[2, 1] = GridLayout()
-    cbs = _build_checkbox_grid!(scroll_area, string.(unique_triggers), 5, (trig, _) -> (parse(Float64, trig) in active_set))
-
-    groups = [("All", ch -> true), ("None", ch -> false)]
-    _add_group_buttons!(menu_fig, 3, cbs, string.(unique_triggers), groups)
+    trig_strs = string.(unique_triggers)
+    cbs = _build_checkbox_grid!(scroll_area, trig_strs, 5, (trig, _) -> (parse(Float64, trig) in active_set))
+    _add_group_buttons!(menu_fig, 3, cbs, trig_strs, [("All", _ -> true), ("None", _ -> false)])
 
     action_area = menu_fig[4, 1] = GridLayout()
     btn_apply = Button(action_area[1, 1], label = "Apply", width = 200)
     on(btn_apply.clicks) do _
         empty!(active_set)
         for (i, cb) in enumerate(cbs)
-            if cb.checked[]
-                push!(active_set, unique_triggers[i])
-            end
+            cb.checked[] && push!(active_set, unique_triggers[i])
         end
-        # Force redraw with new selected triggers
         _update_markers!(ax, state)
-
-        # Ensure the toggle matches the new state (if any triggers are selected, turn the main toggle ON)
-        # Note: In the future, we could sync the main Toggle UI state, but for now just updating markers works.
     end
 
     _display_in_screen(menu_fig)
 end
 
-"""Popup: select filter cutoff frequency for a specific filter."""
 function _show_single_filter_menu(state, dat, filter_type::Symbol)
     menu_fig = _eegfun_figure(size = (450, 350))
-
     title_str = filter_type == :hp ? "Highpass Filter Settings" : "Lowpass Filter Settings"
     Label(menu_fig[1, 1], title_str, fontsize = 18, halign = :center, font = :bold)
 
     grid = menu_fig[2, 1] = GridLayout(valign = :top)
-    row = 1
-
     if filter_type == :hp
-        range_freq = 0.1:0.1:2
-        freq_field = :hp_freq
-        method_field = :hp_method
-        order_field = :hp_order
-        func_field = :hp_func
-        default_val = 0.5
+        range_freq, freq_field, method_field, order_field, func_field, default_val =
+            0.1:0.1:2, :hp_freq, :hp_method, :hp_order, :hp_func, 0.5
     else
-        range_freq = 5:5:60
-        freq_field = :lp_freq
-        method_field = :lp_method
-        order_field = :lp_order
-        func_field = :lp_func
-        default_val = 20.0
+        range_freq, freq_field, method_field, order_field, func_field, default_val = 5:5:60, :lp_freq, :lp_method, :lp_order, :lp_func, 20.0
     end
 
     fs = state.data.filter_state
-    if getfield(fs, freq_field)[] == 0.0
-        getfield(fs, freq_field)[] = default_val
-    end
+    getfield(fs, freq_field)[] == 0.0 && (getfield(fs, freq_field)[] = default_val)
 
-    # Cutoff
-    Label(grid[row, 1], "Cutoff (Hz):", halign = :left)
-    slider_freq = Slider(grid[row, 2], range = range_freq, startvalue = getfield(fs, freq_field)[])
-    Label(grid[row, 3], @lift(string(round($(slider_freq.value), digits = 1))), halign = :left)
-    on(slider_freq.value) do val
+    Label(grid[1, 1], "Cutoff (Hz):", halign = :left)
+    slider_freq = Slider(grid[1, 2], range = range_freq, startvalue = getfield(fs, freq_field)[])
+    Label(grid[1, 3], @lift(string(round($(slider_freq.value), digits = 1))), halign = :left)
+    on(val -> (getfield(fs, freq_field)[] = val), slider_freq.value)
 
-        getfield(fs, freq_field)[] = val
-    end
-    row += 1
+    Label(grid[2, 1], "Order:", halign = :left)
+    slider_order = Slider(grid[2, 2], range = 1:10, startvalue = getfield(fs, order_field)[])
+    Label(grid[2, 3], @lift(string($(slider_order.value))), halign = :left)
+    on(val -> (getfield(fs, order_field)[] = val), slider_order.value)
 
-    # Order
-    Label(grid[row, 1], "Order:", halign = :left)
-    slider_order = Slider(grid[row, 2], range = 1:10, startvalue = getfield(fs, order_field)[])
-    Label(grid[row, 3], @lift(string($(slider_order.value))), halign = :left)
-    on(slider_order.value) do val
-
-        getfield(fs, order_field)[] = val
-    end
-    row += 1
-
-    # Method
-    Label(grid[row, 1], "Method:", halign = :left)
-    method_labels = ["Butterworth (IIR)", "FIR (Hamming)"]
-    method_values = ["iir", "fir"]
+    Label(grid[3, 1], "Method:", halign = :left)
     current_method = getfield(fs, method_field)[]
     menu_method = Menu(
-        grid[row, 2],
-        options = zip(method_labels, method_values),
+        grid[3, 2],
+        options = zip(["Butterworth (IIR)", "FIR (Hamming)"], ["iir", "fir"]),
         default = current_method == "iir" ? "Butterworth (IIR)" : "FIR (Hamming)",
         width = 220,
     )
-    on(menu_method.selection) do val
+    on(val -> (getfield(fs, method_field)[] = val), menu_method.selection)
 
-        getfield(fs, method_field)[] = val
-    end
-    row += 1
-
-    # Function
-    Label(grid[row, 1], "Function:", halign = :left)
-    func_labels = ["filtfilt (zero-phase)", "filt (one-pass)"]
-    func_values = ["filtfilt", "filt"]
+    Label(grid[4, 1], "Function:", halign = :left)
     current_func = getfield(fs, func_field)[]
     menu_func = Menu(
-        grid[row, 2],
-        options = zip(func_labels, func_values),
+        grid[4, 2],
+        options = zip(["filtfilt (zero-phase)", "filt (one-pass)"], ["filtfilt", "filt"]),
         default = current_func == "filtfilt" ? "filtfilt (zero-phase)" : "filt (one-pass)",
         width = 220,
     )
-    on(menu_func.selection) do val
-
-        getfield(fs, func_field)[] = val
-    end
-    row += 1
+    on(val -> (getfield(fs, func_field)[] = val), menu_func.selection)
 
     rowgap!(grid, 10)
     colgap!(grid, 15)
 
     action_area = menu_fig[3, 1] = GridLayout()
     btn_apply = Button(action_area[1, 1], label = "Apply", width = 150)
-    on(btn_apply.clicks) do _
-        _apply_filters!(state)
-    end
+    on(_ -> _apply_filters!(state), btn_apply.clicks)
 
     _display_in_screen(menu_fig)
 end
 
+const _CHANNEL_HEMISPHERE_GROUPS = Tuple{String,Function}[
+    ("Left", ch -> occursin(r"\d*[13579]$", String(ch))),
+    ("Right", ch -> occursin(r"\d*[24680]$", String(ch))),
+    ("Central", ch -> occursin(r"z$", String(ch))),
+]
 
-"""Popup: select which channels are visible."""
 function _show_labels_menu(state, ax)
     all_channels = state.channels.labels
     menu_fig = _eegfun_figure(size = (900, 700))
     Label(menu_fig[1, 1], "Select Channels to Display", fontsize = 18, halign = :center)
     scroll_area = menu_fig[2, 1] = GridLayout()
-    cbs = _build_checkbox_grid!(scroll_area, all_channels, 9, (ch, i) -> state.channels.visible[i])
+    cbs = _build_checkbox_grid!(scroll_area, all_channels, 9, (_, i) -> state.channels.visible[i])
 
-    groups = [
-        ("All", ch -> true),
-        ("None", ch -> false),
-        ("Left", ch -> occursin(r"\d*[13579]$", String(ch))),
-        ("Right", ch -> occursin(r"\d*[24680]$", String(ch))),
-        ("Central", ch -> occursin(r"z$", String(ch))),
-    ]
+    groups = vcat(Tuple{String,Function}[("All", _ -> true), ("None", _ -> false)], _CHANNEL_HEMISPHERE_GROUPS)
     _add_group_buttons!(menu_fig, 3, cbs, all_channels, groups)
 
     action_area = menu_fig[4, 1] = GridLayout()
@@ -633,26 +490,21 @@ function _show_labels_menu(state, ax)
         _clear_and_save_limits!(ax, state)
         _update_channel_offsets!(state)
         _draw(ax, state)
-        if !isempty(state.extra_channel.channels)
-            _draw_extra_channel!(ax, state)
-        end
+        !isempty(state.extra_channel.channels) && _draw_extra_channel!(ax, state)
     end
 
     _display_in_screen(menu_fig)
 end
 
-"""Create the channel-label selection button for the control panel."""
 _create_labels_menu(fig, ax, state) = _popup_button(fig, "Labels", () -> _show_labels_menu(state, ax))
 
-"""Popup: select reference channels and apply re-referencing."""
 function _show_reference_menu(state, dat)
     all_channels = state.channels.labels
     menu_fig = _eegfun_figure(size = (900, 700))
     Label(menu_fig[1, 1], "Select Reference Channels", fontsize = 18, halign = :center)
 
-    # Determine currently-checked channels from stored state (without splitting channel names on "_")
     current_syms = if state.reference_state == :avg
-        all_channels  # all checked when avg
+        all_channels
     elseif state.reference_state == :mastoid
         [:M1, :M2]
     elseif state.reference_state == :none
@@ -668,14 +520,11 @@ function _show_reference_menu(state, dat)
     scroll_area = menu_fig[2, 1] = GridLayout()
     cbs = _build_checkbox_grid!(scroll_area, all_channels, 9, (ch, _) -> ch in current_syms)
 
-    groups = [
-        ("All (Avg)", ch -> true),
-        ("None", ch -> false),
-        ("Left", ch -> occursin(r"\d*[13579]$", String(ch))),
-        ("Right", ch -> occursin(r"\d*[24680]$", String(ch))),
-        ("Central", ch -> occursin(r"z$", String(ch))),
-        ("Mastoids", ch -> ch == :M1 || ch == :M2),
-    ]
+    groups = vcat(
+        Tuple{String,Function}[("All (Avg)", _ -> true), ("None", _ -> false)],
+        _CHANNEL_HEMISPHERE_GROUPS,
+        Tuple{String,Function}[("Mastoids", ch -> ch == :M1 || ch == :M2)],
+    )
     _add_group_buttons!(menu_fig, 3, cbs, all_channels, groups)
 
     action_area = menu_fig[4, 1] = GridLayout()
@@ -704,16 +553,12 @@ function _show_reference_menu(state, dat)
     _display_in_screen(menu_fig)
 end
 
-"""Create the re-reference button for the control panel."""
 _create_reference_menu(fig, state, dat) = _popup_button(fig, "Reference", () -> _show_reference_menu(state, dat))
 
-"""Apply re-referencing to `cur` according to `ref_state` and optional `custom_channels`."""
 function _apply_reference!(cur::EegData, ref_state::Symbol, custom_channels::Vector{Symbol} = Symbol[])
     ref_state == :none && return cur
-    ref = if ref_state == :avg
-        :avg
-    elseif ref_state == :mastoid
-        :mastoid
+    ref = if ref_state == :avg || ref_state == :mastoid
+        ref_state
     elseif !isempty(custom_channels)
         length(custom_channels) == 1 ? custom_channels[1] : custom_channels
     else
@@ -723,64 +568,78 @@ function _apply_reference!(cur::EegData, ref_state::Symbol, custom_channels::Vec
     return cur
 end
 
-"""Apply the isolated artifact of a single ICA component linearly to a Continuous dataset."""
-function _apply_single_ica_removal!(cur::ContinuousData, orig::ContinuousData, ica::InfoIca, comp::Int)
-    dat = cur.data
-    cols = ica.layout.data.label
-
-    unmix_vec = ica.unmixing[comp, :]
-    mix_vec = ica.mixing[:, comp]
-    n_samples = nrow(dat)
-
-    # Calculate 1D activation series for the component
-    activation = zeros(Float64, n_samples)
-    for (i, col_sym) in enumerate(cols)
-        norm_ch = (orig.data[!, col_sym] .- ica.mean[i]) ./ ica.scale
-        activation .+= unmix_vec[i] .* norm_ch
+function _accum_ica_comp_1d!(act::Vector{Float64}, col::AbstractVector{<:Real}, u::Float64, m::Float64, scale::Float64)
+    @inbounds for s in eachindex(act, col)
+        act[s] += u * ((col[s] - m) / scale)
     end
-
-    # Dynamically inject the isolated footprint back into sensor space
-    for (i, col_sym) in enumerate(cols)
-        artifact_ch = mix_vec[i] .* ica.scale .* activation
-        dat[!, col_sym] .-= artifact_ch
-    end
+    return nothing
 end
 
-"""Apply the isolated artifact of a single ICA component linearly to an Epoched dataset."""
+function _sub_ica_comp_1d!(col::AbstractVector{<:AbstractFloat}, act::Vector{Float64}, w::Float64)
+    @inbounds for s in eachindex(col, act)
+        col[s] -= w * act[s]
+    end
+    return nothing
+end
+
+function _apply_df_ica_removal!(cur_df::DataFrame, orig_df::DataFrame, ica::InfoIca, comp::Int, act::Vector{Float64})
+    n = nrow(cur_df)
+    length(act) == n || resize!(act, n)
+    fill!(act, 0.0)
+    cols = ica.layout.data.label
+    scale = ica.scale
+    @inbounds for i in eachindex(cols)
+        col_sym = cols[i]
+        _accum_ica_comp_1d!(act, orig_df[!, col_sym], ica.unmixing[comp, i], ica.mean[i], scale)
+    end
+    @inbounds for i in eachindex(cols)
+        col_sym = cols[i]
+        _sub_ica_comp_1d!(cur_df[!, col_sym], act, ica.mixing[i, comp] * scale)
+    end
+    return nothing
+end
+
+function _apply_single_ica_removal!(cur::SingleDataFrameEeg, orig::SingleDataFrameEeg, ica::InfoIca, comp::Int)
+    act = Vector{Float64}(undef, nrow(cur.data))
+    _apply_df_ica_removal!(cur.data, orig.data, ica, comp, act)
+    return nothing
+end
+
 function _apply_single_ica_removal!(cur::EpochData, orig::EpochData, ica::InfoIca, comp::Int)
-    cols = ica.layout.data.label
-    unmix_vec = ica.unmixing[comp, :]
-    mix_vec = ica.mixing[:, comp]
-
-    for ep = 1:length(cur.data)
-        dat_ep = cur.data[ep]
-        orig_ep = orig.data[ep]
-        n_samples = nrow(dat_ep)
-
-        activation = zeros(Float64, n_samples)
-        for (i, col_sym) in enumerate(cols)
-            norm_ch = (orig_ep[!, col_sym] .- ica.mean[i]) ./ ica.scale
-            activation .+= unmix_vec[i] .* norm_ch
-        end
-
-        for (i, col_sym) in enumerate(cols)
-            artifact_ch = mix_vec[i] .* ica.scale .* activation
-            dat_ep[!, col_sym] .-= artifact_ch
-        end
+    isempty(cur.data) && return nothing
+    act = Vector{Float64}(undef, nrow(cur.data[1]))
+    for ep in eachindex(cur.data)
+        _apply_df_ica_removal!(cur.data[ep], orig.data[ep], ica, comp, act)
     end
+    return nothing
 end
 
-"""Apply all active ICA component removals to `cur`."""
-function _apply_all_ica_removals!(cur::EegData, state)
+function _apply_all_ica_removals!(cur::SingleDataFrameEeg, state)
     if state.ica.is_active && !isempty(state.ica.removed_components)
+        ica = state.ica.original::InfoIca
+        orig_df = state.data.original.data
+        act = Vector{Float64}(undef, nrow(cur.data))
         for comp in state.ica.removed_components
-            _apply_single_ica_removal!(cur, state.data.original, state.ica.original, comp)
+            _apply_df_ica_removal!(cur.data, orig_df, ica, comp, act)
         end
     end
     return cur
 end
 
-"""Apply active high-pass and low-pass filters to `cur`."""
+function _apply_all_ica_removals!(cur::EpochData, state)
+    if state.ica.is_active && !isempty(state.ica.removed_components) && !isempty(cur.data)
+        ica = state.ica.original::InfoIca
+        orig_eps = state.data.original.data
+        act = Vector{Float64}(undef, nrow(cur.data[1]))
+        for comp in state.ica.removed_components
+            for ep in eachindex(cur.data)
+                _apply_df_ica_removal!(cur.data[ep], orig_eps[ep], ica, comp, act)
+            end
+        end
+    end
+    return cur
+end
+
 function _apply_active_filters!(cur::EegData, state)
     fs = state.data.filter_state
     if fs.hp_active[]
@@ -796,11 +655,7 @@ function _apply_active_filters!(cur::EegData, state)
     return cur
 end
 
-"""
-Rebuild `state.data.current` from `state.data.original` in the canonical sequence:
-repairs -> reference -> ICA removals -> active filters.
-Updates `state.data.current[]` with a single notification and synchronizes analysis settings.
-"""
+# Canonical rebuild order: repairs -> reference -> ICA removals -> active filters.
 function _rebuild_current!(state)
     cur = copy(state.data.original)
     for (chs, method, _) in state.channel_repair_history
@@ -814,25 +669,18 @@ function _rebuild_current!(state)
     return cur
 end
 
-"""Toggle an ICA component for removal and rebuild dataset."""
 function _toggle_ica_component!(state, component_id::Union{Nothing,Int})
     if isnothing(component_id)
         empty!(state.ica.removed_components)
-        _rebuild_current!(state)
-        return
-    end
-
-    is_removing = !(component_id in state.ica.removed_components)
-    if is_removing
-        push!(state.ica.removed_components, component_id)
+    elseif component_id in state.ica.removed_components
+        filter!(!=(component_id), state.ica.removed_components)
     else
-        filter!(x -> x != component_id, state.ica.removed_components)
+        push!(state.ica.removed_components, component_id)
     end
-
     _rebuild_current!(state)
+    return nothing
 end
 
-"""Popup: toggle ICA component removals and display options."""
 function _show_ica_menu(state, ax, ica)
     all_components = ica.ica_label
     menu_fig = _eegfun_figure(size = (800, 600))
@@ -861,7 +709,6 @@ function _show_ica_menu(state, ax, ica)
         _draw(ax, state)
     end
 
-    # Display options row
     display_area = menu_fig[5, 1] = GridLayout()
     Label(display_area[1, 1:6], "Display Options", fontsize = 16, halign = :center)
     display_items = [
@@ -873,9 +720,7 @@ function _show_ica_menu(state, ax, ica)
         col = (j - 1) * 2 + 1
         cb = Checkbox(display_area[2, col], checked = obs[], width = 16, height = 16)
         Label(display_area[2, col+1], lbl, halign = :left, color = colr)
-        on(cb.checked) do active
-            obs[] = active
-        end
+        on(active -> (obs[] = active), cb.checked)
         colgap!(display_area, col, 5)
         j < length(display_items) && colgap!(display_area, col + 1, 30)
     end
@@ -883,7 +728,6 @@ function _show_ica_menu(state, ax, ica)
     _display_in_screen(menu_fig)
 end
 
-"""Create the ICA components button for the control panel."""
 function _create_ica_menu(fig, ax, state, ica)
     if !haskey(state.plot_kwargs, :show_cleaned_ica) || !(state.plot_kwargs[:show_cleaned_ica] isa Observable)
         state.plot_kwargs[:show_cleaned_ica] = Observable(false)
@@ -893,33 +737,22 @@ function _create_ica_menu(fig, ax, state, ica)
     return _popup_button(fig, "ICA Components", () -> _show_ica_menu(state, ax, ica))
 end
 
-"""Create the epoch navigation slider and label."""
 function _create_epoch_menu(fig, ax, state)
-    slider_epoch = Slider(fig[2, 1], range = 1:n_epochs(state.data.original), startvalue = state.data.current_epoch[], snap = true)
-    label = Label(
-        fig,
-        @lift("Epoch: $($(slider_epoch.value))/$(n_epochs(state.data.original))"),
-        fontsize = 22,
-        halign = :left,
-        tellwidth = false,
-    )
+    n_ep = n_epochs(state.data.original)
+    slider_epoch = Slider(fig[2, 1], range = 1:n_ep, startvalue = state.data.current_epoch[], snap = true)
+    label = Label(fig, @lift("Epoch: $($(slider_epoch.value))/$n_ep"), fontsize = 22, halign = :left, tellwidth = false)
 
-    # Flag to prevent circular updates
     updating_from_keyboard = Ref(false)
 
-    # Handle slider input
     on(slider_epoch.value) do epoch_num
         if !updating_from_keyboard[]
             state.data.current_epoch[] = epoch_num
-            ax.title = "Epoch $(epoch_num)/$(n_epochs(state.data.original))"
+            ax.title = "Epoch $(epoch_num)/$n_ep"
             _update_markers!(ax, state)
-            if !isempty(state.extra_channel.channels)
-                _draw_extra_channel!(ax, state)
-            end
+            !isempty(state.extra_channel.channels) && _draw_extra_channel!(ax, state)
         end
     end
 
-    # Make slider observe current_epoch changes (for left/right key navigation)
     on(state.data.current_epoch) do epoch_num
         updating_from_keyboard[] = true
         set_close_to!(slider_epoch, epoch_num)
@@ -929,67 +762,58 @@ function _create_epoch_menu(fig, ax, state)
     return hcat(slider_epoch, label)
 end
 
-"""Find trigger onset events within the selected region for continuous data."""
-function _find_region_triggers(state::ContinuousDataBrowserState, clicked_region_idx = nothing)
-    bounds = _get_selected_region_bounds(state, clicked_region_idx)
-    isnothing(bounds) && return NamedTuple{(:sample, :code, :time),Tuple{Int,Int,Float64}}[]
-    x_min, x_max = bounds
+const _RegionTriggerEvent = NamedTuple{(:sample, :code, :time),Tuple{Int,Int,Float64}}
 
-    df = state.data.current[].data
-    !hasproperty(df, :trigger) && return NamedTuple{(:sample, :code, :time),Tuple{Int,Int,Float64}}[]
-
-    active_triggers = get(state.plot_kwargs, :active_triggers, nothing)
-    return [
-        (sample = i, code = Int(df.trigger[i]), time = Float64(df.time[i])) for i = 1:nrow(df) if df.time[i] >= x_min &&
-            df.time[i] <= x_max &&
-            df.trigger[i] != 0 &&
-            (isnothing(active_triggers) || df.trigger[i] in active_triggers) &&
-            (i == 1 || df.trigger[i] != df.trigger[i-1])
-    ]
+function _scan_region_triggers(trig_col::AbstractVector, time_col::AbstractVector{<:Real}, x_min::Float64, x_max::Float64, active_triggers)
+    events = _RegionTriggerEvent[]
+    @inbounds for i in eachindex(trig_col, time_col)
+        t = Float64(time_col[i])
+        (t < x_min || t > x_max) && continue
+        tr = trig_col[i]
+        tr == 0 && continue
+        (!isnothing(active_triggers) && !(tr in active_triggers)) && continue
+        (i == 1 || tr != trig_col[i-1]) && push!(events, (sample = i, code = Int(tr), time = t))
+    end
+    return events
 end
 
-_find_region_triggers(state, clicked_region_idx = nothing) = NamedTuple{(:sample, :code, :time),Tuple{Int,Int,Float64}}[]
+function _find_region_triggers(state::ContinuousDataBrowserState, clicked_region_idx = nothing)
+    bounds = _get_selected_region_bounds(state, clicked_region_idx)
+    isnothing(bounds) && return _RegionTriggerEvent[]
+    df = state.data.current[].data
+    !hasproperty(df, :trigger) && return _RegionTriggerEvent[]
+    return _scan_region_triggers(df.trigger, df.time, bounds[1], bounds[2], get(state.plot_kwargs, :active_triggers, nothing))
+end
 
-"""Extract and plot all epochs matching a trigger code using the selected region offset interval."""
+_find_region_triggers(state, clicked_region_idx = nothing) = _RegionTriggerEvent[]
+
 function _plot_all_trigger_epochs(state::ContinuousDataBrowserState, code::Integer, x_min::Real, x_max::Real, t_trig::Real; kwargs...)
-    curr_dat = state.data.current[]
-    interval = (x_min - t_trig, x_max - t_trig)
     epoch_cond = EpochCondition(name = "Trigger_$code", trigger_sequences = [[code]])
     try
-        all_epochs = extract_epochs(curr_dat, 1, epoch_cond, interval)
-        target_channels = _get_browser_target_channels(state)
-        return plot_epochs(all_epochs; channel_selection = channels(target_channels), kwargs...)
+        all_epochs = extract_epochs(state.data.current[], 1, epoch_cond, (x_min - t_trig, x_max - t_trig))
+        return plot_epochs(all_epochs; channel_selection = channels(_get_browser_target_channels(state)), kwargs...)
     catch e
         @minimal_warning "Could not extract all epochs for trigger $code: $e"
         return nothing
     end
 end
 
-"""Extract and plot averaged ERP matching a trigger code using the selected region offset interval."""
 function _plot_trigger_erp(state::ContinuousDataBrowserState, code::Integer, x_min::Real, x_max::Real, t_trig::Real; kwargs...)
-    curr_dat = state.data.current[]
-    interval = (x_min - t_trig, x_max - t_trig)
     epoch_cond = EpochCondition(name = "Trigger_$code", trigger_sequences = [[code]])
     try
-        all_epochs = extract_epochs(curr_dat, 1, epoch_cond, interval)
+        all_epochs = extract_epochs(state.data.current[], 1, epoch_cond, (x_min - t_trig, x_max - t_trig))
         erp = average_epochs(all_epochs)
-        target_channels = _get_browser_target_channels(state)
-        return plot_erp(erp; channel_selection = channels(target_channels), kwargs...)
+        return plot_erp(erp; channel_selection = channels(_get_browser_target_channels(state)), kwargs...)
     catch e
         @minimal_warning "Could not compute ERP for trigger $code: $e"
         return nothing
     end
 end
 
-"""Open a popup menu with Topoplot / Spectrum / Epoch / Region actions."""
 function _show_additional_menu(state, clicked_region_idx = nothing)
-
-    # Check if layout has valid coordinates for topographic plots
-    has_coords = has_valid_coordinates(state.data.original.layout)
-
     menu_items = Tuple{String,Function}[]
 
-    if has_coords
+    if has_valid_coordinates(state.data.original.layout)
         push!(
             menu_items,
             ("Topoplot", () -> begin
@@ -1010,17 +834,12 @@ function _show_additional_menu(state, clicked_region_idx = nothing)
         !isnothing(selected_data) && plot_channel_spectrum(selected_data)
     end))
 
-    # Check for trigger codes in the selected region for continuous data
-    # Only offer epoch and ERP plotting if the trigger toggle is active and the region contains an actual trigger
-    trigger_active = get(state.marker_visibility, :trigger, false)
-    if state.data isa ContinuousDataState && trigger_active
+    if state.data isa ContinuousDataState && get(state.marker_visibility, :trigger, false)
         trigger_events = _find_region_triggers(state, clicked_region_idx)
         bounds = _get_selected_region_bounds(state, clicked_region_idx)
         if !isempty(trigger_events) && !isnothing(bounds)
             x_min, x_max = bounds
-            unique_codes = unique([ev.code for ev in trigger_events])
-
-            for code in unique_codes
+            for code in unique(ev.code for ev in trigger_events)
                 ev = trigger_events[findfirst(e -> e.code == code, trigger_events)]
                 push!(menu_items, ("Plot Epochs (Trigger $code)", () -> _plot_all_trigger_epochs(state, code, x_min, x_max, ev.time)))
                 push!(menu_items, ("Plot ERP (Trigger $code)", () -> _plot_trigger_erp(state, code, x_min, x_max, ev.time)))
@@ -1036,21 +855,18 @@ function _show_additional_menu(state, clicked_region_idx = nothing)
         @info "Selected regions: $(state.selection.selected_regions[])"
     end))
 
-    menu_fig = _eegfun_figure(size = (340, max(160, 50 * length(menu_items))))
+    fig_size = (340, max(160, 50 * length(menu_items)))
+    menu_fig = _eegfun_figure(size = fig_size)
     for (idx, (label_str, action_fn)) in enumerate(menu_items)
         btn = Button(menu_fig[idx, 1], label = label_str, tellwidth = false)
-        on(btn.clicks) do _
-            action_fn()
-        end
+        on(_ -> action_fn(), btn.clicks)
     end
 
-    _display_in_screen(menu_fig; size = (340, max(160, 50 * length(menu_items))))
+    _display_in_screen(menu_fig; size = fig_size)
 end
 
-"""Open the interactive channel repair window with checkboxes and method selection."""
 function _channel_repair_menu(state, selected_channels, ax)
     all_channels = state.channels.labels
-
     menu_fig = _eegfun_figure(size = (900, 700))
     Label(menu_fig[1, 1], "Channel Repair Interface", fontsize = 18, halign = :center)
 
@@ -1059,16 +875,11 @@ function _channel_repair_menu(state, selected_channels, ax)
         scroll_area,
         all_channels,
         9,
-        (ch, _) -> begin
-            is_repaired = _is_channel_repaired(state, ch)
-            # Pre-select channels passed in, show repair status via label colour
-            ch in selected_channels
-        end;
+        (ch, _) -> ch in selected_channels;
         fontsize = 14,
         label_fn = ch -> _is_channel_repaired(state, ch) ? "$(ch) ✓" : string(ch),
     )
 
-    # Add repair method selection
     Label(menu_fig[3, 1], "Repair Method:", fontsize = 14)
     method_area = menu_fig[4, 1] = GridLayout()
     method_buttons = [
@@ -1076,17 +887,14 @@ function _channel_repair_menu(state, selected_channels, ax)
         Button(method_area[1, 2], label = "Spherical Spline", width = 200),
     ]
 
-    # Add action buttons
     action_area = menu_fig[5, 1] = GridLayout()
     action_buttons =
         [Button(action_area[1, 1], label = "Apply Repair", width = 200), Button(action_area[1, 2], label = "Undo Last Repair", width = 200)]
 
-    # Method selection via shared radio-button helper
     selected_method = Observable(:neighbor_interpolation)
     _radio_buttons!(method_buttons, selected_method, [:neighbor_interpolation, :spherical_spline])
 
-    # Apply repair
-    on(action_buttons[1].clicks) do n
+    on(action_buttons[1].clicks) do _
         channels_to_repair = all_channels[findall(cb -> cb.checked[], channel_checkboxes)]
         if !isempty(channels_to_repair)
             _repair_selected_channels!(state, channels_to_repair, selected_method[], ax)
@@ -1095,8 +903,7 @@ function _channel_repair_menu(state, selected_channels, ax)
         end
     end
 
-    # Undo last repair
-    on(action_buttons[2].clicks) do n
+    on(action_buttons[2].clicks) do _
         if !isempty(state.channel_repair_history)
             _undo_last_repair!(state, ax)
         else
@@ -1107,16 +914,10 @@ function _channel_repair_menu(state, selected_channels, ax)
     _display_in_screen(menu_fig)
 end
 
-"""Interpolate the selected channels, store in repair history, and rebuild."""
 function _repair_selected_channels!(state, selected_channels, method, ax)
-    # Check if any of these channels have already been repaired
     already_repaired = Set{Symbol}()
-    for (repaired_channels, _, _) in state.channel_repair_history
-        for ch in repaired_channels
-            if ch in selected_channels
-                push!(already_repaired, ch)
-            end
-        end
+    for (repaired_channels, _, _) in state.channel_repair_history, ch in repaired_channels
+        ch in selected_channels && push!(already_repaired, ch)
     end
 
     if !isempty(already_repaired)
@@ -1124,21 +925,15 @@ function _repair_selected_channels!(state, selected_channels, method, ax)
         return
     end
 
-    # Store repair in history
     push!(state.channel_repair_history, (selected_channels, method, nothing))
-
     _rebuild_current!(state)
-
-    # Clear and redraw the plot
     _clear_and_save_limits!(ax, state)
     _draw(ax, state)
 
-    total_repairs = length(state.channel_repair_history)
     @info "Successfully repaired channels: $(join(string.(selected_channels), ", ")) using $method"
-    @info "Total repairs in history: $total_repairs"
+    @info "Total repairs in history: $(length(state.channel_repair_history))"
 end
 
-"""Pop the last channel repair from history and rebuild."""
 function _undo_last_repair!(state, ax)
     if isempty(state.channel_repair_history)
         @info "No repairs to undo"
@@ -1146,55 +941,36 @@ function _undo_last_repair!(state, ax)
     end
 
     channels, method, _ = pop!(state.channel_repair_history)
-
     _rebuild_current!(state)
-
-    # Clear and redraw the plot
     _clear_and_save_limits!(ax, state)
     _draw(ax, state)
 
-    remaining_repairs = length(state.channel_repair_history)
     @info "Undid repair of channels: $(join(string.(channels), ", ")) (was $method)"
-    @info "Remaining repairs in history: $remaining_repairs"
+    @info "Remaining repairs in history: $(length(state.channel_repair_history))"
 end
 
-"""Create extreme-value slider and label widgets."""
 function _create_extreme_slider(fig, state)
     slider_extreme = Slider(fig, range = 0:5:100, startvalue = 0, tellwidth = false)
-    on(slider_extreme.value) do x
-        state.view.crit_val[] = x
-    end
+    on(x -> (state.view.crit_val[] = x), slider_extreme.value)
     lbl = Label(fig, @lift(string("Extreme: ", $(slider_extreme.value), " μV")), halign = :left, fontsize = 14)
     return (lbl, slider_extreme)
 end
 
-"""Create sliders for continuous data — includes x-range and position."""
 function _create_sliders(fig, state::ContinuousDataBrowserState, dat)
     extreme_widgets = state.ica.is_active ? nothing : _create_extreme_slider(fig, state)
 
-    # Add navigation sliders specific to continuous data
     slider_range = Slider(fig[3, 1], range = 100:50:30000, startvalue = length(state.view.xrange[]), snap = true)
     slider_x = Slider(fig[2, 1], range = 1:50:nrow(state.data.current[].data), startvalue = first(state.view.xrange[]), snap = true)
 
     updating_from_key = Ref(false)
 
-    on(slider_range.value) do w
-        updating_from_key[] && return
-        start = slider_x.value[]
+    function _update_window(start::Int, w::Int)
         new_range = start:min(nrow(state.data.current[].data), start+w-1)
-        if length(new_range) > 1
-            state.view.xrange[] = new_range
-        end
+        length(new_range) > 1 && (state.view.xrange[] = new_range)
     end
 
-    on(slider_x.value) do start
-        updating_from_key[] && return
-        w = slider_range.value[]
-        new_range = start:min(nrow(state.data.current[].data), start+w-1)
-        if length(new_range) > 1
-            state.view.xrange[] = new_range
-        end
-    end
+    on(w -> (updating_from_key[] || _update_window(slider_x.value[], w)), slider_range.value)
+    on(start -> (updating_from_key[] || _update_window(start, slider_range.value[])), slider_x.value)
 
     on(state.view.xrange) do rng
         updating_from_key[] = true
@@ -1206,12 +982,8 @@ function _create_sliders(fig, state::ContinuousDataBrowserState, dat)
     return extreme_widgets
 end
 
-"""Create sliders for epoched data (extreme slider only)."""
-function _create_sliders(fig, state::EpochedDataBrowserState, dat)
-    return state.ica.is_active ? nothing : _create_extreme_slider(fig, state)
-end
+_create_sliders(fig, state::EpochedDataBrowserState, dat) = state.ica.is_active ? nothing : _create_extreme_slider(fig, state)
 
-"""Popup: select which extra channels to overlay."""
 function _show_extra_channel_menu(state, ax, dat)
     all_extras = extra_labels(dat)
     (isnothing(all_extras) || isempty(all_extras)) && return
@@ -1235,7 +1007,6 @@ function _show_extra_channel_menu(state, ax, dat)
     _display_in_screen(menu_fig)
 end
 
-"""Create the extra-channels button for the control panel."""
 _create_extra_channel_menu(fig, ax, state, dat) = _popup_button(fig, "Extra Channels", () -> _show_extra_channel_menu(state, ax, dat))
 
 function _build_grid_components!(
@@ -1254,40 +1025,25 @@ function _build_grid_components!(
     rowgap!(control_panel, 8)
 
     cur_row = 1
-    # 1. Toggles section
     for i = 1:size(toggles, 1)
         control_panel[cur_row, 1] = toggles[i, 1]
         control_panel[cur_row, 2] = toggles[i, 2]
         cur_row += 1
     end
 
-    # 2. Extreme slider section
     extreme_widgets = _create_sliders(fig, state, dat)
     if !isnothing(extreme_widgets)
         lbl_ext, slider_ext = extreme_widgets
         control_panel[cur_row, 1:2] = lbl_ext
-        cur_row += 1
-        control_panel[cur_row, 1:2] = slider_ext
-        cur_row += 1
+        control_panel[cur_row+1, 1:2] = slider_ext
+        cur_row += 2
     end
 
-    # 3. Action buttons
-    control_panel[cur_row, 1:2] = labels_menu
-    cur_row += 1
-    control_panel[cur_row, 1:2] = reference_menu
-    cur_row += 1
-
-    if !isnothing(ica_menu)
-        control_panel[cur_row, 1:2] = ica_menu
-        cur_row += 1
-    end
-    if !isnothing(extra_menu)
-        control_panel[cur_row, 1:2] = extra_menu
-        cur_row += 1
-    end
-    if !isnothing(epoch_menu)
-        control_panel[cur_row, 1:2] = epoch_menu
-        cur_row += 1
+    for widget in (labels_menu, reference_menu, ica_menu, extra_menu, epoch_menu)
+        if !isnothing(widget)
+            control_panel[cur_row, 1:2] = widget
+            cur_row += 1
+        end
     end
 
     colsize!(fig.layout, 2, Fixed(220))
@@ -1295,16 +1051,15 @@ function _build_grid_components!(
     rowsize!(fig.layout, 1, Relative(1.0))
 end
 
-"""Return an epoch menu for epoched data, `nothing` for continuous."""
 _get_epoch_menu(fig, ax, state::ContinuousDataBrowserState) = nothing
 _get_epoch_menu(fig, ax, state::EpochedDataBrowserState) = _create_epoch_menu(fig, ax, state)
 
-############
-# Navigation
-############
+# =============================================================================
+# Navigation & Interaction
+# =============================================================================
+
 const KEYBOARD_ACTIONS = Dict(Keyboard.left => :left, Keyboard.right => :right, Keyboard.up => :up, Keyboard.down => :down)
 
-"""Dispatch arrow-key actions to pan / zoom / epoch-step."""
 function _handle_navigation!(ax, state::DataBrowserState{<:AbstractDataState}, action::Symbol)
     if action == :up
         _ymore!(ax, state)
@@ -1317,13 +1072,11 @@ function _handle_navigation!(ax, state::DataBrowserState{<:AbstractDataState}, a
     end
 end
 
-"""Left/right arrow: pan for continuous, epoch-step for epoched."""
 _handle_left_navigation(ax, state::ContinuousDataBrowserState) = _xback!(ax, state)
 _handle_left_navigation(ax, state::EpochedDataBrowserState) = _step_epoch_backward(ax, state)
 _handle_right_navigation(ax, state::ContinuousDataBrowserState) = _xforward!(ax, state)
 _handle_right_navigation(ax, state::EpochedDataBrowserState) = _step_epoch_forward(ax, state)
 
-"""Scroll the x-range backward."""
 function _xback!(ax, state::ContinuousDataBrowserState)
     step = state.plot_kwargs[:scroll_step]
     current_range = state.view.xrange.val
@@ -1333,7 +1086,6 @@ function _xback!(ax, state::ContinuousDataBrowserState)
     _restore_axis_limits!(ax, state)
 end
 
-"""Scroll the x-range forward."""
 function _xforward!(ax, state::ContinuousDataBrowserState)
     step = state.plot_kwargs[:scroll_step]
     current_range = state.view.xrange.val
@@ -1344,11 +1096,9 @@ function _xforward!(ax, state::ContinuousDataBrowserState)
     _restore_axis_limits!(ax, state)
 end
 
-"""Step one epoch backward / forward."""
 _step_epoch_backward(ax, state::EpochedDataBrowserState) = _step_epoch!(ax, state, -1)
 _step_epoch_forward(ax, state::EpochedDataBrowserState) = _step_epoch!(ax, state, 1)
 
-"""Change the current epoch by `direction` (+1 or -1) and redraw."""
 function _step_epoch!(ax, state::EpochedDataBrowserState, direction::Int)
     current = state.data.current_epoch[]
     total = n_epochs(state.data.original)
@@ -1357,93 +1107,70 @@ function _step_epoch!(ax, state::EpochedDataBrowserState, direction::Int)
     state.data.current_epoch[] = new_epoch
     ax.title = "Epoch $(new_epoch)/$total"
     _update_markers!(ax, state)
-    if !isempty(state.extra_channel.channels)
-        _draw_extra_channel!(ax, state)
-    end
+    !isempty(state.extra_channel.channels) && _draw_extra_channel!(ax, state)
 end
 
-"""Zoom y-axis out / in."""
 _yless!(ax, state) = _yzoom!(ax, state, 1.2)
 _ymore!(ax, state) = _yzoom!(ax, state, 0.8)
 
-"""Scale the y-range or amplitude by `factor`."""
 function _yzoom!(ax, state, factor::Float64)
     zoom_step = state.plot_kwargs[:zoom_step]
     if state.view.butterfly[]
-        # In butterfly mode: adjust y-range
         y_min, y_max = state.view.yrange.val[1], state.view.yrange.val[end]
-        if factor > 1.0  # Zoom in (yless)
+        if factor > 1.0
             (y_min + zoom_step >= 0 || y_max - zoom_step <= 0) && return
             state.view.yrange[] = (y_min+zoom_step):(y_max-zoom_step)
-        else  # Zoom out (ymore)
+        else
             state.view.yrange[] = (y_min-zoom_step):(y_max+zoom_step)
         end
         ylims!(ax, state.view.yrange.val[1], state.view.yrange.val[end])
-    else # In non-butterfly mode: adjust amplitude scale
+    else
         state.view.amplitude_scale[] = state.view.amplitude_scale[] * factor
     end
 end
 
-"""Return `true` if the mouse position falls inside the browser axis bbox."""
 function _is_mouse_in_browser_axis(ax, pos)
     bbox = ax.layoutobservables.computedbbox[]
     return bbox.origin[1] <= pos[1] <= (bbox.origin[1] + bbox.widths[1]) && bbox.origin[2] <= pos[2] <= (bbox.origin[2] + bbox.widths[2])
 end
 
-"""Return the index of the selected region containing `mouse_x`, or `nothing`."""
 function _find_clicked_region(state, mouse_x)
-    # Check if click is within any of the selected regions
-    regions = state.selection.selected_regions[]
-    for (i, (start_time, end_time)) in enumerate(regions)
-        if mouse_x >= min(start_time, end_time) && mouse_x <= max(start_time, end_time)
+    for (i, (start_time, end_time)) in enumerate(state.selection.selected_regions[])
+        if min(start_time, end_time) <= mouse_x <= max(start_time, end_time)
             return i
         end
     end
     return nothing
 end
 
-"""Delete region at `region_idx` from the selection list and remove its plot."""
 function _remove_region_from_selection!(ax, state, region_idx)
-    # Remove the region from the list
     regions = state.selection.selected_regions[]
     if 1 <= region_idx <= length(regions)
-        # Remove the region plot
-        plot_to_remove = state.selection.region_plots[region_idx]
-        delete!(ax.scene, plot_to_remove)
+        delete!(ax.scene, state.selection.region_plots[region_idx])
         deleteat!(state.selection.region_plots, region_idx)
-
-        # Remove the region from the list
         deleteat!(regions, region_idx)
         state.selection.selected_regions[] = regions
         _update_analysis_settings!(state)
     end
 end
 
-"""Begin a new time-region selection at `mouse_x`."""
 function _start_selection!(ax, state, mouse_x)
     state.selection.active[] = true
     state.selection.bounds[] = (mouse_x, mouse_x)
     _update_x_region_selection!(ax, state, mouse_x, mouse_x)
 end
 
-"""Finalise the current drag selection and add it to the region list."""
 function _finish_selection!(ax, state, mouse_x)
     t1 = state.selection.bounds[][1]
     t2 = mouse_x
     state.selection.active[] = false
     _clear_x_region_selection!(state)
-
-    if abs(t2 - t1) < 1e-4
-        return
-    end
-
+    abs(t2 - t1) < 1e-4 && return
     state.selection.bounds[] = (t1, t2)
     _add_region_to_selection!(ax, state, t1, t2)
 end
 
-"""Wire up mouse button and drag events for selection and channel clicking."""
 function _handle_mouse_events!(ax, state)
-    # Track if Shift and Ctrl are currently pressed
     shift_pressed = Ref(false)
     ctrl_pressed = Ref(false)
 
@@ -1456,19 +1183,13 @@ function _handle_mouse_events!(ax, state)
     end
 
     on(events(ax).mousebutton) do event
-        pos = events(ax).mouseposition[]
-        if !_is_mouse_in_browser_axis(ax, pos)
-            return
-        end
-
+        _is_mouse_in_browser_axis(ax, events(ax).mouseposition[]) || return
         mouse_x = mouseposition(ax)[1]
 
         if event.button == Mouse.left
             if event.action == Mouse.press
-                # Ctrl + Left click selects/toggles a channel
                 if ctrl_pressed[]
-                    mouse_y = mouseposition(ax)[2]
-                    clicked_channel = _find_closest_browser_channel(ax, state, mouse_x, mouse_y)
+                    clicked_channel = _find_closest_browser_channel(ax, state, mouse_x, mouseposition(ax)[2])
                     if !isnothing(clicked_channel)
                         _toggle_channel_selection!(ax, state, clicked_channel)
                         return
@@ -1476,7 +1197,6 @@ function _handle_mouse_events!(ax, state)
                 elseif shift_pressed[]
                     _handle_left_click!(ax, state, event, mouse_x)
                 else
-                    # Left click on an existing region to deselect it
                     clicked_region_idx = _find_clicked_region(state, mouse_x)
                     if !isnothing(clicked_region_idx)
                         _remove_region_from_selection!(ax, state, clicked_region_idx)
@@ -1484,34 +1204,26 @@ function _handle_mouse_events!(ax, state)
                     end
                 end
             elseif event.action == Mouse.release
-                if state.selection.active[] || shift_pressed[]
-                    _handle_left_click!(ax, state, event, mouse_x)
-                end
+                (state.selection.active[] || shift_pressed[]) && _handle_left_click!(ax, state, event, mouse_x)
             end
         elseif event.button == Mouse.right && event.action == Mouse.press
             _handle_right_click!(ax, state, mouse_x)
         end
     end
 
-    # Update selection rectangle while dragging
     on(events(ax).mouseposition) do _
         if state.selection.active[]
-            world_pos = mouseposition(ax)[1]
-            _update_x_region_selection!(ax, state, state.selection.bounds[][1], world_pos)
+            _update_x_region_selection!(ax, state, state.selection.bounds[][1], mouseposition(ax)[1])
         end
     end
 end
 
-"""Handle left-button press/release for region creation or removal."""
 function _handle_left_click!(ax, state, event, mouse_x)
     if event.action == Mouse.press
-        # Check if click is within any existing selected region
         clicked_region_idx = _find_clicked_region(state, mouse_x)
         if !isnothing(clicked_region_idx)
-            # Remove the clicked region
             _remove_region_from_selection!(ax, state, clicked_region_idx)
         else
-            # Start a new selection
             _start_selection!(ax, state, mouse_x)
         end
     elseif event.action == Mouse.release && state.selection.active[]
@@ -1519,17 +1231,11 @@ function _handle_left_click!(ax, state, event, mouse_x)
     end
 end
 
-"""Handle right-click: show context menu if inside a selected region."""
 function _handle_right_click!(ax, state, mouse_x)
-    # Check if right-click is within any selected region
     clicked_region_idx = _find_clicked_region(state, mouse_x)
-    if !isnothing(clicked_region_idx)
-        _show_additional_menu(state, clicked_region_idx)
-    end
-    # Right-click outside regions does nothing (use 'r' key for channel repair)
+    !isnothing(clicked_region_idx) && _show_additional_menu(state, clicked_region_idx)
 end
 
-"""Open the channel repair menu (continuous data only)."""
 function _show_channel_repair_menu(state::DataBrowserState{<:ContinuousDataState}, ax)
     if !has_valid_coordinates(state.data.original.layout)
         @minimal_warning "Channel repair requires electrode layout coordinates. Please load a layout file (e.g. using EegFun.read_layout)."
@@ -1538,70 +1244,15 @@ function _show_channel_repair_menu(state::DataBrowserState{<:ContinuousDataState
     _channel_repair_menu(state, _get_selected_channels(state), ax)
 end
 
-function _show_channel_repair_menu(state::DataBrowserState{<:EpochedDataState}, ax)
-    @info "Channel repair is only available for continuous data"
-end
+_show_channel_repair_menu(::DataBrowserState{<:EpochedDataState}, ax) = @info "Channel repair is only available for continuous data"
 
-"""Return currently Ctrl-selected channel labels."""
-function _get_selected_channels(state)
-    selected_indices = findall(state.channels.selected)
-    return state.channels.labels[selected_indices]
-end
+_get_selected_channels(state) = state.channels.labels[state.channels.selected]
 
-"""Return selected channels if any channel is selected, otherwise all visible channels."""
-function _get_browser_target_channels(state)
-    if any(state.channels.selected)
-        return state.channels.labels[state.channels.selected]
-    else
-        return state.channels.labels[state.channels.visible]
-    end
-end
+_get_browser_target_channels(state) =
+    any(state.channels.selected) ? state.channels.labels[state.channels.selected] : state.channels.labels[state.channels.visible]
 
-"""Find the channel label clicked near the left edge of the browser axis."""
-function _find_clicked_channel_label(state, mouse_x, mouse_y)
-    current_data = _get_current_data(state.data)
-    time_vec = current_data.time
-    t_start = time_vec[first(state.view.xrange[])]
-    t_end = time_vec[last(state.view.xrange[])]
-    t_span = t_end - t_start
-
-    # Check if click is near the left edge of the visible window
-    if mouse_x < t_start - 0.05 * t_span || mouse_x > t_start + 0.08 * t_span
-        return nothing
-    end
-
-    visible_indices = findall(state.channels.visible)
-    isempty(visible_indices) && return nothing
-
-    min_dist = Inf
-    closest_idx = nothing
-    for idx in visible_indices
-        dist = abs(mouse_y - state.view.offset[idx])
-        if dist < min_dist
-            min_dist = dist
-            closest_idx = idx
-        end
-    end
-
-    tol = if length(visible_indices) >= 2
-        offsets = state.view.offset[visible_indices]
-        step = abs(offsets[end] - offsets[1]) / (length(visible_indices) - 1)
-        max(step * 0.5, 20.0)
-    else
-        50.0
-    end
-
-    return min_dist <= tol ? closest_idx : nothing
-end
-
-"""Find the channel line closest to the given mouse coordinates."""
 function _find_closest_browser_channel(ax, state, mouse_x, mouse_y)
     current_data = _get_current_data(state.data)
-
-    min_distance = Inf
-    closest_channel = nothing
-
-    # Find the data point closest to the clicked x position 
     time_data = current_data.time
     x_idx = searchsortedfirst(time_data, mouse_x)
     if x_idx > 1 && x_idx <= length(time_data) && abs(time_data[x_idx-1] - mouse_x) < abs(time_data[x_idx] - mouse_x)
@@ -1609,22 +1260,22 @@ function _find_closest_browser_channel(ax, state, mouse_x, mouse_y)
     end
     x_idx = clamp(x_idx, 1, length(time_data))
 
+    min_distance = Inf
+    closest_channel = nothing
+    scale = state.view.amplitude_scale[]
     for (idx, visible) in enumerate(state.channels.visible)
-        if visible
-            col = state.channels.labels[idx]
-            channel_y = current_data[x_idx, col] * state.view.amplitude_scale[] + state.view.offset[idx]
-            distance = abs(mouse_y - channel_y)
-            if distance < min_distance
-                min_distance = distance
-                closest_channel = idx
-            end
+        visible || continue
+        channel_y = current_data[x_idx, state.channels.labels[idx]] * scale + state.view.offset[idx]
+        distance = abs(mouse_y - channel_y)
+        if distance < min_distance
+            min_distance = distance
+            closest_channel = idx
         end
     end
 
     visible_indices = findall(state.channels.visible)
     tol = if length(visible_indices) >= 2
-        offsets = state.view.offset[visible_indices]
-        step = abs(offsets[end] - offsets[1]) / (length(visible_indices) - 1)
+        step = abs(state.view.offset[visible_indices[end]] - state.view.offset[visible_indices[1]]) / (length(visible_indices) - 1)
         max(step * 0.9, 50.0)
     else
         100.0
@@ -1633,27 +1284,24 @@ function _find_closest_browser_channel(ax, state, mouse_x, mouse_y)
     return min_distance <= tol ? closest_channel : nothing
 end
 
-"""Apply visual styling to all channels based on current selection and repair state."""
 function _apply_channel_visual_state!(ax, state)
     sel_color = get(state.plot_kwargs, :selected_channel_color, :black)
-    selected_lw = state.plot_kwargs[:channel_line_width] * 2
     normal_lw = state.plot_kwargs[:channel_line_width]
+    selected_lw = normal_lw * 2
     base_unselected_color = state.plot_kwargs[:unselected_channel_color]
+    is_cleaned = state.ica.is_active && haskey(state.plot_kwargs, :show_cleaned_ica) && state.plot_kwargs[:show_cleaned_ica][]
+    base_color = is_cleaned ? get(state.plot_kwargs, :cleaned_channel_color, :green) : base_unselected_color
 
     for (idx, col) in enumerate(state.channels.labels)
         !state.channels.visible[idx] && continue
-        is_selected = state.channels.selected[idx]
-        is_repaired = _is_channel_repaired(state, col)
         if haskey(state.channels.data_lines, col) && haskey(state.channels.data_labels, col)
             line_handle = state.channels.data_lines[col]
             label_handle = state.channels.data_labels[col]
-            if is_repaired || is_selected
+            if state.channels.selected[idx] || _is_channel_repaired(state, col)
                 line_handle.colormap[] = [sel_color, sel_color, sel_color]
                 line_handle.linewidth[] = selected_lw
                 label_handle.color[] = :red
             else
-                is_cleaned = state.ica.is_active && haskey(state.plot_kwargs, :show_cleaned_ica) && state.plot_kwargs[:show_cleaned_ica][]
-                base_color = is_cleaned ? get(state.plot_kwargs, :cleaned_channel_color, :green) : base_unselected_color
                 line_handle.colormap[] = [base_color, base_color, :red]
                 line_handle.linewidth[] = normal_lw
                 label_handle.color[] = :black
@@ -1662,127 +1310,83 @@ function _apply_channel_visual_state!(ax, state)
     end
 end
 
-"""Select a single channel and update visual styling."""
 function _select_single_channel!(ax, state, target_col::Symbol)
     state.channels.selected .= false
     idx = findfirst(==(target_col), state.channels.labels)
-    if !isnothing(idx)
-        state.channels.selected[idx] = true
-    end
+    !isnothing(idx) && (state.channels.selected[idx] = true)
     _apply_channel_visual_state!(ax, state)
 end
 
-"""Clear channel selection and restore normal styling for all channels."""
 function _clear_channel_selection!(ax, state)
     state.channels.selected .= false
     _apply_channel_visual_state!(ax, state)
 end
 
-"""Toggle the selected/highlighted state of one channel instantly."""
 function _toggle_channel_selection!(ax, state, channel_idx)
     state.channels.selected[channel_idx] = !state.channels.selected[channel_idx]
     _apply_channel_visual_state!(ax, state)
 end
 const _toggle_channel_visibility! = _toggle_channel_selection!
-_handle_channel_click!(ax, state, channel_idx) = _toggle_channel_selection!(ax, state, channel_idx)
 
-"""Register keyboard shortcuts (arrows, i=help, r=repair, c=clear)."""
 function _handle_keyboard_events!(fig, ax, state)
     on(events(fig).keyboardbutton) do event
         if event.action == Keyboard.press && event.key == Keyboard.i
-            # Show help for databrowser
             _show_plot_help(:databrowser)
         elseif event.action == Keyboard.press && event.key == Keyboard.r
-            # Open channel repair menu
             _show_channel_repair_menu(state, ax)
         elseif event.action == Keyboard.press && event.key == Keyboard.c
-            # Clear all selected regions and channel selection
             _clear_all_selected_regions!(ax, state)
             _clear_channel_selection!(ax, state)
         elseif event.action in (Keyboard.press, Keyboard.repeat) && haskey(KEYBOARD_ACTIONS, event.key)
-            action = KEYBOARD_ACTIONS[event.key]
-            _handle_navigation!(ax, state, action)
+            _handle_navigation!(ax, state, KEYBOARD_ACTIONS[event.key])
         end
     end
 end
 
-
-"""Redraw the temporary selection rectangle between x1 and x2."""
-function _update_x_region_selection!(ax, state, x1, x2)
+function _region_rect_points(ax, state, x1, x2)
     limits_y = ax.limits[][2]
-    ylims = isnothing(limits_y) ? (Float64(state.view.yrange[][1]), Float64(state.view.yrange[][end])) : limits_y
-    state.selection.rectangle[1] = Point2f[
-        Point2f(Float64(x1), Float64(ylims[1])),
-        Point2f(Float64(x2), Float64(ylims[1])),
-        Point2f(Float64(x2), Float64(ylims[2])),
-        Point2f(Float64(x1), Float64(ylims[2])),
-    ]
+    y1, y2 = isnothing(limits_y) ? (Float64(state.view.yrange[][1]), Float64(state.view.yrange[][end])) : limits_y
+    return Point2f[Point2f(x1, y1), Point2f(x2, y1), Point2f(x2, y2), Point2f(x1, y2)]
+end
+
+function _update_x_region_selection!(ax, state, x1, x2)
+    state.selection.rectangle[1] = _region_rect_points(ax, state, x1, x2)
     state.selection.rectangle.visible[] = true
 end
 
-"""Store a finalised region, draw its permanent overlay, and update settings."""
 function _add_region_to_selection!(ax, state, x1, x2)
-    # Ensure x1 <= x2
-    if x1 > x2
-        x1, x2 = x2, x1
-    end
-
-    # Add to selected regions
+    x1 > x2 && ((x1, x2) = (x2, x1))
     current_regions = state.selection.selected_regions[]
-    new_region = (x1, x2)
-    push!(current_regions, new_region)
+    push!(current_regions, (x1, x2))
     state.selection.selected_regions[] = current_regions
 
-    # Create a permanent region plot
-    limits_y = ax.limits[][2]
-    ylims = isnothing(limits_y) ? (Float64(state.view.yrange[][1]), Float64(state.view.yrange[][end])) : limits_y
-    region_points = Point2f[
-        Point2f(Float64(x1), Float64(ylims[1])),
-        Point2f(Float64(x2), Float64(ylims[1])),
-        Point2f(Float64(x2), Float64(ylims[2])),
-        Point2f(Float64(x1), Float64(ylims[2])),
-    ]
     region_plot = poly!(
         ax,
-        region_points,
+        _region_rect_points(ax, state, x1, x2),
         color = (state.plot_kwargs[:selection_color], state.plot_kwargs[:selection_alpha]),
         strokecolor = :transparent,
     )
     push!(state.selection.region_plots, region_plot)
-
-    # Update analysis settings
     _update_analysis_settings!(state)
-
 end
 
-"""Reset the temporary selection rectangle to invisible."""
 function _clear_x_region_selection!(state)
-    # Set to a single point instead of empty vector to avoid CairoMakie issues
+    # Single point avoids CairoMakie empty-polygon issues
     state.selection.rectangle[1] = [Point2f(0.0, 0.0)]
     state.selection.bounds[] = (0.0, 0.0)
     state.selection.visible[] = false
     state.selection.rectangle.visible[] = false
 end
 
-"""Delete all permanent region overlays and clear the region list."""
 function _clear_all_selected_regions!(ax, state)
-    # Clear all region plots
     for plot in state.selection.region_plots
         delete!(ax.scene, plot)
     end
     empty!(state.selection.region_plots)
-
-    # Clear the selected regions list
     state.selection.selected_regions[] = Tuple{Float64,Float64}[]
     _update_analysis_settings!(state)
 end
 
-"""
-    _get_selected_regions_bool(state::DataBrowserState) -> Vector{Bool}
-
-Returns a boolean vector indicating which samples are within the selected regions.
-The vector has the same length as the total number of samples in the data.
-"""
 function _get_selected_regions_bool(state::DataBrowserState)
     current_data = _get_current_data(state.data)
     total_samples = nrow(current_data)
@@ -1790,54 +1394,32 @@ function _get_selected_regions_bool(state::DataBrowserState)
     bool_vector = falses(total_samples)
 
     for (start_time, end_time) in state.selection.selected_regions[]
-        # Find the bounding sample indices in O(log N) without allocations
-        start_idx = searchsortedfirst(time_data, start_time)
-        end_idx = searchsortedlast(time_data, end_time)
-
-        # Ensure indices are within bounds and start <= end
-        start_idx = max(1, min(start_idx, total_samples))
-        end_idx = max(1, min(end_idx, total_samples))
-        if start_idx > end_idx
-            start_idx, end_idx = end_idx, start_idx
-        end
-
-        # Mark the region as selected
-        bool_vector[start_idx:end_idx] .= true
+        start_idx = clamp(searchsortedfirst(time_data, start_time), 1, total_samples)
+        end_idx = clamp(searchsortedlast(time_data, end_time), 1, total_samples)
+        start_idx <= end_idx && (bool_vector[start_idx:end_idx] .= true)
     end
 
     return bool_vector
 end
 
-"""
-    _get_selected_regions_info(state::DataBrowserState) -> NamedTuple
-
-Returns detailed information about the selected regions including:
-- `bool_vector`: Boolean vector of selected samples
-- `regions`: List of (start_time, end_time) tuples
-- `n_samples`: Number of selected samples
-- `n_regions`: Number of selected regions
-"""
 function _get_selected_regions_info(state::DataBrowserState)
     bool_vector = _get_selected_regions_bool(state)
     regions = state.selection.selected_regions[]
-
     return (bool_vector = bool_vector, regions = regions, n_samples = sum(bool_vector), n_regions = length(regions))
 end
 
-"""Return (x_min, x_max) tuple for the clicked or most recent selected region."""
 function _get_selected_region_bounds(state, clicked_region_idx = nothing)
-    if !isnothing(clicked_region_idx) && 1 <= clicked_region_idx <= length(state.selection.selected_regions[])
-        r = state.selection.selected_regions[][clicked_region_idx]
+    regions = state.selection.selected_regions[]
+    if !isnothing(clicked_region_idx) && 1 <= clicked_region_idx <= length(regions)
+        r = regions[clicked_region_idx]
         return (min(r[1], r[2]), max(r[1], r[2]))
-    elseif !isempty(state.selection.selected_regions[])
-        r = state.selection.selected_regions[][end]
+    elseif !isempty(regions)
+        r = regions[end]
         return (min(r[1], r[2]), max(r[1], r[2]))
-    else
-        return nothing
     end
+    return nothing
 end
 
-"""Return a subset of the current continuous data within the selected region."""
 function _subset_selected_data(state::ContinuousDataBrowserState, clicked_region_idx = nothing; all_visible_channels::Bool = false)
     bounds = _get_selected_region_bounds(state, clicked_region_idx)
     if isnothing(bounds)
@@ -1845,7 +1427,6 @@ function _subset_selected_data(state::ContinuousDataBrowserState, clicked_region
         return nothing
     end
     x_min, x_max = bounds
-
     selected_channels = all_visible_channels ? state.channels.labels[state.channels.visible] : _get_browser_target_channels(state)
     return subset(
         state.data.current[],
@@ -1854,7 +1435,6 @@ function _subset_selected_data(state::ContinuousDataBrowserState, clicked_region
     )
 end
 
-"""Return a subset of the current epoch data within the selected region."""
 function _subset_selected_data(state::EpochedDataBrowserState, clicked_region_idx = nothing; all_visible_channels::Bool = false)
     bounds = _get_selected_region_bounds(state, clicked_region_idx)
     if isnothing(bounds)
@@ -1862,82 +1442,56 @@ function _subset_selected_data(state::EpochedDataBrowserState, clicked_region_id
         return nothing
     end
     x_min, x_max = bounds
-
     selected_channels = all_visible_channels ? state.channels.labels[state.channels.visible] : _get_browser_target_channels(state)
-    current_epoch = state.data.current_epoch[]
-
-    # Create a sample_selection function that works with epoch DataFrame
-    # get_selected_samples for MultiDataFrameEeg expects a function that takes the first epoch DataFrame
-    sample_selection = epoch_df -> begin
-        time_mask = (epoch_df.time .>= x_min) .& (epoch_df.time .<= x_max)
-        return time_mask
-    end
 
     epoch_data = subset(
         state.data.current[],
-        sample_selection = sample_selection,
+        sample_selection = epoch_df -> (epoch_df.time .>= x_min) .& (epoch_df.time .<= x_max),
         channel_selection = channels(selected_channels),
-        epoch_selection = epochs([current_epoch]),
+        epoch_selection = epochs([state.data.current_epoch[]]),
     )
-
-    # Check if we have data before converting
     if isempty(epoch_data)
         @minimal_warning "Selected region contains no data"
         return nothing
     end
-
     return epoch_to_continuous(epoch_data, 1)
 end
 
+# =============================================================================
+# Filtering
+# =============================================================================
 
-############
-# Filtering
-############
-############
-# Filtering
-############
-"""Rebuild current dataset from original, applying repairs, reference, ICA, and active filters."""
 _apply_filters!(state) = _rebuild_current!(state)
 
-"""Toggle or set the high-pass filter and reapply."""
 function _apply_hp_filter!(state, active::Bool = !state.data.filter_state.hp_active[])
     state.data.filter_state.hp_active[] = active
     _apply_filters!(state)
 end
 
-"""Toggle or set the low-pass filter and reapply."""
 function _apply_lp_filter!(state, active::Bool = !state.data.filter_state.lp_active[])
     state.data.filter_state.lp_active[] = active
     _apply_filters!(state)
 end
 
-########################
+# =============================================================================
 # Drawing
-########################
+# =============================================================================
 
 """Add a vertical marker (trigger/EOG) to the marker list, window-scoped for performance."""
 function _add_marker!(markers, ax, state, data, col; label = nothing, trial = nothing, visible = false, active_values = nothing)
-    if isnothing(trial)
-        # More efficient: filter directly without findall
-        mask = data[!, col] .!= 0
-        if !isnothing(active_values)
-            mask .&= map(v -> v in active_values, data[!, col])
+    src_df = isnothing(trial) ? data : data[trial]
+    col_vec = src_df[!, col]
+    mask = col_vec .!= 0
+    if !isnothing(active_values)
+        @inbounds for i in eachindex(mask, col_vec)
+            mask[i] && (mask[i] = col_vec[i] in active_values)
         end
-        marker_data = data[mask, [:time, col]]
-    else
-        mask = data[trial][!, col] .!= 0
-        if !isnothing(active_values)
-            mask .&= map(v -> v in active_values, data[trial][!, col])
-        end
-        marker_data = data[trial][mask, [:time, col]]
     end
-
-    # if no markers, return
+    marker_data = src_df[mask, [:time, col]]
     nrow(marker_data) == 0 && return
 
-    label_vec = isnothing(label) ? string.(marker_data[!, col]) : repeat([label], nrow(marker_data))
+    label_vec = isnothing(label) ? string.(marker_data[!, col]) : fill(label, nrow(marker_data))
 
-    # Reactive atomic window-scoped marker time, label, & position subviews
     marker_obs = @lift(begin
         if state isa EpochedDataBrowserState
             idxs = 1:nrow(marker_data)
@@ -1946,9 +1500,7 @@ function _add_marker!(markers, ax, state, data, col; label = nothing, trial = no
             t_start = data.time[win[1]]
             t_end = data.time[win[end]]
             times = marker_data.time
-            i1 = searchsortedfirst(times, t_start)
-            i2 = searchsortedlast(times, t_end)
-            idxs = i1:i2
+            idxs = searchsortedfirst(times, t_start):searchsortedlast(times, t_end)
         end
         times = marker_data.time[idxs]
         lbls = label_vec[idxs]
@@ -1982,7 +1534,6 @@ function _add_marker!(markers, ax, state, data, col; label = nothing, trial = no
     )
 end
 
-"""Disconnect an observer or observable from its upstream sources."""
 function _disconnect_observer(o)
     if o isa Observable
         Makie.Observables.clear(o)
@@ -1993,14 +1544,11 @@ function _disconnect_observer(o)
     end
 end
 
-"""Return the four line/label dict collections for clearing."""
 _all_line_dicts(state) =
-    [state.channels.data_lines, state.channels.data_labels, state.channels.original_lines, state.channels.subtracted_lines]
+    (state.channels.data_lines, state.channels.data_labels, state.channels.original_lines, state.channels.subtracted_lines)
 
-"""Check whether a channel has been repaired in the current session."""
 _is_channel_repaired(state, col) = any(col in chs for (chs, _, _) in state.channel_repair_history)
 
-"""Recompute channel vertical offsets for the current visible channels."""
 function _update_channel_offsets!(state)
     nchannels = count(state.channels.visible)
     margin = state.plot_kwargs[:channel_offset_margin]
@@ -2008,16 +1556,18 @@ function _update_channel_offsets!(state)
         y_max = state.view.yrange[][end] * margin
         y_min = state.view.yrange[][1] * margin
         step = (y_min - y_max) / (nchannels - 1)
-        visible_indices = findall(state.channels.visible)
-        for (i, idx) in enumerate(visible_indices)
-            state.view.offset[idx] = y_max + (i - 1) * step
+        i = 0
+        @inbounds for idx in eachindex(state.channels.visible)
+            if state.channels.visible[idx]
+                state.view.offset[idx] = y_max + i * step
+                i += 1
+            end
         end
     else
         state.view.offset[state.channels.visible] .= 0.0
     end
 end
 
-"""Delete all plotted lines/labels from the given dict collections."""
 function _clear_axes!(ax, datas)
     for data in datas
         for value in values(data)
@@ -2027,32 +1577,23 @@ function _clear_axes!(ax, datas)
     end
 end
 
-"""Set reactive x/y limits on the axis from view state."""
 function _set_axes!(ax, state::DataBrowserState{<:AbstractDataState})
     @lift ylims!(ax, $(state.view.yrange)[1], $(state.view.yrange)[end])
     _set_x_limits!(ax, state, state.data)
 end
 
-"""Bind x-limits to the continuous data time range."""
 function _set_x_limits!(ax, state, data::ContinuousDataState)
     @lift xlims!(ax, data.current[].data.time[$(state.view.xrange)[1]], data.current[].data.time[$(state.view.xrange)[end]])
 end
 
-"""Bind x-limits to the epoch time range."""
 function _set_x_limits!(ax, state, data::EpochedDataState)
     @lift xlims!(ax, $(data.current).data[1].time[1], $(data.current).data[1].time[end])
 end
 
-"""Create initial marker objects for triggers and EOG channels."""
 function _init_markers(ax, state)
     markers = Marker[]
     data = _get_current_data(state.data)
-
-    # Define marker configurations
-    marker_configs = [(:trigger, nothing), (:is_vEOG, "v"), (:is_hEOG, "h")]
-
-    # Add markers based on configuration
-    for (symbol, label) in marker_configs
+    for (symbol, label) in ((:trigger, nothing), (:is_vEOG, "v"), (:is_hEOG, "h"))
         if _has_column(state.data, symbol)
             active_vals = symbol == :trigger ? get(state.plot_kwargs, :active_triggers, nothing) : nothing
             _add_marker!(
@@ -2067,16 +1608,12 @@ function _init_markers(ax, state)
             )
         end
     end
-
     return markers
 end
 
-"""Re-create markers for the current epoch (preserving visibility)."""
 function _update_markers!(ax, state)
     for marker in state.markers
-        for o in marker.observers
-            _disconnect_observer(o)
-        end
+        foreach(_disconnect_observer, marker.observers)
         delete!(ax, marker.line)
         delete!(ax, marker.text)
     end
@@ -2084,19 +1621,14 @@ function _update_markers!(ax, state)
     state.markers = _init_markers(ax, state)
 end
 
-"""Toggle butterfly mode on/off and redraw channels."""
 function _butterfly_plot!(ax, state)
     state.view.butterfly[] = !state.view.butterfly[]
     _clear_and_save_limits!(ax, state)
     _update_channel_offsets!(state)
     _draw(ax, state)
-    if !isempty(state.extra_channel.channels)
-        _draw_extra_channel!(ax, state)
-    end
+    !isempty(state.extra_channel.channels) && _draw_extra_channel!(ax, state)
 end
 
-# ICA ghost-line helpers
-"""Fill `pts` in place with `(x[i], y[i] * scale + offset)`; `pts`, `x` and `y` must have the same length."""
 function _window_points!(pts::Vector{Point2{Float64}}, x, y, scale, offset)
     @inbounds for i in eachindex(pts)
         pts[i] = Point2{Float64}(x[i], y[i] * scale + offset)
@@ -2104,7 +1636,6 @@ function _window_points!(pts::Vector{Point2{Float64}}, x, y, scale, offset)
     return pts
 end
 
-"""Fill `pts` in place with NaN y-values (an invisible line segment) at the x-positions `x`."""
 function _nan_points!(pts::Vector{Point2{Float64}}, x)
     @inbounds for i in eachindex(pts)
         pts[i] = Point2{Float64}(x[i], NaN)
@@ -2112,14 +1643,7 @@ function _nan_points!(pts::Vector{Point2{Float64}}, x)
     return pts
 end
 
-"""
-    _points_observable(fill_points!, xrange, deps...)
-
-Observable holding one `Vector{Point2{Float64}}` per line (x and y update together, so Makie sees a single
-notification per change). The vector is reused and mutated in place; it is only reallocated when the window
-length changes. `fill_points!(buf, resized)` fills `buf` and returns `false` if nothing changed (no notification).
-The observer functions it registers are appended to `tracker` (see `_disconnect_draw_observers!`).
-"""
+# Reuses a single `Vector{Point2{Float64}}` per line in place; only reallocates when window length changes.
 function _points_observable(fill_points!::F, tracker::Vector{Any}, xrange::Observable, deps::Observable...) where {F<:Function}
     obs = Observable(Vector{Point2{Float64}}(undef, length(xrange[])))
     resized = Ref(true)
@@ -2132,20 +1656,18 @@ function _points_observable(fill_points!::F, tracker::Vector{Any}, xrange::Obser
         end
         if fill_points!(buf, resized[])
             resized[] = false
-            obs[] = buf   # same array mutated in place: Observables always notify on assignment
+            obs[] = buf
         end
         return nothing
     end
     refresh()
-    push!(tracker, onany(refresh, xrange, deps...))   # tracked so a redraw can disconnect them
+    push!(tracker, onany(refresh, xrange, deps...))
     return obs
 end
 
-"""Raw (unfiltered) original series for `col` from the browser's original data."""
 _ica_original_series(data::ContinuousDataState, ep, col) = data.original.data[!, col]
 _ica_original_series(data::EpochedDataState, ep, col) = data.original.data[ep][!, col]
 
-"""Accumulate `u * ((x[i] - m) / scale)` for `i in rng` into column `k` of `acts` (type-stable kernel)."""
 function _accumulate_activation!(
     acts::Matrix{Float64},
     k::Int,
@@ -2161,7 +1683,6 @@ function _accumulate_activation!(
     return acts
 end
 
-"""Activations (samples × removed components) of the removed ICA components for sample range `rng`."""
 function _compute_ica_activations(state, ep, rng::UnitRange{Int})
     ica = state.ica.original::InfoIca
     comps = state.ica.removed_components
@@ -2173,12 +1694,6 @@ function _compute_ica_activations(state, ep, rng::UnitRange{Int})
     return acts
 end
 
-"""
-Return `(range, acts)` where `acts` holds the removed-component activations covering `win`.
-
-Results are cached per epoch and extended to a margin of one window width on each side, so
-consecutive scroll steps reuse them. The cache is dropped when the removed components change.
-"""
 function _ica_activations!(state, ep, win::UnitRange{Int})
     ica = state.ica
     if ica.activation_key != ica.removed_components
@@ -2196,75 +1711,133 @@ function _ica_activations!(state, ep, win::UnitRange{Int})
     return entry::Tuple{UnitRange{Int},Matrix{Float64}}
 end
 
-"""Add `mix_weight * scale * acts[:, k]` (rows of `win` offset by `off`) onto `restored` in place."""
-function _add_component!(restored::Vector{Float64}, acts::Matrix{Float64}, k::Int, win::UnitRange{Int}, off::Int, coeff::Float64)
-    @inbounds for (j, i) in enumerate(win)
-        restored[j] += coeff * acts[i-off, k]
-    end
-    return restored
-end
-
-"""Current-window values with the removed components added back (the 'original' ICA signal) for one channel."""
-function _ica_restored_window(state, ep, win::UnitRange{Int}, current_raw, ch_row)
-    restored = collect(Float64, current_raw)
+function _fill_ica_points!(
+    buf::Vector{Point2{Float64}},
+    x,
+    raw,
+    state,
+    ep::Int,
+    win::UnitRange{Int},
+    ch_row::Int,
+    scale::Float64,
+    offset::Float64,
+    subtract_raw::Bool,
+)
     comps = state.ica.removed_components
-    isempty(comps) && return restored
+    if isempty(comps)
+        if subtract_raw
+            @inbounds for j in eachindex(buf)
+                buf[j] = Point2{Float64}(x[j], offset)
+            end
+        else
+            _window_points!(buf, x, raw, scale, offset)
+        end
+        return buf
+    end
     rng, acts = _ica_activations!(state, ep, win)
     ica = state.ica.original::InfoIca
-    off = first(rng) - 1
-    for (k, comp) in enumerate(comps)
-        # (mix_weight * scale) first, then times the activation: same operation order as the original code
-        _add_component!(restored, acts, k, win, off, ica.mixing[ch_row, comp] * ica.scale)
+    win_off = first(win) - first(rng)
+    n_comps = length(comps)
+    @inbounds for j in eachindex(buf)
+        val = Float64(raw[j])
+        r = j + win_off
+        for k = 1:n_comps
+            comp = comps[k]
+            val += (ica.mixing[ch_row, comp] * ica.scale) * acts[r, k]
+        end
+        subtract_raw && (val -= raw[j])
+        buf[j] = Point2{Float64}(x[j], val * scale + offset)
     end
-    return restored
+    return buf
 end
 
-# Single function with data access abstraction
-"""Draw all visible channel lines and labels on the axis."""
+# Keeps `color` as `Observable{Vector{Bool}}` for GLMakie shader type stability while skipping
+# allocations/notifications on constant-length scrolls when `crit_val <= 0`.
+function _color_mask_observable(state, epoch_obs, get_data, col::Symbol, ch_row::Int)
+    xrange = state.view.xrange
+    crit_obs = state.view.crit_val
+    obs = Observable(fill(false, length(xrange[])))
+    all_false = Ref(true)
+    function refresh(_...)
+        win = xrange[]
+        n = length(win)
+        crit = crit_obs[]
+        buf = obs[]
+        resized = length(buf) != n
+        resized && (buf = Vector{Bool}(undef, n))
+        if crit > 0.0
+            cur = state.data.current[]
+            ep = epoch_obs[]
+            raw = get_data(cur, ep, win, col)
+            if state.ica.is_active &&
+               ch_row > 0 &&
+               !state.plot_kwargs[:show_cleaned_ica][] &&
+               state.view.show_original_ica[] &&
+               !isempty(state.ica.removed_components)
+                rng, acts = _ica_activations!(state, ep, win)
+                ica = state.ica.original::InfoIca
+                comps = state.ica.removed_components
+                win_off = first(win) - first(rng)
+                @inbounds for j = 1:n
+                    val = Float64(raw[j])
+                    r = j + win_off
+                    for k in eachindex(comps)
+                        comp = comps[k]
+                        val += (ica.mixing[ch_row, comp] * ica.scale) * acts[r, k]
+                    end
+                    buf[j] = abs(val) >= crit
+                end
+            else
+                @inbounds for j = 1:n
+                    buf[j] = abs(raw[j]) >= crit
+                end
+            end
+            all_false[] = false
+            obs[] = buf
+        elseif resized || !all_false[]
+            fill!(buf, false)
+            all_false[] = true
+            obs[] = buf
+        end
+        return nothing
+    end
+    refresh()
+    push!(
+        state.channels.draw_observers,
+        onany(refresh, xrange, crit_obs, state.data.current, epoch_obs, state.plot_kwargs[:show_cleaned_ica], state.view.show_original_ica),
+    )
+    return obs
+end
+
 function _draw(ax, state::DataBrowserState{<:AbstractDataState})
-    # Get data access functions based on type
     get_data, get_time, get_label_y = _get_data_accessors(state.data)
-
     epoch_obs = state.data isa EpochedDataState ? state.data.current_epoch : Observable(1)
-
-    # Every derived observable / observer created below is registered in `state.channels.draw_observers`,
-    # so `_clear_and_save_limits!` can disconnect them from the shared inputs (xrange, current, ...) on redraw.
     track(x) = (push!(state.channels.draw_observers, x); x)
 
-    # Pre-compute shared observables
     visible_time_obs = track(@lift(get_time($(state.data.current), $(epoch_obs), $(state.view.xrange))))
-    time_start_obs   = track(@lift($(visible_time_obs)[1]))  # Fix 6: derived from visible_time_obs
+    time_start_obs = track(@lift($(visible_time_obs)[1]))
 
     ch_idx_map = state.ica.is_active ? Dict(lbl => i for (i, lbl) in enumerate(state.ica.original.layout.data.label)) : Dict{Symbol,Int}()
+    ghost_orig_visible =
+        state.ica.is_active ? track(@lift($(state.view.show_original_ica) && $(state.plot_kwargs[:show_cleaned_ica]))) : nothing
+    data_lines_visible =
+        state.ica.is_active ? track(@lift($(state.plot_kwargs[:show_cleaned_ica]) || $(state.view.show_original_ica))) : true
+
+    any_selected = any(state.channels.selected)
+    unsel_color = state.plot_kwargs[:unselected_channel_color]
+    cleaned_color = get(state.plot_kwargs, :cleaned_channel_color, :green)
+    sel_color = state.plot_kwargs[:selected_channel_color]
+    normal_lw = state.plot_kwargs[:channel_line_width]
+    line_alpha = state.plot_kwargs[:channel_line_alpha]
 
     for (idx, visible) in enumerate(state.channels.visible)
         col = state.channels.labels[idx]
         if visible
             is_selected = state.channels.selected[idx]
-
             ch_row = get(ch_idx_map, col, 0)
 
-            # Channel data (compute once)
-            channel_data_obs = track(
-                @lift(
-                    begin
-                        cur = $(state.data.current)
-                        ep = $(epoch_obs)
-                        win = $(state.view.xrange)
-                        raw = get_data(cur, ep, win, col)
-                        if state.ica.is_active &&
-                           ch_row > 0 &&
-                           !($(state.plot_kwargs[:show_cleaned_ica])) &&
-                           $(state.view.show_original_ica)
-                            _ica_restored_window(state, ep, win, raw, ch_row)
-                        else
-                            collect(Float64, raw)
-                        end
-                    end
-                )
-            )
+            line_color = _color_mask_observable(state, epoch_obs, get_data, col, ch_row)
 
-            # One Point2 observable per line, updated in place (no per-step allocation of the point array)
             channel_points_obs = _points_observable(
                 state.channels.draw_observers,
                 state.view.xrange,
@@ -2277,18 +1850,18 @@ function _draw(ax, state::DataBrowserState{<:AbstractDataState})
                 win = state.view.xrange[]
                 ep = epoch_obs[]
                 cur = state.data.current[]
-                data_series =
-                    if state.ica.is_active && ch_row > 0 && !state.plot_kwargs[:show_cleaned_ica][] && state.view.show_original_ica[]
-                        _ica_restored_window(state, ep, win, get_data(cur, ep, win, col), ch_row)
-                    else
-                        get_data(cur, ep, win, col)
-                    end
-                _window_points!(buf, get_time(cur, ep, win), data_series, state.view.amplitude_scale[], state.view.offset[idx])
+                raw = get_data(cur, ep, win, col)
+                t_view = get_time(cur, ep, win)
+                scale = state.view.amplitude_scale[]
+                off = state.view.offset[idx]
+                if state.ica.is_active && ch_row > 0 && !state.plot_kwargs[:show_cleaned_ica][] && state.view.show_original_ica[]
+                    _fill_ica_points!(buf, t_view, raw, state, ep, win, ch_row, scale, off, false)
+                else
+                    _window_points!(buf, t_view, raw, scale, off)
+                end
                 return true
             end
 
-            # Ghost lines data (activations are only computed while the respective ghost is visible;
-            # while hidden the buffer is set to NaN once and then left untouched)
             if state.ica.is_active && ch_row > 0
                 original_nan = Ref(false)
                 original_points_obs = _points_observable(
@@ -2303,8 +1876,18 @@ function _draw(ax, state::DataBrowserState{<:AbstractDataState})
                     ep = epoch_obs[]
                     cur = state.data.current[]
                     if state.view.show_original_ica[]
-                        restored = _ica_restored_window(state, ep, win, get_data(cur, ep, win, col), ch_row)
-                        _window_points!(buf, get_time(cur, ep, win), restored, state.view.amplitude_scale[], state.view.offset[idx])
+                        _fill_ica_points!(
+                            buf,
+                            get_time(cur, ep, win),
+                            get_data(cur, ep, win, col),
+                            state,
+                            ep,
+                            win,
+                            ch_row,
+                            state.view.amplitude_scale[],
+                            state.view.offset[idx],
+                            false,
+                        )
                         original_nan[] = false
                         return true
                     elseif resized || !original_nan[]
@@ -2328,10 +1911,18 @@ function _draw(ax, state::DataBrowserState{<:AbstractDataState})
                     ep = epoch_obs[]
                     cur = state.data.current[]
                     if state.view.show_subtracted_ica[]
-                        current_raw = get_data(cur, ep, win, col)
-                        restored = _ica_restored_window(state, ep, win, current_raw, ch_row)
-                        restored .-= current_raw
-                        _window_points!(buf, get_time(cur, ep, win), restored, state.view.amplitude_scale[], state.view.offset[idx])
+                        _fill_ica_points!(
+                            buf,
+                            get_time(cur, ep, win),
+                            get_data(cur, ep, win, col),
+                            state,
+                            ep,
+                            win,
+                            ch_row,
+                            state.view.amplitude_scale[],
+                            state.view.offset[idx],
+                            true,
+                        )
                         subtracted_nan[] = false
                         return true
                     elseif resized || !subtracted_nan[]
@@ -2342,7 +1933,6 @@ function _draw(ax, state::DataBrowserState{<:AbstractDataState})
                     return false
                 end
 
-                ghost_orig_visible = track(@lift($(state.view.show_original_ica) && $(state.plot_kwargs[:show_cleaned_ica])))
                 _create_line!(
                     state.channels.original_lines,
                     col,
@@ -2350,11 +1940,10 @@ function _draw(ax, state::DataBrowserState{<:AbstractDataState})
                     original_points_obs,
                     :grey,
                     [:grey],
-                    1, # linewidth
-                    0.5, # clear alpha
+                    1,
+                    0.5;
                     visible = ghost_orig_visible,
                 )
-
                 _create_line!(
                     state.channels.subtracted_lines,
                     col,
@@ -2362,43 +1951,27 @@ function _draw(ax, state::DataBrowserState{<:AbstractDataState})
                     subtracted_points_obs,
                     :red,
                     [:red],
-                    1, # linewidth
-                    0.5, # clear alpha
+                    1,
+                    0.5;
                     visible = state.view.show_subtracted_ica,
                 )
             end
 
-            is_repaired = _is_channel_repaired(state, col)
-
-            # Line properties (reuse channel_data_obs for efficiency)
-            # Keep line_color as Vector{Bool} observable at all times so GLMakie shader pipeline type is fixed
-            line_color = track(
-                @lift(
-                    ($(state.view.crit_val) > 0.0) ? (abs.($(channel_data_obs)) .>= $(state.view.crit_val)) :
-                    fill(false, length($(channel_data_obs)))
-                )
-            )
-
-            if is_repaired || is_selected
-                sel_color = state.plot_kwargs[:selected_channel_color]
+            if is_selected || _is_channel_repaired(state, col)
                 line_colormap = [sel_color, sel_color, sel_color]
-                line_width = state.plot_kwargs[:channel_line_width] * 2  # Make repaired/selected channels thicker
-            else
-                unsel_color = state.plot_kwargs[:unselected_channel_color]
-                cleaned_color = get(state.plot_kwargs, :cleaned_channel_color, :green)
+                line_width = normal_lw * 2
+            elseif state.ica.is_active
                 line_colormap = track(
                     @lift(
-                        state.ica.is_active && $(state.plot_kwargs[:show_cleaned_ica]) ? [cleaned_color, cleaned_color, :red] :
-                        [unsel_color, unsel_color, :red]
+                        $(state.plot_kwargs[:show_cleaned_ica]) ? [cleaned_color, cleaned_color, :red] : [unsel_color, unsel_color, :red]
                     )
                 )
-                line_width = state.plot_kwargs[:channel_line_width]
+                line_width = normal_lw
+            else
+                line_colormap = [unsel_color, unsel_color, :red]
+                line_width = normal_lw
             end
 
-            data_lines_visible =
-                track(@lift(!state.ica.is_active || $(state.plot_kwargs[:show_cleaned_ica]) || $(state.view.show_original_ica)))
-
-            # Update or create line
             _create_line!(
                 state.channels.data_lines,
                 col,
@@ -2407,11 +1980,10 @@ function _draw(ax, state::DataBrowserState{<:AbstractDataState})
                 line_color,
                 line_colormap,
                 line_width,
-                state.plot_kwargs[:channel_line_alpha];
+                line_alpha;
                 visible = data_lines_visible,
             )
 
-            # Handle labels
             if !state.view.butterfly[]
                 label_y_obs = track(
                     @lift(
@@ -2425,7 +1997,7 @@ function _draw(ax, state::DataBrowserState{<:AbstractDataState})
                         )
                     )
                 )
-                _create_label!(state.channels.data_labels, col, ax, time_start_obs, label_y_obs, is_selected, any(state.channels.selected))
+                _create_label!(state.channels.data_labels, col, ax, time_start_obs, label_y_obs, is_selected, any_selected)
             else
                 _hide_channel_label!(state.channels.data_labels, col)
             end
@@ -2434,26 +2006,15 @@ function _draw(ax, state::DataBrowserState{<:AbstractDataState})
         end
     end
 
-    # Restore axis limits after clearing and redrawing (prevents Makie auto-limits from resetting zoom)
     _restore_axis_limits!(ax, state)
 end
 
-"""
-    _disconnect_draw_observers!(state)
-
-Disconnect every observable/observer registered by `_draw` from its shared inputs (`xrange`, `current`, ...).
-Without this, each redraw (butterfly toggle, ICA apply, hiding a channel, ...) leaves the previous draw's
-observers attached, and every later scroll step pays for them again.
-"""
 function _disconnect_draw_observers!(state)
-    for o in state.channels.draw_observers
-        _disconnect_observer(o)
-    end
+    foreach(_disconnect_observer, state.channels.draw_observers)
     empty!(state.channels.draw_observers)
     return nothing
 end
 
-"""Save current axis limits and clear all channel lines/labels."""
 function _clear_and_save_limits!(ax, state)
     state.plot_kwargs[:_saved_xlims] = ax.xaxis.attributes.limits[]
     state.plot_kwargs[:_saved_ylims] = ax.yaxis.attributes.limits[]
@@ -2461,7 +2022,6 @@ function _clear_and_save_limits!(ax, state)
     _disconnect_draw_observers!(state)
 end
 
-"""Restore axis limits from saved values (preserves user zoom across redraws)."""
 function _restore_axis_limits!(ax, state)
     if haskey(state.plot_kwargs, :_saved_xlims)
         xlims!(ax, state.plot_kwargs[:_saved_xlims]...)
@@ -2471,24 +2031,20 @@ function _restore_axis_limits!(ax, state)
     end
 end
 
-# Data accessor functions
-"""Return `(get_data, get_time, get_label_y)` closures for continuous data."""
-function _get_data_accessors(data::ContinuousDataState) # data used for dispatch
+function _get_data_accessors(::ContinuousDataState)
     get_data = (current, ep, range, col) -> @view current.data[!, col][range]
     get_time = (current, ep, range) -> @view current.data.time[range]
     get_label_y = (current, ep, col, offset, sample_idx, scale) -> current.data[sample_idx, col] * scale + offset
     return get_data, get_time, get_label_y
 end
 
-"""Return `(get_data, get_time, get_label_y)` closures for epoched data."""
-function _get_data_accessors(state::EpochedDataState)
+function _get_data_accessors(::EpochedDataState)
     get_data = (current, ep, range, col) -> @view current.data[ep][!, col][range]
     get_time = (current, ep, range) -> @view current.data[ep].time[range]
     get_label_y = (current, ep, col, offset, sample_idx, scale) -> current.data[ep][!, col][sample_idx] * scale + offset
     return get_data, get_time, get_label_y
 end
 
-"""Plot a channel line (from one `Point2` observable) on the axis and store it."""
 function _create_line!(data_lines, col, ax, points_obs, color, colormap, linewidth, alpha; visible = true)
     data_lines[col] = lines!(
         ax,
@@ -2502,18 +2058,13 @@ function _create_line!(data_lines, col, ax, points_obs, color, colormap, linewid
     )
 end
 
-"""Add a channel-name text label on the axis."""
 function _create_label!(data_labels, col, ax, x_obs, y_obs, is_selected, any_selected = false)
     label_color = is_selected ? :red : (any_selected ? :gray50 : :black)
     data_labels[col] = text!(ax, x_obs, y_obs, text = String(col), align = (:left, :center), fontsize = 18, color = label_color)
 end
 
-"""Hide a single channel label."""
-function _hide_channel_label!(data_labels, col)
-    haskey(data_labels, col) && (data_labels[col].visible = false)
-end
+_hide_channel_label!(data_labels, col) = haskey(data_labels, col) && (data_labels[col].visible = false)
 
-"""Hide both line and label for a channel."""
 function _hide_channel_objects!(channels, col)
     haskey(channels.data_lines, col) && (channels.data_lines[col].visible = false)
     haskey(channels.data_labels, col) && (channels.data_labels[col].visible = false)
@@ -2521,179 +2072,132 @@ function _hide_channel_objects!(channels, col)
     haskey(channels.subtracted_lines, col) && (channels.subtracted_lines[col].visible = false)
 end
 
-# Single function with data access abstraction
-"""Draw the extra-channel overlay (line or boolean highlight)."""
 function _draw_extra_channel!(ax, state::DataBrowserState{<:AbstractDataState})
-    for o in state.extra_channel.draw_observers
-        _disconnect_observer(o)
-    end
+    foreach(_disconnect_observer, state.extra_channel.draw_observers)
     empty!(state.extra_channel.draw_observers)
+    _clear_axes!(ax, (state.extra_channel.data_lines, state.extra_channel.data_labels))
 
-    _clear_axes!(ax, [state.extra_channel.data_lines, state.extra_channel.data_labels])
-
-    # Remove old legend if present
     if !isnothing(state.extra_channel.legend)
         delete!(state.extra_channel.legend)
         state.extra_channel.legend = nothing
     end
 
-    if !isempty(state.extra_channel.channels)
-        margin = state.plot_kwargs[:channel_offset_margin]
-        y_max = state.view.yrange[][end] * margin
-        y_min = state.view.yrange[][1] * margin
-        n_vis = count(state.channels.visible)
-        default_step = n_vis > 1 ? (y_min - y_max) / (n_vis - 1) : -50.0
+    isempty(state.extra_channel.channels) && return
 
-        step = 0.0
-        if !state.view.butterfly[] && length(state.view.offset) > 1
-            step = state.view.offset[end] - state.view.offset[end-1]
-        end
-        if abs(step) < 1e-4
-            step = default_step
-        end
-        base_offset = state.view.butterfly[] ? (y_min + step) : state.view.offset[end]
+    margin = state.plot_kwargs[:channel_offset_margin]
+    y_max = state.view.yrange[][end] * margin
+    y_min = state.view.yrange[][1] * margin
+    n_vis = count(state.channels.visible)
+    default_step = n_vis > 1 ? (y_min - y_max) / (n_vis - 1) : -50.0
 
-        # Get data access functions based on type
-        get_data, get_time, get_label_y = _get_data_accessors(state.data)
+    step = (!state.view.butterfly[] && length(state.view.offset) > 1) ? (state.view.offset[end] - state.view.offset[end-1]) : 0.0
+    abs(step) < 1e-4 && (step = default_step)
+    base_offset = state.view.butterfly[] ? (y_min + step) : state.view.offset[end]
 
-        colors = Makie.wong_colors()
+    get_data, get_time, get_label_y = _get_data_accessors(state.data)
+    legend_elements = Any[]
+    legend_labels = String[]
+    epoch_obs = state.data isa EpochedDataState ? state.data.current_epoch : Observable(1)
 
-        # Accumulators for the legend
-        legend_elements = Any[]
-        legend_labels   = String[]
+    for (idx, channel) in enumerate(state.extra_channel.channels)
+        channel_offset = base_offset + idx * step
 
-        epoch_obs = state.data isa EpochedDataState ? state.data.current_epoch : Observable(1)
-
-        for (idx, channel) in enumerate(state.extra_channel.channels)
-            channel_offset = base_offset + idx * step
-            line_color = :black
-
-            if eltype(get_data(state.data.current[], epoch_obs[], 1:1, channel)) == Bool # Boolean data - vspan + legend entry only
-                highlight_data = @views _splitgroups(findall(get_data(state.data.current[], epoch_obs[], :, channel)))
-                if !isempty(highlight_data[1])
-                    # Widen single-sample regions so they're visible (per-region, not global)
-                    end_indices = copy(highlight_data[2])
-                    n_samples = length(get_time(state.data.current[], epoch_obs[], :))
-                    for i in eachindex(end_indices)
-                        if end_indices[i] == highlight_data[1][i]
-                            end_indices[i] = min(n_samples, end_indices[i] + 5)
-                        end
-                    end
-                    state.extra_channel.data_lines[channel] = vspan!(
-                        ax,
-                        get_time(state.data.current[], epoch_obs[], highlight_data[1]),
-                        get_time(state.data.current[], epoch_obs[], end_indices),
-                        color = line_color,
-                        alpha = 0.5,
-                        visible = true,
-                    )
+        if eltype(get_data(state.data.current[], epoch_obs[], 1:1, channel)) == Bool
+            highlight_data = @views _splitgroups(findall(get_data(state.data.current[], epoch_obs[], :, channel)))
+            if !isempty(highlight_data[1])
+                end_indices = copy(highlight_data[2])
+                n_samp = length(get_time(state.data.current[], epoch_obs[], :))
+                for i in eachindex(end_indices)
+                    end_indices[i] == highlight_data[1][i] && (end_indices[i] = min(n_samp, end_indices[i] + 5))
                 end
-                # Boolean channels identified via the legend only — no in-plot text
-                push!(legend_elements, PolyElement(color = (line_color, 0.5), strokecolor = :transparent))
-                push!(legend_labels, String(channel))
-            else # Regular channel - in-plot label is sufficient, skip legend
-                time_obs = @lift(get_time($(state.data.current), $(epoch_obs), :))
-                data_obs =
-                    @lift(get_data($(state.data.current), $(epoch_obs), :, $channel) .* $(state.view.amplitude_scale) .+ $channel_offset)
-                push!(state.extra_channel.draw_observers, time_obs)
-                push!(state.extra_channel.draw_observers, data_obs)
-
-                state.extra_channel.data_lines[channel] = lines!(ax, time_obs, data_obs, color = :black, linewidth = 2)
-
-                lbl_x_obs = @lift(get_time($(state.data.current), $(epoch_obs), $(state.view.xrange)[1:1])[1])
-                lbl_y_obs = @lift(
-                    get_label_y(
-                        $(state.data.current),
-                        $(epoch_obs),
-                        $channel,
-                        $channel_offset,
-                        $(state.view.xrange)[1],
-                        $(state.view.amplitude_scale),
-                    )
+                state.extra_channel.data_lines[channel] = vspan!(
+                    ax,
+                    get_time(state.data.current[], epoch_obs[], highlight_data[1]),
+                    get_time(state.data.current[], epoch_obs[], end_indices),
+                    color = :black,
+                    alpha = 0.5,
+                    visible = true,
                 )
-                push!(state.extra_channel.draw_observers, lbl_x_obs)
-                push!(state.extra_channel.draw_observers, lbl_y_obs)
-
-                state.extra_channel.data_labels[channel] =
-                    text!(ax, lbl_x_obs, lbl_y_obs, text = String(channel), align = (:left, :center), color = :black, fontsize = 18)
             end
-        end
-
-        # Build / rebuild the legend in the figure if we have a figure reference
-        if !isnothing(state.extra_channel.fig) && !isempty(legend_labels)
-            state.extra_channel.legend = Legend(
-                state.extra_channel.fig[1, 1],
-                legend_elements,
-                legend_labels;
-                tellwidth = false,
-                tellheight = false,
-                halign = :right,
-                valign = :bottom,
-                framevisible = true,
-                padding = (8.0f0, 8.0f0, 8.0f0, 8.0f0),
-                margin = (4.0f0, 4.0f0, 4.0f0, 4.0f0),
+            push!(legend_elements, PolyElement(color = (:black, 0.5), strokecolor = :transparent))
+            push!(legend_labels, String(channel))
+        else
+            time_obs = @lift(get_time($(state.data.current), $(epoch_obs), :))
+            data_obs = @lift(get_data($(state.data.current), $(epoch_obs), :, $channel) .* $(state.view.amplitude_scale) .+ $channel_offset)
+            lbl_x_obs = @lift(get_time($(state.data.current), $(epoch_obs), $(state.view.xrange)[1:1])[1])
+            lbl_y_obs = @lift(
+                get_label_y(
+                    $(state.data.current),
+                    $(epoch_obs),
+                    $channel,
+                    $channel_offset,
+                    $(state.view.xrange)[1],
+                    $(state.view.amplitude_scale),
+                )
             )
+            append!(state.extra_channel.draw_observers, (time_obs, data_obs, lbl_x_obs, lbl_y_obs))
+
+            state.extra_channel.data_lines[channel] = lines!(ax, time_obs, data_obs, color = :black, linewidth = 2)
+            state.extra_channel.data_labels[channel] =
+                text!(ax, lbl_x_obs, lbl_y_obs, text = String(channel), align = (:left, :center), color = :black, fontsize = 18)
         end
+    end
+
+    if !isnothing(state.extra_channel.fig) && !isempty(legend_labels)
+        state.extra_channel.legend = Legend(
+            state.extra_channel.fig[1, 1],
+            legend_elements,
+            legend_labels;
+            tellwidth = false,
+            tellheight = false,
+            halign = :right,
+            valign = :bottom,
+            framevisible = true,
+            padding = (8.0f0, 8.0f0, 8.0f0, 8.0f0),
+            margin = (4.0f0, 4.0f0, 4.0f0, 4.0f0),
+        )
     end
 end
 
-"""Return a descriptive window title based on the data type."""
 _get_title(dat::EpochData) = "Epoch 1/$(n_epochs(dat))"
-_get_title(dat::ContinuousData) = ""
+_get_title(::ContinuousData) = ""
 _get_title(dat::ErpData) = "Epoch Average (n=$(n_epochs(dat)))"
 
-"""Toggle visibility of a vertical marker."""
 function _plot_vertical_lines!(ax, marker, active)
     marker.line.visible = active
     marker.text.visible = active
     marker.visible = active
 end
 
-"""
-    _add_scale_indicator!(ax, state, plot_kwargs)
-
-Add a scale indicator bar to the plot showing the amplitude scale.
-"""
 function _add_scale_indicator!(ax, state, plot_kwargs)
-
     scale_value = plot_kwargs[:scale_indicator_value]
-
-    # Use an observable for position so it can be updated by dragging
     if !(plot_kwargs[:scale_indicator_position] isa Observable)
         plot_kwargs[:scale_indicator_position] = Observable{Tuple{Float64,Float64}}(Float64.(plot_kwargs[:scale_indicator_position]))
     end
     pos_obs = plot_kwargs[:scale_indicator_position]
 
-    # Get axis limits observables
     xlims_obs = ax.xaxis.attributes.limits
     ylims_obs = ax.yaxis.attributes.limits
 
-    # Calculate position in data coordinates
     x_pos = @lift($xlims_obs[1] + ($xlims_obs[2] - $xlims_obs[1]) * $pos_obs[1])
     y_top = @lift($ylims_obs[1] + ($ylims_obs[2] - $ylims_obs[1]) * $pos_obs[2])
     y_bottom = @lift($y_top - scale_value * $(state.view.amplitude_scale))
-
     tick_length = @lift(($xlims_obs[2] - $xlims_obs[1]) * 0.005)
-    tick_left = @lift($x_pos - $tick_length)
-    tick_right = @lift($x_pos + $tick_length)
 
-    # Use linesegments! to draw all parts of the scale indicator in a single draw call
     segments = @lift([
         Point2f($x_pos, $y_bottom),
-        Point2f($x_pos, $y_top),           # Vertical line
-        Point2f($tick_left, $y_bottom),
-        Point2f($tick_right, $y_bottom), # Bottom tick
-        Point2f($tick_left, $y_top),
-        Point2f($tick_right, $y_top),        # Top tick
+        Point2f($x_pos, $y_top),
+        Point2f($x_pos - $tick_length, $y_bottom),
+        Point2f($x_pos + $tick_length, $y_bottom),
+        Point2f($x_pos - $tick_length, $y_top),
+        Point2f($x_pos + $tick_length, $y_top),
     ])
     linesegments!(ax, segments, color = :black, linewidth = 1.5, overdraw = true)
 
-    # Add label (formatted as integer if whole number, e.g. "100 μV")
     val_str = isinteger(scale_value) ? "$(Int(scale_value)) μV" : "$scale_value μV"
-    label_x = @lift($x_pos + ($xlims_obs[2] - $xlims_obs[1]) * 0.01)
     text!(
         ax,
-        @lift(Point2f($label_x, $y_top)),
+        @lift(Point2f($x_pos + ($xlims_obs[2] - $xlims_obs[1]) * 0.01, $y_top)),
         text = val_str,
         align = (:left, :center),
         fontsize = 14,
@@ -2702,25 +2206,21 @@ function _add_scale_indicator!(ax, state, plot_kwargs)
         overdraw = true,
     )
 
-    # Enable mouse dragging
     is_dragging = Observable(false)
 
     on(events(ax).mousebutton, priority = 10) do event
         if event.button == Mouse.left
             if event.action == Mouse.press
                 mpos = mouseposition(ax)
-                # Check if mouse is near the scale indicator (hit box)
                 x_tol = (xlims_obs[][2] - xlims_obs[][1]) * 0.05
                 y_tol = (ylims_obs[][2] - ylims_obs[][1]) * 0.05
                 if abs(mpos[1] - x_pos[]) < x_tol && mpos[2] >= (y_bottom[] - y_tol) && mpos[2] <= (y_top[] + y_tol)
                     is_dragging[] = true
                     return Consume(true)
                 end
-            elseif event.action == Mouse.release
-                if is_dragging[]
-                    is_dragging[] = false
-                    return Consume(true)
-                end
+            elseif event.action == Mouse.release && is_dragging[]
+                is_dragging[] = false
+                return Consume(true)
             end
         end
         return Consume(false)
@@ -2738,41 +2238,51 @@ function _add_scale_indicator!(ax, state, plot_kwargs)
     end
 end
 
+# =============================================================================
+# Entry Points & File Launcher
+# =============================================================================
 
-"""Launch the interactive data browser for a single EEG dataset."""
+function _load_example_databrowser_data()
+    raw_path = example_path("data/bdf/example1.bdf")
+    lay = read_layout(example_path("layouts/biosemi/biosemi72.csv"))
+    polar_to_cartesian_xy!(lay)
+    dat = create_eegfun_data(read_raw_data(raw_path), lay)
+    dat.file = basename(raw_path)
+    return dat
+end
+
+"""
+    plot_databrowser(dat::EegData, ica = nothing; screen = nothing, kwargs...)
+    plot_databrowser(; launcher::Bool = false, screen = nothing, kwargs...)
+    plot_databrowser(filename::String, ica = nothing; input_dir = pwd(), participant_selection = participants(), screen = nothing, kwargs...)
+    plot_databrowser(data::Vector{<:EegData}, ica = nothing; screen = nothing, kwargs...)
+
+Launch the interactive EEG data browser for continuous, epoched, or ERP datasets, with optional
+dynamic ICA component subtraction, filtering, re-referencing, channel repair, and region selection.
+Called with no arguments, opens the bundled `example1.bdf` dataset (`launcher = true` opens the
+drag-and-drop file launcher).
+
+$(_generate_kwargs_doc(PLOT_DATABROWSER_KWARGS))
+"""
 function plot_databrowser(dat::EegData, ica = nothing; screen = nothing, kwargs...)
-
-    # Check if CairoMakie is being used and warn about lack of interactivity
     if string(Makie.current_backend()) == "CairoMakie"
         @minimal_warning "CairoMakie detected. For full interactivity in plot_databrowser, use GLMakie."
     end
 
-    # Generate window title from dataset
-    title_str = _generate_window_title(dat)
-    _set_window_title(title_str)
-
+    _set_window_title(_generate_window_title(dat))
     try
-        # Merge user kwargs with defaults
         plot_kwargs = _merge_plot_kwargs(PLOT_DATABROWSER_KWARGS, kwargs)
-
-        # Common fig/ax/state/ui setup
         fontsize_kw = isnothing(plot_kwargs[:theme_fontsize]) ? (;) : (; fontsize = plot_kwargs[:theme_fontsize])
         fig = _eegfun_figure(; size = plot_kwargs[:figure_size], figure_padding = plot_kwargs[:figure_padding], fontsize_kw...)
         ax = Axis(fig[1, 1], xlabel = plot_kwargs[:xlabel], ylabel = plot_kwargs[:ylabel], title = _get_title(dat))
 
         state = _create_browser_state(dat, dat.layout.data.label, ax, ica, plot_kwargs)
-        state.extra_channel.fig = fig  # store figure reference for legend placement
+        state.extra_channel.fig = fig
         _setup_ui(fig, ax, state, dat, ica, plot_kwargs)
-
         _draw(ax, state)
         _draw_extra_channel!(ax, state)
+        plot_kwargs[:show_scale_indicator] && _add_scale_indicator!(ax, state, plot_kwargs)
 
-        # Add scale indicator
-        if plot_kwargs[:show_scale_indicator]
-            _add_scale_indicator!(ax, state, plot_kwargs)
-        end
-
-        # Display on the provided screen if given, otherwise use default display
         screen_obj = nothing
         if plot_kwargs[:display_plot]
             if !isnothing(screen)
@@ -2789,44 +2299,11 @@ function plot_databrowser(dat::EegData, ica = nothing; screen = nothing, kwargs.
     end
 end
 
-"""
-    plot_databrowser(; launcher::Bool = false, screen = nothing, kwargs...)
-
-Launch the interactive continuous EEG data browser.
-
-When called with no arguments, automatically loads the bundled example raw EEG dataset
-(`example1.bdf`) along with its full 72-channel layout (`biosemi72.csv`) for an immediate demonstration.
-
-Pass `launcher = true` to open the drag-and-drop file selector window instead.
-
-# Examples
-```julia
-# Quick demo with bundled raw dataset and layout:
-plot_databrowser()
-
-# Open file drag-and-drop launcher:
-plot_databrowser(launcher = true)
-```
-"""
 function plot_databrowser(; launcher::Bool = false, screen = nothing, kwargs...)
-    if launcher
-        return _plot_databrowser_launcher(; screen = screen, kwargs...)
-    end
-    raw_path = example_path("data/bdf/example1.bdf")
-    layout_path = example_path("layouts/biosemi/biosemi72.csv")
-    dat = read_raw_data(raw_path)
-    lay = read_layout(layout_path)
-    polar_to_cartesian_xy!(lay)
-    dat = create_eegfun_data(dat, lay)
-    dat.file = basename(raw_path)
-    return plot_databrowser(dat; screen = screen, kwargs...)
+    launcher && return _plot_databrowser_launcher(; screen = screen, kwargs...)
+    return plot_databrowser(_load_example_databrowser_data(); screen = screen, kwargs...)
 end
 
-"""
-    _plot_databrowser_launcher(; screen = nothing, kwargs...)
-
-Open a file-selector window that lets you drag-and-drop EEG files or click to load the bundled example data.
-"""
 function _plot_databrowser_launcher(; screen = nothing, kwargs...)
     shared_layout = Ref{Union{Nothing,Layout}}(nothing)
     layout_status = Observable{String}("Layout: NA")
@@ -2859,7 +2336,6 @@ function _plot_databrowser_launcher(; screen = nothing, kwargs...)
             status_label.text = "File not found: $(basename(filepath))"
             return
         end
-
         if lowercase(splitext(filepath)[2]) == ".csv"
             _load_layout(filepath)
             return
@@ -2881,21 +2357,13 @@ function _plot_databrowser_launcher(; screen = nothing, kwargs...)
 
     on(btn_layout.clicks) do _
         filepath = NativeFileDialog.pick_file(pwd())
-        if filepath != "" && isfile(filepath)
-            _load_layout(filepath)
-        end
+        filepath != "" && isfile(filepath) && _load_layout(filepath)
     end
 
     on(btn_example.clicks) do _
         status_label.text = "Loading example1.bdf…"
         try
-            raw_path = example_path("data/bdf/example1.bdf")
-            layout_path = example_path("layouts/biosemi/biosemi72.csv")
-            dat = read_raw_data(raw_path)
-            lay = read_layout(layout_path)
-            polar_to_cartesian_xy!(lay)
-            dat = create_eegfun_data(dat, lay)
-            dat.file = basename(raw_path)
+            dat = _load_example_databrowser_data()
             _set_window_title(_generate_window_title(dat))
             plot_databrowser(dat; screen = _create_screen(), kwargs...)
             n_loaded[] += 1
@@ -2906,18 +2374,13 @@ function _plot_databrowser_launcher(; screen = nothing, kwargs...)
         end
     end
 
-    on(events(fig).dropped_files) do files
-        for f in files
-            _load_file(f)
-        end
-    end
+    on(files -> foreach(_load_file, files), events(fig).dropped_files)
 
     screen_obj = _display_in_screen(fig)
     _set_window_title("EegFun Data Browser")
     return (fig = fig, axes = Axis[], screen = screen_obj)
 end
 
-"""Decode percent-encoded bytes into a UTF-8 string."""
 function _percent_decode(s::AbstractString)
     bytes = UInt8[]
     i = 1
@@ -2925,34 +2388,27 @@ function _percent_decode(s::AbstractString)
     while i <= n
         c = s[i]
         if c == '%' && i + 2 <= n && isxdigit(s[i+1]) && isxdigit(s[i+2])
-            b = parse(UInt8, s[(i+1):(i+2)], base = 16)
-            push!(bytes, b)
+            push!(bytes, parse(UInt8, s[(i+1):(i+2)], base = 16))
             i += 3
         else
-            for b in codeunits(string(c))
-                push!(bytes, b)
-            end
+            append!(bytes, codeunits(string(c)))
             i = nextind(s, i)
         end
     end
     return String(bytes)
 end
 
-"""Sanitize a filepath from drag-and-drop (strip URI scheme, URL-decode)."""
 function _sanitize_dropped_path(filepath::AbstractString)
     s = strip(filepath, ['\r', '\n', '"', '\''])
     if startswith(s, "file://")
         s = replace(s, r"^file://localhost" => "")
         s = replace(s, r"^file://" => "")
         s = _percent_decode(s)
-        if Sys.iswindows() && occursin(r"^/[A-Za-z]:", s)
-            s = s[2:end]
-        end
+        Sys.iswindows() && occursin(r"^/[A-Za-z]:", s) && (s = s[2:end])
     end
     return String(s)
 end
 
-"""Load any supported EEG file and return `(dat, ica)` — ica may be `nothing`."""
 function _read_any_eeg_file(filepath::String, layout::Union{Nothing,Layout} = nothing)
     ext = lowercase(splitext(filepath)[2])
     ica_data = nothing
@@ -2961,26 +2417,16 @@ function _read_any_eeg_file(filepath::String, layout::Union{Nothing,Layout} = no
         read_data(filepath)
     elseif ext == ".set"
         res = read_eeglab(filepath)
-        if res isa Tuple
-            dat_eeg_tmp, ica_data = res
-            dat_eeg_tmp
-        else
-            res
-        end
+        res isa Tuple ? ((dat_tmp, ica_data) = res; dat_tmp) : res
     else
         raw = read_raw_data(filepath)
-        if isnothing(layout)
-            create_eegfun_data(raw)
-        else
-            create_eegfun_data(raw, layout)
-        end
+        isnothing(layout) ? create_eegfun_data(raw) : create_eegfun_data(raw, layout)
     end
 
     isnothing(dat_eeg) && @minimal_error("Unsupported file format or failed to read: $filepath")
     return (dat_eeg, ica_data)
 end
 
-"""Load data from a `.jld2` file or pattern and open the data browser."""
 function plot_databrowser(
     filename::String,
     ica = nothing;
@@ -2991,43 +2437,28 @@ function plot_databrowser(
 )
     if endswith(filename, ".jld2")
         dat_eeg = read_data(filename)
-        if !isnothing(ica)
-            ica = read_data(ica)
-        end
+        !isnothing(ica) && (ica = read_data(ica))
         return plot_databrowser(dat_eeg, ica; screen = screen, kwargs...)
-    else
-        files = _find_batch_files(filename, input_dir, participant_selection)
-        isempty(files) && @minimal_error "No files matching pattern '$filename' in $input_dir"
-
-        results = NamedTuple[]
-        for file in sort(files, by = _natural_sort_key)
-            file_path = joinpath(input_dir, file)
-            @info "Browsing: $file"
-            dat_eeg = read_data(file_path)
-            isnothing(dat_eeg) && continue
-            result = plot_databrowser(dat_eeg, nothing; screen = screen, kwargs...)
-            push!(results, result)
-        end
-        return results
     end
+    files = _require_batch_files(filename, input_dir, participant_selection)
+    results = NamedTuple[]
+    for file in files
+        @info "Browsing: $file"
+        dat_eeg = read_data(joinpath(input_dir, file))
+        isnothing(dat_eeg) && continue
+        push!(results, plot_databrowser(dat_eeg, nothing; screen = screen, kwargs...))
+    end
+    return results
 end
 
-"""Open a separate data browser window for each dataset in the vector."""
 function plot_databrowser(data::Vector{<:EegData}, ica = nothing; screen = nothing, kwargs...)
     @info "Vector of $(length(data)) datasets provided — opening a browser for each"
     results = NamedTuple[]
     display_plot = get(kwargs, :display_plot, true)
     for dat in data
-        _set_window_title(_generate_window_title(dat))  # must be before Screen()
-        s = if !isnothing(screen)
-            screen
-        elseif display_plot
-            _create_screen()
-        else
-            nothing
-        end
-        res = plot_databrowser(dat, ica; screen = s, kwargs...)
-        push!(results, res)
+        _set_window_title(_generate_window_title(dat))
+        s = !isnothing(screen) ? screen : (display_plot ? _create_screen() : nothing)
+        push!(results, plot_databrowser(dat, ica; screen = s, kwargs...))
     end
     return results
 end
