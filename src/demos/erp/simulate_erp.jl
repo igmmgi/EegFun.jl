@@ -1,4 +1,74 @@
-"""Generate a cosine-shaped ERP peak across trials with amplitude and latency jitter."""
+const _ERP_MEANPOWER = Float64[
+    0.0015,
+    0.0008,
+    0.0006,
+    0.0005,
+    fill(0.0004, 3)...,
+    fill(0.0003, 2)...,
+    fill(0.0004, 2)...,
+    fill(0.0003, 3)...,
+    fill(0.0002, 42)...,
+    fill(0.0001, 88)...,
+]
+
+function _add_peak_vec!(
+    signal::Matrix{Float64},
+    trials::Int,
+    samples::Int,
+    sample_rate::Int,
+    peak_freq::Float64,
+    peak_amp::Float64,
+    peak_latency::Float64,
+    jitter_amp::Float64,
+    jitter_latency::Float64,
+)
+    trials == 0 && return signal
+    amp = Vector{Float64}(undef, trials)
+    @inbounds for tr = 1:trials
+        amp[tr] = jitter_amp == 0.0 ? peak_amp : muladd(randn(), jitter_amp, peak_amp)
+    end
+
+    phase_scale = 2π * peak_freq / sample_rate
+    half_pi = π / 2
+    half_width = half_pi / phase_scale
+
+    if jitter_latency == 0.0
+        s_lo = max(1, floor(Int, peak_latency - half_width))
+        s_hi = min(samples, ceil(Int, peak_latency + half_width))
+        @inbounds for s = s_lo:s_hi
+            ph = (Float64(s) - peak_latency) * phase_scale
+            if abs(ph) <= half_pi
+                c = cos(ph)
+                for tr = 1:trials
+                    signal[tr, s] = muladd(c, amp[tr], signal[tr, s])
+                end
+            end
+        end
+    else
+        pos = Vector{Float64}(undef, trials)
+        min_pos = Inf
+        max_pos = -Inf
+        @inbounds for tr = 1:trials
+            p = muladd(randn(), jitter_latency, peak_latency)
+            pos[tr] = p
+            min_pos = min(min_pos, p)
+            max_pos = max(max_pos, p)
+        end
+        s_lo = max(1, floor(Int, min_pos - half_width))
+        s_hi = min(samples, ceil(Int, max_pos + half_width))
+        @inbounds for s = s_lo:s_hi
+            sf = Float64(s)
+            for tr = 1:trials
+                ph = (sf - pos[tr]) * phase_scale
+                if abs(ph) <= half_pi
+                    signal[tr, s] = muladd(cos(ph), amp[tr], signal[tr, s])
+                end
+            end
+        end
+    end
+    return signal
+end
+
 function _peak_vec(
     trials::Int,
     samples::Int,
@@ -9,68 +79,46 @@ function _peak_vec(
     jitter_amp::Float64,
     jitter_latency::Float64,
 )
-    # Vectorized trials handling
-    rand_lat = randn(trials) .* jitter_latency
-    pos = peak_latency .+ rand_lat
-
-    # Create time matrix (trials x samples)
-    t = (1:samples)'
-    # Calculate phase for all trials and samples at once
-    phase = @. (t - pos) / sample_rate * 2π * peak_freq
-
-    # Apply cosine
-    signal = cos.(phase)
-
-    # Apply amplitude with jitter
-    rand_amp = randn(trials) .* jitter_amp
-    amp_factor = peak_amp .+ rand_amp
-
-    # Apply mask and amplitude in one fused broadcast
-    @. signal = ifelse(abs(phase) > π/2, 0.0, signal * amp_factor)
-
-    return signal
+    out = zeros(Float64, trials, samples)
+    return _add_peak_vec!(out, trials, samples, sample_rate, peak_freq, peak_amp, peak_latency, jitter_amp, jitter_latency)
 end
 
-"""Generate 1/f-shaped background EEG noise across trials."""
 function _noise_vec(trials::Int, samples::Int, sample_rate::Int, noise_amp::Float64)
+    noise_amp == 0.0 && return zeros(Float64, trials, samples)
 
-    noise_amp == 0 && return zeros(trials, samples)
+    n_mp = length(_ERP_MEANPOWER)
+    inv_mp1 = 1.0 / _ERP_MEANPOWER[1]
+    dt_2pi = 2π / sample_rate
+    sumsig = 50
 
-    # Mean power spectrum of human EEG (hardcoded as in original MATLAB)
-    meanpower = [
-        0.0015,
-        0.0008,
-        0.0006,
-        0.0005,
-        fill(0.0004, 3)...,
-        fill(0.0003, 2)...,
-        fill(0.0004, 2)...,
-        fill(0.0003, 3)...,
-        fill(0.0002, 42)...,
-        fill(0.0001, 88)...,
-    ]
+    out = Matrix{Float64}(undef, trials, samples)
+    col_buf = Vector{Float64}(undef, samples)
 
-    sumsig = 50  # number of sinusoids
-    signal = zeros(samples, trials) # column-major contiguous memory
-    t_vec = (1:samples) ./ sample_rate .* 2π
-
-    for trial = 1:trials
-        freqs = cumsum(rand(sumsig) .* 4)
-        indices = min.(ceil.(Int, freqs), length(meanpower))
-        amps = meanpower[indices] ./ meanpower[1]
-        phases = rand(sumsig) .* 2π
-
-        # Use a view for contiguous memory access
-        sig_col = @view signal[:, trial]
-        for (f, a, p) in zip(freqs, amps, phases)
-            @. sig_col += sin(t_vec * f + p) * a
+    @inbounds for trial = 1:trials
+        fill!(col_buf, 0.0)
+        f_acc = 0.0
+        for _ = 1:sumsig
+            f_acc += rand() * 4.0
+            idx = min(max(1, ceil(Int, f_acc)), n_mp)
+            a = _ERP_MEANPOWER[idx] * inv_mp1
+            p = rand() * 2π
+            ω = dt_2pi * f_acc
+            sin_ω, cos_ω = sincos(ω)
+            s_cur, c_cur = sincos(p)
+            for s = 1:samples
+                s_next = muladd(s_cur, cos_ω, c_cur * sin_ω)
+                c_next = muladd(c_cur, cos_ω, -s_cur * sin_ω)
+                col_buf[s] = muladd(a, s_next, col_buf[s])
+                s_cur, c_cur = s_next, c_next
+            end
+        end
+        for s = 1:samples
+            out[trial, s] = col_buf[s] * noise_amp
         end
     end
-
-    return Matrix(signal') .* noise_amp
+    return out
 end
 
-"""Simulate a multi-component ERP with noise; return the average and individual trials."""
 function _run_erp_simulation(
     trials::Int,
     comps::Matrix{Float64};
@@ -80,37 +128,53 @@ function _run_erp_simulation(
     noise_base::Union{Matrix{Float64},Nothing} = nothing,
 )
     n_samples = Int(samp_freq * (sig_length + base_length))
+    noise_scale = comps[end, 6]
     if noise_base !== nothing
-        my_signal = noise_base[1:trials, :] .* comps[end, 6]
+        my_signal = Matrix{Float64}(undef, trials, n_samples)
+        if noise_scale == 0.0
+            fill!(my_signal, 0.0)
+        else
+            @inbounds for s = 1:n_samples, tr = 1:trials
+                my_signal[tr, s] = noise_base[tr, s] * noise_scale
+            end
+        end
     else
-        my_signal = _noise_vec(trials, n_samples, samp_freq, comps[end, 6])
+        my_signal = _noise_vec(trials, n_samples, samp_freq, noise_scale)
     end
-
 
     n_components = size(comps, 1)
     ms_to_samples = samp_freq / 1000.0
+    base_offset = base_length * samp_freq
     for comp = 1:n_components
-        my_signal .+= _peak_vec(
+        _add_peak_vec!(
+            my_signal,
             trials,
             n_samples,
             samp_freq,
-            comps[comp, 1],  # peakFreq
-            comps[comp, 2],  # peakAmp
-            comps[comp, 3] * ms_to_samples + (base_length * samp_freq),  # peakLatency (ms -> samples)
-            comps[comp, 4],  # jitterAmp
-            comps[comp, 5] * ms_to_samples,  # jitterLatency (ms -> samples)
+            comps[comp, 1],
+            comps[comp, 2],
+            comps[comp, 3] * ms_to_samples + base_offset,
+            comps[comp, 4],
+            comps[comp, 5] * ms_to_samples,
         )
     end
 
-    return vec(mean(my_signal, dims = 1)), my_signal
+    avg = Vector{Float64}(undef, n_samples)
+    if trials > 0
+        inv_trials = 1.0 / trials
+        @inbounds for s = 1:n_samples
+            acc = 0.0
+            for tr = 1:trials
+                acc += my_signal[tr, s]
+            end
+            avg[s] = acc * inv_trials
+        end
+    else
+        fill!(avg, 0.0)
+    end
+    return avg, my_signal
 end
 
-# Component parameters structure
-"""
-    _SimulatedErpComponent
-
-Mutable struct representing an ERP component for simulation.
-"""
 mutable struct _SimulatedErpComponent
     active::Observable{Bool}
     freq::Observable{Float64}
@@ -123,47 +187,15 @@ end
 """
     simulate_erp()
 
-Interactive ERP simulator for teaching signal averaging and component analysis.
+Interactive ERP simulator for teaching signal averaging and component superposition.
 
-Generates synthetic EEG trials from up to 5 independent ERP components and displays
-individual trial waveforms (grey) alongside the trial-average ERP (blue) in real time.
-Demonstrates how signal-to-noise ratio improves as the number of averaged trials increases.
-
-## What it shows
-
-- **Trial waveforms** — individual simulated EEG trials (shown in grey), each
-  with realistic 1/f background noise.
-- **ERP average** — the mean across all trials (shown in blue), which clarifies
-  as trial count increases.
-- **ERP components** — up to 5 independent cosine-shaped components, each with
-  independently controllable frequency, amplitude, latency, and trial-to-trial jitter.
-
-## Teaching tips
-
-- Start with 1 trial and a single active component. The ERP and the trial are identical.
-- Increase noise to bury the component in background activity, then increase the
-  number of trials to show the ERP emerging from the noise.
-- Activate a second component at a different latency to show how multiple ERP
-  components superpose in the waveform.
-- Add amplitude or latency jitter to demonstrate why averaging can attenuate and
-  smear ERP components.
-
-## Controls
-
-| Control | Range | Description |
-|---------|-------|-------------|
-| Number of Trials | 1–500 | How many simulated trials to average |
-| Noise Amplitude | 0–20 | Amplitude of background 1/f EEG noise |
-| Active (toggle, ×5) | on/off | Enable/disable each component |
-| Freq (×5) | 0.1–20.0 Hz | Cosine frequency of the component |
-| Amp (×5) | −20 to 20 μV | Peak amplitude of the component |
-| Latency (×5) | 0–1000 ms | Peak latency of the component |
-| Amp Jitter (×5) | 0–20 | Trial-to-trial amplitude variability |
-| Lat Jitter (×5) | 0–150 ms | Trial-to-trial latency variability |
+Generates synthetic EEG trials from up to 5 cosine-shaped ERP components (with controllable
+frequency, amplitude, latency, and trial-to-trial jitter) plus 1/f background noise, displaying
+individual trials (or a 95% confidence interval) alongside the trial-averaged ERP.
 
 # Examples
 ```julia
-using EegFun
+using GLMakie, EegFun
 EegFun.simulate_erp()
 ```
 
@@ -174,37 +206,25 @@ EegFun.simulate_erp()
 function simulate_erp()
     _check_interactive_demo_backend("ERP Simulator demo") || return nothing
 
-    # Create the figure with more space for component controls
     fig = _eegfun_figure(size = (1400, 1000))
-
-    # Create layout
     gl = fig[1:2, 1:3] = GridLayout()
-
-    # Create the main plot axis
     ax = Axis(gl[1, 1:2], xlabel = "Time (ms)", ylabel = "Amplitude (μV)", title = "ERP Simulation Demo")
 
-    # Stimulus onset marker and zero baseline
     vlines!(ax, [0], color = :black, linestyle = :dash, linewidth = 1.5)
     hlines!(ax, [0], color = (:black, 0.3), linewidth = 1)
 
-    # Component controls layout (right side)
     comp_layout = gl[1:2, 3] = GridLayout()
-    Label(comp_layout[1, 1:6], "Components", fontsize = 20)
+    Label(comp_layout[1, 1:11], "Components", fontsize = 20)
 
-    # Calculate time points based on parameters
     samp_freq = 1000
     sig_length = 1.0
     base_length = 0.2
     n_samples = Int(samp_freq * (sig_length + base_length))
-
     time = (collect(1:n_samples) .- (samp_freq * base_length)) .* (1000.0 / samp_freq)
 
-    # Precompute noise base for up to 500 trials to avoid millions of sin/cos calls on every slider drag
-    MAX_TRIALS = 500
-    noise_base = Observable(_noise_vec(MAX_TRIALS, n_samples, samp_freq, 1.0))
+    max_trials = 500
+    noise_base = Observable(_noise_vec(max_trials, n_samples, samp_freq, 1.0))
 
-
-    # Control layout at the bottom
     ctrl_layout = gl[2, 1:2] = GridLayout()
 
     trials = Observable(1)
@@ -213,31 +233,25 @@ function simulate_erp()
     Label(ctrl_layout[1, 3], lift(x -> string(Int(x)), trials), halign = :left)
     connect!(trials, sl_trials.value)
 
-    # Noise control
     noise_amp = Observable(0.0)
     Label(ctrl_layout[1, 4], "Noise Amplitude", halign = :right)
     sl_noise = Slider(ctrl_layout[1, 5], range = 0.0:1:20.0, startvalue = 0.0)
     Label(ctrl_layout[1, 6], lift(x -> string(round(x, digits = 1)), noise_amp), halign = :left)
     connect!(noise_amp, sl_noise.value)
 
-    # Regenerate Button
     btn_regen = Button(ctrl_layout[1, 7], label = "Regenerate", width = 120)
 
-    # Toggle for CI vs Trials
     tb_ci = Toggle(ctrl_layout[1, 8])
     tb_ci.active[] = false
     Label(ctrl_layout[1, 9], "Confidence Interval", halign = :left)
     show_ci = tb_ci.active
 
-    colsize!(ctrl_layout, 2, Weight(1))
-    colsize!(ctrl_layout, 5, Weight(1))
+    colsize!(ctrl_layout, 2, Auto(1))
+    colsize!(ctrl_layout, 5, Auto(1))
 
-    # List to store components
     components = _SimulatedErpComponent[]
 
-    """Create sliders and toggle for one ERP component and return a `_SimulatedErpComponent` struct."""
     function create_component(parent, row)
-        # Initialize all observables - start INACTIVE
         active = Observable(false)
         freq = Observable(3.0)
         amp = Observable(5.0)
@@ -245,112 +259,60 @@ function simulate_erp()
         jitter_amp = Observable(0.0)
         jitter_lat = Observable(0.0)
 
-        # (widget references are local — Makie retains them via the scene graph)
-
-        # Active toggle - start INACTIVE
         tb = Toggle(parent[row, 1], halign = :center)
         tb.active[] = false
-        active[] = false
         connect!(active, tb.active)
 
-        # Parameter sliders with value labels
         sl_freq = Slider(parent[row, 2], range = 0.1:0.1:20.0, startvalue = 3.0)
-        lbl_freq = Label(parent[row, 3], lift(x -> string(round(x, digits = 1)), freq), halign = :left)
+        Label(parent[row, 3], lift(x -> string(round(x, digits = 1)), freq), halign = :left)
         connect!(freq, sl_freq.value)
 
         sl_amp = Slider(parent[row, 4], range = -20.0:1.0:20.0, startvalue = 5.0)
-        lbl_amp = Label(parent[row, 5], lift(x -> string(round(x, digits = 1)), amp), halign = :left)
+        Label(parent[row, 5], lift(x -> string(round(x, digits = 1)), amp), halign = :left)
         connect!(amp, sl_amp.value)
 
         sl_latency = Slider(parent[row, 6], range = 0.0:10.0:1000.0, startvalue = 100.0)
-        lbl_latency = Label(parent[row, 7], lift(x -> string(Int(round(x))), latency), halign = :left)
+        Label(parent[row, 7], lift(x -> string(Int(round(x))), latency), halign = :left)
         connect!(latency, sl_latency.value)
 
         sl_jitter_amp = Slider(parent[row, 8], range = 0.0:1.0:20.0, startvalue = 0.0)
-        lbl_jitter_amp = Label(parent[row, 9], lift(x -> string(round(x, digits = 1)), jitter_amp), halign = :left)
+        Label(parent[row, 9], lift(x -> string(round(x, digits = 1)), jitter_amp), halign = :left)
         connect!(jitter_amp, sl_jitter_amp.value)
 
         sl_jitter_lat = Slider(parent[row, 10], range = 0.0:1.0:150.0, startvalue = 0.0)
-        lbl_jitter_lat = Label(parent[row, 11], lift(x -> string(round(x, digits = 1)), jitter_lat), halign = :left)
+        Label(parent[row, 11], lift(x -> string(round(x, digits = 1)), jitter_lat), halign = :left)
         connect!(jitter_lat, sl_jitter_lat.value)
 
-        _SimulatedErpComponent(active, freq, amp, latency, jitter_amp, jitter_lat)
+        return _SimulatedErpComponent(active, freq, amp, latency, jitter_amp, jitter_lat)
     end
 
-    # Component parameter labels
-    labels = ["Active", "Freq (Hz)", "Amp (μV)", "Latency (ms)", "Amp Jitter", "Lat Jitter"]
-    for (i, label) in enumerate(labels)
-        Label(comp_layout[2, i == 1 ? 1 : (i-1)*2], label, font = :bold)
+    for (i, label) in enumerate(("Active", "Freq (Hz)", "Amp (μV)", "Latency (ms)", "Amp Jitter", "Lat Jitter"))
+        Label(comp_layout[2, i == 1 ? 1 : (i - 1) * 2], label, font = :bold)
     end
 
-    # Fix toggle column width so the layout doesn't shift
-    colsize!(comp_layout, 1, Fixed(60))
-    for c in [2, 4, 6, 8, 10]
-        colsize!(comp_layout, c, Weight(1))
-        colsize!(comp_layout, c+1, Fixed(45))
-    end
-
-    # Add initial components - all start INACTIVE
     for i = 1:5
-        comp = create_component(comp_layout, i + 2)
-        push!(components, comp)
+        push!(components, create_component(comp_layout, i + 2))
     end
 
-    # Update function
-    """Collect active component parameters and re-run the ERP simulation."""
-    function update_simulation()
-        # Count active components
-        n_active = count(c -> c.active[], components)
-
-        if n_active == 0 # No active components - set everything to zero
-            update_plot(zeros(0, n_samples), zeros(n_samples))
-        else # Collect parameters from active components only
-            active_comps_list = [[c.freq[] c.amp[] c.latency[] c.jitter_amp[] c.jitter_lat[] 0.0] for c in components if c.active[]]
-
-            if isempty(active_comps_list)
-                update_plot(zeros(trials[], n_samples), zeros(n_samples))
-                return
-            end
-
-            active_comps = vcat(active_comps_list...)
-            active_comps[end, 6] = noise_amp[]
-
-            new_erp, new_signals = _run_erp_simulation(
-                trials[],
-                active_comps,
-                samp_freq = samp_freq,
-                sig_length = sig_length,
-                base_length = base_length,
-                noise_base = noise_base[],
-            )
-
-            # Update plot directly without clearing axis
-            update_plot(new_signals, new_erp)
-        end
+    colsize!(comp_layout, 1, Fixed(60))
+    for c in (2, 4, 6, 8, 10)
+        colsize!(comp_layout, c, Auto(1))
+        colsize!(comp_layout, c + 1, Fixed(45))
     end
 
-    # Create plot objects
     trial_plot_data = Observable(Point2f[])
     erp_plot_data = Observable(Point2f[])
-
     time_obs = Observable(Float64[])
     lower_obs = Observable(Float64[])
     upper_obs = Observable(Float64[])
-
     show_trials = @lift(!$show_ci)
 
-    # 95% Confidence Interval Band (rendered beneath the lines)
     band!(ax, time_obs, lower_obs, upper_obs; color = (:blue, 0.2), visible = show_ci)
-
     lines!(ax, trial_plot_data, color = (:gray, 0.15), visible = show_trials)
     lines!(ax, erp_plot_data, color = :blue, linewidth = 3, label = "Empirical Average")
 
-    # Plot update function
-    """Update trial and ERP line plot data from new simulation results."""
     function update_plot(new_signals, new_erp)
-        t = time
         n_trials, n_smpl = size(new_signals)
-
         if n_trials == 0
             trial_plot_data[] = Point2f[]
             erp_plot_data[] = Point2f[]
@@ -361,7 +323,6 @@ function simulate_erp()
             return
         end
 
-        # Calculate 95% Confidence interval
         if n_trials > 1
             stds = vec(std(new_signals, dims = 1))
             ci_margin = 1.96 .* stds ./ sqrt(n_trials)
@@ -371,32 +332,56 @@ function simulate_erp()
             lower_obs[] = new_erp
             upper_obs[] = new_erp
         end
-        time_obs[] = t
+        time_obs[] = time
 
-        # Efficiently prepare trial data with NaN separators
-        # Capped at 50 drawn trials to prevent visual spaghetti
         max_drawn_trials = min(n_trials, 50)
         points = Vector{Point2f}(undef, max_drawn_trials * (n_smpl + 1))
-        for trial = 1:max_drawn_trials
+        @inbounds for trial = 1:max_drawn_trials
             offset = (trial - 1) * (n_smpl + 1)
             for s = 1:n_smpl
-                points[offset+s] = Point2f(t[s], new_signals[trial, s])
+                points[offset+s] = Point2f(time[s], new_signals[trial, s])
             end
             points[offset+n_smpl+1] = Point2f(NaN32, NaN32)
         end
         trial_plot_data[] = points
-
-        # Prepare ERP data
-        erp_plot_data[] = [Point2f(t[s], new_erp[s]) for s = 1:n_samples]
-
+        erp_plot_data[] = [Point2f(time[s], new_erp[s]) for s = 1:n_samples]
         autolimits!(ax)
     end
 
-    # Connect parameter changes to simulation update
-    # We use a central trigger and async_latest to prevent the slider dragging 
-    # from queueing hundreds of massive updates and freezing the UI.
+    function update_simulation()
+        n_active = count(c -> c.active[], components)
+        if n_active == 0
+            update_plot(zeros(0, n_samples), zeros(n_samples))
+            return
+        end
+
+        active_comps = Matrix{Float64}(undef, n_active, 6)
+        row = 0
+        for c in components
+            c.active[] || continue
+            row += 1
+            active_comps[row, 1] = c.freq[]
+            active_comps[row, 2] = c.amp[]
+            active_comps[row, 3] = c.latency[]
+            active_comps[row, 4] = c.jitter_amp[]
+            active_comps[row, 5] = c.jitter_lat[]
+            active_comps[row, 6] = 0.0
+        end
+        active_comps[end, 6] = noise_amp[]
+
+        new_erp, new_signals = _run_erp_simulation(
+            trials[],
+            active_comps;
+            samp_freq = samp_freq,
+            sig_length = sig_length,
+            base_length = base_length,
+            noise_base = noise_base[],
+        )
+        update_plot(new_signals, new_erp)
+    end
+
     update_trigger = Observable(0)
-    throttled_trigger = async_latest(update_trigger)
+    throttled_trigger = Makie.Observables.async_latest(update_trigger)
     on(throttled_trigger) do _
         update_simulation()
     end
@@ -405,11 +390,9 @@ function simulate_erp()
         on(comp.active) do _
             update_trigger[] += 1
         end
-        for param in [comp.freq, comp.amp, comp.latency, comp.jitter_amp, comp.jitter_lat]
+        for param in (comp.freq, comp.amp, comp.latency, comp.jitter_amp, comp.jitter_lat)
             on(param) do _
-                if comp.active[]
-                    update_trigger[] += 1
-                end
+                comp.active[] && (update_trigger[] += 1)
             end
         end
     end
@@ -417,24 +400,15 @@ function simulate_erp()
     on(trials) do _
         update_trigger[] += 1
     end
-
     on(noise_amp) do _
-        if any(c -> c.active[], components)
-            update_trigger[] += 1
-        end
+        any(c -> c.active[], components) && (update_trigger[] += 1)
     end
-
     on(btn_regen.clicks) do _
-        noise_base[] = _noise_vec(MAX_TRIALS, n_samples, samp_freq, 1.0)
-        if any(c -> c.active[], components)
-            update_trigger[] += 1
-        end
+        noise_base[] = _noise_vec(max_trials, n_samples, samp_freq, 1.0)
+        any(c -> c.active[], components) && (update_trigger[] += 1)
     end
 
-    # Initialize with empty plot
     update_plot(zeros(0, n_samples), zeros(n_samples))
-
     _display_demo_figure(fig)
     return fig, ax
-
 end

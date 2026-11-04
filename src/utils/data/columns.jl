@@ -1,6 +1,9 @@
 _first_df(dat::SingleDataFrameEeg) = dat.data
 _first_df(dat::MultiDataFrameEeg) = isempty(dat.data) ? nothing : dat.data[1]
 
+_as_symbol_vec(v::AbstractVector{Symbol}) = v
+_as_symbol_vec(v::AbstractVector) = Symbol[Symbol(x) for x in v]
+
 function _channel_cols(layout_channels::AbstractVector{Symbol}, df::DataFrame)::Vector{Symbol}
     lookup = DataFrames.index(df).lookup
     out = Vector{Symbol}(undef, length(layout_channels))
@@ -69,11 +72,16 @@ function _count_channels(layout_channels::AbstractVector{Symbol}, df::DataFrame)
     return cnt
 end
 
+_channel_cols(layout_channels::AbstractVector, df::DataFrame)::Vector{Symbol} = _channel_cols(_as_symbol_vec(layout_channels), df)
+_meta_cols(layout_channels::AbstractVector, df::DataFrame)::Vector{Symbol} = _meta_cols(_as_symbol_vec(layout_channels), df)
+_extra_cols(layout_channels::AbstractVector, df::DataFrame)::Vector{Symbol} = _extra_cols(_as_symbol_vec(layout_channels), df)
+_count_channels(layout_channels::AbstractVector, df::DataFrame)::Int = _count_channels(_as_symbol_vec(layout_channels), df)
+
 function _get_cols_by_group(dat::EegData, group::Symbol)::Vector{Symbol}
     layout_channels = dat.layout.data[!, :label]
     df = _first_df(dat)
     if group === :channels
-        return isnothing(df) ? copy(layout_channels) : _channel_cols(layout_channels, df)
+        return isnothing(df) ? copy(_as_symbol_vec(layout_channels)) : _channel_cols(layout_channels, df)
     elseif group === :metadata
         return isnothing(df) ? Symbol[] : _meta_cols(layout_channels, df)
     elseif group === :extra
