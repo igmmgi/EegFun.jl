@@ -241,20 +241,6 @@ end
 plot_layout_2d(dat::EegFunData; kwargs...) = plot_layout_2d(dat.layout; kwargs...)
 
 """
-    plot_layout(args...; kwargs...)
-
-2D sensor layout alias for [`plot_layout_2d`](@ref).
-"""
-plot_layout(args...; kwargs...) = plot_layout_2d(args...; kwargs...)
-
-"""
-    plot_layout!(args...; kwargs...)
-
-In-place 2D sensor layout alias for [`plot_layout_2d!`](@ref).
-"""
-plot_layout!(args...; kwargs...) = plot_layout_2d!(args...; kwargs...)
-
-"""
     add_topo_rois!(ax::Axis, layout::Layout, rois::Vector{<:Vector{Symbol}}; kwargs...)
 
 Draw padded convex-hull region-of-interest (ROI) outlines or fills around groups of electrodes on `ax`.

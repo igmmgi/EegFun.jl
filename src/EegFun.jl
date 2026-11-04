@@ -69,7 +69,6 @@ include("utils/misc.jl")
 include("utils/viewer.jl")
 include("utils/print.jl")
 include("utils/tables.jl")
-include("utils/extern/read_fieldtrip_csv.jl")
 
 # Layout handling
 include("layouts/layout.jl")

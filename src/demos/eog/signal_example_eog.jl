@@ -360,10 +360,3 @@ function signal_example_heog(; kwargs...)
     _display_demo_figure(fig)
     return fig, ax_eyes, ax_eog
 end
-
-"""
-    signal_example_eog(; kwargs...)
-
-Alias for [`signal_example_heog`](@ref): launches the interactive Electrooculography (EOG) corneo-retinal dipole and bipolar derivation simulator.
-"""
-signal_example_eog(; kwargs...) = signal_example_heog(; kwargs...)

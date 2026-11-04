@@ -25,5 +25,5 @@ Interactive Electrooculography (hEOG) simulator illustrating how horizontal eye 
 using EegFun
 using GLMakie
 
-EegFun.signal_example_eog()
+EegFun.signal_example_heog()
 ```

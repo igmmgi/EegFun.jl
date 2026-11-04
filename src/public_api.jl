@@ -136,7 +136,6 @@ public read_config
 public read_data
 public read_eeglab
 public read_fieldtrip
-public read_fieldtrip_csv
 public read_layout
 public read_raw_data
 public read_xdf
@@ -273,7 +272,6 @@ public calculate_eog_channels!
 public combine_artifact_components
 public detect_eog_onsets
 public detect_eog_onsets!
-public get_all_components
 public get_all_ica_components
 public get_eog_channels
 public get_selected_components
@@ -384,8 +382,6 @@ public plot_ica_component_activation
 public plot_ica_component_spectrum
 public plot_joint_probability
 public plot_joint_probability!
-public plot_layout
-public plot_layout!
 public plot_layout_2d
 public plot_layout_2d!
 public plot_layout_3d
@@ -432,7 +428,6 @@ public signal_example_dotproduct
 public signal_example_ecg_einthoven
 public signal_example_ecg_hrv
 public signal_example_emg
-public signal_example_eog
 public signal_example_heog
 public signal_example_ica_clt
 public signal_example_ica_geometry

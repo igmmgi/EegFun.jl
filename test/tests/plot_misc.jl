@@ -152,7 +152,6 @@ import Logging
             EegFun.signal_example_ica_geometry,
             EegFun.signal_example_ica_mixture,
             EegFun.signal_example_heog,
-            EegFun.signal_example_eog,
             EegFun.signal_example_convolution,
             EegFun.signal_example_ecg_hrv,
             EegFun.signal_example_sampling,

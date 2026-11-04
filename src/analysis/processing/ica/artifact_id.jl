@@ -673,13 +673,6 @@ function get_all_ica_components(artifacts::ArtifactComponents)
     return sort!(collect(all_comps))
 end
 
-"""
-    get_all_components(artifacts::ArtifactComponents) -> Vector{Int}
-
-Alias for [`get_all_ica_components`](@ref).
-"""
-get_all_components(artifacts::ArtifactComponents) = get_all_ica_components(artifacts)
-
 function Base.show(io::IO, artifacts::ArtifactComponents)
     all_comps = get_all_ica_components(artifacts)
     print(io, "ArtifactComponents($(length(all_comps)) components: $(all_comps))")

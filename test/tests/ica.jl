@@ -310,8 +310,6 @@ using LinearAlgebra
         @test artifacts isa EegFun.ArtifactComponents
         allc = EegFun.get_all_ica_components(artifacts)
         @test sort(allc) == sort([1, 2, 3, 4, 5, 6, 7])
-        # get_all_components alias
-        @test EegFun.get_all_components(artifacts) == allc
 
         # show single-line and MIME text/plain should not error
         io = IOBuffer()
