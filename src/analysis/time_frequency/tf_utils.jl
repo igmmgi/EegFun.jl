@@ -593,7 +593,7 @@ function _tf_batch_worker(tf_fn::F, label::String, condition_selection, kwargs) 
         end
         data = _condition_select(data, condition_selection)
         tf_results = tf_fn(data; kwargs...)
-        jldsave(output_path; data = tf_results)
+        jldsave(output_path; data = tf_results, format_version = EEGFUN_FORMAT_VERSION)
         return BatchResult(true, filename, "TF $label analysis complete ($(length(tf_results)) conditions)")
     end
 end

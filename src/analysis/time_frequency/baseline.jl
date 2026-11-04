@@ -353,7 +353,7 @@ function tf_baseline(
             end
             data = _condition_select(data, condition_selection)
             tf_baseline!(data, baseline_interval; method = method)
-            jldsave(output_path; data = data)
+            jldsave(output_path; data = data, format_version = EEGFUN_FORMAT_VERSION)
             return BatchResult(true, filename, "Baseline corrected")
         end
 

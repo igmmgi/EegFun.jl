@@ -199,19 +199,9 @@ end
 
 function _resolve_neighbor_criterion(dict::AbstractDict, default::Float64)::Float64
     haskey(dict, "neighbor_criterion") && !isnothing(dict["neighbor_criterion"]) && return Float64(dict["neighbor_criterion"])
-    if haskey(dict, "neighbour_criterion")
-        @warn "'neighbour_criterion' is deprecated; use 'neighbor_criterion' instead." _module = nothing _file = nothing _line = nothing
-        val = dict["neighbour_criterion"]
-        return isnothing(val) ? default : Float64(val)
-    end
     lay = get(dict, "layout", nothing)
     if lay isa AbstractDict
         haskey(lay, "neighbor_criterion") && !isnothing(lay["neighbor_criterion"]) && return Float64(lay["neighbor_criterion"])
-        if haskey(lay, "neighbour_criterion")
-            @warn "'neighbour_criterion' is deprecated; use 'neighbor_criterion' instead." _module = nothing _file = nothing _line = nothing
-            val = lay["neighbour_criterion"]
-            return isnothing(val) ? default : Float64(val)
-        end
     end
     return default
 end

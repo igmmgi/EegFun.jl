@@ -160,33 +160,10 @@ function _generate_default_config()
     return config
 end
 
-function _normalize_legacy_config!(user_config::AbstractDict)
-    if haskey(user_config, "preprocess") && user_config["preprocess"] isa AbstractDict
-        prep = user_config["preprocess"]
-        if haskey(prep, "neighbour_criterion")
-            @minimal_warning "'preprocess.neighbour_criterion' is deprecated; use 'preprocess.layout.neighbor_criterion' instead."
-            val = pop!(prep, "neighbour_criterion")
-            if !haskey(prep, "layout") || !(prep["layout"] isa AbstractDict)
-                prep["layout"] = Dict{String,Any}()
-            end
-            !haskey(prep["layout"], "neighbor_criterion") && (prep["layout"]["neighbor_criterion"] = val)
-        end
-        if haskey(prep, "layout") && prep["layout"] isa AbstractDict
-            layout_cfg = prep["layout"]
-            if haskey(layout_cfg, "neighbour_criterion")
-                @minimal_warning "'preprocess.layout.neighbour_criterion' is deprecated; use 'preprocess.layout.neighbor_criterion' instead."
-                val = pop!(layout_cfg, "neighbour_criterion")
-                !haskey(layout_cfg, "neighbor_criterion") && (layout_cfg["neighbor_criterion"] = val)
-            end
-        end
-    end
-    return user_config
-end
-
 """
     read_config(config_file::String) -> Dict{String,Any}
 
-Load, normalize, merge with defaults, and validate a TOML configuration file.
+Load, merge with defaults, and validate a TOML configuration file.
 """
 function read_config(config_file::String)
     !isfile(config_file) && @minimal_error "Configuration file not found: $config_file"
@@ -199,7 +176,6 @@ function read_config(config_file::String)
         @minimal_error "Error parsing TOML file: $(sprint(showerror, e))"
     end
 
-    _normalize_legacy_config!(user_config)
     config = _merge_configs(default_config, user_config)
     _convert_any_arrays!(config)
 

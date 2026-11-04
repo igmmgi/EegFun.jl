@@ -1100,7 +1100,7 @@ using Dates
         @test p_cfg.preprocess.channel_repair_method == :spherical_spline
     end
 
-    @testset "Phase 2 regressions: ConfigParameter.allowed typing, rereference, nullable from_dict, neighbour alias, defaults" begin
+    @testset "Phase 2 regressions: ConfigParameter.allowed typing, rereference, nullable from_dict, defaults" begin
         # 1. ConfigParameter.allowed field type is Union{Nothing,Vector{Any}} (not untyped Any)
         @test fieldtype(EegFun.ConfigParameter{String}, :allowed) == Union{Nothing,Vector{Any}}
 
@@ -1142,12 +1142,7 @@ component_method = "correlation"
         @test eeg_none.artifact_interval_start === nothing
         @test eeg_none.artifact_interval_end === nothing
 
-        # 5. Legacy "neighbour_criterion" accepted with @warn in both from_dict and read_config
-        legacy_pre = @test_logs (:warn, r"neighbour_criterion") match_mode = :any EegFun.PreprocessConfig(
-            Dict("layout" => Dict("neighbour_criterion" => 0.42)),
-        )
-        @test legacy_pre.neighbor_criterion == 0.42
-
+        # 5. Unknown UK "neighbour_criterion" is rejected by read_config
         legacy_toml = joinpath(test_dir, "legacy_uk.toml")
         write(
             legacy_toml,
@@ -1156,9 +1151,7 @@ component_method = "correlation"
 neighbour_criterion = 0.44
 """,
         )
-        legacy_dict = @test_logs (:warn, r"neighbour_criterion") match_mode = :any EegFun.read_config(legacy_toml)
-        @test legacy_dict["preprocess"]["layout"]["neighbor_criterion"] == 0.44
-        @test EegFun.PipelineConfig(legacy_dict).preprocess.neighbor_criterion == 0.44
+        @test_throws EegFun.EegFunError EegFun.read_config(legacy_toml)
 
         # 6. Struct defaults align with _generate_default_config()
         empty_toml = joinpath(test_dir, "defaults_align.toml")

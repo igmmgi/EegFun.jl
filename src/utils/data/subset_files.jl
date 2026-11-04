@@ -6,7 +6,7 @@ function _process_subset_file(filepath::String, output_path::String; kwargs...)
     isnothing(dat) && return BatchResult(false, fname, "No data found in file")
 
     subset_data = subset(dat; kwargs...)
-    jldsave(output_path; data = subset_data)
+    jldsave(output_path; data = subset_data, format_version = EEGFUN_FORMAT_VERSION)
 
     if subset_data isa Vector && !isempty(subset_data) && hasproperty(subset_data[1], :data)
         n_items = sum(length(cond.data) for cond in subset_data)

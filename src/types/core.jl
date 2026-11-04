@@ -119,42 +119,6 @@ function Base.copy(layout::Layout)::Layout
     return Layout(copy(layout.data; copycols = true), neighbors_copy, layout.criterion, layout.criterion_type)
 end
 
-# Backward-compatible JLD2 deserialization for legacy files saved with UK spelling (:neighbours / Neighbours)
-_convert_legacy_jld2_neighbors(::Nothing) = nothing
-
-function _convert_legacy_jld2_neighbors(d::JLD2.SerializedDict)
-    out = Dict{Symbol,Neighbors}()
-    for p in d.kvvec
-        out[Symbol(p.first)] = p.second isa Neighbors ? p.second : convert(Neighbors, p.second)
-    end
-    return out
-end
-
-function _convert_legacy_jld2_neighbors(d)
-    out = Dict{Symbol,Neighbors}()
-    for (k, v) in d
-        out[Symbol(k)] = v isa Neighbors ? v : convert(Neighbors, v)
-    end
-    return out
-end
-
-Base.convert(::Type{Neighbors}, x::Union{JLD2.ReconstructedStatic,JLD2.ReconstructedMutable}) =
-    Neighbors(Symbol.(x.channels), Float64.(x.distances), Float64.(x.weights))
-
-function Base.convert(::Type{Layout}, x::JLD2.ReconstructedMutable)
-    nb_raw = hasproperty(x, :neighbors) ? x.neighbors : (hasproperty(x, :neighbours) ? x.neighbours : nothing)
-    return Layout(x.data, _convert_legacy_jld2_neighbors(nb_raw), x.criterion, x.criterion_type)
-end
-
-JLD2.rconvert(::Type{Neighbors}, nt::NamedTuple) = Neighbors(Symbol.(nt.channels), Float64.(nt.distances), Float64.(nt.weights))
-
-function JLD2.rconvert(::Type{Layout}, nt::NamedTuple)
-    nb_raw = haskey(nt, :neighbors) ? nt.neighbors : (haskey(nt, :neighbours) ? nt.neighbours : nothing)
-    return Layout(nt.data, _convert_legacy_jld2_neighbors(nb_raw), nt.criterion, nt.criterion_type)
-end
-
-const _LEGACY_JLD2_TYPEMAP = Dict{String,Any}("EegFun.Neighbours" => Neighbors, "EegFun.Layout" => JLD2.Upgrade(Layout))
-
 """
     ContinuousData <: SingleDataFrameEeg
 
