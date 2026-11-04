@@ -1,69 +1,38 @@
-# === MATHEMATICAL UTILITIES ===
-"""
-    find_closest_time_index(times::AbstractVector{<:Real}, target::Real) -> Int
-
-Find the index in a strictly sorted time vector that is closest to `target`.
-"""
 function find_closest_time_index(times::AbstractVector{<:Real}, target::Real)
     isempty(times) && @minimal_error("Cannot find closest time index in an empty time vector")
     idx = searchsortedfirst(times, target)
-    if idx == 1
-        return 1
-    elseif idx > length(times)
-        return length(times)
-    else
-        return abs(times[idx] - target) < abs(times[idx-1] - target) ? idx : idx - 1
-    end
+    idx == 1 && return 1
+    idx > length(times) && return length(times)
+    return abs(times[idx] - target) < abs(times[idx-1] - target) ? idx : idx - 1
 end
 
-"""
-    _datarange(x::AbstractVector) -> Float64
-
-Calculate the range of data (maximum - minimum).
-
-# Returns
-- `Float64`: Difference between maximum and minimum values
-"""
 function _datarange(x::AbstractVector)::Float64
     isempty(x) && return 0.0
     mn, mx = extrema(x)
     return Float64(mx - mn)
 end
 
+function _add_col!(out::Vector{Float64}, col::Vector{Float64}, N::Int)
+    @inbounds @simd for i = 1:N
+        out[i] += col[i]
+    end
+end
 
-"""
-    _colmeans(df::DataFrame, cols) -> Vector{Float64}
-    _colmeans(df::Matrix) -> Vector{Float64}
-    _colmeans(df::Matrix, cols) -> Vector{Float64}
+function _add_col!(out::Vector{Float64}, col::AbstractVector, N::Int)
+    @inbounds @simd for i = 1:N
+        out[i] += Float64(col[i])
+    end
+end
 
-Calculate the row-wise mean across specified columns (channel-average waveform).
-
-# Arguments
-- `df::DataFrame`: The DataFrame containing the data.
-- `cols`: The columns across which to average for each row. Can be a vector of column names or indices.
-
-# Returns
-- `Vector{Float64}`: A vector of length `nrow(df)` containing the mean across the specified columns at each sample.
-"""
 function _colmeans(df::DataFrame, cols)::Vector{Float64}
     isempty(cols) && return Float64[]
     N = nrow(df)
-    n_cols = length(cols)
     out = zeros(Float64, N)
     for c in cols
-        col_vec = df[!, c]
-        if col_vec isa Vector{Float64}
-            col_f64 = col_vec::Vector{Float64}
-            @inbounds @simd for i = 1:N
-                out[i] += col_f64[i]
-            end
-        else
-            @inbounds @simd for i = 1:N
-                out[i] += Float64(col_vec[i])
-            end
-        end
+        _add_col!(out, df[!, c], N)
     end
-    return out ./ n_cols
+    out .*= (1.0 / length(cols))
+    return out
 end
 
 function _colmeans(mat::Matrix)::Vector{Float64}
@@ -75,35 +44,39 @@ function _colmeans(mat::Matrix)::Vector{Float64}
             out[i] += mat[i, c]
         end
     end
-    return out ./ C
+    out .*= (1.0 / C)
+    return out
 end
 
 function _colmeans(mat::Matrix, cols)::Vector{Float64}
     isempty(cols) && return Float64[]
     N = size(mat, 1)
-    n_cols = length(cols)
     out = zeros(Float64, N)
     for c in cols
         @inbounds @simd for i = 1:N
             out[i] += mat[i, c]
         end
     end
-    return out ./ n_cols
+    out .*= (1.0 / length(cols))
+    return out
 end
 
-
-"""
-    _data_limits_x(dat::DataFrame) -> Union{Tuple{Float64,Float64}, Nothing}
-
-Get the time range of the data.
-
-# Returns
-- `Tuple{Float64,Float64}`: Minimum and maximum time values
-- `Nothing`: If the DataFrame is empty
-"""
 function _data_limits_x(dat::DataFrame; col::Symbol = :time)
     isempty(dat) && return nothing
     return extrema(dat[!, col])
+end
+
+function _nan_safe_extrema(v::AbstractVector{Float64})
+    mn, mx = Inf, -Inf
+    found = false
+    @inbounds for x in v
+        if !isnan(x)
+            mn = min(mn, x)
+            mx = max(mx, x)
+            found = true
+        end
+    end
+    return found ? (mn, mx) : nothing
 end
 
 function _nan_safe_extrema(v::AbstractVector)
@@ -120,38 +93,41 @@ function _nan_safe_extrema(v::AbstractVector)
     return found ? (mn, mx) : nothing
 end
 
-"""
-    _data_limits_y(dat::DataFrame, col) -> Union{Vector{Float64}, Nothing}
+function _nan_safe_extrema_rows(col::Vector{Float64}, rows::Vector{Int})
+    mn, mx = Inf, -Inf
+    found = false
+    @inbounds for idx in rows
+        val = col[idx]
+        if !isnan(val)
+            mn = min(mn, val)
+            mx = max(mx, val)
+            found = true
+        end
+    end
+    return found ? (mn, mx) : nothing
+end
 
-Get the value range for specified columns.
+function _nan_safe_extrema_rows(col::AbstractVector, rows::Vector{Int})
+    mn, mx = Inf, -Inf
+    found = false
+    @inbounds for idx in rows
+        x = col[idx]
+        if !ismissing(x) && !(x isa AbstractFloat && isnan(x))
+            val = Float64(x)
+            mn = min(mn, val)
+            mx = max(mx, val)
+            found = true
+        end
+    end
+    return found ? (mn, mx) : nothing
+end
 
-# Arguments
-- `dat::DataFrame`: The DataFrame containing the data
-- `col::Symbol`: The column to get limits for
-
-# Returns
-- `Vector{Float64}`: [minimum, maximum] across specified column
-- `Nothing`: If the DataFrame is empty or contains only NaN values
-"""
 function _data_limits_y(dat::DataFrame, col::Symbol)
     isempty(dat) && return nothing
     ext = _nan_safe_extrema(dat[!, col])
     return isnothing(ext) ? nothing : [ext[1], ext[2]]
 end
 
-"""
-    _data_limits_y(dat::DataFrame, cols::Vector{Symbol}) -> Union{Vector{Float64}, Nothing}
-
-Get the value range across multiple specified columns.
-
-# Arguments
-- `dat::DataFrame`: The DataFrame containing the data
-- `cols::Vector{Symbol}`: The columns to get limits for
-
-# Returns
-- `Vector{Float64}`: [minimum, maximum] across all specified columns
-- `Nothing`: If the DataFrame is empty or contains only NaN values
-"""
 function _data_limits_y(dat::DataFrame, cols::Vector{Symbol})
     (isempty(dat) || isempty(cols)) && return nothing
     global_min, global_max = Inf, -Inf
@@ -167,30 +143,16 @@ function _data_limits_y(dat::DataFrame, cols::Vector{Symbol})
     return found ? [global_min, global_max] : nothing
 end
 
-
-
-
-# === DEFAULT Y-RANGE HELPERS ===
-function _ylimit_value_cols(dat_sub::SingleDataFrameEeg, include_extra::Bool)::Vector{Symbol}
-    chs = channel_labels(dat_sub)
-    !include_extra && return chs
-    extra = [c for c in extra_labels(dat_sub) if eltype(dat_sub.data[!, c]) <: Real && !(eltype(dat_sub.data[!, c]) <: Bool)]
-    return vcat(chs, extra)
+function _filter_ylimit_cols(raw_cols::Vector{Symbol}, lay_labels::AbstractVector{Symbol}, df0::DataFrame)::Vector{Symbol}
+    return Symbol[c for c in raw_cols if (c in lay_labels) || (eltype(df0[!, c]) <: Real && !(eltype(df0[!, c]) <: Bool))]
 end
 
-function _ylimit_value_cols(dat_sub::MultiDataFrameEeg, include_extra::Bool)::Vector{Symbol}
-    chs = channel_labels(dat_sub)
-    (!include_extra || isempty(dat_sub.data)) && return chs
-    df1 = dat_sub.data[1]
-    extra = [c for c in extra_labels(dat_sub) if eltype(df1[!, c]) <: Real && !(eltype(df1[!, c]) <: Bool)]
-    return vcat(chs, extra)
+function _selected_ylimit_cols(dat::EegData, df0::DataFrame, channel_selection, include_extra::Bool)::Vector{Symbol}
+    raw_cols = get_selected_channels(dat, channel_selection; include_meta = false, include_extra = include_extra)
+    !include_extra && return raw_cols
+    return _filter_ylimit_cols(raw_cols, dat.layout.data[!, :label], df0)
 end
 
-"""
-    _ylimits(dat::Union{ErpData, ContinuousData}; channel_selection::Function = channels(), sample_selection::Function = samples(), interval_selection::Interval = times(), include_extra::Bool = false)
-
-Compute y-limits (min, max) for single-dataframe EEG data (ERP or Continuous) using channel and time selection predicates.
-"""
 function _ylimits(
     dat::Union{ErpData,ContinuousData};
     channel_selection = channels(),
@@ -198,24 +160,25 @@ function _ylimits(
     interval_selection::Interval = times(),
     include_extra::Bool = false,
 )::Tuple{Float64,Float64}
-    dat_sub = subset(
-        dat;
-        channel_selection = channel_selection,
-        sample_selection = sample_selection,
-        interval_selection = interval_selection,
-        include_extra = include_extra,
-    )
-    chs = _ylimit_value_cols(dat_sub, include_extra)
-    lims = _data_limits_y(dat_sub.data, chs)
-    isnothing(lims) && return (0.0, 1.0)
-    return (lims[1], lims[2])
+    df = dat.data
+    isempty(df) && return (0.0, 1.0)
+    cols = _selected_ylimit_cols(dat, df, channel_selection, include_extra)
+    sel_samples = get_selected_samples(df, _combine_interval_sample(interval_selection, sample_selection))
+    (isempty(cols) || isempty(sel_samples)) && return (0.0, 1.0)
+
+    mn, mx = Inf, -Inf
+    found = false
+    for c in cols
+        ext = _nan_safe_extrema_rows(df[!, c], sel_samples)
+        if !isnothing(ext)
+            mn = min(mn, ext[1])
+            mx = max(mx, ext[2])
+            found = true
+        end
+    end
+    return found ? (mn, mx) : (0.0, 1.0)
 end
 
-"""
-    _ylimits(dat::EpochData; channel_selection::Function = channels(), sample_selection::Function = samples(), interval_selection::Interval = times(), include_extra::Bool = false)
-
-Compute y-limits (min, max) for epoch data using channel and time selection predicates.
-"""
 function _ylimits(
     dat::EpochData;
     channel_selection = channels(),
@@ -223,33 +186,35 @@ function _ylimits(
     interval_selection::Interval = times(),
     include_extra::Bool = false,
 )::Tuple{Float64,Float64}
+    isempty(dat.data) && return (0.0, 1.0)
+    df1 = dat.data[1]
+    isempty(df1) && return (0.0, 1.0)
+    cols = _selected_ylimit_cols(dat, df1, channel_selection, include_extra)
+    sel_samples = get_selected_samples(df1, _combine_interval_sample(interval_selection, sample_selection))
+    (isempty(cols) || isempty(sel_samples)) && return (0.0, 1.0)
 
-    # Apply predicates via subset first
-    dat_sub = subset(
-        dat;
-        channel_selection = channel_selection,
-        sample_selection = sample_selection,
-        interval_selection = interval_selection,
-        include_extra = include_extra,
-    )
-    # Determine which value columns to use
-    chs = _ylimit_value_cols(dat_sub, include_extra)
-    # Compute limits per epoch and combine
-    limits = map(df -> _data_limits_y(df, chs), dat_sub.data)
-    limits = filter(!isnothing, limits)
-    isempty(limits) && return (0.0, 1.0)
-    min_val = minimum(lim[1] for lim in limits)
-    max_val = maximum(lim[2] for lim in limits)
-    return (min_val, max_val)
+    mn, mx = Inf, -Inf
+    found = false
+    for df in dat.data
+        for c in cols
+            ext = _nan_safe_extrema_rows(df[!, c], sel_samples)
+            if !isnothing(ext)
+                mn = min(mn, ext[1])
+                mx = max(mx, ext[2])
+                found = true
+            end
+        end
+    end
+    return found ? (mn, mx) : (0.0, 1.0)
 end
 
-"""
-    _ylimits(datasets::Vector{<:Union{ErpData, ContinuousData, EpochData}}; kwargs...)
-
-Compute global y-limits (min, max) across multiple EEG datasets.
-"""
 function _ylimits(datasets::Vector{<:Union{ErpData,ContinuousData,EpochData}}; kwargs...)::Tuple{Float64,Float64}
     isempty(datasets) && return (0.0, 1.0)
-    all_limits = [_ylimits(d; kwargs...) for d in datasets]
-    return (minimum(lim[1] for lim in all_limits), maximum(lim[2] for lim in all_limits))
+    mn, mx = Inf, -Inf
+    for d in datasets
+        lo, hi = _ylimits(d; kwargs...)
+        mn = min(mn, lo)
+        mx = max(mx, hi)
+    end
+    return (mn, mx)
 end

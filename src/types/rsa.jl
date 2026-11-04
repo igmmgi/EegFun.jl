@@ -1,94 +1,71 @@
-# Types for Representational Similarity Analysis (RSA) results.
-#
-# Defines types for storing RSA results, including Representational
-# Dissimilarity Matrices (RDMs) and correlations with model RDMs.
-
 """
-    NoiseCeiling
+    NoiseCeiling <: EegFunData
 
-Stores noise ceiling estimates for RSA analysis.
-
-The noise ceiling quantifies the maximum correlation that an ideal model could
-achieve with the observed neural data, given the noise and variability in the
-measurements. This is computed using leave-one-out cross-validation across
-participants (Nili et al., 2014).
+Leave-one-participant-out RSA noise ceiling estimates across time (Nili et al., 2014).
 
 # Fields
-- `lower_bound::Vector{Float64}`: Lower bound of noise ceiling at each time point [time]
-  - Computed as correlation between each left-out participant and the average of remaining participants
-  - Conservative estimate (underestimates true ceiling)
-- `upper_bound::Vector{Float64}`: Upper bound of noise ceiling at each time point [time]
-  - Computed as correlation between each left-out participant and the average of all participants
-  - Liberal estimate (overestimates true ceiling)
-- `n_participants::Int`: Number of participants used in computation
-
-# References
-Nili, H., Wingfield, C., Walther, A., Su, L., Marslen-Wilson, W., & Kriegeskorte, N. (2014).
-A toolbox for representational similarity analysis. PLoS computational biology, 10(4), e1003553.
+- `lower_bound::Vector{Float64}`: Conservative lower bound at each time point
+- `upper_bound::Vector{Float64}`: Liberal upper bound at each time point
+- `n_participants::Int`: Number of participants included
 """
 struct NoiseCeiling <: EegFunData
-    lower_bound::Vector{Float64}  # [time]
-    upper_bound::Vector{Float64}  # [time]
+    lower_bound::Vector{Float64}
+    upper_bound::Vector{Float64}
     n_participants::Int
 end
 
-function Base.copy(nc::NoiseCeiling)::NoiseCeiling
-    return NoiseCeiling(copy(nc.lower_bound), copy(nc.upper_bound), nc.n_participants)
+Base.copy(nc::NoiseCeiling)::NoiseCeiling = NoiseCeiling(copy(nc.lower_bound), copy(nc.upper_bound), nc.n_participants)
+
+function _bound_range_str(v::Vector{Float64}; include_mean::Bool = false)
+    isempty(v) && return "N/A"
+    lo, hi = round.(extrema(v); digits = 3)
+    return include_mean ? "$(round(mean(v); digits = 3)) (range: $lo-$hi)" : "$lo to $hi"
 end
 
 function Base.show(io::IO, nc::NoiseCeiling)
-    lower_str =
-        isempty(nc.lower_bound) ? "N/A" : "$(round(minimum(nc.lower_bound), digits=3)) to $(round(maximum(nc.lower_bound), digits=3))"
-    upper_str =
-        isempty(nc.upper_bound) ? "N/A" : "$(round(minimum(nc.upper_bound), digits=3)) to $(round(maximum(nc.upper_bound), digits=3))"
     println(io, "NoiseCeiling:")
     println(io, "  Participants: $(nc.n_participants)")
     println(io, "  Time points: $(length(nc.lower_bound))")
-    println(io, "  Lower bound: $lower_str")
-    println(io, "  Upper bound: $upper_str")
+    println(io, "  Lower bound: $(_bound_range_str(nc.lower_bound))")
+    println(io, "  Upper bound: $(_bound_range_str(nc.upper_bound))")
 end
 
 """
-    RsaData
+    RsaData <: EegFunData
 
-Stores RSA analysis results for a single participant.
+Time-resolved Representational Similarity Analysis (RSA) results.
 
 # Fields
 - `file::String`: Source filename
-- `condition_names::Vector{String}`: Names of conditions/bins analyzed
-- `times::Vector{Float64}`: Time points in seconds where RDMs were computed
-- `rdm::Array{Float64, 3}`: Representational Dissimilarity Matrices [time × condition × condition]
-- `dissimilarity_measure::Symbol`: Measure used (:correlation, :euclidean, :mahalanobis, etc.)
-- `channels::Vector{Symbol}`: Channel names used in the analysis
-- `layout::Layout`: Layout object containing electrode positioning information
-- `sample_rate::Int64`: Sample rate of the original data in Hz
-- `model_correlations::Union{Array{Float64, 2}, Nothing}`: Correlations with model RDMs [time × model]
-- `model_names::Union{Vector{String}, Nothing}`: Names of models compared (if any)
-- `p_values::Union{Array{Float64, 2}, Nothing}`: P-values for model correlations [time × model]
-- `noise_ceiling::Union{NoiseCeiling, Nothing}`: Noise ceiling estimates, or `nothing`
-- `analysis_info::AnalysisInfo`: Analysis information and preprocessing metadata
+- `condition_names::Vector{String}`: Analyzed condition labels
+- `times::Vector{Float64}`: Time points in seconds
+- `rdm::Array{Float64,3}`: Representational dissimilarity matrices `[time × condition × condition]`
+- `dissimilarity_measure::Symbol`: Dissimilarity metric (`:correlation`, `:euclidean`, `:mahalanobis`, `:spearman`)
+- `channels::Vector{Symbol}`: Included electrode labels
+- `layout::Layout`: Electrode layout
+- `sample_rate::Int64`: Sample rate in Hz
+- `model_correlations::Union{Array{Float64,2},Nothing}`: Model RDM correlations `[time × model]`
+- `model_names::Union{Vector{String},Nothing}`: Model names
+- `p_values::Union{Array{Float64,2},Nothing}`: Model correlation p-values `[time × model]`
+- `noise_ceiling::Union{NoiseCeiling,Nothing}`: Group noise ceiling estimates
+- `analysis_info::AnalysisInfo`: Preprocessing metadata
 """
 mutable struct RsaData <: EegFunData
     file::String
     condition_names::Vector{String}
     times::Vector{Float64}
-    rdm::Array{Float64,3}  # [time × condition × condition]
+    rdm::Array{Float64,3}
     dissimilarity_measure::Symbol
     channels::Vector{Symbol}
     layout::Layout
     sample_rate::Int64
-    model_correlations::Union{Array{Float64,2},Nothing}  # [time × model]
+    model_correlations::Union{Array{Float64,2},Nothing}
     model_names::Union{Vector{String},Nothing}
-    p_values::Union{Array{Float64,2},Nothing}  # [time × model]
+    p_values::Union{Array{Float64,2},Nothing}
     noise_ceiling::Union{NoiseCeiling,Nothing}
     analysis_info::AnalysisInfo
 end
 
-"""
-    RsaData constructor with default values
-
-Create an RsaData object with required fields.
-"""
 function RsaData(
     file::String,
     condition_names::Vector{String},
@@ -140,15 +117,12 @@ function Base.copy(rsa::RsaData)::RsaData
 end
 
 function Base.show(io::IO, rsa::RsaData)
-    n_conditions = length(rsa.condition_names)
-    n_times = length(rsa.times)
     time_str = isempty(rsa.times) ? "N/A" : "$(first(rsa.times)) to $(last(rsa.times)) s"
-
     println(io, "RsaData:")
     println(io, "  File: $(rsa.file)")
-    println(io, "  Conditions: $(join(rsa.condition_names, ", ")) (n=$(n_conditions))")
+    println(io, "  Conditions: $(join(rsa.condition_names, ", ")) (n=$(length(rsa.condition_names)))")
     println(io, "  Dissimilarity measure: $(rsa.dissimilarity_measure)")
-    println(io, "  Time points: $(n_times) ($time_str)")
+    println(io, "  Time points: $(length(rsa.times)) ($time_str)")
     println(io, "  Channels: $(length(rsa.channels))")
 
     if !isnothing(rsa.model_correlations) && !isnothing(rsa.model_names) && size(rsa.model_correlations, 1) > 0
@@ -156,12 +130,12 @@ function Base.show(io::IO, rsa::RsaData)
         for (idx, model_name) in enumerate(rsa.model_names)
             idx > size(rsa.model_correlations, 2) && break
             col = @view rsa.model_correlations[:, idx]
-            max_corr = maximum(col)
             max_idx = argmax(col)
+            max_r = round(col[max_idx]; digits = 3)
             if max_idx <= length(rsa.times)
-                println(io, "    - $model_name: max r=$(round(max_corr, digits=3)) at $(round(rsa.times[max_idx], digits=3)) s")
+                println(io, "    - $model_name: max r=$max_r at $(round(rsa.times[max_idx]; digits = 3)) s")
             else
-                println(io, "    - $model_name: max r=$(round(max_corr, digits=3))")
+                println(io, "    - $model_name: max r=$max_r")
             end
         end
     end
@@ -169,23 +143,7 @@ function Base.show(io::IO, rsa::RsaData)
     if !isnothing(rsa.noise_ceiling)
         nc = rsa.noise_ceiling
         println(io, "  Noise ceiling ($(nc.n_participants) participants):")
-        if !isempty(nc.lower_bound)
-            avg_lower = mean(nc.lower_bound)
-            println(
-                io,
-                "    - Lower: $(round(avg_lower, digits=3)) (range: $(round(minimum(nc.lower_bound), digits=3))-$(round(maximum(nc.lower_bound), digits=3)))",
-            )
-        else
-            println(io, "    - Lower: N/A")
-        end
-        if !isempty(nc.upper_bound)
-            avg_upper = mean(nc.upper_bound)
-            println(
-                io,
-                "    - Upper: $(round(avg_upper, digits=3)) (range: $(round(minimum(nc.upper_bound), digits=3))-$(round(maximum(nc.upper_bound), digits=3)))",
-            )
-        else
-            println(io, "    - Upper: N/A")
-        end
+        println(io, "    - Lower: $(_bound_range_str(nc.lower_bound; include_mean = true))")
+        println(io, "    - Upper: $(_bound_range_str(nc.upper_bound; include_mean = true))")
     end
 end

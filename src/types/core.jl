@@ -1,4 +1,3 @@
-# === ABSTRACT TYPES ===
 """
     EegFunData
 
@@ -7,56 +6,39 @@ Abstract supertype for all primary EegFun data and result structures.
 abstract type EegFunData end
 
 """
-    EegData
+    EegData <: EegFunData
 
-Abstract supertype for all EEG data structures.
-
-This type represents the base interface for EEG data objects, providing a common
-interface for different data formats including continuous data, event-related
-potentials, and epoch-based data.
+Abstract supertype for EEG data containers (continuous, epoched, ERP, spectrum, and time-frequency).
 """
 abstract type EegData <: EegFunData end
 
 """
-    SingleDataFrameEeg
+    SingleDataFrameEeg <: EegData
 
-Abstract type for EEG data stored in a single DataFrame.
-
-This type represents EEG data where all samples are stored in a single DataFrame,
-typically used for continuous data or event-related potentials that have been
-averaged into a single time series.
+Abstract supertype for EEG data stored in a single `DataFrame` (e.g., `ContinuousData`, `ErpData`, `SpectrumData`, `TimeFreqData`).
 """
 abstract type SingleDataFrameEeg <: EegData end
 
 """
-    MultiDataFrameEeg
+    MultiDataFrameEeg <: EegData
 
-Abstract type for EEG data stored across multiple DataFrames.
-
-This type represents EEG data where samples are distributed across multiple
-DataFrames, typically used for epoch-based data where each epoch is stored
-separately.
+Abstract supertype for trial-level EEG data stored across a `Vector{DataFrame}` (e.g., `EpochData`, `TimeFreqEpochData`).
 """
 abstract type MultiDataFrameEeg <: EegData end
 
-# === ANALYSIS TYPES ===
 """
     AnalysisInfo
 
-Stores metadata about data preprocessing and analysis parameters.
-
-This type contains information about how the EEG data has been processed,
-including filtering parameters, reference information, and other analysis
-settings that affect the interpretation of the data.
+Preprocessing and analysis metadata attached to EEG data containers.
 
 # Fields
-- `reference::Symbol`: Reference type used (e.g., :avg, :mastoid, :none)
-- `hp_filter::Float64`: High-pass filter cutoff in Hz (0.0 if none)
-- `lp_filter::Float64`: Low-pass filter cutoff in Hz (0.0 if none)
-- `sample_rate::Float64`: Sample rate of the data in Hz
-- `n_ica_components_removed::Int`: Number of ICA components removed
-- `n_channels_repaired::Int`: Number of channels repaired
-- `repaired_channels::Vector{Symbol}`: List of repaired channels
+- `reference::Symbol = :none`: Reference scheme (`:avg`, `:mastoid`, `:none`, or channel label)
+- `hp_filter::Float64 = 0.0`: High-pass cutoff in Hz (`0.0` if unfiltered)
+- `lp_filter::Float64 = 0.0`: Low-pass cutoff in Hz (`0.0` if unfiltered)
+- `sample_rate::Float64 = 0.0`: Sample rate in Hz
+- `n_ica_components_removed::Int = 0`: Number of ICA components removed
+- `n_channels_repaired::Int = 0`: Number of channels repaired
+- `repaired_channels::Vector{Symbol} = Symbol[]`: Labels of repaired channels
 """
 @kwdef mutable struct AnalysisInfo
     reference::Symbol = :none
@@ -68,20 +50,19 @@ settings that affect the interpretation of the data.
     repaired_channels::Vector{Symbol} = Symbol[]
 end
 
-
 """
     AnalysisSettings
 
-Stores the final analysis settings applied by the user in the databrowser.
+Interactive preprocessing settings recorded from the databrowser.
 
 # Fields
-- `hp_filter::Float64`: High-pass filter frequency (0.0 if not applied)
-- `lp_filter::Float64`: Low-pass filter frequency (0.0 if not applied)
-- `reference::Symbol`: Reference type used (:avg, :mastoid, :none, or channel name)
-- `repaired_channels::Vector{Symbol}`: List of channels that were repaired
-- `repair_method::Symbol`: Repair method used for all repaired channels
-- `selected_regions::Vector{Tuple{Float64,Float64}}`: Time regions selected by user
-- `removed_ica_components::Vector{Int}`: ICA components that were removed
+- `hp_filter::Float64 = 0.0`: High-pass filter cutoff in Hz
+- `lp_filter::Float64 = 0.0`: Low-pass filter cutoff in Hz
+- `reference::Symbol = :none`: Reference scheme
+- `repaired_channels::Vector{Symbol} = Symbol[]`: Repaired channel labels
+- `repair_method::Symbol = :none`: Channel repair method
+- `selected_regions::Vector{Tuple{Float64,Float64}} = Tuple{Float64,Float64}[]`: Selected time intervals in seconds
+- `removed_ica_components::Vector{Int} = Int[]`: Removed ICA component indices
 """
 @kwdef struct AnalysisSettings
     hp_filter::Float64 = 0.0
@@ -93,22 +74,15 @@ Stores the final analysis settings applied by the user in the databrowser.
     removed_ica_components::Vector{Int} = Int[]
 end
 
-
-# === LAYOUT TYPES ===
 """
     Neighbors
 
-Stores spatial neighbor information for an electrode in layout-based operations.
-
-This type contains information about neighboring electrodes for spatial
-interpolation, artifact detection, and other layout-dependent operations.
-The distances and weights are typically calculated based on electrode
-positions in 2D or 3D space.
+Spatial neighbor channels, distances, and interpolation weights for a single electrode.
 
 # Fields
-- `channels::Vector{Symbol}`: List of neighboring channel labels
+- `channels::Vector{Symbol}`: Neighboring channel labels
 - `distances::Vector{Float64}`: Distances to each neighbor in normalized coordinate units
-- `weights::Vector{Float64}`: Interpolation weights for each neighbor
+- `weights::Vector{Float64}`: Spatial interpolation weights
 """
 struct Neighbors
     channels::Vector{Symbol}
@@ -119,17 +93,13 @@ end
 """
     Layout
 
-Stores electrode layout information and spatial relationships.
-
-This type contains the complete electrode layout information including
-electrode positions in various coordinate systems (polar, 2D Cartesian,
-3D Cartesian) and neighbor relationships for spatial operations.
+Electrode positions (polar, 2D, and/or 3D Cartesian) and spatial neighbor graph.
 
 # Fields
-- `data::DataFrame`: DataFrame containing layout information with metadata groups
-- `neighbors::Union{Nothing, Dict{Symbol, Neighbors}}`: Dictionary of neighbors for each electrode
-- `criterion::Union{Nothing, Float64}`: Distance criterion for neighbor calculation in normalized coordinate units
-- `criterion_type::Union{Nothing, Symbol}`: Type of neighbor calculation (`:xy` or `:xyz`)
+- `data::DataFrame`: Electrode coordinate table (`:label`, `:inc`, `:azi`, and optional Cartesian columns)
+- `neighbors::Union{Nothing,Dict{Symbol,Neighbors}}`: Neighbor graph keyed by electrode label
+- `criterion::Union{Nothing,Float64}`: Distance criterion used to compute neighbors
+- `criterion_type::Union{Nothing,Symbol}`: Coordinate space used for neighbors (`:xy` or `:xyz`)
 """
 mutable struct Layout
     data::DataFrame
@@ -138,7 +108,6 @@ mutable struct Layout
     criterion_type::Union{Nothing,Symbol}
 end
 
-# Empty constructor for quick visualization without layout information
 Layout() = Layout(DataFrame(label = Symbol[], inc = Float64[], azi = Float64[]), nothing, nothing, nothing)
 
 function Base.copy(layout::Layout)::Layout
@@ -147,12 +116,7 @@ function Base.copy(layout::Layout)::Layout
     else
         Dict{Symbol,Neighbors}(k => Neighbors(copy(v.channels), copy(v.distances), copy(v.weights)) for (k, v) in layout.neighbors)
     end
-    return Layout(
-        copy(layout.data, copycols = true),
-        neighbors_copy,
-        layout.criterion,    # Share since Float64 is immutable
-        layout.criterion_type,
-    )
+    return Layout(copy(layout.data; copycols = true), neighbors_copy, layout.criterion, layout.criterion_type)
 end
 
 # Backward-compatible JLD2 deserialization for legacy files saved with UK spelling (:neighbours / Neighbours)
@@ -191,18 +155,17 @@ end
 
 const _LEGACY_JLD2_TYPEMAP = Dict{String,Any}("EegFun.Neighbours" => Neighbors, "EegFun.Layout" => JLD2.Upgrade(Layout))
 
-# === EEG DATA TYPES ===
 """
-    ContinuousData
+    ContinuousData <: SingleDataFrameEeg
 
-Stores continuous EEG data with associated layout and analysis information.
+Continuous EEG recording with layout and preprocessing metadata.
 
 # Fields
 - `file::String`: Source filename
-- `data::DataFrame`: DataFrame containing continuous data (without file column)
-- `layout::Layout`: Layout object containing electrode positioning information
-- `sample_rate::Int64`: Sample rate of the data in Hz
-- `analysis_info::AnalysisInfo`: Analysis information and preprocessing metadata
+- `data::DataFrame`: Continuous samples (`:time`, metadata, channel columns, and optional extra columns)
+- `layout::Layout`: Electrode layout
+- `sample_rate::Int64`: Sample rate in Hz
+- `analysis_info::AnalysisInfo`: Preprocessing metadata
 """
 mutable struct ContinuousData <: SingleDataFrameEeg
     file::String
@@ -212,21 +175,20 @@ mutable struct ContinuousData <: SingleDataFrameEeg
     analysis_info::AnalysisInfo
 end
 
-
 """
-    ErpData
+    ErpData <: SingleDataFrameEeg
 
-Stores event-related potential data with associated layout and analysis information.
+Condition-averaged event-related potential (ERP) data.
 
 # Fields
 - `file::String`: Source filename
 - `condition::Int64`: Condition number
-- `condition_name::String`: Name of the condition
-- `data::DataFrame`: DataFrame containing averaged ERP data (without condition/condition_name/n_epochs columns)
-- `layout::Layout`: Layout object containing electrode positioning information
-- `sample_rate::Int64`: Sample rate of the data in Hz
-- `analysis_info::AnalysisInfo`: Analysis information and preprocessing metadata
-- `n_epochs::Int64`: Number of epochs that were averaged together
+- `condition_name::String`: Condition label
+- `data::DataFrame`: Averaged ERP samples
+- `layout::Layout`: Electrode layout
+- `sample_rate::Int64`: Sample rate in Hz
+- `analysis_info::AnalysisInfo`: Preprocessing metadata
+- `n_epochs::Int64`: Number of epochs averaged
 """
 mutable struct ErpData <: SingleDataFrameEeg
     file::String
@@ -239,20 +201,19 @@ mutable struct ErpData <: SingleDataFrameEeg
     n_epochs::Int64
 end
 
-
 """
-    EpochData
+    EpochData <: MultiDataFrameEeg
 
-Stores epoch-based EEG data with associated layout and analysis information.
+Single-trial epoched EEG data for one experimental condition.
 
 # Fields
-- `file::String`: Source filename (constant across all epochs)
-- `condition::Int64`: Condition number (constant across all epochs)
-- `condition_name::String`: Name of the condition (constant across all epochs)
-- `data::Vector{DataFrame}`: Vector of DataFrames, one for each epoch (without condition/condition_name/file columns; epoch column remains for original numbering)
-- `layout::Layout`: Layout object containing electrode positioning information
-- `sample_rate::Int64`: Sample rate of the data in Hz
-- `analysis_info::AnalysisInfo`: Analysis information and preprocessing metadata
+- `file::String`: Source filename
+- `condition::Int64`: Condition number
+- `condition_name::String`: Condition label
+- `data::Vector{DataFrame}`: Per-epoch `DataFrame`s
+- `layout::Layout`: Electrode layout
+- `sample_rate::Int64`: Sample rate in Hz
+- `analysis_info::AnalysisInfo`: Preprocessing metadata
 """
 mutable struct EpochData <: MultiDataFrameEeg
     file::String
@@ -267,11 +228,7 @@ end
 """
     BaselineInfo
 
-Stores information about baseline correction applied to time-frequency data.
-
-# Fields
-- `method::Symbol`: Baseline method (`:db`, `:percent`, `:relchange`)
-- `window::Tuple{Float64,Float64}`: Baseline time interval (start, stop) in seconds
+Baseline correction parameters applied to time-frequency data (`method` and `(start, stop)` `window` in seconds).
 """
 @kwdef struct BaselineInfo
     method::Symbol
@@ -279,24 +236,21 @@ Stores information about baseline correction applied to time-frequency data.
 end
 
 """
-    TimeFreqData
+    TimeFreqData <: SingleDataFrameEeg
 
-Stores time-frequency analysis results for a single condition/average.
+Condition-averaged time-frequency power and phase data. Accessing `.data` aliases `.data_power`.
 
 # Fields
 - `file::String`: Source filename
 - `condition::Int64`: Condition number
-- `condition_name::String`: Name of the condition
-- `data_power::DataFrame`: DataFrame with columns: time, freq, [electrode channels...] containing power values
-- `data_phase::DataFrame`: DataFrame with columns: time, freq, [electrode channels...] containing phase values (radians)
-- `layout::Layout`: Layout object containing electrode positioning information
-- `sample_rate::Int64`: Sample rate of the original data in Hz
-- `method::Symbol`: Analysis method (`:wavelet`, `:superlet`, `:multitaper`, `:spectrum`, `:hanning_fixed`, `:hanning_adaptive`)
-- `baseline::Union{BaselineInfo,Nothing}`: Baseline correction information (if applied)
-- `analysis_info::AnalysisInfo`: Analysis information and preprocessing metadata
-
-!!! note
-    Accessing `.data` returns `data_power` via a `getproperty` override, so the generic accessors (`all_data`, `subset`, ...) work.
+- `condition_name::String`: Condition label
+- `data_power::DataFrame`: Power values (`:time`, `:freq`, and channel columns)
+- `data_phase::DataFrame`: Phase values in radians (`:time`, `:freq`, and channel columns)
+- `layout::Layout`: Electrode layout
+- `sample_rate::Int64`: Original sample rate in Hz
+- `method::Symbol`: Spectral estimation method
+- `baseline::Union{BaselineInfo,Nothing}`: Applied baseline correction, if any
+- `analysis_info::AnalysisInfo`: Preprocessing metadata
 """
 mutable struct TimeFreqData <: SingleDataFrameEeg
     file::String
@@ -311,15 +265,7 @@ mutable struct TimeFreqData <: SingleDataFrameEeg
     analysis_info::AnalysisInfo
 end
 
-# Alias data to data_power so the generic accessors (all_data, subset, ...) work
-function Base.getproperty(tf_data::TimeFreqData, name::Symbol)
-    if name === :data
-        return getfield(tf_data, :data_power)
-    else
-        return getfield(tf_data, name)
-    end
-end
-
+Base.getproperty(tf_data::TimeFreqData, name::Symbol) = name === :data ? getfield(tf_data, :data_power) : getfield(tf_data, name)
 Base.propertynames(tf::TimeFreqData, private::Bool = false) = (fieldnames(typeof(tf))..., :data)
 
 function Base.copy(tf_data::TimeFreqData)::TimeFreqData
@@ -327,35 +273,32 @@ function Base.copy(tf_data::TimeFreqData)::TimeFreqData
         tf_data.file,
         tf_data.condition,
         tf_data.condition_name,
-        copy(tf_data.data_power, copycols = true),
-        copy(tf_data.data_phase, copycols = true),
+        copy(tf_data.data_power; copycols = true),
+        copy(tf_data.data_phase; copycols = true),
         copy(tf_data.layout),
         tf_data.sample_rate,
         tf_data.method,
-        tf_data.baseline,  # BaselineInfo is immutable, can share
+        tf_data.baseline,
         copy(tf_data.analysis_info),
     )
 end
 
 """
-    TimeFreqEpochData
+    TimeFreqEpochData <: MultiDataFrameEeg
 
-Stores time-frequency analysis results with individual trials preserved.
+Single-trial time-frequency power and phase data. Accessing `.data` aliases `.data_power`.
 
 # Fields
-- `file::String`: Source filename (constant across all trials)
-- `condition::Int64`: Condition number (constant across all trials)
-- `condition_name::String`: Name of the condition (constant across all trials)
-- `data_power::Vector{DataFrame}`: Vector of DataFrames, one per trial (columns: time, freq, [electrodes...]) containing power values
-- `data_phase::Vector{DataFrame}`: Vector of DataFrames, one per trial (columns: time, freq, [electrodes...]) containing phase values (radians)
-- `layout::Layout`: Layout object containing electrode positioning information
-- `sample_rate::Int64`: Sample rate of the original data in Hz
-- `method::Symbol`: Analysis method (`:wavelet`, `:superlet`, `:multitaper`, `:spectrum`, `:hanning_fixed`, `:hanning_adaptive`)
-- `baseline::Union{BaselineInfo,Nothing}`: Baseline correction information (if applied)
-- `analysis_info::AnalysisInfo`: Analysis information and preprocessing metadata
-
-!!! note
-    Accessing `.data` returns `data_power` via a `getproperty` override, so the generic accessors (`all_data`, `subset`, ...) work.
+- `file::String`: Source filename
+- `condition::Int64`: Condition number
+- `condition_name::String`: Condition label
+- `data_power::Vector{DataFrame}`: Per-trial power `DataFrame`s
+- `data_phase::Vector{DataFrame}`: Per-trial phase `DataFrame`s (radians)
+- `layout::Layout`: Electrode layout
+- `sample_rate::Int64`: Original sample rate in Hz
+- `method::Symbol`: Spectral estimation method
+- `baseline::Union{BaselineInfo,Nothing}`: Applied baseline correction, if any
+- `analysis_info::AnalysisInfo`: Preprocessing metadata
 """
 mutable struct TimeFreqEpochData <: MultiDataFrameEeg
     file::String
@@ -370,15 +313,7 @@ mutable struct TimeFreqEpochData <: MultiDataFrameEeg
     analysis_info::AnalysisInfo
 end
 
-# Alias data to data_power so the generic accessors (all_data, subset, ...) work
-function Base.getproperty(tf_data::TimeFreqEpochData, name::Symbol)
-    if name === :data
-        return getfield(tf_data, :data_power)
-    else
-        return getfield(tf_data, name)
-    end
-end
-
+Base.getproperty(tf_data::TimeFreqEpochData, name::Symbol) = name === :data ? getfield(tf_data, :data_power) : getfield(tf_data, name)
 Base.propertynames(tf::TimeFreqEpochData, private::Bool = false) = (fieldnames(typeof(tf))..., :data)
 
 function Base.copy(tf_data::TimeFreqEpochData)::TimeFreqEpochData
@@ -386,30 +321,30 @@ function Base.copy(tf_data::TimeFreqEpochData)::TimeFreqEpochData
         tf_data.file,
         tf_data.condition,
         tf_data.condition_name,
-        [copy(df, copycols = true) for df in tf_data.data_power],
-        [copy(df, copycols = true) for df in tf_data.data_phase],
+        [copy(df; copycols = true) for df in tf_data.data_power],
+        [copy(df; copycols = true) for df in tf_data.data_phase],
         copy(tf_data.layout),
         tf_data.sample_rate,
         tf_data.method,
-        tf_data.baseline,  # BaselineInfo is immutable, can share
+        tf_data.baseline,
         copy(tf_data.analysis_info),
     )
 end
 
 """
-    SpectrumData
+    SpectrumData <: SingleDataFrameEeg
 
-Stores power spectrum analysis results (frequency domain, no time dimension).
+Frequency-domain power spectral density data (`:freq` and electrode channel columns).
 
 # Fields
 - `file::String`: Source filename
 - `condition::Int64`: Condition number
-- `condition_name::String`: Name of the condition
-- `data::DataFrame`: DataFrame with columns: freq, [electrode channels...] containing power spectral density (μV²/Hz)
-- `layout::Layout`: Layout object containing electrode positioning information
-- `sample_rate::Int64`: Sample rate of the original data in Hz
-- `method::Symbol`: Analysis method (`:welch`, `:multitaper`, etc.)
-- `analysis_info::AnalysisInfo`: Analysis information and preprocessing metadata
+- `condition_name::String`: Condition label
+- `data::DataFrame`: Power spectrum values (μV²/Hz)
+- `layout::Layout`: Electrode layout
+- `sample_rate::Int64`: Original sample rate in Hz
+- `method::Symbol`: Spectral estimation method (`:welch`, `:multitaper`, etc.)
+- `analysis_info::AnalysisInfo`: Preprocessing metadata
 """
 mutable struct SpectrumData <: SingleDataFrameEeg
     file::String
@@ -427,19 +362,13 @@ function Base.copy(spectrum_data::SpectrumData)::SpectrumData
         spectrum_data.file,
         spectrum_data.condition,
         spectrum_data.condition_name,
-        copy(spectrum_data.data, copycols = true),
+        copy(spectrum_data.data; copycols = true),
         copy(spectrum_data.layout),
         spectrum_data.sample_rate,
         spectrum_data.method,
         copy(spectrum_data.analysis_info),
     )
 end
-
-
-
-# === SELECTION TYPES AND INTERVAL ALIAS ===
-# Intervals are represented as `TimeSelection` / `AllSelection`; tuples, functions and
-# `nothing` are also accepted as shorthand (see `Interval` below).
 
 abstract type AbstractSelection end
 struct TimeSelection <: AbstractSelection
@@ -449,36 +378,29 @@ end
 struct AllSelection <: AbstractSelection end
 
 """
-Type alias for interval specifications used throughout EegFun.
+    Interval
 
-Accepts:
-- AbstractSelection types: `TimeSelection`, `AllSelection`
-- Tuples (fallback): `(start, stop)`
-- Functions (fallback): `samples(...)`
-- `nothing` (fallback)
+Type alias for time/sample interval specifications: `TimeSelection` (via `times(start, stop)`),
+`AllSelection`, `(start, stop)` tuples, numeric vectors, sample predicate `Function`s, or `nothing`.
 """
 const Interval = Union{AbstractSelection,Tuple{Real,Real},AbstractVector{<:Real},Function,Nothing}
 
 """
     EpochCondition
 
-Defines parameters for extracting epochs for a specific experimental condition.
-
-This type specifies the criteria for identifying and extracting epochs
-from continuous EEG data based on trigger sequences and timing constraints.
-It supports complex trigger patterns and timing relationships between events.
+Trigger-matching and timing rules defining an experimental condition for epoch extraction.
 
 # Fields
-- `name::String`: Descriptive condition name for identification
-- `trigger_sequences::Vector`: Trigger sequence(s) to match. Can be a single sequence (e.g. `[101, 102]`), a list of sequences (e.g. `[[101, 102], [103, 104]]`), a single trigger `101`, or a range `1:5`. Elements can be exact integers, `:any` (wildcard), ranges, or sets.
-- `reference_index::Int`: Which trigger position is t=0 (1-based, default: 1)
-- `timing_pairs::Union{Nothing,Vector{Tuple{Int,Int}}}`: Which trigger pairs to apply min/max intervals to (optional, default: nothing)
-- `min_interval::Union{Nothing,Real}`: Minimum time between specified trigger pairs in seconds (optional, default: nothing)
-- `max_interval::Union{Nothing,Real}`: Maximum time between specified trigger pairs in seconds (optional, default: nothing)
-- `mask_before_trigger::Union{Nothing,Int}`: Only search for sequences before this trigger value (optional, default: nothing)
-- `mask_after_trigger::Union{Nothing,Int}`: Only search for sequences after this trigger value (optional, default: nothing)
-- `mask_triggers::Union{Nothing,Vector{Int}}`: Specific trigger values to use as search boundaries (optional, default: nothing)
-- `mask_between_triggers::Union{Nothing,Vector{Tuple{Int,Int}}}`: Pairs of trigger values defining search regions (optional, default: nothing)
+- `name::String`: Condition name
+- `trigger_sequences::Vector{Vector{Any}}`: Trigger sequence(s) to match (integers, `:any`, ranges, or sets)
+- `reference_index::Int = 1`: 1-based position within the sequence aligned to `t = 0`
+- `timing_pairs::Union{Nothing,Vector{Tuple{Int,Int}}} = nothing`: Sequence index pairs constrained by `min_interval`/`max_interval`
+- `min_interval::Union{Nothing,Float64} = nothing`: Minimum inter-trigger interval in seconds
+- `max_interval::Union{Nothing,Float64} = nothing`: Maximum inter-trigger interval in seconds
+- `mask_before_trigger::Union{Nothing,Int} = nothing`: Only match sequences before this trigger code
+- `mask_after_trigger::Union{Nothing,Int} = nothing`: Only match sequences after this trigger code
+- `mask_triggers::Union{Nothing,Vector{Int}} = nothing`: Trigger codes defining search boundaries
+- `mask_between_triggers::Union{Nothing,Vector{Tuple{Int,Int}}} = nothing`: Trigger code pairs bounding valid search regions
 """
 @kwdef struct EpochCondition
     name::String
@@ -515,7 +437,7 @@ It supports complex trigger patterns and timing relationships between events.
         end
         min_iv = isnothing(min_interval) ? nothing : Float64(min_interval)
         max_iv = isnothing(max_interval) ? nothing : Float64(max_interval)
-        new(
+        return new(
             name,
             norm_seqs,
             reference_index,
@@ -530,36 +452,10 @@ It supports complex trigger patterns and timing relationships between events.
     end
 end
 
-
-# === ICA TYPES ===
 """
     IcaPrms
 
-Parameters for Independent Component Analysis (ICA) decomposition.
-
-This type contains all the parameters needed to configure ICA decomposition
-of EEG data, including learning rates, convergence criteria, and algorithm
-specific settings.
-
-# Fields
-- `l_rate::Float64`: Learning rate for the ICA algorithm
-- `max_iter::Int`: Maximum number of iterations for convergence
-- `w_change::Float64`: Weight change threshold for convergence
-- `anneal_deg::Float64`: Annealing degree for temperature scheduling
-- `anneal_step::Float64`: Annealing step size for temperature updates
-- `blowup::Float64`: Blowup factor for numerical stability
-- `blowup_fac::Float64`: Blowup factor for algorithm stability
-- `max_weight::Float64`: Maximum allowed weight value
-- `restart_factor::Float64`: Factor for restarting stuck algorithms
-- `degconst::Float64`: Degree constant for spherical coordinates
-- `default_stop::Float64`: Default stopping criterion threshold
-- `use_gpu::Bool`: Whether to use GPU acceleration (default: false)
-- `picard_m::Int`: Picard algorithm parameter m
-- `picard_lambda_min::Float64`: Picard algorithm minimum lambda
-- `picard_ls_tries::Int`: Picard algorithm line search tries
-- `amica_lrate::Float64`: AMICA algorithm initial learning rate (default: 0.1)
-- `amica_max_iter::Int`: AMICA algorithm maximum iterations (default: 2000)
-- `amica_m::Int`: AMICA number of mixture components (default: 3)
+Algorithm hyperparameters for Infomax, Picard, and AMICA ICA decomposition.
 """
 @kwdef mutable struct IcaPrms
     l_rate::Float64 = 0.001
@@ -583,26 +479,22 @@ specific settings.
 end
 
 """
-    InfoIca
+    InfoIca <: EegFunData
 
-Stores ICA analysis results and decomposition information.
-
-This type contains the complete results of ICA decomposition including
-the unmixing and mixing matrices, component statistics, and metadata
-about the decomposition process.
+ICA decomposition result storing unmixing/mixing/sphering matrices, component variances, and layout.
 
 # Fields
-- `filename::String`: Filename of the input data file used to generate this ICA result
-- `unmixing::Matrix{Float64}`: Unmixing matrix (sources = unmixing × data)
-- `mixing::Matrix{Float64}`: Mixing matrix (data = mixing × sources)
-- `sphere::Matrix{Float64}`: Sphering matrix for data preprocessing
-- `variance::Vector{Float64}`: Variance explained by each component
-- `scale::Float64`: Scaling factor applied to the data
-- `mean::Vector{Float64}`: Mean vector subtracted from the data
-- `ica_label::Vector{Symbol}`: Component labels (e.g., [:IC1, :IC2, ...])
-- `removed_activations::Dict{Int, Matrix{Float64}}`: Removed component activations by epoch
-- `layout::Layout`: Layout information for the ICA components (contains channel labels)
-- `is_sub_gaussian::Vector{Bool}`: Boolean vector indicating if each component is sub-Gaussian (true = sub-Gaussian, false = super-Gaussian). For regular Infomax, all components are super-Gaussian (all false).
+- `filename::String`: Source filename
+- `unmixing::Matrix{Float64}`: Unmixing matrix (`sources = unmixing * data`)
+- `mixing::Matrix{Float64}`: Mixing matrix (`data = mixing * sources`)
+- `sphere::Matrix{Float64}`: Sphering matrix
+- `variance::Vector{Float64}`: Proportion of variance explained per component
+- `scale::Float64`: Data scaling factor
+- `mean::Vector{Float64}`: Per-channel mean vector
+- `ica_label::Vector{Symbol}`: Component labels (`:IC1`, `:IC2`, ...)
+- `removed_activations::Dict{Int,Matrix{Float64}}`: Removed component activations keyed by epoch
+- `layout::Layout`: Electrode layout
+- `is_sub_gaussian::Vector{Bool}`: Sub-Gaussian component flags
 """
 struct InfoIca <: EegFunData
     filename::String
@@ -619,19 +511,9 @@ struct InfoIca <: EegFunData
 end
 
 """
-    ErpMeasurementsResult
+    ErpMeasurementsResult <: EegFunData
 
-Stores ERP measurement results with metadata about the analysis.
-
-This type contains the measurement results DataFrame along with metadata
-about the analysis type and interval used, allowing the plotting function to
-automatically use the correct parameters.
-
-# Fields
-- `data::DataFrame`: DataFrame containing measurement results
-- `analysis_type::String`: Type of measurement (e.g., "mean_amplitude", "max_peak_latency")
-- `analysis_interval::Union{Interval,Nothing}`: Analysis interval used
-- `baseline_interval::Union{Interval,Nothing}`: Baseline interval used (if any)
+Tabular ERP amplitude/latency measurements bundled with their `analysis_type` and time intervals.
 """
 struct ErpMeasurementsResult <: EegFunData
     data::DataFrame
@@ -640,8 +522,17 @@ struct ErpMeasurementsResult <: EegFunData
     baseline_interval::Union{Interval,Nothing}
 end
 
-# Custom display methods for EegFun data types. Each type prints a structured
-# summary including key fields, dimensions, and metadata.
+"""
+    TriggerInfo
+
+Wrapper around a trigger-count `DataFrame` for formatted display.
+"""
+struct TriggerInfo
+    data::DataFrame
+end
+
+# === DISPLAY & FILENAME HELPERS ===
+
 function Base.show(io::IO, result::ErpMeasurementsResult)
     println(io, "ErpMeasurementsResult")
     println(io, "  Analysis type: $(getfield(result, :analysis_type))")
@@ -651,181 +542,112 @@ function Base.show(io::IO, result::ErpMeasurementsResult)
     show(io, getfield(result, :data))
 end
 
-# Custom show method for EpochCondition
 function Base.show(io::IO, cond::EpochCondition)
     println(io, "EpochCondition: \"$(cond.name)\"")
-
-    # Show trigger sequences
-    println(io, "├─ Trigger sequences: ($(length(cond.trigger_sequences)) sequence(s))")
+    n_seq = length(cond.trigger_sequences)
+    println(io, "├─ Trigger sequences: ($n_seq sequence(s))")
     for (i, seq) in enumerate(cond.trigger_sequences)
-        is_last_seq = (i == length(cond.trigger_sequences))
-        seq_prefix = is_last_seq ? "└─" : "├─"
-
-        # Format sequence elements
-        seq_str = join([string(elem) for elem in seq], " → ")
-        println(io, "│  $seq_prefix $seq_str")
+        prefix = i == n_seq ? "└─" : "├─"
+        println(io, "│  $prefix $(join(seq, " → "))")
     end
 
-    # Show reference index only if any sequence has more than one trigger
-    max_seq_length = isempty(cond.trigger_sequences) ? 0 : maximum(length(seq) for seq in cond.trigger_sequences)
-    if max_seq_length > 1
-        println(io, "├─ Reference index: $(cond.reference_index) (t=0)")
-    end
+    max_len = isempty(cond.trigger_sequences) ? 0 : maximum(length, cond.trigger_sequences)
+    max_len > 1 && println(io, "├─ Reference index: $(cond.reference_index) (t=0)")
 
-    # Show timing constraints if present
     has_timing = !isnothing(cond.timing_pairs) || !isnothing(cond.min_interval) || !isnothing(cond.max_interval)
     if has_timing
         println(io, "├─ Timing constraints:")
         if !isnothing(cond.timing_pairs)
-            pairs_str = join(["($p1 → $p2)" for (p1, p2) in cond.timing_pairs], ", ")
+            pairs_str = join(("($p1 → $p2)" for (p1, p2) in cond.timing_pairs), ", ")
             println(io, "│  ├─ Timing pairs: $pairs_str")
         end
-        if !isnothing(cond.min_interval)
-            println(io, "│  ├─ Min interval: $(cond.min_interval) s")
-        end
-        if !isnothing(cond.max_interval)
-            println(io, "│  └─ Max interval: $(cond.max_interval) s")
-        end
+        !isnothing(cond.min_interval) && println(io, "│  ├─ Min interval: $(cond.min_interval) s")
+        !isnothing(cond.max_interval) && println(io, "│  └─ Max interval: $(cond.max_interval) s")
     end
 
-    # Show search boundaries if present
-    has_boundaries = !isnothing(cond.mask_after_trigger) || !isnothing(cond.mask_before_trigger)
-    if has_boundaries
-        boundary_symbol = has_timing ? "└─" : "├─"
-        println(io, "$boundary_symbol Search boundaries:")
+    if !isnothing(cond.mask_after_trigger) || !isnothing(cond.mask_before_trigger)
+        println(io, "$(has_timing ? "└─" : "├─") Search boundaries:")
         if !isnothing(cond.mask_after_trigger)
-            after_symbol = isnothing(cond.mask_before_trigger) ? "└─" : "├─"
-            println(io, "   $after_symbol After trigger: $(cond.mask_after_trigger)")
+            println(io, "   $(isnothing(cond.mask_before_trigger) ? "└─" : "├─") After trigger: $(cond.mask_after_trigger)")
         end
-        if !isnothing(cond.mask_before_trigger)
-            println(io, "   └─ Before trigger: $(cond.mask_before_trigger)")
-        end
+        !isnothing(cond.mask_before_trigger) && println(io, "   └─ Before trigger: $(cond.mask_before_trigger)")
     end
 end
 
-"""
-    TriggerInfo
-
-Stores trigger count information in a DataFrame format with pretty printing support.
-
-This type wraps a DataFrame containing trigger counts and provides automatic
-pretty table formatting when displayed.
-
-# Fields
-- `data::DataFrame`: The underlying DataFrame with trigger count information
-"""
-struct TriggerInfo
-    data::DataFrame
+function _format_layout_rows(df::DataFrame)
+    out = DataFrame()
+    for col in names(df)
+        vals = df[!, col]
+        out[!, col] = eltype(vals) <: Number ? [@sprintf("%.2f", v) for v in vals] : vals
+    end
+    return out
 end
 
-# === CONFIGURATION TYPES ===
-# Preprocessing configuration types are now in preprocess_config.jl
-
-# === DISPLAY FUNCTIONS ===
 function Base.show(io::IO, layout::Layout)
-    n_electrodes = size(layout.data, 1)
+    n_electrodes = nrow(layout.data)
     has_2d = has_2d_coords(layout)
     has_3d = has_3d_coords(layout)
     has_neigh = has_neighbors(layout)
 
     println(io, "Layout ($n_electrodes channels)")
     println(io, "2D coords: $(has_2d ? "✓" : "✗"), 3D coords: $(has_3d ? "✓" : "✗"), Neighbors: $(has_neigh ? "✓" : "✗")")
-
     if has_neigh
-        avg_neighbors = average_number_of_neighbors(layout.neighbors)
-        println(io, "Criterion: $(layout.criterion) ($(layout.criterion_type)), Avg neighbors: $(round(avg_neighbors, digits=1))")
+        avg_nb = round(average_number_of_neighbors(layout.neighbors); digits = 1)
+        println(io, "Criterion: $(layout.criterion) ($(layout.criterion_type)), Avg neighbors: $avg_nb")
     end
     println(io)
 
-    # Format numeric columns for display
-    display_data = copy(layout.data)
-    for col in names(display_data)
-        if eltype(display_data[!, col]) <: Number
-            display_data[!, col] = [@sprintf("%.2f", val) for val in display_data[!, col]]
-        end
-    end
-
-    # Don't print too much noise!
     if n_electrodes <= 10
-        PrettyTables.pretty_table(io, display_data, alignment = :r)
+        PrettyTables.pretty_table(io, _format_layout_rows(layout.data); alignment = :r)
     else
-        # Show first 3, ellipsis, last 3
-        first_rows = display_data[1:3, :]
-        last_rows = display_data[(end-2):end, :]
-
-        # Create ellipsis row more concisely
-        ellipsis_row = DataFrame([col => ["..."] for col in names(display_data)])
-        combined_data = vcat(first_rows, ellipsis_row, last_rows)
-
-        PrettyTables.pretty_table(io, combined_data, alignment = :r)
+        first_rows = _format_layout_rows(layout.data[1:3, :])
+        last_rows = _format_layout_rows(layout.data[(end-2):end, :])
+        ellipsis_row = DataFrame([col => ["..."] for col in names(first_rows)])
+        PrettyTables.pretty_table(io, vcat(first_rows, ellipsis_row, last_rows); alignment = :r)
         println(io, "\n[showing first 3 and last 3 of $n_electrodes electrodes]")
     end
 end
 
-# Compact display for arrays
-function Base.show(io::IO, ::MIME"text/plain", layout::Layout)
-    show(io, layout)
-end
+Base.show(io::IO, ::MIME"text/plain", layout::Layout) = show(io, layout)
 
-# Custom show method for neighbors Dict
 function Base.show(io::IO, neighbors_dict::Dict{Symbol,Neighbors})
-    if isempty(neighbors_dict)
-        print(io, "Neighbors Dictionary (empty)")
-        return
-    end
-
-    n_electrodes = length(neighbors_dict)
-    avg_neighbors = average_number_of_neighbors(neighbors_dict)
-
-    print(io, "Neighbors Dictionary ($n_electrodes electrodes, avg neighbors: $(round(avg_neighbors, digits=1)))")
+    isempty(neighbors_dict) && return print(io, "Neighbors Dictionary (empty)")
+    avg_nb = round(average_number_of_neighbors(neighbors_dict); digits = 1)
+    print(io, "Neighbors Dictionary ($(length(neighbors_dict)) electrodes, avg neighbors: $avg_nb)")
 end
 
-filename(dat::BiosemiDataFormat.BiosemiData)::String = basename_without_ext(dat.filename)
-filename(dat::EuropeanDataFormat.EdfData)::String = basename_without_ext(dat.filename)
-filename(dat::BrainVisionDataFormat.BrainVisionData)::String = basename_without_ext(dat.filename)
-filename(dat::FunctionalImageFormat.FifData)::String = basename_without_ext(dat.filename)
-filename(dat::ExtensibleDataFormat.XdfData)::String = basename_without_ext(dat.filename)
-filename(dat::ContinuousData)::String = dat.file
-filename(dat::ErpData)::String = dat.file
-filename(dat::EpochData)::String = dat.file
-filename(dat::TimeFreqData)::String = dat.file
-filename(dat::TimeFreqEpochData)::String = dat.file
-filename(dat::SpectrumData)::String = dat.file
-
-
-
-"""
-    Base.show(io::IO, ::MIME"text/plain", neighbors_dict::Dict{Symbol,Neighbors})
-
-Prints a detailed multi-line representation of the `Neighbors` dictionary, showing the
-neighbors for each electrode. Displays a summary of the dictionary configuration.
-"""
 function Base.show(io::IO, ::MIME"text/plain", neighbors_dict::Dict{Symbol,Neighbors})
     n_electrodes = length(neighbors_dict)
-    avg_neighbors = average_number_of_neighbors(neighbors_dict)
+    avg_nb = round(average_number_of_neighbors(neighbors_dict); digits = 1)
+    println(io, "Neighbors Dictionary ($n_electrodes electrodes): Average neighbors per electrode: $avg_nb\n")
 
-    println(io, "Neighbors Dictionary ($n_electrodes electrodes): Average neighbors per electrode: $(round(avg_neighbors, digits=1))")
-    println(io)
-
-    # Don't print too much noise!
     if n_electrodes <= 6
-        for (electrode, neighbors) in neighbors_dict
-            _format_electrode(io, electrode, neighbors)
+        for (electrode, nb) in neighbors_dict
+            _format_electrode(io, electrode, nb)
         end
     else
         entries = collect(neighbors_dict)
-        # Show first 3, ellipsis, last 3
-        for entry in entries[1:3]
-            _format_electrode(io, entry[1], entry[2])
+        for i = 1:3
+            _format_electrode(io, entries[i][1], entries[i][2])
         end
         println(io, "⋮")
-        for entry in entries[(end-2):end]
-            _format_electrode(io, entry[1], entry[2])
+        for i = (n_electrodes-2):n_electrodes
+            _format_electrode(io, entries[i][1], entries[i][2])
         end
         println(io, "[showing first 3 and last 3 of $n_electrodes electrodes]")
     end
 end
 
+filename(
+    dat::Union{
+        BiosemiDataFormat.BiosemiData,
+        EuropeanDataFormat.EdfData,
+        BrainVisionDataFormat.BrainVisionData,
+        FunctionalImageFormat.FifData,
+        ExtensibleDataFormat.XdfData,
+    },
+)::String = basename_without_ext(dat.filename)
+filename(dat::EegData)::String = dat.file
 
 function Base.show(io::IO, dat::MultiDataFrameEeg)
     n_rows = isempty(dat.data) ? 0 : nrow(dat.data[1])
@@ -846,7 +668,6 @@ function Base.show(io::IO, dat::ContinuousData)
     println(io, "Sample Rate: ", sample_rate(dat))
 end
 
-
 function Base.show(io::IO, dat::SingleDataFrameEeg)
     println(io, "File: $(filename(dat))")
     println(io, "Type: $(typeof(dat))")
@@ -856,50 +677,34 @@ function Base.show(io::IO, dat::SingleDataFrameEeg)
     println(io, "Sample Rate: ", sample_rate(dat))
 end
 
-
-
 function Base.show(io::IO, dat::AnalysisInfo)
-    print(io, "Reference: ", reference(dat), ", ")
-    print(io, "HP Filter: $(filter_info(dat)[1]), LP Filter: $(filter_info(dat)[2])")
+    hp, lp = filter_info(dat)
+    print(io, "Reference: ", reference(dat), ", HP Filter: $hp, LP Filter: $lp")
 end
 
-########### ICA ##############
-# Custom display method for InfoIca
 function Base.show(io::IO, ica::InfoIca)
     n_components = length(ica.ica_label)
-    n_channels = length(ica.layout.data.label)
+    n_ch = length(ica.layout.data.label)
 
     println(io, "InfoIca Result")
     println(io, "├─ Filename: $(ica.filename)")
     println(io, "├─ Components: $n_components")
-    println(io, "├─ Channels: $n_channels")
-    println(io, "├─ Scale: $(round(ica.scale, digits=3))")
+    println(io, "├─ Channels: $n_ch")
+    println(io, "├─ Scale: $(round(ica.scale; digits = 3))")
     println(io, "├─ Top 5 variance explained:")
-
-    # Show top 5 components with their variance
     for i = 1:min(5, n_components)
-        var_pct = round(ica.variance[i] * 100, digits = 2)
-        println(io, "│  $(ica.ica_label[i]): $(var_pct)%")
+        println(io, "│  $(ica.ica_label[i]): $(round(ica.variance[i] * 100; digits = 2))%")
     end
-
-    if n_components > 5
-        println(io, "│  ... and $(n_components - 5) more components")
-    end
-
+    n_components > 5 && println(io, "│  ... and $(n_components - 5) more components")
     println(io, "├─ Matrix sizes:")
     println(io, "│  ├─ Unmixing: $(size(ica.unmixing))")
     println(io, "│  ├─ Mixing: $(size(ica.mixing))")
     println(io, "│  └─ Sphere: $(size(ica.sphere))")
-
-    println(io, "└─ Channel labels: $(join(ica.layout.data.label[1:min(5, n_channels)], ", "))$(n_channels > 5 ? " ..." : "")")
+    println(io, "└─ Channel labels: $(join(@view(ica.layout.data.label[1:min(5, n_ch)]), ", "))$(n_ch > 5 ? " ..." : "")")
 end
 
-# Compact display for arrays
-function Base.show(io::IO, ::MIME"text/plain", ica::InfoIca)
-    show(io, ica)
-end
+Base.show(io::IO, ::MIME"text/plain", ica::InfoIca) = show(io, ica)
 
-# Custom copy method for InfoIca
 function Base.copy(ica::InfoIca)::InfoIca
     return InfoIca(
         ica.filename,

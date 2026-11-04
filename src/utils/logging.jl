@@ -1,4 +1,3 @@
-# Keep track of logging state in a single mutable struct
 mutable struct LoggingState
     log_handle::Union{Nothing,IO}
     log_start_time::Union{Nothing,DateTime}
@@ -12,35 +11,16 @@ end
 
 const LOG_LOCK = ReentrantLock()
 
-# Initialize global logging state
-const LOG_STATE = LoggingState(
-    nothing,               # log_handle
-    nothing,               # log_start_time
-    true,                  # log_include_kwargs
-    nothing,               # global_log_handle
-    nothing,               # global_log_start_time
-    false,                 # global_log_include_kwargs
-    nothing,               # saved_logger (captured at runtime)
-    Logging.Info,          # log_level
-)
+const LOG_STATE = LoggingState(nothing, nothing, true, nothing, nothing, false, nothing, Logging.Info)
 
-# True while a local or global log file is active (i.e. messages are being captured to disk)
 _file_logging_active() = !isnothing(LOG_STATE.log_handle) || !isnothing(LOG_STATE.global_log_handle)
 
-"""
-    _format_duration(duration::Millisecond)
-
-Format a duration in a human-readable way, choosing appropriate units.
-"""
 function _format_duration(duration::Millisecond)
-    s = round(Int, duration.value / 1000) # nearest S
+    s = round(Int, duration.value / 1000)
     s == 0 && return "0 seconds"
     return string(Dates.canonicalize(Second(s)))
 end
 
-# === Helper Functions ===
-
-# Internal: map symbols to log levels
 const LOG_LEVEL_MAP = Dict{Symbol,Logging.LogLevel}(
     :debug => Logging.Debug,
     :info => Logging.Info,
@@ -49,18 +29,10 @@ const LOG_LEVEL_MAP = Dict{Symbol,Logging.LogLevel}(
     :error => Logging.Error,
 )
 
-# Internal: normalize log level
 _to_loglevel(level::Logging.LogLevel) = level
 _to_loglevel(level::Symbol) = get(LOG_LEVEL_MAP, level, Logging.Info)
-
-# Back-compat overload for String input
 _to_loglevel(level::String) = _to_loglevel(Symbol(lowercase(level)))
 
-"""
-    _write_log_header(io::IO, start_time::DateTime)
-
-Write version info and start time to a log file.
-"""
 function _write_log_header(io::IO, start_time::DateTime)
     ver_info = version_info()
     println(io, "julia version: $(ver_info["julia_version"])")
@@ -68,40 +40,21 @@ function _write_log_header(io::IO, start_time::DateTime)
     println(io, "Start time: ", Dates.format(start_time, "dd-mm-yyyy HH:MM:SS"))
 end
 
-"""
-    _open_log_file(handle_field::Union{Nothing,IO}, filename::String) -> Tuple{IO, DateTime}
-
-Open a log file, closing any existing one, and record the start time.
-Returns the opened file handle and start time.
-"""
 function _open_log_file(handle_field::Union{Nothing,IO}, filename::String)
     !isnothing(handle_field) && close(handle_field)
-
     handle = open(filename, "w")
     start_time = now()
     _write_log_header(handle, start_time)
-
     return handle, start_time
 end
 
-"""
-    _close_log_file(handle::Union{Nothing,IO}, start_time::Union{Nothing,DateTime}, label::String)
-
-Close a log file, write duration, and return nothing for cleanup.
-"""
 function _close_log_file(handle::Union{Nothing,IO}, start_time::Union{Nothing,DateTime}, label::String)
     if !isnothing(handle)
-        duration = now() - start_time
-        println(handle, "\n$(label): ", _format_duration(duration))
+        println(handle, "\n$(label): ", _format_duration(now() - start_time))
         close(handle)
     end
 end
 
-"""
-    _create_file_logger(io::IO, level::Logging.LogLevel; include_kwargs::Bool = false)
-
-Create a FormatLogger that writes to the given IO handle.
-"""
 function _create_file_logger(io::IO, level::Logging.LogLevel; include_kwargs::Bool = false)
     return FormatLogger(io) do io_inner, log
         lock(LOG_LOCK) do
@@ -118,61 +71,44 @@ function _create_file_logger(io::IO, level::Logging.LogLevel; include_kwargs::Bo
     end
 end
 
-"""
-    _create_tee_logger(console_level::Logging.LogLevel, file_handle::IO, file_level::Logging.LogLevel; include_kwargs::Bool = false)
-
-Create a TeeLogger that writes to both console and file.
-"""
 function _create_tee_logger(console_level::Logging.LogLevel, file_handle::IO, file_level::Logging.LogLevel; include_kwargs::Bool = false)
-    console_logger = ConsoleLogger(stdout, console_level)
-    file_logger = _create_file_logger(file_handle, file_level; include_kwargs = include_kwargs)
-    return TeeLogger(console_logger, file_logger)
+    return TeeLogger(ConsoleLogger(stdout, console_level), _create_file_logger(file_handle, file_level; include_kwargs = include_kwargs))
+end
+
+function _apply_active_logger!()
+    use_local = !isnothing(LOG_STATE.log_handle)
+    active_handle = use_local ? LOG_STATE.log_handle : LOG_STATE.global_log_handle
+    active_include = use_local ? LOG_STATE.log_include_kwargs : LOG_STATE.global_log_include_kwargs
+    level = LOG_STATE.log_level
+    global_logger(_create_tee_logger(level, active_handle, level; include_kwargs = active_include))
 end
 
 """
     setup_logging(log_file::String; log_level::Symbol = :info, is_global::Bool = false, include_kwargs::Bool = !is_global)
+    setup_logging(f::Function, log_file::String; is_global::Bool = false, kwargs...)
 
-Set up logging to both stdout and a file. 
-
-# Arguments
-- `log_file`: Path to the log file.
-- `log_level`: Logging level (:debug, :info, :warn, :error).
-- `is_global`: If true, sets up a session-wide log. If false (default), sets up for individual file processing.
-- `include_kwargs`: Whether to include metadata in the log. Defaults to true for local logs.
-
-# Returns
-- The file handle (for direct writing if desired).
+Configure logging to both `stdout` and `log_file`. Local file logs take precedence over global logs.
 """
 function setup_logging(log_file::String; log_level::Symbol = :info, is_global::Bool = false, include_kwargs::Bool = !is_global)
     return lock(LOG_LOCK) do
-        level = _to_loglevel(log_level)
-        LOG_STATE.log_level = level
-
-        h_field = is_global ? :global_log_handle : :log_handle
-        t_field = is_global ? :global_log_start_time : :log_start_time
-        k_field = is_global ? :global_log_include_kwargs : :log_include_kwargs
-
-        # Capture original logger if we haven't yet (before replacing with our first file logger)
+        LOG_STATE.log_level = _to_loglevel(log_level)
         if isnothing(LOG_STATE.saved_logger) && !(global_logger() isa TeeLogger)
             LOG_STATE.saved_logger = global_logger()
         end
 
-        # Open log file (closes existing if necessary)
-        handle, start_time = _open_log_file(getproperty(LOG_STATE, h_field), log_file)
+        if is_global
+            handle, start_time = _open_log_file(LOG_STATE.global_log_handle, log_file)
+            LOG_STATE.global_log_handle = handle
+            LOG_STATE.global_log_start_time = start_time
+            LOG_STATE.global_log_include_kwargs = include_kwargs
+        else
+            handle, start_time = _open_log_file(LOG_STATE.log_handle, log_file)
+            LOG_STATE.log_handle = handle
+            LOG_STATE.log_start_time = start_time
+            LOG_STATE.log_include_kwargs = include_kwargs
+        end
 
-        # Update state
-        setproperty!(LOG_STATE, h_field, handle)
-        setproperty!(LOG_STATE, t_field, start_time)
-        setproperty!(LOG_STATE, k_field, include_kwargs)
-
-        # Re-apply logger.
-        # If local is active, it always takes precedence. Otherwise global.
-        use_local = !isnothing(LOG_STATE.log_handle)
-        active_handle = use_local ? LOG_STATE.log_handle : LOG_STATE.global_log_handle
-        active_include = use_local ? LOG_STATE.log_include_kwargs : LOG_STATE.global_log_include_kwargs
-
-        global_logger(_create_tee_logger(level, active_handle, level; include_kwargs = active_include))
-
+        _apply_active_logger!()
         return handle
     end
 end
@@ -190,27 +126,27 @@ end
     setup_global_logging(log_file::String; kwargs...)
     setup_global_logging(f::Function, log_file::String; kwargs...)
 
-Configure global session file logging (convenience wrapper around [`setup_logging`](@ref) with `is_global = true`).
+Configure session-wide file logging (equivalent to `setup_logging(...; is_global = true)`).
 """
 setup_global_logging(args...; kwargs...) = setup_logging(args...; is_global = true, kwargs...)
 
 """
     close_logging(; is_global::Bool = false)
 
-Close the currently active log file and restore previous logger.
+Close the active local (or global) log file and restore the previous logger.
 """
 function close_logging(; is_global::Bool = false)
     lock(LOG_LOCK) do
-        h_field = is_global ? :global_log_handle : :log_handle
-        t_field = is_global ? :global_log_start_time : :log_start_time
-        label = is_global ? "Global session duration" : "File processing duration"
+        if is_global
+            _close_log_file(LOG_STATE.global_log_handle, LOG_STATE.global_log_start_time, "Global session duration")
+            LOG_STATE.global_log_handle = nothing
+            LOG_STATE.global_log_start_time = nothing
+        else
+            _close_log_file(LOG_STATE.log_handle, LOG_STATE.log_start_time, "File processing duration")
+            LOG_STATE.log_handle = nothing
+            LOG_STATE.log_start_time = nothing
+        end
 
-        _close_log_file(getproperty(LOG_STATE, h_field), getproperty(LOG_STATE, t_field), label)
-
-        setproperty!(LOG_STATE, h_field, nothing)
-        setproperty!(LOG_STATE, t_field, nothing)
-
-        # If both file loggers are now closed, restore the original saved logger
         if isnothing(LOG_STATE.log_handle) && isnothing(LOG_STATE.global_log_handle)
             if !isnothing(LOG_STATE.saved_logger)
                 global_logger(LOG_STATE.saved_logger)
@@ -219,12 +155,7 @@ function close_logging(; is_global::Bool = false)
                 global_logger(ConsoleLogger(stdout, LOG_STATE.log_level))
             end
         else
-            # Still have one file logger active (must be the global one if were closing local, 
-            # or we just closed global while local was active)
-            use_local = !isnothing(LOG_STATE.log_handle)
-            active_handle = use_local ? LOG_STATE.log_handle : LOG_STATE.global_log_handle
-            active_include = use_local ? LOG_STATE.log_include_kwargs : LOG_STATE.global_log_include_kwargs
-            global_logger(_create_tee_logger(LOG_STATE.log_level, active_handle, LOG_STATE.log_level; include_kwargs = active_include))
+            _apply_active_logger!()
         end
     end
     return nothing
@@ -233,78 +164,48 @@ end
 """
     close_global_logging()
 
-Close the active global session log file and restore the previous logger (wrapper around [`close_logging`](@ref) with `is_global = true`).
+Close the active global session log file and restore the previous logger.
 """
 close_global_logging() = close_logging(is_global = true)
 
+function _format_log_call(name_str::String, local_vars::Dict{Symbol,Any})
+    arg_strs = String[]
+    if haskey(local_vars, :dat)
+        push!(arg_strs, "dat")
+    elseif haskey(local_vars, :data)
+        push!(arg_strs, "data")
+    end
 
-# === FUNCTION CALL LOGGING ===
+    for (k, v) in local_vars
+        if k === :dat || k === :data || k === :_eegfun_locals || k === Symbol("#self#") || startswith(string(k), "#") || v isa BatchContext
+            continue
+        end
+        if v isa Union{Number,Symbol,AbstractString,Tuple} ||
+           v isa AbstractVector{<:Number} ||
+           v isa AbstractVector{Symbol} ||
+           v isa AbstractVector{<:AbstractString}
+            push!(arg_strs, "$k=$(repr(v))")
+        elseif v isa Function
+            push!(arg_strs, "$k=$(string(nameof(v)))")
+        else
+            push!(arg_strs, "$k=::$(typeof(v))")
+        end
+    end
+    return string(name_str, "(", join(arg_strs, ", "), ")")
+end
 
-"""
-    @log_call func_name
-
-Macro to log a function call by reading the current local variables in scope (arguments).
-This provides a reproducible script-ready log line regardless of whether the function 
-was called from the REPL, a script, or a GUI callback.
-
-# Arguments
-- `func_name`: String or Symbol representing the function name.
-"""
 macro log_call(func_name)
     name_str = string(func_name)
     return quote
-        local_vars = Base.@locals
-        arg_strs = String[]
-
-        # Format the core data argument first (without kwarg syntax)
-        if haskey(local_vars, :dat)
-            push!(arg_strs, "dat")
-        elseif haskey(local_vars, :data)
-            push!(arg_strs, "data")
-        end
-
-        # Append remaining arguments and kwargs
-        for (k, v) in local_vars
-            if k == :dat || k == :data || k == Symbol("#self#") || startswith(string(k), "#") || v isa BatchContext
-                continue
-            end
-
-            # Format values for standard script representation
-            if v isa Number || v isa Symbol
-                push!(arg_strs, "$k=$(repr(v))")
-            elseif v isa AbstractString
-                push!(arg_strs, "$k=$(repr(v))")
-            elseif v isa AbstractVector{<:Number} || v isa AbstractVector{Symbol} || v isa AbstractVector{<:AbstractString}
-                push!(arg_strs, "$k=$(repr(v))")
-            elseif v isa Tuple
-                push!(arg_strs, "$k=$(repr(v))")
-            elseif v isa Function
-                push!(arg_strs, "$k=$(string(nameof(v)))")
-            else
-                # For complex structs or dicts, log the type signature
-                push!(arg_strs, "$k=::$(typeof(v))")
-            end
-        end
-
-        call_str = "$($name_str)(" * join(arg_strs, ", ") * ")"
-        @info "Function call: $call_str"
+        local _eegfun_locals = Base.@locals
+        @info "Function call: $(_format_log_call($name_str, _eegfun_locals))"
     end
 end
-
-# === ASYNC PROGRESS TRACKING ===
 
 _progress_stopped(::Nothing) = false
 _progress_stopped(flag::Base.Threads.Atomic{Bool}) = flag[]
 _progress_stopped(flag::Base.RefValue{Bool}) = flag[]
 
-"""
-    track_progress_async(prog::ProgressMeter.Progress, counter::Base.Threads.Atomic{Int}, total::Int; stop_flag = nothing)
-
-Tracks progress of a multithreaded loop without lock contention.
-Worker threads should increment `counter` via `Threads.atomic_add!(counter, 1)`.
-This function spins up a lightweight async task to securely update `prog` twice a second,
-stopping early if `stop_flag[]` becomes `true`.
-"""
 function track_progress_async(
     prog,
     counter::Base.Threads.Atomic{Int},
@@ -316,9 +217,7 @@ function track_progress_async(
             ProgressMeter.update!(prog, counter[])
             sleep(0.5)
         end
-        if !_progress_stopped(stop_flag)
-            ProgressMeter.update!(prog, total)
-        end
+        !_progress_stopped(stop_flag) && ProgressMeter.update!(prog, total)
     end
 end
 

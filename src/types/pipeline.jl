@@ -1,20 +1,7 @@
-# Preprocessing Configuration Types
-#
-# Contains all configuration types specific to EEG data preprocessing,
-# including filtering, referencing, artifact detection, and ICA settings.
-
 """
     FilterSection
 
-Configuration for a single filter (highpass, lowpass, etc.).
-
-# Fields
-- `apply::Bool`: Whether to apply this filter
-- `type::Symbol`: Filter type (`:hp` = highpass, `:lp` = lowpass)
-- `freq::Float64`: Cutoff frequency in Hz
-- `func::Symbol`: Filter function (`:filt` or `:filtfilt`)
-- `method::Symbol`: Filter method (`:iir` or `:fir`)
-- `order::Int`: Filter order
+Settings for a single high-pass or low-pass filter stage (`apply`, `type`, `freq`, `func`, `method`, `order`).
 """
 @kwdef struct FilterSection
     apply::Bool = false
@@ -28,13 +15,7 @@ end
 """
     FilterConfig
 
-Configuration for all filters used in preprocessing.
-
-# Fields
-- `highpass::FilterSection`: Highpass filter settings
-- `lowpass::FilterSection`: Lowpass filter settings
-- `ica_highpass::FilterSection`: Highpass filter for ICA data
-- `ica_lowpass::FilterSection`: Lowpass filter for ICA data
+High-pass and low-pass filter settings for main preprocessing and ICA preparation.
 """
 @kwdef struct FilterConfig
     highpass::FilterSection = FilterSection(apply = true, type = :hp, freq = 0.1, order = 1)
@@ -46,13 +27,7 @@ end
 """
     EogConfig
 
-Configuration for EOG (Electrooculogram) channel calculation and detection.
-
-# Fields
-- `vEOG_criterion::Float64`: Detection threshold for vertical EOG artifacts (in μV)
-- `hEOG_criterion::Float64`: Detection threshold for horizontal EOG artifacts (in μV)
-- `vEOG_channels::Vector{Vector{String}}`: Channel configuration for vertical EOG [channels1, channels2, output_channel]
-- `hEOG_channels::Vector{Vector{String}}`: Channel configuration for horizontal EOG [channels1, channels2, output_channel]
+Vertical and horizontal EOG bipolar channel definitions and artifact thresholds (μV).
 """
 @kwdef struct EogConfig
     vEOG_criterion::Float64 = 50.0
@@ -64,15 +39,7 @@ end
 """
     EegConfig
 
-Configuration for EEG-specific preprocessing settings.
-
-# Fields
-- `rereference::Union{Symbol,Vector{Symbol}}`: Reference channel(s) or `:avg` / `:none` (default: `:avg`)
-- `artifact_value_abs_criterion::Float64`: Threshold for artifact detection (μV)
-- `artifact_value_z_criterion::Float64`: Z-score threshold for artifact detection (optional)
-- `extreme_value_abs_criterion::Float64`: Threshold for extreme value detection (μV)
-- `artifact_interval_start::Union{Nothing,Float64}`: Start time for artifact rejection interval (optional)
-- `artifact_interval_end::Union{Nothing,Float64}`: End time for artifact rejection interval (optional)
+EEG rereferencing and amplitude/z-score artifact rejection thresholds (μV).
 """
 @kwdef struct EegConfig
     rereference::Union{Symbol,Vector{Symbol}} = :avg
@@ -86,12 +53,7 @@ end
 """
     IcaConfig
 
-Configuration for Independent Component Analysis.
-
-# Fields
-- `apply::Bool`: Whether to apply ICA
-- `percentage_of_data::Float64`: Percentage of data to use for ICA (0-100)
-- `component_method::Symbol`: Method for identifying artifact components (:correlation)
+ICA decomposition and artifact component identification settings for preprocessing pipelines.
 """
 @kwdef struct IcaConfig
     apply::Bool = true
@@ -102,18 +64,7 @@ end
 """
     CleanLineConfig
 
-Configuration for CleanLine line-noise removal.
-
-# Fields
-- `apply::Bool`: Whether to apply CleanLine
-- `line_frequencies::Vector{Float64}`: Target line noise frequencies (e.g., [50.0])
-- `bandwidth::Float64`: Bandwidth for line frequency detection (Hz)
-- `sliding_win_length::Float64`: Window length in seconds
-- `sliding_win_step::Float64`: Window step in seconds
-- `time_bandwidth::Float64`: Time-bandwidth product for tapers
-- `k_tapers::Int`: Number of tapers
-- `p_value::Float64`: Significance threshold for F-test
-- `pad::Int`: FFT padding factor
+Multi-taper CleanLine sinusoidal line-noise removal settings.
 """
 @kwdef struct CleanLineConfig
     apply::Bool = false
@@ -130,11 +81,7 @@ end
 """
     ResampleConfig
 
-Configuration for data resampling.
-
-# Fields
-- `apply::Bool`: Whether to apply resampling
-- `target_rate::Int`: The target sampling rate in Hz
+Resampling settings (`apply` and `target_rate` in Hz).
 """
 @kwdef struct ResampleConfig
     apply::Bool = false
@@ -144,17 +91,7 @@ end
 """
     AutoRejectConfig
 
-Configuration for adaptive artifact rejection and channel repair (Autoreject approach).
-
-# Fields
-- `apply::Bool`: Whether to apply Autoreject adaptive artifact rejection and repair (default: false)
-- `mode::Symbol`: Rejection mode (`:local` or `:global`, default: `:local`)
-- `n_folds::Int`: Number of cross-validation folds (default: 10)
-- `n_candidates::Int`: Number of candidate peak-to-peak thresholds to evaluate per channel (default: 30)
-- `consensus_perc::Float64`: Maximum fraction of bad channels in an epoch before the epoch is rejected (default: 0.2)
-- `max_repair_perc::Float64`: Maximum fraction of bad channels in an epoch that can be repaired (default: 0.1)
-- `repair_method::Symbol`: Repair method to use (`:spherical_spline` or `:neighbor_interpolation`, default: `:spherical_spline`)
-- `seed::Union{Int,Nothing}`: Random seed for cross-validation fold generation (default: 42)
+Adaptive cross-validated Autoreject artifact rejection and channel repair settings.
 """
 @kwdef struct AutoRejectConfig
     apply::Bool = false
@@ -170,24 +107,7 @@ end
 """
     PreprocessConfig
 
-Comprehensive configuration for EEG data preprocessing.
-
-# Fields
-- `reference_channel::Union{Symbol,Vector{Symbol}}`: Channel(s) to use for rereferencing
-- `epoch_start::Float64`: Start time of the epoch in seconds
-- `epoch_end::Float64`: End time of the epoch in seconds
-- `filter::FilterConfig`: Filter configuration
-- `cleanline::CleanLineConfig`: CleanLine configuration
-- `resample::ResampleConfig`: Resample configuration
-- `eog::EogConfig`: EOG configuration
-- `eeg::EegConfig`: EEG configuration
-- `ica::IcaConfig`: ICA configuration
-- `autoreject::AutoRejectConfig`: Autoreject adaptive artifact rejection configuration
-- `neighbor_criterion::Float64`: Criterion for layout neighbors
-- `channel_repair_method::Symbol`: Method for repairing bad channels
-- `interactive_continuous::Bool`: Show interactive continuous plot
-- `interactive_ica::Bool`: Show interactive ICA plot
-- `interactive_epochs::Bool`: Show interactive epochs plot
+Complete EEG preprocessing configuration combining filtering, CleanLine, resampling, EOG, ICA, Autoreject, and repair settings.
 """
 @kwdef struct PreprocessConfig
     reference_channel::Union{Symbol,Vector{Symbol}} = :avg
@@ -210,14 +130,7 @@ end
 """
     InputFilesConfig
 
-Configuration for pipeline input files and directories.
-
-# Fields
-- `directory::String`: Input directory path
-- `raw_data_files::Union{Vector{String},String}`: Raw data files or regex pattern
-- `recursive::Bool`: Whether to search recursively
-- `layout_file::String`: Path to the layout file
-- `epoch_condition_file::String`: Path to the epoch condition file
+Pipeline input directory, file pattern, layout file, and epoch condition file settings.
 """
 @kwdef struct InputFilesConfig
     directory::String = "."
@@ -230,19 +143,7 @@ end
 """
     OutputFilesConfig
 
-Configuration for pipeline output files and saving options.
-
-# Fields
-- `directory::String`: Output directory path
-- `save_continuous_data_raw::Bool`: Save raw continuous data
-- `save_continuous_data_corrected::Bool`: Save corrected continuous data
-- `save_ica_data::Bool`: Save ICA data
-- `save_epoch_data_raw::Bool`: Save raw epoch data
-- `save_epoch_data_corrected::Bool`: Save corrected epoch data
-- `save_epoch_data::Bool`: Save final epoch data
-- `save_erp_data_raw::Bool`: Save raw ERP data
-- `save_erp_data_corrected::Bool`: Save corrected ERP data
-- `save_erp_data::Bool`: Save final ERP data
+Pipeline output directory and intermediate/final stage saving flags.
 """
 @kwdef struct OutputFilesConfig
     directory::String = "./preprocessed_files"
@@ -260,140 +161,115 @@ end
 """
     FilesConfig
 
-Top-level configuration for pipeline files (input and output).
-
-# Fields
-- `input::InputFilesConfig`: Input files configuration
-- `output::OutputFilesConfig`: Output files configuration
+Input and output file configuration for preprocessing pipelines.
 """
 @kwdef struct FilesConfig
     input::InputFilesConfig = InputFilesConfig()
     output::OutputFilesConfig = OutputFilesConfig()
 end
 
-# === GENERIC DICTIONARY CONVERTER ===
-
-"""
-    from_dict(::Type{T}, dict::Dict) where {T}
-
-Generic helper to recursively instantiate `@kwdef` struct `T` from a string-keyed dictionary.
-Automatically matches dictionary keys to struct field names, converts scalar types (e.g. `String` -> `Symbol`, `Int` -> `Float64`),
-coerces vectors, and recursively constructs nested structs.
-"""
-function from_dict(::Type{T}, dict::Dict) where {T}
-    kwargs = Dict{Symbol,Any}()
-    for field in fieldnames(T)
-        field_type = fieldtype(T, field)
-        key_str = string(field)
-
-        found = false
-        val = nothing
-        if haskey(dict, key_str)
-            found = true
-            val = dict[key_str]
-        elseif field == :neighbor_criterion
-            if haskey(dict, "neighbour_criterion")
-                @warn "'neighbour_criterion' is deprecated; use 'neighbor_criterion' instead." _module = nothing _file = nothing _line =
-                    nothing
-                found = true
-                val = dict["neighbour_criterion"]
-            elseif haskey(dict, "layout") && dict["layout"] isa AbstractDict
-                if haskey(dict["layout"], "neighbor_criterion")
-                    found = true
-                    val = dict["layout"]["neighbor_criterion"]
-                elseif haskey(dict["layout"], "neighbour_criterion")
-                    @warn "'neighbour_criterion' is deprecated; use 'neighbor_criterion' instead." _module = nothing _file = nothing _line =
-                        nothing
-                    found = true
-                    val = dict["layout"]["neighbour_criterion"]
-                end
-            end
-        elseif field == :channel_repair_method &&
-               haskey(dict, "channel_repair") &&
-               dict["channel_repair"] isa AbstractDict &&
-               haskey(dict["channel_repair"], "method")
-            found = true
-            val = dict["channel_repair"]["method"]
-        elseif field == :channel_repair_method && haskey(dict, "repair_method")
-            found = true
-            val = dict["repair_method"]
-        end
-
-        !found && continue
-        isnothing(val) && !(Nothing <: field_type) && continue
-
-        kwargs[field] = _coerce_value(field_type, val)
-    end
-    return T(; kwargs...)
-end
-
-function _coerce_value(::Type{T}, val) where {T}
-    if val isa T
-        return val
-    elseif val isa Dict && !isabstracttype(T) && isstructtype(T)
-        return from_dict(T, val)
-    elseif T == Symbol && val isa String
-        return Symbol(val)
-    elseif T == Int && val isa Number
-        return Int(val)
-    elseif T == Float64 && val isa Number
-        return Float64(val)
-    elseif T == Union{Symbol,Vector{Symbol}}
-        if val isa Symbol || val isa Vector{Symbol}
-            return val
-        elseif val isa String
-            return Symbol(val)
-        elseif val isa Vector
-            return Symbol.(val)
-        else
-            return Symbol(val)
-        end
-    elseif T == Union{Vector{String},String}
-        if val isa String
-            return val
-        elseif val isa Vector
-            return String.(val)
-        else
-            return string(val)
-        end
-    elseif T <: Vector && val isa Vector
-        inner_type = T.parameters[1]
-        if inner_type == Vector{String}
-            return Vector{Vector{String}}([String.(v isa Vector ? v : [v]) for v in val])
-        else
-            return inner_type.(val)
-        end
-    else
-        return val
-    end
-end
-
 """
     PipelineConfig
 
-Unified top-level configuration for the preprocessing pipeline.
-
-# Fields
-- `files::FilesConfig`: Files configuration
-- `preprocess::PreprocessConfig`: Preprocess configuration
+Top-level pipeline configuration bundling `files::FilesConfig` and `preprocess::PreprocessConfig`.
 """
 @kwdef struct PipelineConfig
     files::FilesConfig = FilesConfig()
     preprocess::PreprocessConfig = PreprocessConfig()
 end
 
-# === DICTIONARY CONSTRUCTORS ===
+# === DICTIONARY DESERIALIZATION ===
 
-FilterSection(cfg::Dict) = from_dict(FilterSection, cfg)
-FilterConfig(cfg::Dict) = from_dict(FilterConfig, cfg)
-EogConfig(cfg::Dict) = from_dict(EogConfig, cfg)
-EegConfig(cfg::Dict) = from_dict(EegConfig, cfg)
-IcaConfig(cfg::Dict) = from_dict(IcaConfig, cfg)
-CleanLineConfig(cfg::Dict) = from_dict(CleanLineConfig, cfg)
-ResampleConfig(cfg::Dict) = from_dict(ResampleConfig, cfg)
-AutoRejectConfig(cfg::Dict) = from_dict(AutoRejectConfig, cfg)
-PreprocessConfig(cfg::Dict) = from_dict(PreprocessConfig, cfg)
-InputFilesConfig(cfg::Dict) = from_dict(InputFilesConfig, cfg)
-OutputFilesConfig(cfg::Dict) = from_dict(OutputFilesConfig, cfg)
-FilesConfig(cfg::Dict) = from_dict(FilesConfig, cfg)
-PipelineConfig(cfg::Dict) = from_dict(PipelineConfig, cfg)
+_coerce_value(::Type{Symbol}, val) = val isa Symbol ? val : Symbol(val)
+_coerce_value(::Type{Int}, val) = val isa Int ? val : Int(val)
+_coerce_value(::Type{Float64}, val) = val isa Float64 ? val : Float64(val)
+_coerce_value(::Type{Union{Nothing,Int}}, val) = isnothing(val) ? nothing : Int(val)
+_coerce_value(::Type{Union{Nothing,Float64}}, val) = isnothing(val) ? nothing : Float64(val)
+_coerce_value(::Type{Union{Symbol,Vector{Symbol}}}, val) = val isa AbstractVector ? Symbol[Symbol(x) for x in val] : Symbol(val)
+_coerce_value(::Type{Union{Vector{String},String}}, val) = val isa AbstractVector ? String[String(x) for x in val] : string(val)
+_coerce_value(::Type{Vector{Vector{String}}}, val) =
+    val isa Vector{Vector{String}} ? val :
+    Vector{String}[v isa AbstractVector ? String[String(x) for x in v] : String[String(v)] for v in val]
+_coerce_value(::Type{Vector{E}}, val) where {E} = val isa Vector{E} ? val : E[x isa E ? x : _coerce_value(E, x) for x in val]
+function _coerce_value(::Type{T}, val) where {T}
+    val isa T && return val
+    (val isa AbstractDict && !isabstracttype(T) && isstructtype(T)) && return from_dict(T, val)
+    return val
+end
+
+function _resolve_neighbor_criterion(dict::AbstractDict, default::Float64)::Float64
+    haskey(dict, "neighbor_criterion") && !isnothing(dict["neighbor_criterion"]) && return Float64(dict["neighbor_criterion"])
+    if haskey(dict, "neighbour_criterion")
+        @warn "'neighbour_criterion' is deprecated; use 'neighbor_criterion' instead." _module = nothing _file = nothing _line = nothing
+        val = dict["neighbour_criterion"]
+        return isnothing(val) ? default : Float64(val)
+    end
+    lay = get(dict, "layout", nothing)
+    if lay isa AbstractDict
+        haskey(lay, "neighbor_criterion") && !isnothing(lay["neighbor_criterion"]) && return Float64(lay["neighbor_criterion"])
+        if haskey(lay, "neighbour_criterion")
+            @warn "'neighbour_criterion' is deprecated; use 'neighbor_criterion' instead." _module = nothing _file = nothing _line = nothing
+            val = lay["neighbour_criterion"]
+            return isnothing(val) ? default : Float64(val)
+        end
+    end
+    return default
+end
+
+function _resolve_repair_method(dict::AbstractDict, default::Symbol)::Symbol
+    if haskey(dict, "channel_repair_method") && !isnothing(dict["channel_repair_method"])
+        return _coerce_value(Symbol, dict["channel_repair_method"])
+    end
+    cr = get(dict, "channel_repair", nothing)
+    if cr isa AbstractDict && haskey(cr, "method") && !isnothing(cr["method"])
+        return _coerce_value(Symbol, cr["method"])
+    end
+    if haskey(dict, "repair_method") && !isnothing(dict["repair_method"])
+        return _coerce_value(Symbol, dict["repair_method"])
+    end
+    return default
+end
+
+@generated function from_dict(::Type{T}, dict::AbstractDict) where {T}
+    fnames = fieldnames(T)
+    exprs = Expr[]
+    for f in fnames
+        ft = fieldtype(T, f)
+        key = string(f)
+        def_expr = :(def.$f)
+        if f === :neighbor_criterion && ft === Float64
+            push!(exprs, :(_resolve_neighbor_criterion(dict, $def_expr)))
+        elseif f === :channel_repair_method && ft === Symbol
+            push!(exprs, :(_resolve_repair_method(dict, $def_expr)))
+        elseif Nothing <: ft
+            push!(exprs, :(haskey(dict, $key) ? _coerce_value($ft, dict[$key]) : $def_expr))
+        else
+            push!(exprs, quote
+                if haskey(dict, $key)
+                    v = dict[$key]
+                    isnothing(v) ? $def_expr : _coerce_value($ft, v)
+                else
+                    $def_expr
+                end
+            end)
+        end
+    end
+    return quote
+        def = T()
+        return T($(exprs...))
+    end
+end
+
+FilterSection(cfg::AbstractDict) = from_dict(FilterSection, cfg)
+FilterConfig(cfg::AbstractDict) = from_dict(FilterConfig, cfg)
+EogConfig(cfg::AbstractDict) = from_dict(EogConfig, cfg)
+EegConfig(cfg::AbstractDict) = from_dict(EegConfig, cfg)
+IcaConfig(cfg::AbstractDict) = from_dict(IcaConfig, cfg)
+CleanLineConfig(cfg::AbstractDict) = from_dict(CleanLineConfig, cfg)
+ResampleConfig(cfg::AbstractDict) = from_dict(ResampleConfig, cfg)
+AutoRejectConfig(cfg::AbstractDict) = from_dict(AutoRejectConfig, cfg)
+PreprocessConfig(cfg::AbstractDict) = from_dict(PreprocessConfig, cfg)
+InputFilesConfig(cfg::AbstractDict) = from_dict(InputFilesConfig, cfg)
+OutputFilesConfig(cfg::AbstractDict) = from_dict(OutputFilesConfig, cfg)
+FilesConfig(cfg::AbstractDict) = from_dict(FilesConfig, cfg)
+PipelineConfig(cfg::AbstractDict) = from_dict(PipelineConfig, cfg)

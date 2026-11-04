@@ -1,79 +1,51 @@
 """
-Generic utility functions for batch processing operations.
-These are reusable across different batch scripts.
-"""
+    BatchResult
 
-"""struct to hold batch processing results."""
+Result of processing a single file in a batch operation (`success`, `filename`, `message`).
+"""
 struct BatchResult
     success::Bool
     filename::String
     message::String
 end
 
-
-"""Extract participant ID (number) from filename, returns Int."""
 function _extract_participant_id(filename::String)
-
-    # Only search the filename part (without extension)
     name_without_ext, _ = splitext(filename)
-
-    # extract last numeric sequence from filename (e.g., "exp1a1" -> 1, "Pract6" -> 6)
-    numeric_matches = collect(eachmatch(r"\d+", name_without_ext))
-    if !isempty(numeric_matches)
-        return parse(Int, numeric_matches[end].match)
+    cu = codeunits(name_without_ext)
+    i = length(cu)
+    while i >= 1 && !(0x30 <= cu[i] <= 0x39)
+        i -= 1
     end
-
-    # use hash of filename as fallback (using large modulo to prevent collisions)
+    if i >= 1
+        end_idx = i
+        while i >= 1 && (0x30 <= cu[i] <= 0x39)
+            i -= 1
+        end
+        return parse(Int, SubString(name_without_ext, i + 1, end_idx))
+    end
     participant = Int(hash(filename) % 1_000_000_000)
     @info "  No numeric participant ID found in filename, using hash: $participant"
     return participant
 end
 
-
-"""
-    _find_batch_files(pattern::String, dir::String, participant_selection::Function = participants())
-
-Find and filter JLD2 files in a directory based on a pattern and participant IDs.
-
-# Arguments
-- `pattern::String`: Filename pattern to match.
-- `dir::String`: Directory to search in.
-- `participant_selection::Function`: Predicate function for filtering participant IDs (default: `participants()`).
-
-# Returns
-- `Vector{String}`: List of matching filenames.
-"""
 function _find_batch_files(pattern::String, dir::String, @nospecialize(participant_selection = participants()))
     part_func = _to_participant_func(participant_selection)
-
-    # Filter by pattern and extension
-    all_files = readdir(dir)
-    files = filter(all_files) do f
-        endswith(f, ".jld2") && contains(f, pattern)
-    end
-
-    # extract ids from filenames and apply predicate mask
+    files = filter(f -> endswith(f, ".jld2") && contains(f, pattern), readdir(dir))
     ids = [_extract_participant_id(f) for f in files]
-    mask = part_func(ids)
-    return files[mask]
+    return files[part_func(ids)]
 end
 
-# Convenience overloads
 _find_batch_files(pattern::String, dir::String, ids::Int) = _find_batch_files(pattern, dir, x -> x .== ids)
 _find_batch_files(pattern::String, dir::String, ids::Vector{Int}) = _find_batch_files(pattern, dir, x -> [id in ids for id in x])
-_find_batch_files(pattern::String, dir::String, ids::Nothing) = _find_batch_files(pattern, dir, x -> fill(true, length(x)))
-
+_find_batch_files(pattern::String, dir::String, ::Nothing) = _find_batch_files(pattern, dir, x -> trues(length(x)))
 
 const EEGFUN_FORMAT_VERSION = 1
 
 """
     read_data(filepath::String)
 
-Read data from JLD2 file, returning the data directly, a Dict of all variables, or `nothing`.
-
-- If file has 1 variable: returns the value directly
-- If file has multiple variables: returns a Dict with all key-value pairs
-- If file is empty: returns `nothing`
+Read `EegFunData` (or a vector of `EegFunData`) from a JLD2 file, returning `nothing` if the file
+is missing, empty, or contains no `EegFunData` objects.
 """
 function read_data(filepath::String)::Union{EegFunData,Vector{<:EegFunData},Nothing}
     if !isfile(filepath)
@@ -87,27 +59,20 @@ function read_data(filepath::String)::Union{EegFunData,Vector{<:EegFunData},Noth
                 @minimal_warning "File $filepath was written with EegFun format_version $v, but this version only supports up to $EEGFUN_FORMAT_VERSION."
             end
         end
-        if haskey(file, "data")
-            return _read_data(file["data"])
-        end
+        haskey(file, "data") && return _read_data(file["data"])
         keys_list = collect(keys(file))
         isempty(keys_list) && return nothing
-
         data = length(keys_list) == 1 ? file[keys_list[1]] : Dict(k => file[k] for k in keys_list)
         return _read_data(data)
     end
 end
 
-# Convert Vector{Any} to typed vector if all elements are EegFun data
 function _read_data(data::Vector{Any})::Union{Vector{<:EegFunData},Nothing}
-    isempty(data) && return nothing
-    !all(x -> x isa EegFunData, data) && return nothing
-    # Narrow to the tightest common type, e.g. Vector{ErpData} if all ErpData
-    T = typejoin(typeof.(data)...)
+    (isempty(data) || !all(x -> x isa EegFunData, data)) && return nothing
+    T = mapreduce(typeof, typejoin, data)
     return T[x for x in data]
 end
 
-# Extract EegFunData from Dict
 function _read_data(data::Dict)::Union{EegFunData,Vector{<:EegFunData},Nothing}
     values_found = EegFunData[]
     for value in values(data)
@@ -122,45 +87,27 @@ function _read_data(data::Dict)::Union{EegFunData,Vector{<:EegFunData},Nothing}
     return isempty(values_found) ? nothing : _single_or_vector(values_found)
 end
 
-# NB. read_data is not a generic function for everything; we just use it for data that is saved from EegFun
 _read_data(data::Union{EegFunData,Vector{<:EegFunData}}) = data
 _read_data(::Any)::Nothing = nothing
 
-# return single element or vector
 _single_or_vector(v::Vector) = length(v) == 1 ? v[1] : v
 
-"""
-    _condition_select(data, condition_selection)
-
-Filter data by condition selection predicate.
-
-Returns filtered data.
-"""
 function _condition_select(data, condition_selection::Function = conditions())
     isempty(data) && return data
-    condition_indices = 1:length(data)
-    mask = condition_selection(condition_indices)
-    return data[mask]
+    return data[condition_selection(1:length(data))]
 end
-
-function _condition_select(data, condition_selection::Vector{Int})
-    isempty(data) && return data
-    return data[condition_selection]
-end
-
+_condition_select(data, condition_selection::Vector{Int}) = isempty(data) ? data : data[condition_selection]
 _condition_select(data, condition_selection::Int) = _condition_select(data, [condition_selection])
-_condition_select(data, condition_selection::Nothing) = _condition_select(data, x -> fill(true, length(x)))
+_condition_select(data, ::Nothing) = _condition_select(data, x -> trues(length(x)))
 
-
-# Core internal loading logic
 function _read_all_data_core(::Type{T}, files::Vector{String}, input_dir::String) where {T}
     all_data = T[]
-    for (i, file) in enumerate(sort(files, by = _natural_sort_key))
-        input_path = joinpath(input_dir, file)
-        @info "Loading: $file ($i/$(length(files)))"
-        file_data = read_data(input_path)
+    sorted_files = sort(files, by = _natural_sort_key)
+    n_files = length(sorted_files)
+    for (i, file) in enumerate(sorted_files)
+        @info "Loading: $file ($i/$n_files)"
+        file_data = read_data(joinpath(input_dir, file))
         isnothing(file_data) && continue
-
         if file_data isa Vector{<:T}
             append!(all_data, file_data)
         elseif file_data isa T
@@ -172,90 +119,48 @@ function _read_all_data_core(::Type{T}, files::Vector{String}, input_dir::String
     return all_data
 end
 
+function _split_path_pattern(path_pattern::String)
+    d = dirname(path_pattern)
+    return isempty(d) ? pwd() : d, basename(path_pattern)
+end
+
 """
     read_all_data(path_pattern::String, participant_selection = participants())
     read_all_data(::Type{T}, path_pattern::String, participant_selection = participants())
 
-Find and load EEG data from JLD2 files whose names contain the basename of
-`path_pattern`, searching in the directory given by `dirname(path_pattern)`.
-
-This mirrors the single-argument form of `read_data`, so you compose the path
-the same way:
-
-```julia
-read_data("./derivatives/erps/example1_erps_final.jld2")   # single file
-read_all_data("./derivatives/erps/erps_final")             # all matching files
-```
-
-# Arguments
-- `path_pattern`: A file-system path whose `dirname` is the search directory and
-  whose `basename` is matched (via `contains`) against `.jld2` filenames.
-- `participant_selection`: Predicate function (default: `participants()` — all).
+Find and load EEG data from `.jld2` files in `dirname(path_pattern)` whose names contain
+`basename(path_pattern)`, optionally filtered by `participant_selection`.
 """
 function read_all_data(path_pattern::String, @nospecialize(participant_selection = participants()))
-    input_dir = let d = dirname(path_pattern)
-        isempty(d) ? pwd() : d
-    end
-    pattern   = basename(path_pattern)
-    files     = _find_batch_files(pattern, input_dir, participant_selection)
-    data      = _read_all_data_core(EegData, files, input_dir)
-    # Narrow to concrete subtype if all elements share the same type
+    input_dir, pattern = _split_path_pattern(path_pattern)
+    files = _find_batch_files(pattern, input_dir, participant_selection)
+    data = _read_all_data_core(EegData, files, input_dir)
     isempty(data) && return data
     T = typeof(data[1])
-    if all(x -> x isa T, data)
-        return Vector{T}(data)
-    end
-    return data
+    return all(x -> x isa T, data) ? Vector{T}(data) : data
 end
 
 function read_all_data(::Type{T}, path_pattern::String, @nospecialize(participant_selection = participants())) where {T}
-    input_dir = let d = dirname(path_pattern)
-        isempty(d) ? pwd() : d
-    end
-    pattern   = basename(path_pattern)
-    files     = _find_batch_files(pattern, input_dir, participant_selection)
+    input_dir, pattern = _split_path_pattern(path_pattern)
+    files = _find_batch_files(pattern, input_dir, participant_selection)
     return _read_all_data_core(T, files, input_dir)
 end
 
-
 """
-    group_by_condition(items::Vector{T}) where {T}
+    group_by_condition(items::AbstractVector{T}) -> OrderedDict{Int, Vector{T}}
 
-Group items by their `.condition` field.
-
-# Arguments
-- `items::Vector{T}`: Items to group (must have a `.condition` field, e.g. `ErpData`, `EpochData`)
-
-# Returns
-- `OrderedDict{Int, Vector{T}}`: Items grouped by condition number (sorted)
+Group items by their `.condition` field into a condition-sorted `OrderedDict`.
 """
 function group_by_condition(items::AbstractVector{T}) where {T}
     grouped = Dict{Int,Vector{T}}()
     for item in items
-        cond_num = item.condition
-        push!(get!(() -> T[], grouped, cond_num), item)
+        push!(get!(() -> T[], grouped, item.condition), item)
     end
-    # Sort by condition number and return as OrderedDict
     return OrderedDict(sort!(collect(grouped), by = first))
 end
 
+_validate_input_dir(dir::String) = isdir(dir) ? nothing : "Input directory does not exist: $dir"
 
-"""
-    _validate_input_dir(dir::String)
-
-Validate input directory exists, returning error message or nothing.
-"""
-function _validate_input_dir(dir::String)
-    !isdir(dir) && return "Input directory does not exist: $dir"
-    return nothing
-end
-
-"""
-    _validate_channel_groups(groups::Vector{Vector{Symbol}})
-
-Validate channel groups, returning error message or nothing.
-Issues warnings for groups with < 2 channels.
-"""
 function _validate_channel_groups(groups::Vector{Vector{Symbol}})
     isempty(groups) && return "Channel groups cannot be empty"
     for (i, group) in enumerate(groups)
@@ -267,76 +172,50 @@ function _validate_channel_groups(groups::Vector{Vector{Symbol}})
     return nothing
 end
 
-"""
-    _validate_condition_groups(groups::Vector{Vector{Int}})
-
-Validate condition groups, returning error message or nothing.
-Modifies groups in-place to remove duplicates and warns about overlaps.
-"""
 function _validate_condition_groups(groups::AbstractVector)
     isempty(groups) && return "Condition groups cannot be empty"
-
     all_conditions = Set{Int}()
-
     for (group_idx, group) in enumerate(groups)
-        # Check for duplicates within the group
-        if length(group) != length(unique(group))
-            duplicates = group[findall(x -> count(==(x), group) > 1, group)]
-            @minimal_warning "Group $group_idx contains duplicate conditions: $duplicates. Only unique conditions will be used."
-        end
-
-        # Remove duplicates and update the group
         unique_group = unique(group)
         if length(unique_group) != length(group)
+            duplicates = [x for x in group if count(==(x), group) > 1]
+            @minimal_warning "Group $group_idx contains duplicate conditions: $duplicates. Only unique conditions will be used."
             @info "  Group $group_idx: $(group) → $(unique_group) (removed duplicates)"
         end
         if groups isa Vector{Vector{Int}} || groups isa Vector{<:Vector}
             groups[group_idx] = unique_group
         end
-
-        # Check for overlaps between groups
         overlap = [c for c in unique_group if c in all_conditions]
         if !isempty(overlap)
             @minimal_warning "Condition(s) $overlap appear in multiple groups. This may not be intended."
         end
-
         union!(all_conditions, unique_group)
     end
-
     return nothing
 end
 
-"""
-    _validate_condition_pairs(pairs::AbstractVector)
-
-Validate condition pairs, returning error message or nothing.
-Warns about pairs with identical conditions.
-"""
 function _validate_condition_pairs(pairs::AbstractVector)
     isempty(pairs) && return "Condition pairs cannot be empty"
-
     for (i, pair) in enumerate(pairs)
         if pair[1] == pair[2]
             @minimal_warning "Condition pair $i: ($(pair[1]), $(pair[2])) has identical conditions. Difference will be zero."
         end
     end
-
     return nothing
 end
 
+function _exec_batch_file(process_fn::Function, file::String, input_dir::String, output_dir::String, filename_modifier::Function)
+    input_path = joinpath(input_dir, file)
+    output_path = joinpath(output_dir, filename_modifier(file))
+    try
+        return process_fn(input_path, output_path)
+    catch e
+        msg = sprint(showerror, e)
+        @minimal_warning "Error processing $file: $msg"
+        return BatchResult(false, file, "Exception: $msg")
+    end
+end
 
-"""
-    _run_batch_operation(process_fn::Function, files::Vector{String}, 
-                         input_dir::String, output_dir::String;
-                         operation_name::String = "Processing")
-
-Execute batch processing with logging and error handling.
-
-Takes a pure processing function `process_fn(input_path, output_path)` and maps 
-it over files, handling errors and logging progress.
-
-Returns vector of `BatchResult`.
-"""
 function _run_batch_operation(
     process_fn::Function,
     files::Vector{String},
@@ -348,52 +227,32 @@ function _run_batch_operation(
 )
     n_files = length(files)
     results = Vector{BatchResult}(undef, n_files)
-
     if parallel && n_files > 1 && Threads.nthreads() > 1
         Threads.@threads for i = 1:n_files
-            file = files[i]
-            input_path = joinpath(input_dir, file)
-            out_file = filename_modifier(file)
-            output_path = joinpath(output_dir, out_file)
-            results[i] = try
-                process_fn(input_path, output_path)
-            catch e
-                @minimal_warning "Error processing $file: $(sprint(showerror, e))"
-                BatchResult(false, file, "Exception: $(sprint(showerror, e))")
-            end
+            results[i] = _exec_batch_file(process_fn, files[i], input_dir, output_dir, filename_modifier)
         end
     else
         for (i, file) in enumerate(files)
             @info "$operation_name: $file ($i/$n_files)"
-
-            input_path = joinpath(input_dir, file)
-            out_file = filename_modifier(file)
-            output_path = joinpath(output_dir, out_file)
-
-            result = try
-                process_fn(input_path, output_path)
-            catch e
-                @minimal_warning "Error processing $file: $(sprint(showerror, e))"
-                BatchResult(false, file, "Exception: $(sprint(showerror, e))")
-            end
-
-            results[i] = result
-
-            if result.success
-                @info "  ✓ $(result.message)"
+            res = _exec_batch_file(process_fn, file, input_dir, output_dir, filename_modifier)
+            results[i] = res
+            if res.success
+                @info "  ✓ $(res.message)"
             else
-                @minimal_warning "  ✗ $(result.message)"
+                @minimal_warning "  ✗ $(res.message)"
             end
         end
     end
-
     return results
 end
 
 """
-    batch_process(process_fn::Function, file_pattern::String, input_dir::String, output_dir::String, participant_selection::Function, operation_name::String; filename_modifier::Function = identity, parallel::Bool = false)
+    batch_process(process_fn::Function, file_pattern::String, input_dir::String, output_dir::String,
+                  participant_selection, operation_name::String;
+                  filename_modifier::Function = identity, parallel::Bool = false)
 
-Generic batch processing loop to apply a processing function over files matching a pattern.
+Apply `process_fn(input_path, output_path)` across all `.jld2` files in `input_dir` matching
+`file_pattern` and `participant_selection`.
 """
 function batch_process(
     process_fn::Function,
@@ -410,9 +269,7 @@ function batch_process(
         @minimal_warning "No JLD2 files found matching pattern '$file_pattern' in $input_dir"
         return nothing
     end
-
     @info "Found $(length(files)) JLD2 files matching pattern '$file_pattern'"
-
     results = _run_batch_operation(
         process_fn,
         files,
@@ -422,88 +279,43 @@ function batch_process(
         filename_modifier = filename_modifier,
         parallel = parallel,
     )
-
     return _log_batch_summary(results, output_dir)
 end
 
-"""
-    _log_batch_summary(results::Vector{BatchResult}, output_dir::String)
-
-Log summary statistics from batch results.
-
-Returns named tuple `(success=n, errors=n)`.
-"""
 function _log_batch_summary(results::Vector{BatchResult}, output_dir::String)
     n_success = count(r -> r.success, results)
     n_error = length(results) - n_success
-
     @info ""
     @info "Batch operation complete! Processed $n_success files successfully, $n_error errors"
     @info "Output saved to: $output_dir"
-
     return (success = n_success, errors = n_error)
 end
 
-"""
-    _cleanup_logging(log_file::String, output_dir::Union{String,Nothing})
-
-Cleanup global logging and move log file to output directory.
-If `output_dir` is `nothing`, just closes logging without moving the file.
-"""
 function _cleanup_logging(log_file::String, output_dir::Union{String,Nothing})
     close_global_logging()
     if !isnothing(output_dir) && isfile(log_file)
         dest = joinpath(output_dir, basename(log_file))
-        if abspath(log_file) != abspath(dest)
-            mv(log_file, dest, force = true)
-        end
+        abspath(log_file) != abspath(dest) && mv(log_file, dest, force = true)
     end
 end
 
-"""
-    BatchContext
-
-Mutable state shared between [`_with_batch_logging`](@ref) and the body of a batch entry
-point. Holds the resolved output directory so the log file can be moved there on cleanup.
-"""
 mutable struct BatchContext
     output_dir::Union{String,Nothing}
 end
 
-"""
-    _with_batch_logging(f, description, log_file, input_dir, output_dir)
-
-Run the body `f(ctx)` of a batch entry point with global logging active:
-
-1. starts logging to `log_file` and logs `"Batch <description> started at <time>"`,
-2. validates `input_dir` (raising an `EegFunError` on failure),
-3. calls `f(ctx)` and returns its value,
-4. always closes logging and moves `log_file` into `ctx.output_dir` (if one was set).
-
-Inside `f`, call [`_prepare_output_dir!`](@ref) to resolve and create the output directory.
-`@log_call` can still be used in `f`, since it reads the captured local variables.
-"""
 function _with_batch_logging(f::Function, description::AbstractString, log_file::AbstractString, input_dir::AbstractString, output_dir)
     setup_global_logging(log_file)
     ctx = BatchContext(output_dir)
     try
         @info "Batch $description started at $(now())"
         error_msg = _validate_input_dir(input_dir)
-        if !isnothing(error_msg)
-            @minimal_error(error_msg)
-        end
+        !isnothing(error_msg) && @minimal_error(error_msg)
         return f(ctx)
     finally
         _cleanup_logging(String(log_file), ctx.output_dir)
     end
 end
 
-"""
-    _prepare_output_dir!(ctx::BatchContext, default_dir) -> String
-
-Resolve the output directory (the user-supplied one, else `default_dir`), create it, and
-record it in `ctx` so the log file is moved there on cleanup.
-"""
 function _prepare_output_dir!(ctx::BatchContext, default_dir::AbstractString)
     ctx.output_dir = something(ctx.output_dir, String(default_dir))
     mkpath(ctx.output_dir)

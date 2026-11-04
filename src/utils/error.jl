@@ -1,18 +1,7 @@
 """
     EegFunError <: Exception
 
-Custom exception type for EegFun errors. Try and display a cleaner, user-friendly
-error message without Julia's overly verbose stacktrace spew.
-
-# Error handling policy
-- Problems a user can fix (bad input, configuration, files, selections, parameter values)
-  are raised with `@minimal_error`, which throws an `EegFunError`.
-- Internal invariant violations (bugs, "this should never happen") use plain `error()`.
-
-# Example
-```julia
-throw(EegFun.EegFunError("No data found matching pattern 'xyz'"))
-```
+User-facing exception raised by `@minimal_error` for invalid inputs, files, selections, or configurations.
 """
 struct EegFunError <: Exception
     msg::String
@@ -20,20 +9,8 @@ end
 
 Base.showerror(io::IO, e::EegFunError) = print(io, e.msg)
 
-# Log an error message without module/file/line metadata.
 _log_error(msg::AbstractString) = @error "Error: " * msg _module = nothing _file = nothing _line = nothing
 
-
-"""
-    @minimal_error(msg)
-
-Throws an `EegFunError` with a clean user-facing error message.
-
-The message is also written with `@error` only while a log file is active (see
-[`setup_logging`](@ref)), so batch/pipeline runs record failures in their log file.
-Otherwise (REPL, scripts, tests) the exception alone is reported, to avoid printing
-the same message twice.
-"""
 macro minimal_error(msg)
     quote
         local _msg = string($(esc(msg)))
@@ -42,35 +19,12 @@ macro minimal_error(msg)
     end
 end
 
-"""
-    @minimal_warning(msg)
-
-Displays a warning message without showing module/file/line metadata.
-"""
 macro minimal_warning(msg)
     quote
         @warn $(esc(msg)) _module = nothing _file = nothing _line = nothing
     end
 end
 
-"""
-    @minimal_stacktrace(msg, e, max_lines=5)
-
-Log an error with a limited stacktrace to avoid huge log files.
-
-# Arguments
-- `msg::String`: Error message
-- `e`: The exception object
-- `max_lines::Int`: Maximum number of stacktrace lines to include (default: 5)
-
-# Example
-```julia
-catch e
-    @minimal_stacktrace "Error processing file" e
-    @minimal_stacktrace "Error processing file" e 10  # with custom max_lines
-end
-```
-"""
 macro minimal_stacktrace(msg, e, max_lines = 5)
     quote
         bt = catch_backtrace()

@@ -1,17 +1,12 @@
-# Tables.jl Interface for EegFun.jl types
-
 import Tables
+import DataFrames: nrow, ncol, describe, eachcol, eachrow
+import Base: names, first, last
 
-# 1. Declare that all EegData types are Tables
 Tables.istable(::Type{<:EegData}) = true
+Tables.columnaccess(::Type{<:EegData}) = true
 Tables.rowaccess(::Type{<:EegData}) = true
 Tables.rows(dat::EegData) = Tables.rows(Tables.columns(dat))
 Tables.schema(dat::EegData) = Tables.schema(Tables.columns(dat))
-
-# 1.5 DataAPI / DataFrames Base Interface Forwarding
-# We forward standard DataFrame functions to the internal `.data` so users don't have to extract it.
-import DataFrames: nrow, ncol, describe, eachcol, eachrow
-import Base: names, first, last
 
 nrow(dat::SingleDataFrameEeg) = nrow(dat.data)
 ncol(dat::SingleDataFrameEeg) = ncol(dat.data)
@@ -34,10 +29,6 @@ describe(dat::MultiDataFrameEeg; kwargs...) =
 first(dat::MultiDataFrameEeg, n::Integer) = first(dat.data, n)
 last(dat::MultiDataFrameEeg, n::Integer) = last(dat.data, n)
 
-# 2. Expose the column-based interface (since we wrap DataFrames)
-Tables.columnaccess(::Type{<:EegData}) = true
-
-# 3. Inject metadata using Idiomatic Julia Multiple Dispatch
 function _inject_metadata!(res::DataFrame, dat::ContinuousData, n_rows::Int)
     res.file = fill(dat.file, n_rows)
     return res
@@ -47,9 +38,7 @@ function _inject_metadata!(res::DataFrame, dat::Union{ErpData,EpochData}, n_rows
     res.file = fill(dat.file, n_rows)
     res.condition = fill(dat.condition, n_rows)
     res.condition_name = fill(dat.condition_name, n_rows)
-    if dat isa ErpData
-        res.n_epochs = fill(dat.n_epochs, n_rows)
-    end
+    dat isa ErpData && (res.n_epochs = fill(dat.n_epochs, n_rows))
     return res
 end
 
@@ -61,25 +50,15 @@ function _inject_metadata!(res::DataFrame, dat::Union{TimeFreqData,TimeFreqEpoch
     return res
 end
 
-# Fallback for any future EegData type that doesn't have specific metadata
-function _inject_metadata!(res::DataFrame, dat::EegData, n_rows::Int)
-    return res
-end
+_inject_metadata!(res::DataFrame, ::EegData, ::Int) = res
 
-# 4. Implement column access for SingleDataFrameEeg (ContinuousData, ErpData, etc.)
 function Tables.columns(dat::SingleDataFrameEeg)
     df = dat.data
-
-    # Create a shallow copy so we can insert metadata columns without modifying the original
-    res = copy(df, copycols = false)
-
-    # Inject standard metadata via dispatch
+    res = copy(df; copycols = false)
     _inject_metadata!(res, dat, nrow(df))
-
     return Tables.columns(res)
 end
 
-# 5. Implement column access for MultiDataFrameEeg (EpochData, etc.)
 function Tables.columns(dat::MultiDataFrameEeg)
     if isempty(dat.data)
         res = DataFrame()
@@ -87,21 +66,13 @@ function Tables.columns(dat::MultiDataFrameEeg)
             res[!, ch] = Float64[]
         end
         _inject_metadata!(res, dat, 0)
-        return Tables.columns(res)
+        return Tables.CopiedColumns(Tables.columns(res))
     end
-    # Concatenate all DataFrames in the vector (epoch column is already present internally)
     df = reduce(vcat, dat.data; source = nothing)
-
-    # Create a shallow copy for metadata injection
-    res = copy(df, copycols = false)
-
-    # Inject standard metadata via dispatch
-    _inject_metadata!(res, dat, nrow(df))
-
-    return Tables.columns(res)
+    _inject_metadata!(df, dat, nrow(df))
+    return Tables.CopiedColumns(Tables.columns(df))
 end
 
-# 6. Support vectors of EegData (e.g., from extract_epochs or average_epochs)
 Tables.istable(::Type{<:AbstractVector{<:EegData}}) = true
 Tables.columnaccess(::Type{<:AbstractVector{<:EegData}}) = true
 Tables.rowaccess(::Type{<:AbstractVector{<:EegData}}) = true
@@ -109,9 +80,7 @@ Tables.rows(dats::AbstractVector{<:EegData}) = Tables.rows(Tables.columns(dats))
 Tables.schema(dats::AbstractVector{<:EegData}) = Tables.schema(Tables.columns(dats))
 
 function Tables.columns(dats::AbstractVector{<:EegData})
-    isempty(dats) && return Tables.columns(DataFrame())
-    # Convert each object to a DataFrame (which goes through our Tables interface above)
-    # and then efficiently concatenate them all together.
+    isempty(dats) && return Tables.CopiedColumns(Tables.columns(DataFrame()))
     dfs = [DataFrame(d) for d in dats]
-    return Tables.columns(reduce(vcat, dfs; cols = :union))
+    return Tables.CopiedColumns(Tables.columns(reduce(vcat, dfs; cols = :union)))
 end

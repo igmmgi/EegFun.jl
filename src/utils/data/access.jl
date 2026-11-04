@@ -1,18 +1,11 @@
-# === EEG DATA ACCESS FUNCTIONS ===
 """
-    all_data(dat::EegData) -> DataFrame
+    all_data(dat) -> DataFrame
 
-Get the complete DataFrame with all columns.
-
-# Arguments
-- `dat::EegData`: The EEG data object
-
-# Returns
-- `DataFrame`: Complete DataFrame with all columns
+Return the underlying tabular data as a `DataFrame`.
 """
-all_data(dat::SingleDataFrameEeg)::DataFrame = dat.data # single data frame
-all_data(dat::MultiDataFrameEeg)::DataFrame = to_data_frame(dat) # single data frame with all epochs
-all_data(dat::Vector{<:MultiDataFrameEeg})::DataFrame = to_data_frame(dat) # single data frame with all epochs from all objects
+all_data(dat::SingleDataFrameEeg)::DataFrame = dat.data
+all_data(dat::MultiDataFrameEeg)::DataFrame = to_data_frame(dat)
+all_data(dat::Vector{<:MultiDataFrameEeg})::DataFrame = to_data_frame(dat)
 all_data(dat::DataFrame)::DataFrame = dat
 all_data(dat::Vector{DataFrame})::DataFrame = isempty(dat) ? DataFrame() : reduce(vcat, dat)
 
@@ -27,13 +20,16 @@ function all_data(dat::Vector{<:SingleDataFrameEeg})::DataFrame
 end
 
 all_data(dat::Layout)::DataFrame = dat.data
-all_data(dat::BiosemiDataFormat.BiosemiData)::DataFrame = _create_eegfun_dataframe(dat)
-all_data(dat::EuropeanDataFormat.EdfData)::DataFrame = _create_eegfun_dataframe(dat)
-all_data(dat::BrainVisionDataFormat.BrainVisionData)::DataFrame = _create_eegfun_dataframe(dat)
-all_data(dat::FunctionalImageFormat.FifData)::DataFrame = _create_eegfun_dataframe(dat)
-all_data(dat::ExtensibleDataFormat.XdfData)::DataFrame = _create_eegfun_dataframe(dat)
-all_data(dat::ErpMeasurementsResult)::DataFrame = dat.data
-all_data(dat::TriggerInfo)::DataFrame = dat.data
+all_data(
+    dat::Union{
+        BiosemiDataFormat.BiosemiData,
+        EuropeanDataFormat.EdfData,
+        BrainVisionDataFormat.BrainVisionData,
+        FunctionalImageFormat.FifData,
+        ExtensibleDataFormat.XdfData,
+    },
+)::DataFrame = _create_eegfun_dataframe(dat)
+all_data(dat::Union{ErpMeasurementsResult,TriggerInfo})::DataFrame = dat.data
 
 function all_data(ica::InfoIca)::DataFrame
     removed = Set(keys(ica.removed_activations))
@@ -45,36 +41,28 @@ function all_data(ica::InfoIca)::DataFrame
     )
 end
 
-# Handle collections and epoch selections
-function all_data(dat::Union{MultiDataFrameEeg,Vector{<:MultiDataFrameEeg}}; epoch_selection::Function = epochs())
-    return to_data_frame(subset(dat, epoch_selection = epoch_selection))
-end
+all_data(dat::Union{MultiDataFrameEeg,Vector{<:MultiDataFrameEeg}}; epoch_selection::Function = epochs()) =
+    to_data_frame(subset(dat; epoch_selection = epoch_selection))
 
 function meta_data(dat::Union{MultiDataFrameEeg,Vector{<:MultiDataFrameEeg}}; epoch_selection::Function = epochs())
-    meta_cols = _get_cols_by_group(dat, :metadata)
-    return isempty(meta_cols) ? DataFrame() : all_data(dat, epoch_selection = epoch_selection)[!, meta_cols]
+    cols = _get_cols_by_group(dat, :metadata)
+    return isempty(cols) ? DataFrame() : all_data(dat; epoch_selection = epoch_selection)[!, cols]
 end
 
 function channel_data(dat::Union{MultiDataFrameEeg,Vector{<:MultiDataFrameEeg}}; epoch_selection::Function = epochs())
-    channel_cols = _get_cols_by_group(dat, :channels)
-    return isempty(channel_cols) ? DataFrame() : all_data(dat, epoch_selection = epoch_selection)[!, channel_cols]
+    cols = _get_cols_by_group(dat, :channels)
+    return isempty(cols) ? DataFrame() : all_data(dat; epoch_selection = epoch_selection)[!, cols]
 end
 
 function extra_data(dat::Union{MultiDataFrameEeg,Vector{<:MultiDataFrameEeg}}; epoch_selection::Function = epochs())
-    extra_cols = _get_cols_by_group(dat, :extra)
-    return isempty(extra_cols) ? DataFrame() : all_data(dat, epoch_selection = epoch_selection)[!, extra_cols]
+    cols = _get_cols_by_group(dat, :extra)
+    return isempty(cols) ? DataFrame() : all_data(dat; epoch_selection = epoch_selection)[!, cols]
 end
 
 """
-    all_labels(dat::EegData) -> Vector{Symbol}
+    all_labels(dat) -> Vector{Symbol}
 
-Get all column names from the complete DataFrame.
-
-# Arguments
-- `dat::EegData`: The EEG data object
-
-# Returns
-- `Vector{Symbol}`: All column names
+Return all column names of `dat`.
 """
 all_labels(dat::SingleDataFrameEeg)::Vector{Symbol} = propertynames(dat.data)
 all_labels(dat::MultiDataFrameEeg)::Vector{Symbol} = isempty(dat.data) ? Symbol[] : propertynames(dat.data[1])
@@ -82,22 +70,9 @@ all_labels(dat::MultiDataFrameEeg, epoch::Int)::Vector{Symbol} = propertynames(d
 all_labels(dat::DataFrame)::Vector{Symbol} = propertynames(dat)
 
 """
-    time_vector(dat::EegData) -> Vector{Float64}
-    time_vector(dat::EegData, epoch::Int) -> Vector{Float64}
-    time_vector(df::DataFrame) -> Vector{Float64}
+    time_vector(dat) -> Vector{Float64}
 
-Get the time column from the EEG data or DataFrame as a vector.
-
-# Arguments
-- `dat::EegData`: The EEG data object
-- `df::DataFrame`: A DataFrame with a `:time` column
-
-# Returns
-- `Vector{Float64}`: Time vector in seconds
-
-# Notes
-- For MultiDataFrameEeg types (EpochData, etc.), returns time from first epoch
-- All epochs are assumed to have identical time vectors
+Return the `:time` vector in seconds from `dat` (or its first epoch for `MultiDataFrameEeg`).
 """
 time_vector(dat::SingleDataFrameEeg)::Vector{Float64} = hasproperty(dat.data, :time) ? dat.data[!, :time] : Float64[]
 time_vector(dat::MultiDataFrameEeg)::Vector{Float64} =
@@ -106,14 +81,13 @@ time_vector(dat::MultiDataFrameEeg, epoch::Int)::Vector{Float64} =
     hasproperty(dat.data[epoch], :time) ? dat.data[epoch][!, :time] : Float64[]
 time_vector(dat::Vector{T}) where {T<:EegData} = isempty(dat) ? Float64[] : time_vector(dat[1])
 time_vector(df::DataFrame)::Vector{Float64} = hasproperty(df, :time) ? df[!, :time] : Float64[]
-time_vector(dat::StatisticalData)::Vector{Float64} = dat.analysis.time_points
-time_vector(dat::TFStatisticalData)::Vector{Float64} = dat.analysis.time_points
+time_vector(dat::Union{StatisticalData,TFStatisticalData})::Vector{Float64} = dat.analysis.time_points
 time_vector(res::StatsResult)::Vector{Float64} = res.time_points
 
 """
     frequency_vector(dat) -> Vector{Float64}
 
-Get the frequency vector in Hz from a time-frequency or spectrum data object or statistical result.
+Return the sorted unique frequency vector in Hz from a time-frequency, spectrum, or TF statistical object.
 """
 frequency_vector(dat::TimeFreqData)::Vector{Float64} = Float64.(sort(unique(dat.data_power.freq)))
 frequency_vector(dat::TimeFreqEpochData)::Vector{Float64} =
@@ -123,22 +97,13 @@ frequency_vector(dat::TFStatisticalData)::Vector{Float64} = dat.analysis.frequen
 frequency_vector(res::TFStatsResult)::Vector{Float64} = res.frequencies
 frequency_vector(dat::Vector{<:TimeFreqData})::Vector{Float64} = isempty(dat) ? Float64[] : frequency_vector(first(dat))
 
-
-
 """
     meta_labels(dat::EegData) -> Vector{Symbol}
 
-Get metadata column names from the EEG data.
-
-# Arguments
-- `dat::EegData`: The EEG data object
-
-# Returns
-- `Vector{Symbol}`: Vector of metadata column names
+Return metadata column names (columns preceding the first layout channel).
 """
 meta_labels(dat::EegData) = _get_cols_by_group(dat, :metadata)
 
-"""Return a DataFrame of just the columns in `group` (`:metadata`, `:channels`, `:extra`)."""
 function _get_cols_data(dat::SingleDataFrameEeg, group::Symbol)
     cols = _get_cols_by_group(dat, group)
     return isempty(cols) ? DataFrame() : dat.data[!, cols]
@@ -156,173 +121,122 @@ function _get_cols_data(dat::MultiDataFrameEeg, group::Symbol)
 end
 
 """
-    meta_data(eeg_data::EegData) -> DataFrame
+    meta_data(dat::EegData) -> DataFrame
 
-Get meta data columns from the EEG data.
+Return a `DataFrame` containing only the metadata columns of `dat`.
 """
 meta_data(dat::SingleDataFrameEeg) = _get_cols_data(dat, :metadata)
 meta_data(dat::MultiDataFrameEeg, epoch::Int) = _get_cols_data(dat, :metadata, epoch)
 meta_data(dat::MultiDataFrameEeg) = _get_cols_data(dat, :metadata)
 
-
 """
-    channel_labels(dat::EegData) -> Vector{Symbol}
+    channel_labels(dat) -> Vector{Symbol}
 
-Get EEG channel column names from the EEG data.
+Return electrode channel column names of `dat`.
 """
 channel_labels(dat::EegData)::Vector{Symbol} = _get_cols_by_group(dat, :channels)
 channel_labels(dat::EegData, channel_numbers::Vector{<:UnitRange})::Vector{Symbol} = channel_labels(dat)[channel_numbers...]
 channel_labels(dat::EegData, channel_numbers)::Vector{Symbol} = channel_labels(dat)[channel_numbers]
 channel_labels(dat::EegData, channel_numbers::Int)::Vector{Symbol} = channel_labels(dat)[[channel_numbers]]
-
-# Handle collections of EEG data
-# NOTE: Assumes all EegData objects in the collection have identical channel labels.
 channel_labels(dat::Vector{<:EegData})::Vector{Symbol} = isempty(dat) ? Symbol[] : channel_labels(first(dat))
-channel_labels(dat::StatisticalData)::Vector{Symbol} = isempty(dat.data) ? Symbol[] : channel_labels(first(dat.data))
-channel_labels(dat::TFStatisticalData)::Vector{Symbol} = isempty(dat.data) ? Symbol[] : channel_labels(first(dat.data))
+channel_labels(dat::Union{StatisticalData,TFStatisticalData})::Vector{Symbol} =
+    isempty(dat.data) ? Symbol[] : channel_labels(first(dat.data))
 channel_labels(res::StatsResult)::Vector{Symbol} = res.electrodes
 
-
 """
-    channel_data(eeg_data::EegData) -> DataFrame
+    channel_data(dat::EegData) -> DataFrame
+    channel_data(dat::EegData, channel::Symbol) -> Vector{Float64}
 
-Get EEG channel data columns from the EEG data.
+Return EEG channel columns of `dat` as a `DataFrame`, or extract a single `channel` signal vector.
 """
 channel_data(dat::SingleDataFrameEeg)::DataFrame = _get_cols_data(dat, :channels)
 channel_data(dat::MultiDataFrameEeg, epoch::Int)::DataFrame = _get_cols_data(dat, :channels, epoch)
 channel_data(dat::MultiDataFrameEeg)::DataFrame = _get_cols_data(dat, :channels)
-
-# Extract channel signals as vectors (returns vector of signals for processing)
 channel_data(dat::MultiDataFrameEeg, channel::Symbol) =
     isempty(dat.data) ? Float64[] : reduce(vcat, (trial[!, channel] for trial in dat.data))
 channel_data(dat::SingleDataFrameEeg, channel::Symbol)::Vector{Float64} = dat.data[!, channel]
 
 """
-    extra_labels(dat::EegData) -> Vector{Symbol}
+    extra_labels(dat) -> Vector{Symbol}
 
-Get extra/derived column names (EOG, flags, etc.) from the EEG data.
+Return derived/extra column names (columns following the last layout channel).
 """
 extra_labels(dat::EegData) = _get_cols_by_group(dat, :extra)
 extra_labels(dat::Vector{<:EegData})::Vector{Symbol} = isempty(dat) ? Symbol[] : extra_labels(first(dat))
 
 """
-    extra_data(eeg_data::EegData) -> DataFrame
+    extra_data(dat::EegData) -> DataFrame
 
-Get extra/derived columns (EOG, flags, etc.) from the EEG data.
+Return derived/extra columns (EOG, artifact flags, etc.) of `dat`.
 """
 extra_data(dat::SingleDataFrameEeg)::DataFrame = _get_cols_data(dat, :extra)
 extra_data(dat::MultiDataFrameEeg, epoch::Int)::DataFrame = _get_cols_data(dat, :extra, epoch)
 extra_data(dat::MultiDataFrameEeg)::DataFrame = _get_cols_data(dat, :extra)
 
-
-
-# === EEG CONVENIENCE FUNCTIONS ===
-# Basic information functions
 """
-    sample_rate(dat::EegData) -> Int
+    sample_rate(dat) -> Int
 
-Get the sample rate of the EEG data.
-
-# Arguments
-- `dat::EegData`: The EEG data object
-
-# Returns
-- `Int`: Sample rate in Hz
+Return the sample rate in Hz.
 """
 sample_rate(dat::EegData)::Int = dat.sample_rate
 sample_rate(dat::DataFrame)::Int = round(Int, 1 / mean(diff(dat.time)))
 
 """
-    reference(dat::EegData) -> Symbol
+    reference(dat) -> Symbol
 
-Get the reference information from the EEG data.
-
-# Arguments
-- `dat::EegData`: The EEG data object
-
-# Returns
-- `Symbol`: Reference information
+Return the applied reference scheme.
 """
 reference(dat::EegData)::Symbol = dat.analysis_info.reference
 reference(dat::AnalysisInfo)::Symbol = dat.reference
 
-"""
-    filter_info(dat::AnalysisInfo) -> Vector
-
-Get filter information from the analysis info.
-
-# Arguments
-- `dat::AnalysisInfo`: The analysis info object
-
-# Returns
-- `Vector`: Filter information [hp_filter, lp_filter]
-"""
 filter_info(dat::AnalysisInfo)::Vector{Float64} = [dat.hp_filter, dat.lp_filter]
 
-# Unique convenience functions (not available through metadata)
 """
-    n_samples(dat::EegData) -> Int
+    n_samples(dat) -> Int
 
-Get the number of samples in the EEG data.
-
-# Arguments
-- `dat::EegData`: The EEG data object
-
-# Returns
-- `Int`: Number of samples
+Return the number of time/frequency samples per epoch or DataFrame.
 """
 n_samples(dat::SingleDataFrameEeg)::Int = nrow(dat.data)
 n_samples(dat::MultiDataFrameEeg)::Int = isempty(dat.data) ? 0 : nrow(dat.data[1])
 n_samples(dat::MultiDataFrameEeg, epoch::Int)::Int = nrow(dat.data[epoch])
 n_samples(dat::DataFrame)::Int = nrow(dat)
-n_samples(dat::StatisticalData)::Int = length(dat.analysis.time_points)
-n_samples(dat::TFStatisticalData)::Int = length(dat.analysis.time_points)
+n_samples(dat::Union{StatisticalData,TFStatisticalData})::Int = length(dat.analysis.time_points)
 n_samples(res::StatsResult)::Int = length(res.time_points)
 
-
 """
-    n_channels(dat::EegData) -> Int
+    n_channels(dat) -> Int
 
-Get the number of channels in the EEG data.
-
-# Arguments
-- `dat::EegData`: The EEG data object
-
-# Returns
-- `Int`: Number of channels
+Return the number of EEG channels in `dat`.
 """
-n_channels(dat::EegData)::Int = length(channel_labels(dat))
+function n_channels(dat::EegData)::Int
+    layout_channels = dat.layout.data[!, :label]
+    df = _first_df(dat)
+    return isnothing(df) ? length(layout_channels) : _count_channels(layout_channels, df)
+end
 n_channels(layout::Layout)::Int = nrow(layout.data)
-n_channels(dat::StatisticalData)::Int = isempty(dat.data) ? 0 : n_channels(first(dat.data))
-n_channels(dat::TFStatisticalData)::Int = isempty(dat.data) ? 0 : n_channels(first(dat.data))
+n_channels(dat::Union{StatisticalData,TFStatisticalData})::Int = isempty(dat.data) ? 0 : n_channels(first(dat.data))
 n_channels(res::StatsResult)::Int = length(channel_labels(res))
 
 """
     n_layout(layout::Layout) -> Int
 
-Get the number of channels in the layout.
-
-# Arguments
-- `layout::Layout`: The layout object
-
-# Returns
-- `Int`: Number of channels in the layout
+Return the number of electrodes in `layout`.
 """
 n_layout(layout::Layout)::Int = nrow(layout.data)
 
 """
     n_epochs(dat::EegData) -> Int
 
-Get the number of epochs in the EEG data.
+Return the number of epochs (`1` for continuous/spectrum/TF-average, `dat.n_epochs` for `ErpData`).
 """
 n_epochs(dat::SingleDataFrameEeg)::Int = 1
 n_epochs(dat::MultiDataFrameEeg)::Int = length(dat.data)
 n_epochs(dat::ErpData)::Int = dat.n_epochs
 
 """
-    condition_number(dat::EegData) -> Union{Int, String}
+    condition_number(dat::EegData) -> Union{Int,String}
 
-Get the condition number (`"Raw Data"` for [`ContinuousData`](@ref), which has no condition).
+Return the condition number (`"Raw Data"` for `ContinuousData`).
 """
 condition_number(dat::EegData)::Int = dat.condition
 condition_number(dat::ContinuousData)::String = "Raw Data"
@@ -330,7 +244,7 @@ condition_number(dat::ContinuousData)::String = "Raw Data"
 """
     condition_name(dat::EegData) -> String
 
-Get the condition name (`"Raw Data"` for [`ContinuousData`](@ref), which has no condition).
+Return the condition name (`"Raw Data"` for `ContinuousData`).
 """
 condition_name(dat::EegData)::String = dat.condition_name
 condition_name(dat::ContinuousData)::String = "Raw Data"
@@ -338,7 +252,7 @@ condition_name(dat::ContinuousData)::String = "Raw Data"
 """
     file_name(dat::EegFunData) -> String
 
-Get the source filename.
+Return the source filename of `dat`.
 """
 function file_name(dat::EegFunData)
     hasproperty(dat, :file) && return dat.file
@@ -346,17 +260,10 @@ function file_name(dat::EegFunData)
     return "Unknown"
 end
 
-
 """
-    duration(dat::EegData) -> Float64
+    duration(dat) -> Float64
 
-Get the duration of the EEG data in seconds.
-
-# Arguments
-- `dat::EegData`: The EEG data object
-
-# Returns
-- `Float64`: Duration in seconds
+Return the time span in seconds (`last(time) - first(time)`).
 """
 duration(dat::SingleDataFrameEeg)::Float64 =
     hasproperty(dat.data, :time) && !isempty(dat.data.time) ? last(dat.data.time) - first(dat.data.time) : 0.0
@@ -367,47 +274,14 @@ duration(dat::MultiDataFrameEeg, epoch::Int)::Float64 =
     hasproperty(dat.data[epoch], :time) && !isempty(dat.data[epoch].time) ? last(dat.data[epoch].time) - first(dat.data[epoch].time) : 0.0
 duration(dat::Vector{T}) where {T<:EegData} = isempty(dat) ? 0.0 : duration(dat[1])
 
-
 _structure_label(dat::EegData) = hasfield(typeof(dat), :condition) ? "$(dat.file)/$(dat.condition)" : dat.file
 
-"""
-    _have_same_structure(dat1::EegData, dat2::EegData) -> Bool
-    _have_same_structure(dats::Vector{<:EegData}) -> Bool
-
-Check if EegData objects have the same structure (sample rate, number of samples, channel labels, and time vectors).
-
-# Arguments
-- `dat1::EegData`, `dat2::EegData`: Two EegData objects to compare
-- `dats::Vector{<:EegData}`: Vector of EegData objects to compare
-
-# Returns
-- `Bool`: `true` if all objects have the same sample rate, number of samples, channel labels, and time vectors
-
-# Examples
-```julia
-# Check if two ERPs have the same structure
-_have_same_structure(erp1, erp2)
-
-# Check if all ERPs in a vector have the same structure
-_have_same_structure(erps)
-```
-"""
 function _have_same_structure(dat1::EegData, dat2::EegData)::Bool
     desc1 = _structure_label(dat1)
     desc2 = _structure_label(dat2)
-    if sample_rate(dat1) != sample_rate(dat2)
-        @minimal_error("Sample rates do not match: $desc1 vs. $desc2")
-        return false
-    end
-    if n_samples(dat1) != n_samples(dat2)
-        @minimal_error("Number of samples do not match: $desc1 vs. $desc2")
-        return false
-    end
-    if channel_labels(dat1) != channel_labels(dat2)
-        @minimal_error("Channel labels do not match: $desc1 vs. $desc2")
-        return false
-    end
-    # Check time vectors match (if they exist)
+    sample_rate(dat1) != sample_rate(dat2) && (@minimal_error("Sample rates do not match: $desc1 vs. $desc2"); return false)
+    n_samples(dat1) != n_samples(dat2) && (@minimal_error("Number of samples do not match: $desc1 vs. $desc2"); return false)
+    channel_labels(dat1) != channel_labels(dat2) && (@minimal_error("Channel labels do not match: $desc1 vs. $desc2"); return false)
     time1 = time_vector(dat1)
     time2 = time_vector(dat2)
     if (isempty(time1) != isempty(time2)) || (!isempty(time1) && (length(time1) != length(time2) || !isapprox(time1, time2)))
@@ -418,10 +292,7 @@ function _have_same_structure(dat1::EegData, dat2::EegData)::Bool
 end
 
 function _have_same_structure(dats::AbstractVector{<:EegData})::Bool
-    isempty(dats) && return true
-    length(dats) == 1 && return true
-
-    # Check all against the first one
+    length(dats) <= 1 && return true
     template = first(dats)
     for i = 2:length(dats)
         !_have_same_structure(template, dats[i]) && return false
@@ -429,53 +300,28 @@ function _have_same_structure(dats::AbstractVector{<:EegData})::Bool
     return true
 end
 
-
 """
     has_channels(dat::EegData, chans::Vector{Symbol}) -> Bool
 
-Check if the EEG data contains all specified channels.
-
-# Arguments
-- `dat::EegData`: The EEG data object
-- `chans::Vector{Symbol}`: Vector of channel symbols to check
-
-# Returns
-- `Bool`: True if all channels are present
+Return `true` if `dat` contains every channel in `chans`.
 """
 has_channels(dat::EegData, chans::Vector{Symbol})::Bool = all(ch -> ch in dat, chans)
 
 """
     common_channels(dat1::EegData, dat2::EegData) -> Vector{Symbol}
 
-Find common channels between two EEG data objects.
-
-# Arguments
-- `dat1::EegData`: First EEG data object
-- `dat2::EegData`: Second EEG data object
-
-# Returns
-- `Vector{Symbol}`: Vector of common channel symbols
+Return channels shared by `dat1` and `dat2`.
 """
 common_channels(dat1::EegData, dat2::EegData)::Vector{Symbol} = intersect(channel_labels(dat1), channel_labels(dat2))
 
-
-
-
 """
-    to_data_frame(dat::MultiDataFrameEeg) -> DataFrame
-    to_data_frame(dat::Vector{<:MultiDataFrameEeg}) -> DataFrame
+    to_data_frame(dat) -> DataFrame
 
-Convert a multi-dataframe EEG object (or vector of conditions) to a single DataFrame
-by concatenating all epochs. Works for `EpochData`, `TimeFreqEpochData`, and any
-other `MultiDataFrameEeg` subtype.
+Concatenate all epoch `DataFrame`s in a `MultiDataFrameEeg` (or vector of them) into a single `DataFrame`.
 """
-function to_data_frame(dat::MultiDataFrameEeg)
-    isempty(dat.data) && return DataFrame()
-    return reduce(vcat, dat.data)
-end
+to_data_frame(dat::MultiDataFrameEeg) = isempty(dat.data) ? DataFrame() : reduce(vcat, dat.data)
 function to_data_frame(dat::Vector{<:MultiDataFrameEeg})
     isempty(dat) && return DataFrame()
     all_dfs = [df for d in dat for df in d.data]
-    isempty(all_dfs) && return DataFrame()
-    return reduce(vcat, all_dfs)
+    return isempty(all_dfs) ? DataFrame() : reduce(vcat, all_dfs)
 end

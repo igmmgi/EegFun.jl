@@ -1,15 +1,7 @@
-# === DATA VIEWING FUNCTIONS ===
-
 """
     viewer(dat)
 
-Display data using VS Code viewer if available, otherwise use standard display.
-If `all_data(dat)` is defined for the type, it is called first to extract a
-DataFrame — so adding viewer support for a new type only requires adding an
-`all_data` method in data.jl.
-
-# Arguments
-- `dat`: Any data object to display
+Display `dat` (or `all_data(dat)` when defined) using `Main.vscodedisplay` if available, falling back to `display`.
 """
 function viewer(dat)
     target = applicable(all_data, dat) ? all_data(dat) : dat
@@ -25,45 +17,32 @@ function viewer(dat)
     end
 end
 
-
 """
-    head(dat::EegData; n=5)
+    head(dat::EegData; n = 5)
 
-Display and return the first `n` rows of the EEG data.
-
-# Examples
-```julia
-head(erps[1])        # First 5 rows
-head(erps[1], n=10)  # First 10 rows
-```
+Display and return a view of the first `n` rows of `all_data(dat)`.
 """
 function head(dat::EegData; n = nothing)
-    isnothing(n) && (n = 5)
+    n_rows_show = isnothing(n) ? 5 : n
     data = all_data(dat)
     nrows = nrow(data)
-    n = min(n, nrows)
-    result = n > 0 ? view(data, 1:n, :) : DataFrame()
+    k = min(n_rows_show, nrows)
+    result = k > 0 ? view(data, 1:k, :) : DataFrame()
     viewer(result)
     return result
 end
 
 """
-    tail(dat::EegData; n=5)
+    tail(dat::EegData; n = 5)
 
-Display and return the last `n` rows of the EEG data.
-
-# Examples
-```julia
-tail(erps[1])        # Last 5 rows
-tail(erps[1], n=10)  # Last 10 rows
-```
+Display and return a view of the last `n` rows of `all_data(dat)`.
 """
 function tail(dat::EegData; n = nothing)
-    isnothing(n) && (n = 5)
+    n_rows_show = isnothing(n) ? 5 : n
     data = all_data(dat)
     nrows = nrow(data)
-    n = min(n, nrows)
-    result = n > 0 ? view(data, max(1, nrows-n+1):nrows, :) : DataFrame()
+    k = min(n_rows_show, nrows)
+    result = k > 0 ? view(data, max(1, nrows-k+1):nrows, :) : DataFrame()
     viewer(result)
     return result
 end

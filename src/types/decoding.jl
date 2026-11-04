@@ -1,20 +1,14 @@
-# Types for MVPA/decoding analysis results.
-#
-# Defines types for storing multivariate pattern analysis (MVPA)
-# and decoding results, including classification accuracy over time and
-# confusion matrices.
-
 """
     DecodingParameters
 
-Stores parameters used for decoding analysis.
+Cross-validation and multi-class coding parameters for MVPA/decoding.
 
 # Fields
-- `chance_level::Float64`: Expected chance-level performance (e.g., 0.5 for binary, 1/n_classes for n-class)
-- `n_iterations::Int64`: Number of iterations/permutations performed
+- `chance_level::Float64`: Theoretical chance accuracy (e.g., `0.5` for binary, `1 / n_classes` for multi-class)
+- `n_iterations::Int64`: Number of cross-validation iterations
 - `n_folds::Int64`: Number of cross-validation folds
 - `class_coding::Symbol`: Multi-class coding scheme (`:one_vs_one`, `:one_vs_all`, `:binary`)
-- `n_classes::Int64`: Number of classes/conditions being decoded
+- `n_classes::Int64`: Number of decoded classes
 """
 struct DecodingParameters
     chance_level::Float64
@@ -25,20 +19,20 @@ struct DecodingParameters
 end
 
 """
-    DecodedData
+    DecodedData <: EegFunData
 
-Stores MVPA/decoding analysis results for a single participant.
+Time-resolved MVPA/decoding results for a single participant.
 
 # Fields
 - `file::String`: Source filename
-- `condition_names::Vector{String}`: Names of conditions/bins being decoded
-- `times::Vector{Float64}`: Time points in seconds where decoding was performed
-- `average_score::Vector{Float64}`: Average classification accuracy at each time point
-- `channels::Vector{Symbol}`: Channel names used in the analysis
-- `parameters::DecodingParameters`: Decoding analysis parameters (chance_level, n_iterations, n_folds, class_coding, n_classes)
-- `stderror::Union{Vector{Float64}, Nothing}`: Standard error of accuracy, or `nothing`
-- `confusion_matrix::Union{Array{Float64, 3}, Nothing}`: Confusion matrices [time × true_class × predicted_class], or `nothing`
-- `raw_predictions::Union{Array{Float64, 4}, Nothing}`: Raw predictions [iteration × fold × time × class], or `nothing`
+- `condition_names::Vector{String}`: Decoded condition names
+- `times::Vector{Float64}`: Decoded time points in seconds
+- `average_score::Vector{Float64}`: Mean classification accuracy at each time point
+- `channels::Vector{Symbol}`: Channels included as features
+- `parameters::DecodingParameters`: Cross-validation parameters
+- `stderror::Union{Vector{Float64},Nothing}`: Standard error of accuracy across iterations/folds
+- `confusion_matrix::Union{Array{Float64,3},Nothing}`: Confusion matrices `[time × true_class × predicted_class]`
+- `raw_predictions::Union{Array{Float64,4},Nothing}`: Raw predictions `[iteration × fold × time × class]`
 """
 mutable struct DecodedData <: EegFunData
     file::String
@@ -51,11 +45,6 @@ mutable struct DecodedData <: EegFunData
     confusion_matrix::Union{Array{Float64,3},Nothing}
     raw_predictions::Union{Array{Float64,4},Nothing}
 
-    """
-        DecodedData constructor
-
-    Create a DecodedData object with required fields.
-    """
     function DecodedData(
         file::String,
         condition_names::Vector{String},
@@ -96,12 +85,12 @@ function Base.show(io::IO, decoded::DecodedData)
     println(io, "  Cross-validation folds: $(decoded.parameters.n_folds)")
     println(io, "  Channels: $(length(decoded.channels))")
     if !isnothing(decoded.stderror) && !isempty(decoded.average_score) && !isempty(decoded.times)
-        max_acc = maximum(decoded.average_score)
         max_idx = argmax(decoded.average_score)
+        max_acc = round(decoded.average_score[max_idx]; digits = 3)
         if max_idx <= length(decoded.times)
-            println(io, "  Max accuracy: $(round(max_acc, digits=3)) at $(round(decoded.times[max_idx], digits=3)) s")
+            println(io, "  Max accuracy: $max_acc at $(round(decoded.times[max_idx]; digits = 3)) s")
         else
-            println(io, "  Max accuracy: $(round(max_acc, digits=3))")
+            println(io, "  Max accuracy: $max_acc")
         end
     end
 end
