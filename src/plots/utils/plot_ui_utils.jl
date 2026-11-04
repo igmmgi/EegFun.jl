@@ -1,14 +1,8 @@
-"""
-    _build_checkbox_grid!(grid, items, cols, checked_fn; fontsize = 14, label_fn = string)
-
-Build a labelled checkbox grid into `grid`. Returns `Vector{Checkbox}`.
-"""
 function _build_checkbox_grid!(grid, items, cols, checked_fn; fontsize = 14, label_fn = string)
     checkboxes = Checkbox[]
     for (i, item) in enumerate(items)
         row = ((i - 1) ÷ cols) + 1
-        col = ((i - 1) % cols) + 1
-        col_base = (col - 1) * 2
+        col_base = ((i - 1) % cols) * 2
         cb = Checkbox(grid[row, col_base+1], checked = checked_fn(item, i), width = 16, height = 16)
         push!(checkboxes, cb)
         Label(grid[row, col_base+2], label_fn(item), fontsize = fontsize, halign = :left)
@@ -23,11 +17,6 @@ function _build_checkbox_grid!(grid, items, cols, checked_fn; fontsize = 14, lab
     return checkboxes
 end
 
-"""
-    _popup_button(fig, label, popup_fn)
-
-Return a Button that opens `popup_fn` on click. Used to build control panels with popup windows.
-"""
 function _popup_button(fig, label, popup_fn)
     btn = Button(fig, label = label, width = Auto(), fontsize = 18)
     on(btn.clicks) do _
@@ -36,11 +25,6 @@ function _popup_button(fig, label, popup_fn)
     return btn
 end
 
-"""
-    _add_group_buttons!(fig, grid_row, cbs, items, groups)
-
-Add a row of group-selection buttons that set checkboxes to match `predicate`.
-"""
 function _add_group_buttons!(fig, grid_row, cbs, items, groups)
     area = fig[grid_row, 1] = GridLayout()
     for (j, (lbl, pred)) in enumerate(groups)
@@ -53,11 +37,6 @@ function _add_group_buttons!(fig, grid_row, cbs, items, groups)
     end
 end
 
-"""
-    _radio_buttons!(btns::Vector, selected_obs::Observable, values::Vector)
-
-Wire buttons as a radio group: clicking one sets `selected_obs` and highlights it.
-"""
 function _radio_buttons!(btns::Vector, selected_obs::Observable, values::Vector)
     for (btn, val) in zip(btns, values)
         on(btn.clicks) do _
@@ -67,7 +46,6 @@ function _radio_buttons!(btns::Vector, selected_obs::Observable, values::Vector)
             end
         end
     end
-    # Highlight the current default
     for (b, v) in zip(btns, values)
         b.buttoncolor[] = v == selected_obs[] ? :lightblue : :white
     end

@@ -1,15 +1,53 @@
-"""
-Topographic visualizations for Time-Frequency data.
+# Topographic visualizations for Time-Frequency data and TF statistical results.
 
-`plot_topography` for `TimeFreqData` — single topo of average power in a time-freq window.
-`plot_topography_stats` for `TFStatsResult` — grid of topos across time for a selected frequency band.
-"""
-
-
-# === TOPOGRAPHY FOR TIME-FREQUENCY DATA ===
 function _sorted_interval_bounds(iv)
     raw = _normalize_interval(iv)
     return (min(Float64(raw[1]), Float64(raw[2])), max(Float64(raw[1]), Float64(raw[2])))
+end
+
+function _tf_select_window_values(
+    all_freqs::Vector{Float64},
+    all_times::Vector{Float64},
+    freq_range::Interval,
+    interval_selection::Interval,
+)
+    fr = _sorted_interval_bounds(freq_range)
+    selected_freqs = [f for f in all_freqs if fr[1] <= f <= fr[2]]
+    isempty(selected_freqs) &&
+        @minimal_error("No frequencies found in range $(freq_range). Data range: $(first(all_freqs)) to $(last(all_freqs)) Hz")
+
+    if isnothing(interval_selection) || interval_selection isa AllSelection
+        selected_times = all_times
+    else
+        t_start = interval_selection isa TimeSelection ? interval_selection.start : interval_selection[1]
+        t_stop = interval_selection isa TimeSelection ? interval_selection.stop : interval_selection[2]
+        selected_times = [t for t in all_times if t_start <= t <= t_stop]
+    end
+    isempty(selected_times) && @minimal_error("No time points found in interval. Data range: $(first(all_times)) to $(last(all_times)) s")
+
+    return fr, selected_freqs, selected_times
+end
+
+function _prepare_tf_topo_layout(orig_layout::Layout, common_channels::Vector{Symbol}; need_3d::Bool = true)::Layout
+    orig_labels = orig_layout.data[!, :label]
+    layout = if length(common_channels) < length(orig_labels) || common_channels != orig_labels
+        subset_layout(orig_layout; channel_selection = channels(common_channels))
+    elseif !has_2d_coords(orig_layout) || (need_3d && !has_3d_coords(orig_layout))
+        copy(orig_layout)
+    else
+        orig_layout
+    end
+    has_valid_coordinates(layout) || @minimal_error("Cannot create topographic plot: layout has no spatial coordinates.")
+    _ensure_coordinates_2d!(layout)
+    need_3d && _ensure_coordinates_3d!(layout)
+    return layout
+end
+
+function _pop_unused_tf_topo_kwargs!(plot_kwargs::Dict)
+    pop!(plot_kwargs, :interactive, nothing)
+    pop!(plot_kwargs, :use_global_scale, nothing)
+    pop!(plot_kwargs, :component_selection, nothing)
+    return nothing
 end
 
 """
@@ -32,7 +70,7 @@ Plot a topographic map of average power within a frequency band and time window.
 $(_generate_kwargs_doc(PLOT_TOPOGRAPHY_KWARGS))
 
 # Returns
-- Named tuple `(fig, ax)`
+- Named tuple `(fig, axes, ax)`
 
 # Examples
 ```julia
@@ -52,9 +90,8 @@ function plot_topography(
     baseline_method::Symbol = :db,
     kwargs...,
 )
-    # Apply baseline correction if requested
     if !isnothing(baseline_interval) && !isnothing(tf.baseline)
-        @minimal_warning "Data has already been baselined (method: $(tf.baseline.method)). " * "Ignoring baseline_interval parameter."
+        @minimal_warning "Data has already been baselined (method: $(tf.baseline.method)). Ignoring baseline_interval parameter."
         tf_plot = tf
     elseif !isnothing(baseline_interval)
         tf_plot = tf_baseline(tf, baseline_interval; method = baseline_method)
@@ -67,54 +104,26 @@ function plot_topography(
     has_signed_baseline = eff_baseline_method in _SIGNED_TF_BASELINE_METHODS
 
     orig_layout = tf_plot.layout
+    has_valid_coordinates(orig_layout) || @minimal_error("Cannot create topographic plot: layout has no spatial coordinates.")
 
-    # Validate layout
-    if !has_valid_coordinates(orig_layout)
-        @minimal_error("Cannot create topographic plot: layout has no spatial coordinates.")
-    end
+    df_power = tf_plot.data_power
+    all_times = _sorted_unique_f64(df_power[!, :time])
+    all_freqs = _sorted_unique_f64(df_power[!, :freq])
+    fr, selected_freqs, selected_times = _tf_select_window_values(all_freqs, all_times, freq_range, interval_selection)
 
-    # Extract unique time and frequency values
-    all_times = Float64.(sort(unique(tf_plot.data_power.time)))
-    all_freqs = Float64.(sort(unique(tf_plot.data_power.freq)))
+    row_indices = _tf_filter_row_indices(df_power, selected_freqs, selected_times)
 
-    # Apply frequency range filter
-    fr = _sorted_interval_bounds(freq_range)
-    freq_mask = fr[1] .<= all_freqs .<= fr[2]
-    isempty(findall(freq_mask)) &&
-        @minimal_error("No frequencies found in range $(freq_range). Data range: $(first(all_freqs)) to $(last(all_freqs)) Hz")
-
-    # Apply time range filter
-    if isnothing(interval_selection) || interval_selection isa AllSelection
-        time_mask = fill(true, length(all_times))
-    else
-        t_start = interval_selection isa TimeSelection ? interval_selection.start : interval_selection[1]
-        t_stop = interval_selection isa TimeSelection ? interval_selection.stop : interval_selection[2]
-        time_mask = t_start .<= all_times .<= t_stop
-    end
-    isempty(findall(time_mask)) &&
-        @minimal_error("No time points found in interval. Data range: $(first(all_times)) to $(last(all_times)) s")
-
-    selected_times = all_times[time_mask]
-    selected_freqs = all_freqs[freq_mask]
-
-    # Fast row-filtered power average across the selected time-freq window
-    row_indices = _tf_filter_row_indices(tf_plot.data_power, selected_freqs, selected_times)
-
-    # Subset layout to analyzed channels (never fill missing electrodes with 0.0!)
     channels_list = channel_labels(tf_plot)
-    common_channels = intersect(orig_layout.data.label, channels_list)
+    common_channels = intersect(orig_layout.data[!, :label], channels_list)
     isempty(common_channels) && @minimal_error("None of the TF channels $(channels_list) were found in the layout.")
-    layout = subset_layout(orig_layout; channel_selection = channels(common_channels))
+    layout = _prepare_tf_topo_layout(orig_layout, common_channels; need_3d = true)
 
-    # Compute average power per channel directly in subsetted layout order
-    layout_labels = layout.data.label
-    layout_values = _tf_extract_channel_means(tf_plot.data_power, layout_labels, row_indices)
+    layout_labels = layout.data[!, :label]
+    layout_values = _tf_extract_channel_means(df_power, layout_labels, row_indices)
 
-    # Merge user kwargs with shared topography defaults
     kwargs_norm = _normalize_plot_kwargs(kwargs, _TOPO_KWARG_ALIASES)
     plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs_norm)
 
-    # Extract topography-specific parameters
     method = pop!(plot_kwargs, :method)
     gridscale = pop!(plot_kwargs, :gridscale)
     colormap = pop!(plot_kwargs, :colormap)
@@ -126,13 +135,9 @@ function plot_topography(
     num_levels = pop!(plot_kwargs, :num_levels)
     highlight_channels = pop!(plot_kwargs, :highlight_channels, nothing)
 
-    # Pop unused keys
-    pop!(plot_kwargs, :interactive, nothing)
-    pop!(plot_kwargs, :use_global_scale, nothing)
-    pop!(plot_kwargs, :component_selection, nothing)
+    _pop_unused_tf_topo_kwargs!(plot_kwargs)
     pop!(plot_kwargs, :dims, nothing)
 
-    # Build title (using normalized `fr`)
     freq_str = "$(round(Int, fr[1]))-$(round(Int, fr[2])) Hz"
     time_str =
         (isnothing(interval_selection) || interval_selection isa AllSelection) ? "all times" :
@@ -141,34 +146,21 @@ function plot_topography(
     user_title = !isnothing(plot_title) && !isempty(plot_title) ? plot_title : figure_title
     title = show_title ? (isempty(user_title) ? default_title : user_title) : ""
 
-    # Create figure
     fig = _eegfun_figure(size = (400, 400))
     actual_colormap = _resolve_theme_colormap(fig, colormap)
 
     if isnothing(colorrange)
         data_min, data_max = extrema(layout_values)
-        if _is_diverging_colormap(actual_colormap) && (data_min < 0 || has_signed_baseline)
-            colorrange = _symmetric_colorrange(data_min, data_max)
-        elseif data_min ≈ data_max
-            colorrange = (data_min - 1.0, data_max + 1.0)
-        else
-            colorrange = (data_min, data_max)
-        end
+        colorrange = _tf_auto_colorrange(data_min, data_max, actual_colormap; has_signed_baseline = has_signed_baseline)
     end
 
     ax = Axis(fig[1, 1], aspect = DataAspect(), title = title, titlesize = plot_kwargs[:plot_title_fontsize])
 
-    # Ensure coordinates
-    _ensure_coordinates_2d!(layout)
-    _ensure_coordinates_3d!(layout)
-
-    # Extract colorbar kwargs
     colorbar_kwargs = Dict{Symbol,Any}(pairs(pop!(plot_kwargs, :colorbar_kwargs, (;))))
     colorbar_plot = pop!(plot_kwargs, :colorbar_plot)
     pop!(plot_kwargs, :colorbar_position, nothing)
     pop!(plot_kwargs, :colorbar_plot_numbers, nothing)
 
-    # Render
     co, _, _ = _render_topo_surface!(
         fig,
         ax,
@@ -182,9 +174,7 @@ function plot_topography(
         plot_kwargs...,
     )
 
-    if !isnothing(highlight_channels)
-        _draw_highlight_channels!(ax, highlight_channels, layout)
-    end
+    !isnothing(highlight_channels) && _draw_highlight_channels!(ax, highlight_channels, layout)
 
     if colorbar_plot
         cb_label = _tf_colorbar_label(tf_plot, baseline_interval, baseline_method)
@@ -192,13 +182,10 @@ function plot_topography(
     end
 
     hidedecorations!(ax)
-
-    if display_plot
-        _display_figure(fig)
-    end
-
+    display_plot && _display_figure(fig)
     return (fig = fig, axes = [ax], ax = ax)
 end
+
 function plot_topography(
     tfs::AbstractVector{<:TimeFreqData};
     freq_range::Interval,
@@ -209,9 +196,8 @@ function plot_topography(
 )
     isempty(tfs) && @minimal_error("Cannot plot empty vector of TimeFreqData")
 
-    # Apply baseline correction
-    if !isnothing(baseline_interval)
-        tf_plots = map(tfs) do tf
+    tf_plots = if !isnothing(baseline_interval)
+        map(tfs) do tf
             if !isnothing(tf.baseline)
                 @minimal_warning "$(tf.condition_name) already baselined, skipping."
                 tf
@@ -220,20 +206,15 @@ function plot_topography(
             end
         end
     else
-        tf_plots = tfs
+        tfs
     end
 
     n = length(tf_plots)
-    if n == 1
-        return plot_topography(tf_plots[1]; freq_range = freq_range, interval_selection = interval_selection, kwargs...)
-    end
+    n == 1 && return plot_topography(tf_plots[1]; freq_range = freq_range, interval_selection = interval_selection, kwargs...)
 
     orig_layout = tf_plots[1].layout
-    if !has_valid_coordinates(orig_layout)
-        @minimal_error("Cannot create topographic plot: layout has no spatial coordinates.")
-    end
+    has_valid_coordinates(orig_layout) || @minimal_error("Cannot create topographic plot: layout has no spatial coordinates.")
 
-    # Merge kwargs
     kwargs_norm = _normalize_plot_kwargs(kwargs, _TOPO_KWARG_ALIASES)
     plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs_norm)
     method = pop!(plot_kwargs, :method)
@@ -248,71 +229,45 @@ function plot_topography(
     dims = pop!(plot_kwargs, :dims, nothing)
     highlight_channels = pop!(plot_kwargs, :highlight_channels, nothing)
 
-    pop!(plot_kwargs, :interactive, nothing)
-    pop!(plot_kwargs, :use_global_scale, nothing)
-    pop!(plot_kwargs, :component_selection, nothing)
-
-    # Labels off in grid by default
+    _pop_unused_tf_topo_kwargs!(plot_kwargs)
     plot_kwargs[:label_plot] = get(kwargs_norm, :label_plot, false)
     plot_kwargs[:point_plot] = get(kwargs_norm, :point_plot, false)
 
-    # Extract common TF data
-    all_freqs = Float64.(sort(unique(tf_plots[1].data_power.freq)))
-    all_times = Float64.(sort(unique(tf_plots[1].data_power.time)))
-    fr = _sorted_interval_bounds(freq_range)
-    freq_mask = fr[1] .<= all_freqs .<= fr[2]
-    isempty(findall(freq_mask)) &&
-        @minimal_error("No frequencies found in range $(freq_range). Data range: $(first(all_freqs)) to $(last(all_freqs)) Hz")
+    first_df = tf_plots[1].data_power
+    all_freqs = _sorted_unique_f64(first_df[!, :freq])
+    all_times = _sorted_unique_f64(first_df[!, :time])
+    fr, selected_freqs, selected_times = _tf_select_window_values(all_freqs, all_times, freq_range, interval_selection)
 
-    if isnothing(interval_selection) || interval_selection isa AllSelection
-        time_mask = fill(true, length(all_times))
-    else
-        t_start = interval_selection isa TimeSelection ? interval_selection.start : interval_selection[1]
-        t_stop = interval_selection isa TimeSelection ? interval_selection.stop : interval_selection[2]
-        time_mask = t_start .<= all_times .<= t_stop
-    end
-    isempty(findall(time_mask)) &&
-        @minimal_error("No time points found in interval. Data range: $(first(all_times)) to $(last(all_times)) s")
-
-    selected_freqs = all_freqs[freq_mask]
-    selected_times = all_times[time_mask]
-
-    # Subset layout to channels shared across conditions (never fill missing electrodes with 0.0!)
-    common_channels = copy(orig_layout.data.label)
+    common_channels = copy(orig_layout.data[!, :label])
     for tf in tf_plots
         common_channels = intersect(common_channels, channel_labels(tf))
     end
     isempty(common_channels) && @minimal_error("None of the TF channels were found in the layout.")
-    layout = subset_layout(orig_layout; channel_selection = channels(common_channels))
+    layout = _prepare_tf_topo_layout(orig_layout, common_channels; need_3d = false)
 
-    layout_labels = layout.data.label
+    layout_labels = layout.data[!, :label]
     all_layout_values = Vector{Vector{Float64}}(undef, n)
 
     global_min, global_max = Inf, -Inf
+    first_rows = _tf_filter_row_indices(first_df, selected_freqs, selected_times)
     for (idx, tf) in enumerate(tf_plots)
-        row_indices = _tf_filter_row_indices(tf.data_power, selected_freqs, selected_times)
-        layout_values = _tf_extract_channel_means(tf.data_power, layout_labels, row_indices)
+        df = tf.data_power
+        row_indices =
+            (idx == 1 || (df[!, :time] === first_df[!, :time] && df[!, :freq] === first_df[!, :freq])) ? first_rows :
+            _tf_filter_row_indices(df, selected_freqs, selected_times)
+        layout_values = _tf_extract_channel_means(df, layout_labels, row_indices)
         all_layout_values[idx] = layout_values
-        global_min = min(global_min, minimum(layout_values))
-        global_max = max(global_max, maximum(layout_values))
+        lmin, lmax = extrema(layout_values)
+        global_min = min(global_min, lmin)
+        global_max = max(global_max, lmax)
     end
 
-    # Grid layout
-    if isnothing(dims)
-        n_rows, n_cols = _best_rect(n)
-    else
-        n_rows, n_cols = dims
-    end
+    n_rows, n_cols = isnothing(dims) ? _best_rect(n) : dims
 
-    # Ensure coordinates
-    _ensure_coordinates_2d!(layout)
-
-    # Pre-interpolate all panels when possible
     can_batch = n > 1 && _topo_method_supported(method)
     batched_interp = nothing
     xb_shared = nothing
     yb_shared = nothing
-
     if can_batch
         val_matrix = Matrix{Float64}(undef, length(layout_labels), n)
         for j = 1:n
@@ -330,19 +285,11 @@ function plot_topography(
         (!isnothing(baseline_interval) && baseline_method in _SIGNED_TF_BASELINE_METHODS)
 
     if isnothing(colorrange)
-        if _is_diverging_colormap(actual_colormap) && (global_min < 0 || has_signed_baseline)
-            colorrange = _symmetric_colorrange(global_min, global_max)
-        elseif global_min ≈ global_max
-            colorrange = (global_min - 1.0, global_max + 1.0)
-        else
-            colorrange = (global_min, global_max)
-        end
+        colorrange = _tf_auto_colorrange(global_min, global_max, actual_colormap; has_signed_baseline = has_signed_baseline)
     end
 
     header_title = !isnothing(plot_title) && !isempty(plot_title) ? plot_title : figure_title
-    if show_title && !isempty(header_title)
-        Label(fig[0, 1:n_cols], header_title, fontsize = 18, font = :bold)
-    end
+    (show_title && !isempty(header_title)) && Label(fig[0, 1:n_cols], header_title, fontsize = 18, font = :bold)
 
     colorbar_kwargs = Dict{Symbol,Any}(pairs(pop!(plot_kwargs, :colorbar_kwargs, (;))))
     pop!(colorbar_kwargs, :colorrange, nothing)
@@ -351,13 +298,13 @@ function plot_topography(
     pop!(plot_kwargs, :colorbar_position, nothing)
     pop!(plot_kwargs, :colorbar_plot_numbers, nothing)
 
-    axes = Axis[]
+    axes = Vector{Axis}(undef, n)
     for (idx, tf) in enumerate(tf_plots)
         row = div(idx - 1, n_cols) + 1
         col = mod1(idx, n_cols)
         title = show_title ? "$(tf.condition_name) — $freq_str" : ""
         ax = Axis(fig[row, col], aspect = DataAspect(), title = title, titlesize = plot_kwargs[:plot_title_fontsize])
-        push!(axes, ax)
+        axes[idx] = ax
 
         _render_topo_surface!(
             fig,
@@ -374,9 +321,7 @@ function plot_topography(
             num_levels = num_levels,
             plot_kwargs...,
         )
-        if !isnothing(highlight_channels)
-            _draw_highlight_channels!(ax, highlight_channels, layout)
-        end
+        !isnothing(highlight_channels) && _draw_highlight_channels!(ax, highlight_channels, layout)
         hidedecorations!(ax)
     end
 
@@ -387,15 +332,55 @@ function plot_topography(
         nothing
     end
 
-    if display_plot
-        _display_figure(fig)
-    end
-
+    display_plot && _display_figure(fig)
     return (fig = fig, axes = axes, colorbar = cb)
 end
 
-
 # === TOPO STATS FOR TF STATISTICAL RESULTS ===
+
+function _tf_bin_tvalue_means(
+    t_mat::Array{Float64,3},
+    elec_indices::Vector{Int},
+    freq_indices::Vector{Int},
+    bin_indices::AbstractVector{Int},
+)::Vector{Float64}
+    n_elec = length(elec_indices)
+    out = Vector{Float64}(undef, n_elec)
+    inv_n = 1.0 / (length(freq_indices) * length(bin_indices))
+    @inbounds for k = 1:n_elec
+        ei = elec_indices[k]
+        s = 0.0
+        for ti in bin_indices, fi in freq_indices
+            s += t_mat[ei, fi, ti]
+        end
+        m = s * inv_n
+        out[k] = isfinite(m) ? m : 0.0
+    end
+    return out
+end
+
+function _tf_bin_sig_mask(
+    pos::AbstractArray{Bool,3},
+    neg::AbstractArray{Bool,3},
+    elec_indices::Vector{Int},
+    freq_indices::Vector{Int},
+    bin_indices::AbstractVector{Int},
+    threshold::Real,
+)::BitVector
+    n_elec = length(elec_indices)
+    mask = BitVector(undef, n_elec)
+    inv_n = 1.0 / (length(freq_indices) * length(bin_indices))
+    @inbounds for k = 1:n_elec
+        ei = elec_indices[k]
+        cnt = 0
+        for ti in bin_indices, fi in freq_indices
+            cnt += (pos[ei, fi, ti] | neg[ei, fi, ti])
+        end
+        mask[k] = (cnt * inv_n) >= threshold
+    end
+    return mask
+end
+
 """
     plot_topography_stats(result::TFStatsResult;
                      freq_range::Tuple{Real, Real},
@@ -459,17 +444,12 @@ function plot_topography_stats(
     highlight_threshold::Real = 0.5,
     kwargs...,
 )
-    # Validate
     topo_data in (:tvalues, :difference) || @minimal_error("topo_data must be :tvalues or :difference, got :$topo_data")
 
-    # Normalize and merge user kwargs with shared topography defaults
     kwargs_norm = _normalize_plot_kwargs(kwargs, _TOPO_KWARG_ALIASES)
-    if haskey(kwargs_norm, :n_topo)
-        n_topos = Int(pop!(kwargs_norm, :n_topo))
-    end
+    haskey(kwargs_norm, :n_topo) && (n_topos = Int(pop!(kwargs_norm, :n_topo)))
     plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs_norm)
 
-    # Extract topography-specific parameters
     method = pop!(plot_kwargs, :method)
     gridscale = pop!(plot_kwargs, :gridscale)
     colormap = pop!(plot_kwargs, :colormap)
@@ -481,99 +461,80 @@ function plot_topography_stats(
     num_levels = pop!(plot_kwargs, :num_levels)
     highlight_channels = pop!(plot_kwargs, :highlight_channels, nothing)
 
-    pop!(plot_kwargs, :interactive, nothing)
-    pop!(plot_kwargs, :use_global_scale, nothing)
-    pop!(plot_kwargs, :component_selection, nothing)
-
-    # Labels and points off by default for grid layout
+    _pop_unused_tf_topo_kwargs!(plot_kwargs)
     plot_kwargs[:label_plot] = get(kwargs_norm, :label_plot, false)
     plot_kwargs[:point_plot] = get(kwargs_norm, :point_plot, false)
 
-    # Get data dimensions
     electrodes = result.electrodes
     all_time_points = result.time_points
     all_frequencies = result.frequencies
 
-    # Find frequency indices in the selected range
     fr = _sorted_interval_bounds(freq_range)
-    freq_mask = fr[1] .<= all_frequencies .<= fr[2]
-    freq_indices = findall(freq_mask)
+    freq_indices = [i for (i, f) in enumerate(all_frequencies) if fr[1] <= f <= fr[2]]
     isempty(freq_indices) &&
         @minimal_error("No frequencies found in range $(freq_range). Data range: $(first(all_frequencies)) to $(last(all_frequencies)) Hz")
 
-    # Find time indices in the selected range
     if isnothing(interval_selection) || interval_selection isa AllSelection
         t_start, t_end = first(all_time_points), last(all_time_points)
     else
         t_start = interval_selection isa TimeSelection ? interval_selection.start : interval_selection[1]
         t_end = interval_selection isa TimeSelection ? interval_selection.stop : interval_selection[2]
     end
-    time_mask = t_start .<= all_time_points .<= t_end
-    time_indices = findall(time_mask)
+    time_indices = [i for (i, t) in enumerate(all_time_points) if t_start <= t <= t_end]
     isempty(time_indices) && @minimal_error(
         "No time points found in range ($t_start, $t_end). Data range: $(first(all_time_points)) to $(last(all_time_points))"
     )
 
-    # Divide time into bins
     n_topos = min(n_topos, length(time_indices))
     bins = _partition_indices(time_indices, n_topos)
 
-    # Subset layout to analyzed electrodes (never fill unanalyzed electrodes with 0.0!)
     orig_layout = result.data[1].layout
-    common_channels = intersect(orig_layout.data.label, electrodes)
+    common_channels = intersect(orig_layout.data[!, :label], electrodes)
     isempty(common_channels) && @minimal_error("None of the analyzed electrodes $(electrodes) were found in the layout.")
-    layout = subset_layout(orig_layout; channel_selection = channels(common_channels))
+    layout = _prepare_tf_topo_layout(orig_layout, common_channels; need_3d = true)
 
-    if !has_valid_coordinates(layout)
-        @minimal_error("Cannot create topographic plot: layout has no spatial coordinates.")
-    end
-    _ensure_coordinates_2d!(layout)
-    _ensure_coordinates_3d!(layout)
-
-    layout_labels = layout.data.label
+    layout_labels = layout.data[!, :label]
     layout_to_elec_idx = Int[findfirst(==(lbl), electrodes)::Int for lbl in layout_labels]
 
-    # Compute per-bin topo values (directly in subsetted layout order) and significance masks
     topo_values = Vector{Vector{Float64}}(undef, n_topos)
     sig_masks = Vector{BitVector}(undef, n_topos)
     bin_time_labels = Vector{String}(undef, n_topos)
 
+    bin_freqs = topo_data == :difference ? all_frequencies[freq_indices] : Float64[]
     for (i, bin_indices) in enumerate(bins)
         bin_time_start = all_time_points[first(bin_indices)]
         bin_time_end = all_time_points[last(bin_indices)]
         bin_time_labels[i] = @sprintf("%.0f – %.0f ms", bin_time_start * 1000, bin_time_end * 1000)
 
         if topo_data == :tvalues
-            # Average t-values across selected freqs and time bin: stat_matrix.t is [electrodes × freqs × time]
-            raw = vec(mean(result.stat_matrix.t[layout_to_elec_idx, freq_indices, bin_indices], dims = (2, 3)))
-            topo_values[i] = replace(raw, NaN => 0.0, Inf => 0.0, -Inf => 0.0)
-        else  # :difference
-            # Compute power difference from grand average TF data per analyzed layout electrode
-            bin_freqs = all_frequencies[freq_indices]
-            bin_times = all_time_points[bin_indices]
-            row_indices = _tf_filter_row_indices(result.data[1].data_power, bin_freqs, bin_times)
+            topo_values[i] = _tf_bin_tvalue_means(result.stat_matrix.t, layout_to_elec_idx, freq_indices, bin_indices)
+        else
+            row_indices = _tf_filter_row_indices(result.data[1].data_power, bin_freqs, @view(all_time_points[bin_indices]))
             topo_values[i] =
                 _tf_extract_channel_difference_means(result.data[1].data_power, result.data[2].data_power, layout_labels, row_indices)
         end
 
-        # Significance: proportion of significant freq×time bins per channel in this window
-        sig_combined =
-            result.masks.positive[layout_to_elec_idx, freq_indices, bin_indices] .|
-            result.masks.negative[layout_to_elec_idx, freq_indices, bin_indices]
-        n_bins = length(freq_indices) * length(bin_indices)
-        sig_proportion = vec(sum(sig_combined, dims = (2, 3))) ./ n_bins
-        sig_masks[i] = sig_proportion .>= highlight_threshold
+        sig_masks[i] = _tf_bin_sig_mask(
+            result.masks.positive,
+            result.masks.negative,
+            layout_to_elec_idx,
+            freq_indices,
+            bin_indices,
+            highlight_threshold,
+        )
     end
 
-    # Compute symmetric color limits
-    all_vals = vcat(topo_values...)
-    max_abs = maximum(abs, all_vals)
-    max_abs ≈ 0.0 && (max_abs = 1.0)
     if isnothing(colorrange)
+        max_abs = 0.0
+        for vals in topo_values
+            @inbounds for v in vals
+                isfinite(v) && (max_abs = max(max_abs, abs(v)))
+            end
+        end
+        max_abs ≈ 0.0 && (max_abs = 1.0)
         colorrange = (-max_abs, max_abs)
     end
 
-    # Grid layout
     dims = pop!(plot_kwargs, :dims, nothing)
     if isnothing(dims)
         n_rows, n_cols = _best_rect(n_topos)
@@ -583,19 +544,15 @@ function plot_topography_stats(
             @minimal_error("Grid dimensions ($n_rows × $n_cols) provide $(n_rows * n_cols) cells but need $n_topos")
     end
 
-    # Create figure (using normalized `fr`)
-    test_type = isa(result, TFAnalyticResult) ? "Analytic" : "Permutation"
+    test_type = result isa TFAnalyticResult ? "Analytic" : "Permutation"
     data_label = topo_data == :tvalues ? "t-statistic" : "Power Difference"
     freq_str = "$(round(Int, fr[1]))–$(round(Int, fr[2])) Hz"
     user_title = !isnothing(plot_title) && !isempty(plot_title) ? plot_title : figure_title
     fig_title = isempty(user_title) ? "$test_type Test — $data_label ($freq_str)" : user_title
 
     fig = _eegfun_figure(size = (200 * n_cols + 100, 200 * n_rows + 50))
-    if show_title && !isempty(fig_title)
-        Label(fig[0, 1:n_cols], fig_title, fontsize = 18, font = :bold)
-    end
+    (show_title && !isempty(fig_title)) && Label(fig[0, 1:n_cols], fig_title, fontsize = 18, font = :bold)
 
-    # Extract colorbar kwargs
     colorbar_kwargs = Dict{Symbol,Any}(pairs(pop!(plot_kwargs, :colorbar_kwargs, (;))))
     pop!(colorbar_kwargs, :colorrange, nothing)
     pop!(colorbar_kwargs, :label, nothing)
@@ -603,26 +560,27 @@ function plot_topography_stats(
     pop!(plot_kwargs, :colorbar_position, nothing)
     pop!(plot_kwargs, :colorbar_plot_numbers, nothing)
 
-    axes = Axis[]
     actual_colormap = _resolve_theme_colormap(fig, colormap)
 
-    # Pre-interpolate all panels when possible
     can_batch = n_topos > 1 && _topo_method_supported(method)
     batched_interp = nothing
     xb_shared = nothing
     yb_shared = nothing
-
     if can_batch
         all_layout_mat = Matrix{Float64}(undef, length(layout_labels), n_topos)
         for i = 1:n_topos
             channel_data = topo_values[i]
-            for k in eachindex(layout_labels)
+            @inbounds for k in eachindex(layout_labels)
                 v = channel_data[k]
                 all_layout_mat[k, i] = isfinite(v) ? v : 0.0
             end
         end
         batched_interp, xb_shared, yb_shared = _topo_interpolate(all_layout_mat, layout, gridscale; method = method)
     end
+
+    axes = Vector{Axis}(undef, n_topos)
+    x2_col = layout.data[!, :x2]
+    y2_col = layout.data[!, :y2]
 
     for i = 1:n_topos
         row = div(i - 1, n_cols) + 1
@@ -634,14 +592,12 @@ function plot_topography_stats(
             title = show_title ? bin_time_labels[i] : "",
             titlesize = plot_kwargs[:plot_title_fontsize],
         )
-        push!(axes, ax)
-
-        layout_values = Float64[isfinite(v) ? v : 0.0 for v in topo_values[i]]
+        axes[i] = ax
 
         _render_topo_surface!(
             fig,
             ax,
-            layout_values,
+            topo_values[i],
             layout;
             data_interp = can_batch ? batched_interp[i] : nothing,
             x_bounds = can_batch ? xb_shared : nothing,
@@ -654,20 +610,15 @@ function plot_topography_stats(
             plot_kwargs...,
         )
 
-        if !isnothing(highlight_channels)
-            _draw_highlight_channels!(ax, highlight_channels, layout)
-        end
+        !isnothing(highlight_channels) && _draw_highlight_channels!(ax, highlight_channels, layout)
 
-        # Highlight significant channels
         if highlight_significant && any(sig_masks[i])
-            sig_layout_indices = findall(sig_masks[i])
-            sig_x = layout.data.x2[sig_layout_indices]
-            sig_y = layout.data.y2[sig_layout_indices]
-            if !isempty(sig_x)
+            sig_idx = findall(sig_masks[i])
+            if !isempty(sig_idx)
                 scatter!(
                     ax,
-                    sig_x,
-                    sig_y,
+                    x2_col[sig_idx],
+                    y2_col[sig_idx],
                     color = highlight_color,
                     marker = highlight_marker,
                     markersize = highlight_size,
@@ -680,7 +631,6 @@ function plot_topography_stats(
         hidedecorations!(ax)
     end
 
-    # Shared colorbar
     cb = if colorbar_plot
         cb_label = topo_data == :tvalues ? "t-statistic" : "Power Difference"
         Colorbar(fig[1:n_rows, n_cols+1]; colorbar_kwargs..., colormap = actual_colormap, colorrange = colorrange, label = cb_label)
@@ -688,35 +638,24 @@ function plot_topography_stats(
         nothing
     end
 
-    if display_plot
-        _display_figure(fig)
-    end
-
+    display_plot && _display_figure(fig)
     return (fig = fig, axes = axes, colorbar = cb)
 end
 
-
 # === HIGH-PERFORMANCE TF TOPOGRAPHY EXTRACTION HELPERS ===
 
-"""
-    _tf_filter_row_indices(df::DataFrame, selected_freqs::AbstractVector{Float64}, selected_times::AbstractVector{Float64}) -> Vector{Int}
-
-Find row indices in `df` whose `time` and `freq` fall within the bounding intervals of `selected_times` and `selected_freqs`.
-"""
-function _tf_filter_row_indices(
-    df::DataFrame,
-    selected_freqs::AbstractVector{Float64},
-    selected_times::AbstractVector{Float64},
+function _tf_filter_rows_typed(
+    times::AbstractVector,
+    freqs::AbstractVector,
+    t_min::Float64,
+    t_max::Float64,
+    f_min::Float64,
+    f_max::Float64,
 )::Vector{Int}
-    f_min, f_max = extrema(selected_freqs)
-    t_min, t_max = extrema(selected_times)
-    times = df.time
-    freqs = df.freq
-
     row_indices = Int[]
-    @inbounds for i in eachindex(times)
-        t = times[i]
-        f = freqs[i]
+    @inbounds for i in eachindex(times, freqs)
+        t = Float64(times[i])
+        f = Float64(freqs[i])
         if (t_min <= t <= t_max) && (f_min <= f <= f_max)
             push!(row_indices, i)
         end
@@ -724,50 +663,51 @@ function _tf_filter_row_indices(
     return row_indices
 end
 
-"""
-    _tf_extract_channel_means(df::DataFrame, channels::Vector{Symbol}, row_indices::Vector{Int}) -> Vector{Float64}
+function _tf_filter_row_indices(
+    df::DataFrame,
+    selected_freqs::AbstractVector{Float64},
+    selected_times::AbstractVector{Float64},
+)::Vector{Int}
+    f_min, f_max = extrema(selected_freqs)
+    t_min, t_max = extrema(selected_times)
+    return _tf_filter_rows_typed(df[!, :time], df[!, :freq], t_min, t_max, f_min, f_max)
+end
 
-Compute average power per channel across `row_indices` in `df`, ignoring non-finite (`NaN`, `Inf`, `-Inf`) values.
-"""
+function _tf_col_mean_finite(col::AbstractVector, row_indices::Vector{Int})::Float64
+    sum_val = 0.0
+    n_finite = 0
+    @inbounds @simd for idx in eachindex(row_indices)
+        v = Float64(col[row_indices[idx]])
+        if isfinite(v)
+            sum_val += v
+            n_finite += 1
+        end
+    end
+    return n_finite == 0 ? 0.0 : sum_val / n_finite
+end
+
 function _tf_extract_channel_means(df::DataFrame, channels::Vector{Symbol}, row_indices::Vector{Int})::Vector{Float64}
     channel_data = Vector{Float64}(undef, length(channels))
     for (ci, ch) in enumerate(channels)
-        col = df[!, ch]
-        if col isa Vector{Float64}
-            col_f64 = col::Vector{Float64}
-            sum_val = 0.0
-            n_finite = 0
-            @inbounds @simd for idx in eachindex(row_indices)
-                r = row_indices[idx]
-                v = col_f64[r]
-                if isfinite(v)
-                    sum_val += v
-                    n_finite += 1
-                end
-            end
-            channel_data[ci] = n_finite == 0 ? 0.0 : sum_val / n_finite
-        else
-            sum_val = 0.0
-            n_finite = 0
-            @inbounds for idx in eachindex(row_indices)
-                r = row_indices[idx]
-                v = Float64(col[r])
-                if isfinite(v)
-                    sum_val += v
-                    n_finite += 1
-                end
-            end
-            channel_data[ci] = n_finite == 0 ? 0.0 : sum_val / n_finite
-        end
+        channel_data[ci] = _tf_col_mean_finite(df[!, ch], row_indices)
     end
     return channel_data
 end
 
-"""
-    _tf_extract_channel_difference_means(df_a::DataFrame, df_b::DataFrame, channels::Vector{Symbol}, row_indices::Vector{Int}) -> Vector{Float64}
+function _tf_col_diff_mean_finite(col_a::AbstractVector, col_b::AbstractVector, row_indices::Vector{Int})::Float64
+    sum_val = 0.0
+    n_finite = 0
+    @inbounds @simd for idx in eachindex(row_indices)
+        r = row_indices[idx]
+        v = Float64(col_a[r]) - Float64(col_b[r])
+        if isfinite(v)
+            sum_val += v
+            n_finite += 1
+        end
+    end
+    return n_finite == 0 ? 0.0 : sum_val / n_finite
+end
 
-Compute average power difference (`df_a - df_b`) per channel across `row_indices`, ignoring non-finite values.
-"""
 function _tf_extract_channel_difference_means(
     df_a::DataFrame,
     df_b::DataFrame,
@@ -776,35 +716,7 @@ function _tf_extract_channel_difference_means(
 )::Vector{Float64}
     diff_data = Vector{Float64}(undef, length(channels))
     for (ci, ch) in enumerate(channels)
-        col_a = df_a[!, ch]
-        col_b = df_b[!, ch]
-        if col_a isa Vector{Float64} && col_b isa Vector{Float64}
-            col_a_f64 = col_a::Vector{Float64}
-            col_b_f64 = col_b::Vector{Float64}
-            sum_val = 0.0
-            n_finite = 0
-            @inbounds @simd for idx in eachindex(row_indices)
-                r = row_indices[idx]
-                v = col_a_f64[r] - col_b_f64[r]
-                if isfinite(v)
-                    sum_val += v
-                    n_finite += 1
-                end
-            end
-            diff_data[ci] = n_finite == 0 ? 0.0 : sum_val / n_finite
-        else
-            sum_val = 0.0
-            n_finite = 0
-            @inbounds for idx in eachindex(row_indices)
-                r = row_indices[idx]
-                v = Float64(col_a[r]) - Float64(col_b[r])
-                if isfinite(v)
-                    sum_val += v
-                    n_finite += 1
-                end
-            end
-            diff_data[ci] = n_finite == 0 ? 0.0 : sum_val / n_finite
-        end
+        diff_data[ci] = _tf_col_diff_mean_finite(df_a[!, ch], df_b[!, ch], row_indices)
     end
     return diff_data
 end

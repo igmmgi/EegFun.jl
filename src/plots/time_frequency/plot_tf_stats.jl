@@ -1,9 +1,4 @@
-"""
-Plotting functions for Time-Frequency statistical test results.
-
-Visualizes `TFClusterPermutationResult` and `TFAnalyticResult` as heatmaps
-with configurable significance overlays.
-"""
+# Plotting functions for Time-Frequency statistical test results.
 
 """
     plot_tf_stats(result::TFStatsResult;
@@ -88,7 +83,6 @@ function plot_tf_stats(
     display_plot::Bool = true,
     kwargs...,
 )
-    # Validate arguments
     content in (:tvalues, :difference, :power_a, :power_b) ||
         @minimal_error("content must be :tvalues, :difference, :power_a, or :power_b, got :$content")
     mask_style in (:alpha, :contour, :hide, :none) ||
@@ -103,75 +97,43 @@ function plot_tf_stats(
     eff_plot_title = get(kwargs_norm, :plot_title, plot_title)
     eff_show_title = Bool(get(kwargs_norm, :show_title, show_title))
 
-    # Select channels
     all_electrodes = result.electrodes
-    chan_func = _to_channel_func(channel_selection)
-    selected_mask = chan_func(all_electrodes)
-    selected_channels = all_electrodes[selected_mask]
-    isempty(selected_channels) && @minimal_error("No channels matched. Available: $(all_electrodes)")
+    selected_channels = _select_tf_channels(all_electrodes, channel_selection, channel_plot_order)
+    frequencies = result.frequencies
+    time_points = result.time_points
 
-    # Apply user-specified plotting order if provided
-    if !isnothing(channel_plot_order)
-        ordered = Symbol[Symbol(ch) for ch in channel_plot_order if Symbol(ch) in selected_channels]
-        if !isempty(ordered)
-            selected_channels = ordered
-        end
-    end
+    ext_a = content in (:difference, :power_a) ? _tf_make_extractor(result.data[1].data_power, frequencies, time_points) : nothing
+    ext_b = content in (:difference, :power_b) ? _tf_make_extractor(result.data[2].data_power, frequencies, time_points) : nothing
 
-    # Pre-extract 2D data matrices [frequencies × time] across all selected channels
     channel_entries = Tuple{Symbol,Int,Matrix{Float64}}[]
+    sizehint!(channel_entries, length(selected_channels))
     for ch_sym in selected_channels
         ch_idx = findfirst(==(ch_sym), all_electrodes)
         isnothing(ch_idx) && continue
-        push!(channel_entries, (ch_sym, ch_idx, _extract_tf_stats_matrix(result, ch_idx, content)))
+        push!(channel_entries, (ch_sym, ch_idx, _extract_tf_stats_matrix(result, ch_idx, content; ext_a = ext_a, ext_b = ext_b)))
     end
     isempty(channel_entries) && @minimal_error("No channels matched. Available: $(all_electrodes)")
 
     n_channels = length(channel_entries)
-    frequencies = result.frequencies
-    time_points = result.time_points
-
-    # Grid layout: determine rows × cols
     n_cols = min(n_channels, 3)
-    n_rows = ceil(Int, n_channels / n_cols)
+    n_rows = cld(n_channels, n_cols)
 
-    # Figure size: auto-scale based on grid
     if isnothing(figure_size)
-        panel_w = show_cb ? 500 : 400
-        panel_h = 350
-        figure_size = (n_cols * panel_w, n_rows * panel_h)
+        figure_size = (n_cols * (show_cb ? 500 : 400), n_rows * 350)
     end
 
     fig = _eegfun_figure(size = figure_size)
     cmap = _resolve_theme_colormap(fig, colormap)
 
-    # Precompute a single shared colorrange across all channels_to_plot before the subplot loop
-    cr = colorrange
-    if isnothing(cr)
-        global_min = Inf
-        global_max = -Inf
-        for (_, _, data_mat) in channel_entries
-            for v in data_mat
-                if isfinite(v)
-                    global_min = min(global_min, v)
-                    global_max = max(global_max, v)
-                end
-            end
-        end
-        if isinf(global_min)
-            cr = (-1.0, 1.0)
-        elseif content in (:tvalues, :difference) || (_is_diverging_colormap(cmap) && global_min < 0)
-            cr = _symmetric_colorrange(global_min, global_max)
-        elseif global_min ≈ global_max
-            cr = (global_min - 1.0, global_max + 1.0)
-        else
-            cr = (global_min, global_max)
-        end
+    cr = if isnothing(colorrange)
+        gmin, gmax = _tf_finite_extrema((entry[3] for entry in channel_entries))
+        _tf_auto_colorrange(gmin, gmax, cmap; force_symmetric = content in (:tvalues, :difference))
+    else
+        colorrange
     end
 
-    # Build title
     if eff_show_title
-        test_type = isa(result, TFAnalyticResult) ? "Analytic" : "Permutation"
+        test_type = result isa TFAnalyticResult ? "Analytic" : "Permutation"
         content_label =
             content == :tvalues ? "t-values" :
             content == :difference ? "Power Difference" :
@@ -180,12 +142,12 @@ function plot_tf_stats(
         !isempty(header_text) && Label(fig[0, 1:n_cols], header_text, fontsize = 16, font = :bold)
     end
 
-    axes = Axis[]
-    local last_hm  # for colorbar
+    axes = Vector{Axis}(undef, n_channels)
+    last_hm = nothing
 
     for (ch_i, (ch_sym, ch_idx, data_mat)) in enumerate(channel_entries)
-        row = (ch_i - 1) ÷ n_cols + 1
-        col = (ch_i - 1) % n_cols + 1
+        row = fld(ch_i - 1, n_cols) + 1
+        col = mod(ch_i - 1, n_cols) + 1
 
         ax = Axis(
             fig[row, col],
@@ -195,38 +157,36 @@ function plot_tf_stats(
             xscale = use_xlog ? log10 : identity,
             yscale = use_ylog ? log10 : identity,
         )
-        push!(axes, ax)
+        axes[ch_i] = ax
+        use_ylog && (ax.ytickformat = values -> [string(round(Int, v)) for v in values])
 
-        if use_ylog
-            ax.ytickformat = values -> [string(round(Int, v)) for v in values]
-        end
-
-        # Plot heatmap based on mask_style
-        has_mask = false
-        local sig_mask = nothing
-        if mask_style != :none
-            sig_mask = _extract_tf_significance_mask(result, ch_idx)
-            has_mask = !isnothing(sig_mask) && any(sig_mask)
-        end
+        sig_mask = mask_style != :none ? _extract_tf_significance_mask(result, ch_idx) : nothing
+        has_mask = !isnothing(sig_mask) && any(sig_mask)
 
         if !has_mask || mask_style == :none
-            hm = heatmap!(ax, time_points, frequencies, data_mat', colormap = cmap, colorrange = cr, nan_color = :transparent)
-            last_hm = hm
+            last_hm =
+                heatmap!(ax, time_points, frequencies, transpose(data_mat), colormap = cmap, colorrange = cr, nan_color = :transparent)
         elseif mask_style == :alpha
-            heatmap!(ax, time_points, frequencies, data_mat', colormap = cmap, colorrange = cr, alpha = 0.15, nan_color = :transparent)
-
-            highlight = copy(data_mat)
-            highlight[.!sig_mask] .= NaN
-            hm = heatmap!(ax, time_points, frequencies, highlight', colormap = cmap, colorrange = cr, nan_color = :transparent)
-            last_hm = hm
+            heatmap!(
+                ax,
+                time_points,
+                frequencies,
+                transpose(data_mat),
+                colormap = cmap,
+                colorrange = cr,
+                alpha = 0.15,
+                nan_color = :transparent,
+            )
+            highlight = _tf_masked_copy(data_mat, sig_mask)
+            last_hm =
+                heatmap!(ax, time_points, frequencies, transpose(highlight), colormap = cmap, colorrange = cr, nan_color = :transparent)
         elseif mask_style == :hide
-            highlight = copy(data_mat)
-            highlight[.!sig_mask] .= NaN
-            hm = heatmap!(ax, time_points, frequencies, highlight', colormap = cmap, colorrange = cr, nan_color = :transparent)
-            last_hm = hm
+            highlight = _tf_masked_copy(data_mat, sig_mask)
+            last_hm =
+                heatmap!(ax, time_points, frequencies, transpose(highlight), colormap = cmap, colorrange = cr, nan_color = :transparent)
         elseif mask_style == :contour
-            hm = heatmap!(ax, time_points, frequencies, data_mat', colormap = cmap, colorrange = cr, nan_color = :transparent)
-            last_hm = hm
+            last_hm =
+                heatmap!(ax, time_points, frequencies, transpose(data_mat), colormap = cmap, colorrange = cr, nan_color = :transparent)
             _render_significance_contour!(
                 ax,
                 time_points,
@@ -238,78 +198,57 @@ function plot_tf_stats(
         end
     end
 
-    # Link axes for consistent zoom/pan
     length(axes) > 1 && linkaxes!(axes...)
 
-    # Colorbar (on the right of the last column)
-    if show_cb && @isdefined(last_hm)
+    if show_cb && !isnothing(last_hm)
         cb_label = content == :tvalues ? "t-statistic" : content == :difference ? "Power Difference" : "Power"
         Colorbar(fig[1:n_rows, n_cols+1], last_hm, label = cb_label)
     end
 
-    if display_plot
-        _display_figure(fig)
-    end
-
+    display_plot && _display_figure(fig)
     return (fig = fig, axes = axes)
 end
 
-
 # === Internal helpers ===
 
-"""
-    _extract_tf_stats_matrix(result, ch_idx, content) -> Matrix{Float64}
+function _tf_masked_copy(data_mat::Matrix{Float64}, sig_mask::AbstractMatrix{Bool})
+    out = similar(data_mat)
+    @inbounds for i in eachindex(data_mat, sig_mask)
+        out[i] = sig_mask[i] ? data_mat[i] : NaN
+    end
+    return out
+end
 
-Extract a 2D matrix [frequencies × time] for a single channel from TF stats result.
-"""
-function _extract_tf_stats_matrix(result::TFStatsResult, ch_idx::Int, content::Symbol)
-    if content == :tvalues
-        return result.stat_matrix.t[ch_idx, :, :]
+function _extract_tf_stats_matrix(
+    result::TFStatsResult,
+    ch_idx::Int,
+    content::Symbol;
+    ext_a::Union{Nothing,_TFFastExtractor} = nothing,
+    ext_b::Union{Nothing,_TFFastExtractor} = nothing,
+)
+    content == :tvalues && return result.stat_matrix.t[ch_idx, :, :]
+    ch_sym = result.electrodes[ch_idx]
+    if content == :difference
+        ea = isnothing(ext_a) ? _tf_make_extractor(result.data[1].data_power, result.frequencies, result.time_points) : ext_a
+        eb = isnothing(ext_b) ? _tf_make_extractor(result.data[2].data_power, result.frequencies, result.time_points) : ext_b
+        mat = _tf_extract_matrix(ea, ch_sym)
+        mat .-= _tf_extract_matrix(eb, ch_sym)
+        return mat
+    elseif content == :power_b
+        eb = isnothing(ext_b) ? _tf_make_extractor(result.data[2].data_power, result.frequencies, result.time_points) : ext_b
+        return _tf_extract_matrix(eb, ch_sym)
     else
-        # Extract power from grand average TimeFreqData
-        tf_data = content == :power_b ? result.data[2] : result.data[1]
-        ch_sym = result.electrodes[ch_idx]
-
-        # For :difference, compute A - B
-        if content == :difference
-            tf_a = result.data[1]
-            tf_b = result.data[2]
-            return _tf_power_matrix(tf_a, ch_sym, result.frequencies, result.time_points) .-
-                   _tf_power_matrix(tf_b, ch_sym, result.frequencies, result.time_points)
-        else
-            return _tf_power_matrix(tf_data, ch_sym, result.frequencies, result.time_points)
-        end
+        ea = isnothing(ext_a) ? _tf_make_extractor(result.data[1].data_power, result.frequencies, result.time_points) : ext_a
+        return _tf_extract_matrix(ea, ch_sym)
     end
 end
 
-"""
-    _tf_power_matrix(tf_data, channel, frequencies, time_points) -> Matrix{Float64}
+_tf_power_matrix(tf_data::TimeFreqData, channel::Symbol, frequencies::Vector{Float64}, time_points::Vector{Float64}) =
+    _tf_extract_matrix(_tf_make_extractor(tf_data.data_power, frequencies, time_points), channel)
 
-Extract a [frequencies × time] power matrix from a TimeFreqData's DataFrame.
-Delegates to the shared `_tf_df_to_matrix` helper.
-"""
-function _tf_power_matrix(tf_data::TimeFreqData, channel::Symbol, frequencies::Vector{Float64}, time_points::Vector{Float64})
-    return _tf_df_to_matrix(tf_data.data_power, channel, frequencies, time_points)
-end
+@views _extract_tf_significance_mask(result::TFStatsResult, ch_idx::Int) =
+    result.masks.positive[ch_idx, :, :] .| result.masks.negative[ch_idx, :, :]
 
-"""
-    _extract_tf_significance_mask(result, ch_idx) -> BitMatrix
-
-Extract a combined 2D significance mask [frequencies × time] for a single channel.
-Combines positive and negative masks.
-"""
-function _extract_tf_significance_mask(result::TFStatsResult, ch_idx::Int)
-    return result.masks.positive[ch_idx, :, :] .| result.masks.negative[ch_idx, :, :]
-end
-
-
-# === Significance overlay renderers ===
-
-"""
-    _render_significance_contour!(ax, time_points, frequencies, sig_mask; color, linewidth)
-
-Render contour lines around significant regions on a TF heatmap.
-"""
 function _render_significance_contour!(
     ax::Axis,
     time_points::Vector{Float64},
@@ -318,12 +257,11 @@ function _render_significance_contour!(
     color = :black,
     linewidth::Real = 2.0,
 )
-    if !any(sig_mask)
-        return
+    any(sig_mask) || return nothing
+    sig_float = Matrix{Float64}(undef, size(sig_mask, 2), size(sig_mask, 1))
+    @inbounds for j in axes(sig_mask, 2), i in axes(sig_mask, 1)
+        sig_float[j, i] = Float64(sig_mask[i, j])
     end
-
-    # Convert BitMatrix to Float64 for contour (Makie expects numeric)
-    # sig_mask is [n_freqs × n_time], transpose for contour!(ax, x, y, z)
-    sig_float = Float64.(sig_mask)'  # [n_time × n_freqs]
     contour!(ax, time_points, frequencies, sig_float, levels = [0.5], color = color, linewidth = linewidth)
+    return nothing
 end

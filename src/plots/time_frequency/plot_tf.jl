@@ -1,10 +1,7 @@
-"""
-Time-frequency plotting functions for visualizing TimeFreqData.
-"""
+# Time-frequency plotting functions for visualizing TimeFreqData.
 
 const _SIGNED_TF_BASELINE_METHODS = (:db, :percent, :relchange, :normchange, :vssum, :zscore, :absolute)
 
-# === DEFAULT KEYWORD ARGUMENTS ===
 const PLOT_TF_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Display
     :display_plot => (true, "Whether to display the plot"),
@@ -58,6 +55,137 @@ const PLOT_TF_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     ),
 )
 
+# === SHARED TF EXTRACTION & RANGE HELPERS ===
+
+function _sorted_unique_f64(col::AbstractVector)::Vector{Float64}
+    n = length(col)
+    n == 0 && return Float64[]
+    if issorted(col)
+        cnt = 1
+        prev = Float64(col[1])
+        @inbounds for i = 2:n
+            v = Float64(col[i])
+            if v != prev
+                cnt += 1
+                prev = v
+            end
+        end
+        out = Vector{Float64}(undef, cnt)
+        prev = Float64(col[1])
+        out[1] = prev
+        k = 1
+        @inbounds for i = 2:n
+            v = Float64(col[i])
+            if v != prev
+                k += 1
+                out[k] = v
+                prev = v
+            end
+        end
+        return out
+    end
+    u = unique(col)
+    out = Vector{Float64}(undef, length(u))
+    @inbounds for i in eachindex(u)
+        out[i] = Float64(u[i])
+    end
+    sort!(out)
+    return out
+end
+
+struct _TFFastExtractor
+    df::DataFrame
+    freqs::Vector{Float64}
+    times::Vector{Float64}
+    canonical::Bool
+    row_index::Union{Nothing,Dict{Tuple{Float64,Float64},Int}}
+    rounded_freqs::Vector{Float64}
+    rounded_times::Vector{Float64}
+end
+
+function _is_canonical_tf_grid(freq_col::AbstractVector, time_col::AbstractVector, freqs::Vector{Float64}, times::Vector{Float64})::Bool
+    nf = length(freqs)
+    nt = length(times)
+    (length(freq_col) == nf * nt && length(time_col) == nf * nt) || return false
+    idx = 0
+    @inbounds for ti = 1:nt
+        t = times[ti]
+        for fi = 1:nf
+            idx += 1
+            (abs(Float64(freq_col[idx]) - freqs[fi]) <= 1e-6 && abs(Float64(time_col[idx]) - t) <= 1e-6) || return false
+        end
+    end
+    return true
+end
+
+function _tf_make_extractor(df::DataFrame, freqs::Vector{Float64}, times::Vector{Float64})::_TFFastExtractor
+    if _is_canonical_tf_grid(df[!, :freq], df[!, :time], freqs, times)
+        return _TFFastExtractor(df, freqs, times, true, nothing, Float64[], Float64[])
+    end
+    return _TFFastExtractor(df, freqs, times, false, _tf_build_row_index(df), round.(freqs, digits = 6), round.(times, digits = 6))
+end
+
+function _tf_extract_matrix(ext::_TFFastExtractor, channel::Symbol)::Matrix{Float64}
+    nf = length(ext.freqs)
+    nt = length(ext.times)
+    if ext.canonical
+        col = ext.df[!, channel]
+        mat = Matrix{Float64}(undef, nf, nt)
+        if col isa Vector{Float64}
+            copyto!(mat, col)
+        else
+            @inbounds for i in eachindex(mat, col)
+                mat[i] = Float64(col[i])
+            end
+        end
+        return mat
+    end
+    return _tf_df_to_matrix(
+        ext.df,
+        channel,
+        ext.freqs,
+        ext.times,
+        ext.row_index::Dict{Tuple{Float64,Float64},Int};
+        rounded_freqs = ext.rounded_freqs,
+        rounded_times = ext.rounded_times,
+    )
+end
+
+function _select_tf_channels(all_channels::Vector{Symbol}, channel_selection, channel_plot_order = nothing)
+    chan_func = _to_channel_func(channel_selection)
+    selected_channels = all_channels[chan_func(all_channels)]
+    isempty(selected_channels) && @minimal_error("No channels matched. Available: $(all_channels)")
+    if !isnothing(channel_plot_order)
+        ordered = Symbol[Symbol(ch) for ch in channel_plot_order if Symbol(ch) in selected_channels]
+        !isempty(ordered) && (selected_channels = ordered)
+    end
+    return selected_channels
+end
+
+function _tf_finite_extrema(mats)
+    gmin = Inf
+    gmax = -Inf
+    for mat in mats
+        @inbounds for v in mat
+            if isfinite(v)
+                gmin = min(gmin, v)
+                gmax = max(gmax, v)
+            end
+        end
+    end
+    return gmin, gmax
+end
+
+function _tf_auto_colorrange(gmin::Float64, gmax::Float64, colormap; force_symmetric::Bool = false, has_signed_baseline::Bool = false)
+    isinf(gmin) && return (-1.0, 1.0)
+    if force_symmetric || (_is_diverging_colormap(colormap) && (gmin < 0 || has_signed_baseline))
+        return _symmetric_colorrange(gmin, gmax)
+    elseif gmin ≈ gmax
+        return (gmin - 1.0, gmax + 1.0)
+    else
+        return (gmin, gmax)
+    end
+end
 
 """
     plot_tf(filepath::String; kwargs...)
@@ -83,17 +211,14 @@ plot_tf(tf; colormap=:RdBu, ylogscale=true, baseline_interval=(-0.3, 0.0))
 """
 function plot_tf(filepath::String; kwargs...)
     data = read_data(filepath)
-    if isnothing(data)
-        @minimal_error "No data found in file: $filepath"
-    end
+    isnothing(data) && @minimal_error "No data found in file: $filepath"
     return plot_tf(data; kwargs...)
 end
+
 function plot_tf(tf_data::AbstractVector{<:TimeFreqData}; channel_selection = channels(), baseline_interval::Interval = nothing, kwargs...)
     isempty(tf_data) && @minimal_error("Empty TimeFreqData vector")
 
     plot_kwargs = _merge_plot_kwargs(PLOT_TF_KWARGS, _normalize_plot_kwargs(kwargs))
-
-    # Extract colorbar/layout kwargs
     colorbar_kwargs = pop!(plot_kwargs, :colorbar_kwargs, (;))
     layout_kwargs = pop!(plot_kwargs, :layout_kwargs, (;))
 
@@ -118,85 +243,40 @@ function plot_tf(tf_data::AbstractVector{<:TimeFreqData}; channel_selection = ch
     colormap = _resolve_theme_colormap(fig, plot_kwargs[:colormap])
     _set_window_title("$(basename(first(tf_data).file)) — Time-Frequency ($(n) conditions)")
 
-    # Apply baseline to all conditions
     tf_plots = map(tf_data) do tf
-        if !isnothing(baseline_interval) && !isnothing(tf.baseline)
-            tf
-        elseif !isnothing(baseline_interval)
-            tf_baseline(tf, baseline_interval; method = baseline_method)
-        else
-            tf
-        end
+        (!isnothing(baseline_interval) && isnothing(tf.baseline)) ? tf_baseline(tf, baseline_interval; method = baseline_method) : tf
     end
 
-    # Resolve channel (same for all conditions — use first condition's channels)
-    all_channels = channel_labels(first(tf_plots))
-    chan_func = _to_channel_func(channel_selection)
-    selected_mask = chan_func(all_channels)
-    selected_channels = all_channels[selected_mask]
-    isempty(selected_channels) && @minimal_error("No channels matched. Available: $(all_channels)")
-    channel = first(selected_channels)
+    channel = first(_select_tf_channels(channel_labels(first(tf_plots)), channel_selection))
+    first_df = first(tf_plots).data_power
+    all_times = _sorted_unique_f64(first_df[!, :time])
+    freqs_vec = _sorted_unique_f64(first_df[!, :freq])
 
-    # Shared times/freqs (assume consistent across conditions)
-    all_times = Float64.(sort(unique(first(tf_plots).data_power.time)))
-    freqs_vec = Float64.(sort(unique(first(tf_plots).data_power.freq)))
-
-    # Pre-extract power matrices and compute shared color range across all conditions
-    power_mats = Matrix{Float64}[]
-    rounded_freqs = round.(freqs_vec, digits = 6)
-    rounded_times = round.(all_times, digits = 6)
-    for tf in tf_plots
-        row_idx = _tf_build_row_index(tf.data_power)
-        pmat = _tf_df_to_matrix(
-            tf.data_power,
-            channel,
-            freqs_vec,
-            all_times,
-            row_idx;
-            rounded_freqs = rounded_freqs,
-            rounded_times = rounded_times,
-        )
-        push!(power_mats, pmat)
+    power_mats = Vector{Matrix{Float64}}(undef, n)
+    for (i, tf) in enumerate(tf_plots)
+        power_mats[i] = _tf_extract_matrix(_tf_make_extractor(tf.data_power, freqs_vec, all_times), channel)
     end
 
     has_signed_baseline =
         any(tf -> (!isnothing(tf.baseline) && tf.baseline.method in _SIGNED_TF_BASELINE_METHODS), tf_plots) ||
         (!isnothing(baseline_interval) && baseline_method in _SIGNED_TF_BASELINE_METHODS)
 
-    if isnothing(colorrange)
-        global_min = Inf
-        global_max = -Inf
-        for pmat in power_mats
-            for v in pmat
-                if isfinite(v)
-                    global_min = min(global_min, v)
-                    global_max = max(global_max, v)
-                end
-            end
-        end
-        if isinf(global_min)
-            shared_colorrange = (-1.0, 1.0)
-        elseif _is_diverging_colormap(colormap) && (global_min < 0 || has_signed_baseline)
-            shared_colorrange = _symmetric_colorrange(global_min, global_max)
-        elseif global_min ≈ global_max
-            shared_colorrange = (global_min - 1.0, global_max + 1.0)
-        else
-            shared_colorrange = (global_min, global_max)
-        end
+    shared_colorrange = if isnothing(colorrange)
+        gmin, gmax = _tf_finite_extrema(power_mats)
+        _tf_auto_colorrange(gmin, gmax, colormap; has_signed_baseline = has_signed_baseline)
     else
-        shared_colorrange = colorrange
+        colorrange
     end
 
-    # Plot each condition in its grid cell
-    axes = Axis[]
+    axes = Vector{Axis}(undef, n)
     last_hm = nothing
     for (idx, tf) in enumerate(tf_plots)
         row = fld(idx - 1, cols) + 1
         col = mod(idx - 1, cols) + 1
         ax = Axis(fig[row, col])
-        push!(axes, ax)
+        axes[idx] = ax
 
-        hm = _plot_tf_heatmap!(
+        last_hm = _plot_tf_heatmap!(
             ax,
             tf,
             channel,
@@ -213,10 +293,8 @@ function plot_tf(tf_data::AbstractVector{<:TimeFreqData}; channel_selection = ch
             yticks = yticks,
             time_unit = time_unit,
         )
-        last_hm = hm
         ax.title = show_title ? (isnothing(plot_kwargs[:plot_title]) ? "$(tf.condition_name) — $channel" : plot_kwargs[:plot_title]) : ""
 
-        # Only show y-labels on leftmost, x-labels on bottom
         col != 1 && (ax.ylabel = ""; ax.yticklabelsvisible = false)
         row != rows && (ax.xlabel = ""; ax.xticklabelsvisible = false)
     end
@@ -227,14 +305,11 @@ function plot_tf(tf_data::AbstractVector{<:TimeFreqData}; channel_selection = ch
         cb_label =
             isnothing(plot_kwargs[:colorbar_label]) ? _tf_colorbar_label(first(tf_plots), baseline_interval, baseline_method) :
             plot_kwargs[:colorbar_label]
-
         cb_pos = _get_colorbar_position(plot_kwargs[:colorbar_position], 1:rows, 1:cols)
         Colorbar(fig[cb_pos...], last_hm; label = cb_label, colorbar_kwargs...)
     end
 
-    if plot_kwargs[:display_plot]
-        _display_figure(fig)
-    end
+    plot_kwargs[:display_plot] && _display_figure(fig)
     _set_window_title("Makie")
     return (fig = fig, axes = axes)
 end
@@ -246,33 +321,25 @@ function plot_tf(
     baseline_interval::Interval = nothing,
     kwargs...,
 )
-
     plot_kwargs = _merge_plot_kwargs(PLOT_TF_KWARGS, _normalize_plot_kwargs(kwargs))
-
-    # Extract colorbar/layout kwargs
     colorbar_kwargs = pop!(plot_kwargs, :colorbar_kwargs, (;))
-    layout_kwargs   = pop!(plot_kwargs, :layout_kwargs, (;))
+    layout_kw_in = pop!(plot_kwargs, :layout_kwargs, (;))
 
-    layout                  = plot_kwargs[:layout]
-    colorrange              = plot_kwargs[:colorrange]
-    title                   = plot_kwargs[:plot_title]
-    show_title              = plot_kwargs[:show_title]
-    colorbar                = pop!(plot_kwargs, :colorbar_plot, true)
-    xlogscale               = plot_kwargs[:xscale] in (:log10, :log, log10)
-    ylogscale               = plot_kwargs[:yscale] in (:log10, :log, log10)
-    xlim                    = plot_kwargs[:xlim]
-    xticks                  = plot_kwargs[:xticks]
-    yticks                  = plot_kwargs[:yticks]
-    interpolate             = plot_kwargs[:interpolate]
-    baseline_method         = plot_kwargs[:baseline_method]
-    time_unit               = plot_kwargs[:time_unit]
-    layout_grid_dims        = get(layout_kwargs, :grid_dims, nothing)
-    layout_grid_rowgap      = get(layout_kwargs, :grid_rowgap, 10)
-    layout_grid_colgap      = get(layout_kwargs, :grid_colgap, 10)
-    layout_topo_plot_width  = get(layout_kwargs, :topo_plot_width, 0.1)
-    layout_topo_plot_height = get(layout_kwargs, :topo_plot_height, 0.1)
+    layout = plot_kwargs[:layout]
+    colorrange = plot_kwargs[:colorrange]
+    title = plot_kwargs[:plot_title]
+    show_title = plot_kwargs[:show_title]
+    colorbar = pop!(plot_kwargs, :colorbar_plot, true)
+    xlogscale = plot_kwargs[:xscale] in (:log10, :log, log10)
+    ylogscale = plot_kwargs[:yscale] in (:log10, :log, log10)
+    xlim = plot_kwargs[:xlim]
+    xticks = plot_kwargs[:xticks]
+    yticks = plot_kwargs[:yticks]
+    interpolate = plot_kwargs[:interpolate]
+    baseline_method = plot_kwargs[:baseline_method]
+    time_unit = plot_kwargs[:time_unit]
+    layout_grid_dims = get(layout_kw_in, :grid_dims, nothing)
 
-    # Apply baseline if requested, but only if data hasn't already been baselined
     if !isnothing(baseline_interval) && !isnothing(tf_data.baseline)
         @minimal_warning "Data has already been baselined (method: $(tf_data.baseline.method), window: $(tf_data.baseline.window)). " *
                          "Ignoring baseline_interval parameter. Use the data as-is or create a new TimeFreqData without baseline."
@@ -287,45 +354,27 @@ function plot_tf(
         !isnothing(tf_plot.baseline) ? tf_plot.baseline.method : (!isnothing(baseline_interval) ? baseline_method : nothing)
     has_signed_baseline = eff_baseline_method in _SIGNED_TF_BASELINE_METHODS
 
-    # Resolve channels via channel_selection predicate
-    all_channels = channel_labels(tf_plot)
-    chan_func = _to_channel_func(channel_selection)
-    selected_mask = chan_func(all_channels)
-    selected_channels = all_channels[selected_mask]
-    isempty(selected_channels) && @minimal_error("No channels matched. Available: $(all_channels)")
-
-    # Apply user-specified plotting order if provided
-    if !isnothing(channel_plot_order)
-        ordered = Symbol[Symbol(ch) for ch in channel_plot_order if Symbol(ch) in selected_channels]
-        if !isempty(ordered)
-            selected_channels = ordered
-        end
-    end
-
-    # For :single layout, take only the first channel
+    selected_channels = _select_tf_channels(channel_labels(tf_plot), channel_selection, channel_plot_order)
     plot_channels = layout === :single ? [first(selected_channels)] : selected_channels
 
-    # Get unique times and frequencies (shared across all channels)
-    all_times = Float64.(sort(unique(tf_plot.data_power.time)))
-    freqs_vec = Float64.(sort(unique(tf_plot.data_power.freq)))
+    df_power = tf_plot.data_power
+    all_times = _sorted_unique_f64(df_power[!, :time])
+    freqs_vec = _sorted_unique_f64(df_power[!, :freq])
 
-    # Create layout and figure
     layout_kwargs = Dict{Symbol,Any}(
         :grid_dims => layout_grid_dims,
-        :grid_rowgap => layout_grid_rowgap,
-        :grid_colgap => layout_grid_colgap,
-        :topo_plot_width => layout_topo_plot_width,
-        :topo_plot_height => layout_topo_plot_height,
+        :grid_rowgap => get(layout_kw_in, :grid_rowgap, 10),
+        :grid_colgap => get(layout_kw_in, :grid_colgap, 10),
+        :topo_plot_width => get(layout_kw_in, :topo_plot_width, 0.1),
+        :topo_plot_height => get(layout_kw_in, :topo_plot_height, 0.1),
     )
 
-    # Determine figure size based on layout
     fig_size = if layout === :single
         (800, 500)
     elseif layout === :topo
         (1200, 1000)
-    else # :grid
-        n = length(plot_channels)
-        rows, cols = !isnothing(layout_grid_dims) ? layout_grid_dims : _best_rect(n)
+    else
+        rows, cols = !isnothing(layout_grid_dims) ? layout_grid_dims : _best_rect(length(plot_channels))
         (max(600, cols * 350), max(400, rows * 300))
     end
 
@@ -336,67 +385,26 @@ function plot_tf(
 
     eeg_layout = hasproperty(tf_data, :layout) ? tf_data.layout : nothing
     plot_layout = create_layout(layout, plot_channels, eeg_layout; layout_kwargs...)
-
     axes, layout_channels = _apply_layout!(fig, plot_layout; xgrid = false, ygrid = false, xminorgrid = false, yminorgrid = false)
 
-    # Pre-compute shared row index and extract power matrices across all channels
-    row_idx = _tf_build_row_index(tf_plot.data_power)
-    rounded_freqs = round.(freqs_vec, digits = 6)
-    rounded_times = round.(all_times, digits = 6)
+    ext = _tf_make_extractor(df_power, freqs_vec, all_times)
     cached_mats = Dict{Symbol,Matrix{Float64}}()
-
+    sizehint!(cached_mats, length(plot_channels))
     for ch in plot_channels
-        cached_mats[ch] = _tf_df_to_matrix(
-            tf_plot.data_power,
-            ch,
-            freqs_vec,
-            all_times,
-            row_idx;
-            rounded_freqs = rounded_freqs,
-            rounded_times = rounded_times,
-        )
+        cached_mats[ch] = _tf_extract_matrix(ext, ch)
     end
 
-    if isnothing(colorrange)
-        global_min = Inf
-        global_max = -Inf
-        for ch in plot_channels
-            pmat = cached_mats[ch]
-            for v in pmat
-                if isfinite(v)
-                    global_min = min(global_min, v)
-                    global_max = max(global_max, v)
-                end
-            end
-        end
-        if isinf(global_min)
-            shared_colorrange = (-1.0, 1.0)
-        elseif _is_diverging_colormap(colormap) && (global_min < 0 || has_signed_baseline)
-            shared_colorrange = _symmetric_colorrange(global_min, global_max)
-        elseif global_min ≈ global_max
-            shared_colorrange = (global_min - 1.0, global_max + 1.0)
-        else
-            shared_colorrange = (global_min, global_max)
-        end
+    shared_colorrange = if isnothing(colorrange)
+        gmin, gmax = _tf_finite_extrema(values(cached_mats))
+        _tf_auto_colorrange(gmin, gmax, colormap; has_signed_baseline = has_signed_baseline)
     else
-        shared_colorrange = colorrange
+        colorrange
     end
 
-    # Plot heatmap on each axis
     last_hm = nothing
-    for (ax_idx, (ax, channel)) in enumerate(zip(axes, layout_channels))
-        pmat = get(cached_mats, channel) do
-            _tf_df_to_matrix(
-                tf_plot.data_power,
-                channel,
-                freqs_vec,
-                all_times,
-                row_idx;
-                rounded_freqs = rounded_freqs,
-                rounded_times = rounded_times,
-            )
-        end
-        hm = _plot_tf_heatmap!(
+    for (ax, channel) in zip(axes, layout_channels)
+        pmat = get!(() -> _tf_extract_matrix(ext, channel), cached_mats, channel)
+        last_hm = _plot_tf_heatmap!(
             ax,
             tf_plot,
             channel,
@@ -413,34 +421,23 @@ function plot_tf(
             yticks = yticks,
             time_unit = time_unit,
         )
-        last_hm = hm
 
-        # Set title per axis
-        if !show_title
-            ax.title = ""
+        ax.title = if !show_title
+            ""
         elseif layout === :single
-            ax.title = isnothing(title) ? "$(tf_data.condition_name) - $channel" : title
+            isnothing(title) ? "$(tf_data.condition_name) - $channel" : title
         else
-            ax.title = isnothing(title) ? string(channel) : title
+            isnothing(title) ? string(channel) : title
         end
     end
 
-    # Apply layout-specific axis properties (hide redundant labels for grid/topo)
     if plot_layout.type == :grid
         rows, cols = plot_layout.dims
         for (idx, ax) in enumerate(axes)
             row = fld(idx - 1, cols) + 1
             col = mod(idx - 1, cols) + 1
-            # Only show y-axis labels on leftmost column
-            if col != 1
-                ax.ylabel = ""
-                ax.yticklabelsvisible = false
-            end
-            # Only show x-axis labels on bottom row
-            if row != rows
-                ax.xlabel = ""
-                ax.xticklabelsvisible = false
-            end
+            col != 1 && (ax.ylabel = ""; ax.yticklabelsvisible = false)
+            row != rows && (ax.xlabel = ""; ax.xticklabelsvisible = false)
         end
     elseif plot_layout.type == :topo
         for ax in axes
@@ -449,10 +446,8 @@ function plot_tf(
         end
     end
 
-    # Link axes for consistent zoom
     length(axes) > 1 && linkaxes!(axes...)
 
-    # Add shared colorbar
     if colorbar && !isnothing(last_hm)
         cb_label =
             isnothing(plot_kwargs[:colorbar_label]) ? _tf_colorbar_label(tf_plot, baseline_interval, baseline_method) :
@@ -465,28 +460,19 @@ function plot_tf(
             rows, cols = plot_layout.dims
             cb_pos = _get_colorbar_position(plot_kwargs[:colorbar_position], 1:rows, 1:cols)
             Colorbar(fig[cb_pos...], last_hm; label = cb_label, colorbar_kwargs...)
-        else # :topo
-            # Topo is a bit weird because of the scale axis, let's just stick it on the right
+        else
             cb_pos = _get_colorbar_position(plot_kwargs[:colorbar_position], 1:1, 1:1)
             Colorbar(fig[cb_pos[1], cb_pos[2]+1], last_hm; label = cb_label, height = Relative(0.5), colorbar_kwargs...)
         end
     end
 
-    if plot_kwargs[:display_plot]
-        _display_figure(fig)
-    end
+    plot_kwargs[:display_plot] && _display_figure(fig)
     _set_window_title("Makie")
     return (fig = fig, axes = axes)
 end
 
-
 # === INTERNAL HELPERS ===
 
-"""
-    _plot_tf_heatmap!(ax, tf_plot, channel, freqs_vec, times; kwargs...)
-
-Plot a single TF heatmap on the given axis. Returns the heatmap object.
-"""
 function _plot_tf_heatmap!(
     ax::Axis,
     tf_plot::TimeFreqData,
@@ -505,17 +491,14 @@ function _plot_tf_heatmap!(
     yticks = nothing,
     time_unit::Symbol = :s,
 )
-
-    # Extract power matrix: [n_freqs × n_times]
     mat = if !isnothing(power_mat)
         power_mat
     elseif !isnothing(row_index)
         _tf_df_to_matrix(tf_plot.data_power, channel, freqs_vec, times, row_index)
     else
-        _tf_df_to_matrix(tf_plot.data_power, channel, freqs_vec, times)
+        _tf_extract_matrix(_tf_make_extractor(tf_plot.data_power, freqs_vec, times), channel)
     end
 
-    # Configure axis
     if time_unit == :ms
         ax.xlabel = "Time (ms)"
         ax.xtickformat = values -> [string(round(Int, v * 1000)) for v in values]
@@ -542,8 +525,7 @@ function _plot_tf_heatmap!(
     !isnothing(xticks) && (ax.xticks = xticks)
     !isnothing(yticks) && (ax.yticks = yticks)
 
-    # Plot heatmap (expects n_times × n_freqs via zero-allocation lazy transpose)
-    hm = heatmap!(
+    return heatmap!(
         ax,
         times,
         freqs_vec,
@@ -553,24 +535,17 @@ function _plot_tf_heatmap!(
         nan_color = :transparent,
         interpolate = interpolate,
     )
-
-    return hm
 end
 
+function _tf_baseline_unit_label(method::Symbol)
+    method == :db && return "Power (dB)"
+    method == :percent && return "Power (% change)"
+    method == :relchange && return "Power (relative)"
+    return "Power"
+end
 
-"""
-    _tf_colorbar_label(tf_plot, baseline_interval, baseline_method)
-
-Determine the colorbar label based on baseline information.
-"""
 function _tf_colorbar_label(tf_plot::TimeFreqData, baseline_interval, baseline_method::Symbol)
-    if !isnothing(tf_plot.baseline)
-        method = tf_plot.baseline.method
-        return method == :db ? "Power (dB)" : method == :percent ? "Power (% change)" : method == :relchange ? "Power (relative)" : "Power"
-    elseif !isnothing(baseline_interval)
-        return baseline_method == :db ? "Power (dB)" :
-               baseline_method == :percent ? "Power (% change)" : baseline_method == :relchange ? "Power (relative)" : "Power"
-    else
-        return "Power"
-    end
+    !isnothing(tf_plot.baseline) && return _tf_baseline_unit_label(tf_plot.baseline.method)
+    !isnothing(baseline_interval) && return _tf_baseline_unit_label(baseline_method)
+    return "Power"
 end

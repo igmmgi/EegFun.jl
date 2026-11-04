@@ -1,5 +1,5 @@
+# Power spectrum plotting functions for channels, SpectrumData, and ICA components.
 
-# === DEFAULT KEYWORD ARGUMENTS ===
 const PLOT_POWER_SPECTRUM_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Spectral analysis parameters
     :window_size => (1024, "Size of the FFT window for spectral estimation"),
@@ -49,44 +49,8 @@ const PLOT_POWER_SPECTRUM_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :yminorgrid => (false, "Whether to show y-axis minor grid"),
 )
 
-"""
-    _plot_power_spectrum!(fig, ax, df, channels_to_plot, fs; kwargs...)
-
-Internal function to plot power spectra on an existing axis with interactive controls.
-
-# Arguments
-- `fig`: Makie Figure
-- `ax`: Makie Axis to plot on
-- `df`: DataFrame containing the data
-- `channels_to_plot`: Vector of channel symbols to plot
-- `fs`: Sampling frequency in Hz
-
-$(_generate_kwargs_doc(PLOT_POWER_SPECTRUM_KWARGS))
-
-# Features
-- Creates interactive checkboxes for toggling between linear and log scales
-- Automatically sets up grid layout with controls in the top-right corner
-- Shows frequency band indicators below the main plot when enabled
-
-This is an internal function used by the public plotting functions.
-
-# Example
-```julia
-# Basic usage with custom styling
-fig, ax = plot_channel_spectrum(dat;
-    title = "Custom Power Spectrum",
-    line_width = 3,
-    max_freq = 100.0,
-    show_freq_bands = false)
-
-# With custom colors and scales
-fig, ax = plot_channel_spectrum(dat;
-    x_scale = :log10,
-    y_scale = :log10,
-    line_alpha = 0.6,
-    grid_visible = false)
-```
-"""
+const _EEG_FREQ_BANDS = ("δ" => (0.5, 4.0), "θ" => (4.0, 8.0), "α" => (8.0, 13.0), "β" => (13.0, 30.0), "γ" => (30.0, 100.0))
+const _EEG_BAND_COLORS = (:lightblue, :lightgreen, :yellow, :orange, :lightcoral)
 
 function _plot_power_spectrum!(
     fig,
@@ -101,38 +65,33 @@ function _plot_power_spectrum!(
 
     kwargs_norm = _normalize_plot_kwargs(kwargs)
     plot_kwargs = _merge_plot_kwargs(PLOT_POWER_SPECTRUM_KWARGS, kwargs_norm)
-    window_size = plot_kwargs[:window_size]
-    overlap = plot_kwargs[:overlap]
-    window_function = plot_kwargs[:window_function]
 
     n_samples = length(first(signals))
-    effective_window_size = min(window_size, n_samples)
-    effective_window_size = max(4, effective_window_size)
-    noverlap = Int(round(effective_window_size * overlap))
-
+    effective_window_size = max(4, min(plot_kwargs[:window_size], n_samples))
+    noverlap = round(Int, effective_window_size * plot_kwargs[:overlap])
     n_ch = length(channels_to_plot)
 
-    # Ensure consistent floating point type across all signals for WelchConfig reuse
     first_sig = first(signals)
     T = float(eltype(first_sig))
-    uniform_type = all(s -> eltype(s) === T, signals)
-    sig_list = uniform_type ? signals : [Float64.(s) for s in signals]
+    sig_list = all(s -> eltype(s) === T, signals) ? signals : [Float64.(s) for s in signals]
     target_sig = first(sig_list)
 
-    cfg = DSP.WelchConfig(target_sig; n = effective_window_size, noverlap = noverlap, fs = Float64(fs), window = window_function)
+    cfg = DSP.WelchConfig(
+        target_sig;
+        n = effective_window_size,
+        noverlap = noverlap,
+        fs = Float64(fs),
+        window = plot_kwargs[:window_function],
+    )
 
-    # First channel gives the shared frequencies
     pgram_first = DSP.welch_pgram(target_sig, cfg)
-    shared_freq = DSP.freq(pgram_first)
-    freq_data = fill(shared_freq, n_ch)
+    freq_data = fill(DSP.freq(pgram_first), n_ch)
 
     first_power = DSP.power(pgram_first)
     power_raw_data = Vector{typeof(first_power)}(undef, n_ch)
     power_raw_data[1] = first_power
-
     for i = 2:n_ch
-        pgram = DSP.welch_pgram(sig_list[i], cfg)
-        power_raw_data[i] = DSP.power(pgram)
+        power_raw_data[i] = DSP.power(DSP.welch_pgram(sig_list[i], cfg))
     end
 
     _plot_power_spectrum_data!(fig, ax, freq_data, power_raw_data, channels_to_plot; line_labels = line_labels, kwargs_norm...)
@@ -149,18 +108,24 @@ function _calc_power_extrema(power_data::Vector{<:AbstractVector})
     pos_min = Inf
     @inbounds for vec in power_data
         for x in vec
-            if x < min_val
-                min_val = x
-            end
-            if x > max_val
-                max_val = x
-            end
-            if x > 0 && x < pos_min
-                pos_min = x
-            end
+            x < min_val && (min_val = x)
+            x > max_val && (max_val = x)
+            (x > 0 && x < pos_min) && (pos_min = x)
         end
     end
     return (min_val, max_val, pos_min)
+end
+
+function _apply_spectrum_yscale!(ax::Axis, y_scale::Symbol, unit::Symbol, min_val::Real, max_val::Real, pos_min::Real)
+    if y_scale == :log10 && unit != :dB
+        log_min, log_max = isinf(pos_min) ? (0.001, 1.0) : (max(0.001, pos_min), max(max(0.001, pos_min) * 10, max_val))
+        ylims!(ax, (log_min, log_max))
+        ax.yscale = log10
+    else
+        ax.yscale = identity
+        ylims!(ax, unit == :dB ? (min_val - 5, max_val + 5) : (0.0, max(0.1, max_val)))
+    end
+    return nothing
 end
 
 function _plot_power_spectrum_data!(
@@ -172,51 +137,28 @@ function _plot_power_spectrum_data!(
     line_labels::Union{Nothing,AbstractVector{<:AbstractString}} = nothing,
     kwargs...,
 )
-    # Merge user kwargs with defaults
     plot_kwargs = _merge_plot_kwargs(PLOT_POWER_SPECTRUM_KWARGS, _normalize_plot_kwargs(kwargs))
 
-    # Extract commonly used values
-    window_size = plot_kwargs[:window_size]
-    overlap = plot_kwargs[:overlap]
     max_freq = plot_kwargs[:max_freq]
     x_scale = plot_kwargs[:xscale]
     y_scale = plot_kwargs[:yscale]
     unit = plot_kwargs[:unit]
-    window_function = plot_kwargs[:window_function]
-    show_freq_bands = plot_kwargs[:show_freq_bands]
 
-    # Validate scale parameters
-    valid_scales = [:linear, :log10]
-    if !(x_scale in valid_scales)
+    if !(x_scale in (:linear, :log10))
         @minimal_warning "Invalid xscale '$x_scale'. Using :linear instead."
         x_scale = :linear
     end
-    if !(y_scale in valid_scales)
+    if !(y_scale in (:linear, :log10))
         @minimal_warning "Invalid yscale '$y_scale'. Using :linear instead."
         y_scale = :linear
     end
-
-    # Validate unit parameter
-    valid_units = [:linear, :dB]
-    if !(unit in valid_units)
+    if !(unit in (:linear, :dB))
         @minimal_warning "Invalid unit '$unit'. Using :linear instead."
         unit = :linear
     end
 
-    # Define EEG frequency bands in deterministic order
-    freq_bands = OrderedDict(
-        "δ" => (0.5, 4.0),    # Delta
-        "θ" => (4.0, 8.0),    # Theta
-        "α" => (8.0, 13.0),   # Alpha
-        "β" => (13.0, 30.0),  # Beta
-        "γ" => (30.0, 100.0),  # Gamma
-    )
-
-    # Set axis labels and title
     ax.xlabel = plot_kwargs[:xlabel]
-    # Update y-axis label based on unit
-    ylabel_text = unit == :dB ? "Power Spectral Density (dB)" : plot_kwargs[:ylabel]
-    ax.ylabel = ylabel_text
+    ax.ylabel = unit == :dB ? "Power Spectral Density (dB)" : plot_kwargs[:ylabel]
     ax.title = plot_kwargs[:show_title] && !isnothing(plot_kwargs[:plot_title]) ? plot_kwargs[:plot_title] : ""
     ax.titlesize = plot_kwargs[:plot_title_fontsize]
     ax.xlabelsize = plot_kwargs[:label_fontsize]
@@ -224,7 +166,6 @@ function _plot_power_spectrum_data!(
     ax.xticklabelsize = plot_kwargs[:tick_fontsize]
     ax.yticklabelsize = plot_kwargs[:tick_fontsize]
 
-    # Configure grid using the new axis styling function
     _set_axis_grid!(
         ax;
         xgrid = plot_kwargs[:xgrid],
@@ -233,47 +174,32 @@ function _plot_power_spectrum_data!(
         yminorgrid = plot_kwargs[:yminorgrid],
     )
 
-    # Create interactive controls in the figure
     controls_area = fig[1, 2] = GridLayout()
-
-    # Set the column/row proportions 
-    colsize!(fig.layout, 1, Relative(0.85))  # Main plot column
-    colsize!(fig.layout, 2, Relative(0.15))  # Controls column
-    rowsize!(fig.layout, 1, Relative(0.95))  # Main content row
-
-    x_scale_obs = Observable(x_scale)
+    colsize!(fig.layout, 1, Relative(0.85))
+    colsize!(fig.layout, 2, Relative(0.15))
+    rowsize!(fig.layout, 1, Relative(0.95))
 
     x_options = ["Linear (Hz)", "Log10 (Hz)"]
     x_default_idx = x_scale == :log10 ? 2 : 1
-
     y_options = ["Linear (μV²/Hz)", "Log10 (μV²/Hz)", "Decibels (dB)"]
-    y_default_idx = if unit == :dB
-        3
-    elseif y_scale == :log10
-        2
-    else
-        1
-    end
-    y_mode_obs = Observable(y_options[y_default_idx])
+    y_default_idx = unit == :dB ? 3 : (y_scale == :log10 ? 2 : 1)
 
+    x_scale_obs = Observable(x_scale)
+    y_mode_obs = Observable(y_options[y_default_idx])
     band_ax_ref = Ref{Union{Nothing,Axis}}(nothing)
 
-    # Add menus
     Label(controls_area[1, 1], "X-Axis:")
     x_menu = Menu(controls_area[1, 2], options = x_options, default = x_options[x_default_idx])
-
     Label(controls_area[2, 1], "Y-Axis:")
     y_menu = Menu(controls_area[2, 2], options = y_options, default = y_options[y_default_idx])
 
     on(x_menu.selection) do sel
         x_scale_obs[] = sel == "Log10 (Hz)" ? :log10 : :linear
     end
-
     on(y_menu.selection) do sel
         y_mode_obs[] = sel
     end
 
-    # Apply initial scale settings
     if x_scale == :log10
         xlims!(ax, (0.1, max_freq))
         ax.xscale = log10
@@ -281,158 +207,60 @@ function _plot_power_spectrum_data!(
         xlims!(ax, (0, max_freq))
     end
 
-    line_plots = []
+    get_power_data(u) = u == :dB ? [10.0 .* log10.(max.(psd_raw, 1e-10)) for psd_raw in power_raw_data] : power_raw_data
+    initial_power_data = get_power_data(unit)
+
+    n_ch = length(channels_to_plot)
+    psd_observables = Vector{Observable}(undef, n_ch)
+    lw = plot_kwargs[:linewidth]
+    lalpha = plot_kwargs[:line_alpha]
 
     for (i, ch) in enumerate(channels_to_plot)
-        freqs = freq_data[i]
-        psd_raw = power_raw_data[i]
-
-        # Convert power to requested unit
-        if unit == :dB
-            psd = 10.0 .* log10.(max.(psd_raw, 1e-10))
-        else
-            psd = psd_raw
-        end
-
-        psd_obs = Observable(psd)
+        psd_obs = Observable(initial_power_data[i])
+        psd_observables[i] = psd_obs
         lbl = !isnothing(line_labels) && i <= length(line_labels) ? String(line_labels[i]) : string(ch)
-        line_plot = lines!(ax, freqs, psd_obs, label = lbl, linewidth = plot_kwargs[:linewidth], alpha = plot_kwargs[:line_alpha])
-        push!(line_plots, (line_plot, psd_obs))
+        lines!(ax, freq_data[i], psd_obs, label = lbl, linewidth = lw, alpha = lalpha)
     end
 
-    """Return power data converted to the given unit (`:linear` or `:dB`)."""
-    function get_current_power_data(current_unit)
-        if current_unit == :dB
-            return [10.0 .* log10.(max.(psd_raw, 1e-10)) for psd_raw in power_raw_data]
-        else
-            return power_raw_data
-        end
-    end
+    init_min, init_max, init_pos_min = _calc_power_extrema(initial_power_data)
+    _apply_spectrum_yscale!(ax, y_scale, unit, init_min, init_max, init_pos_min)
 
-    # Apply initial y-axis scale settings (after data is calculated)
-    # This will be handled by update_y_scale, but we need to set initial state
-    initial_power_data = get_current_power_data(unit)
-    initial_min, initial_max, init_pos_min = _calc_power_extrema(initial_power_data)
-
-    if y_scale == :log10
-        # Calculate valid limits first
-        if unit == :dB
-            # For dB, use linear scale (dB is already logarithmic)
-            ax.yscale = identity
-            ylims!(ax, (initial_min - 5, initial_max + 5))
-        else
-            # For linear units, use log scale
-            if isinf(init_pos_min)
-                log_min, log_max = 0.001, 1.0
-            else
-                log_min = max(0.001, init_pos_min)
-                log_max = max(log_min * 10, initial_max)
-            end
-            # Set valid limits BEFORE changing scale to avoid validation errors
-            ylims!(ax, (log_min, log_max))
-            ax.yscale = log10
-        end
-    else
-        # For linear scale, ensure axis is in linear mode first
-        ax.yscale = identity
-        if unit == :dB
-            ylims!(ax, (initial_min - 5, initial_max + 5))
-        else
-            ylims!(ax, (0.0, max(0.1, initial_max)))
-        end
-    end
-
-    # Add frequency band indicators below the x-axis if requested
-    if show_freq_bands
-
+    if plot_kwargs[:show_freq_bands]
         band_ax = Axis(fig[2, 1], height = 50)
         band_ax_ref[] = band_ax
         linkxaxes!(ax, band_ax)
-
-        # Set limits and hide decorations
         xlims!(band_ax, 0.1, max_freq)
         ylims!(band_ax, 0, 1)
         hidedecorations!(band_ax)
         hidespines!(band_ax)
 
-        band_colors = [:lightblue, :lightgreen, :yellow, :orange, :lightcoral]
-        for (i, (band_name, (fmin, fmax))) in enumerate(freq_bands)
-            if fmax <= max_freq
-                # Add colored bar and label
-                bar_x = [fmin, fmax]
-                bar_y = [0.5, 0.5]
-                lines!(band_ax, bar_x, bar_y, color = band_colors[i], linewidth = 8, alpha = plot_kwargs[:freq_band_alpha])
-                text!(band_ax, (fmin + fmax) / 2, 0.5, text = band_name, align = (:center, :center), fontsize = 32, color = :black)
-            end
+        band_alpha = plot_kwargs[:freq_band_alpha]
+        for (i, (band_name, (fmin, fmax))) in enumerate(_EEG_FREQ_BANDS)
+            fmax <= max_freq || continue
+            lines!(band_ax, [fmin, fmax], [0.5, 0.5], color = _EEG_BAND_COLORS[i], linewidth = 8, alpha = band_alpha)
+            text!(band_ax, (fmin + fmax) / 2, 0.5, text = band_name, align = (:center, :center), fontsize = 32, color = :black)
         end
     end
 
-    # Add reactive updates for axis scales
-    """Switch x-axis between linear and log10 scale."""
-    function update_x_scale(scale)
-        if scale == :log10
-            xlims!(ax, (0.1, max_freq))
-            ax.xscale = log10
-            if !isnothing(band_ax_ref[])
-                band_ax_ref[].xscale = log10
-            end
-        else
-            xlims!(ax, (0.1, max_freq))
-            ax.xscale = identity
-            if !isnothing(band_ax_ref[])
-                band_ax_ref[].xscale = identity
-            end
-        end
-    end
-
-    """Unified handler for changing Y-axis mode."""
-    function update_y_mode(mode)
-        new_unit = mode == "Decibels (dB)" ? :dB : :linear
-        new_y_scale = mode == "Log10 (μV²/Hz)" ? :log10 : :linear
-
-        # 1. Update power data if unit changed
-        converted_power_data = get_current_power_data(new_unit)
-        for (i, (_, psd_obs)) in enumerate(line_plots)
-            psd_obs[] = converted_power_data[i]
-        end
-
-        # 2. Update y-axis label
-        ax.ylabel = new_unit == :dB ? "Power Spectral Density (dB)" : plot_kwargs[:ylabel]
-
-        # 3. Update y-axis scale and limits
-        new_min_power, new_max_power, new_pos_min = _calc_power_extrema(converted_power_data)
-
-        if new_y_scale == :log10
-            if isinf(new_pos_min)
-                log_min, log_max = 0.001, 1.0
-            else
-                log_min = max(0.001, new_pos_min)
-                log_max = max(log_min * 10, new_max_power)
-            end
-            ylims!(ax, (log_min, log_max))
-            ax.yscale = log10
-        else
-            ax.yscale = identity
-            if new_unit == :dB
-                ylims!(ax, (new_min_power - 5, new_max_power + 5))
-            else
-                ylims!(ax, (0.0, max(0.1, new_max_power)))
-            end
-        end
-    end
-
-    # Set up reactive updates
     on(x_scale_obs) do scale
-        update_x_scale(scale)
+        xlims!(ax, (0.1, max_freq))
+        xscale_fn = scale == :log10 ? log10 : identity
+        ax.xscale = xscale_fn
+        !isnothing(band_ax_ref[]) && (band_ax_ref[].xscale = xscale_fn)
     end
 
     on(y_mode_obs) do mode
-        update_y_mode(mode)
+        new_unit = mode == "Decibels (dB)" ? :dB : :linear
+        new_y_scale = mode == "Log10 (μV²/Hz)" ? :log10 : :linear
+        converted = get_power_data(new_unit)
+        for i in eachindex(psd_observables)
+            psd_observables[i][] = converted[i]
+        end
+        ax.ylabel = new_unit == :dB ? "Power Spectral Density (dB)" : plot_kwargs[:ylabel]
+        pmin, pmax, ppos_min = _calc_power_extrema(converted)
+        _apply_spectrum_yscale!(ax, new_y_scale, new_unit, pmin, pmax, ppos_min)
     end
-
-
 end
-
 
 """
     plot_channel_spectrum(dat; kwargs...)
@@ -484,7 +312,6 @@ fig, ax = plot_channel_spectrum(dat,
 fig, ax = plot_channel_spectrum(dat, unit = :dB)
 ```
 """
-
 function plot_channel_spectrum(
     dat::SingleDataFrameEeg;
     sample_selection = samples(),
@@ -492,40 +319,53 @@ function plot_channel_spectrum(
     channel_selection = channels(),
     kwargs...,
 )
-    # Generate window title from dataset
-    title_str = _generate_window_title(dat)
-    _set_window_title(title_str)
+    _set_window_title(_generate_window_title(dat))
 
-    # Merge user kwargs with defaults
     kwargs_norm = _normalize_plot_kwargs(kwargs)
     plot_kwargs = _merge_plot_kwargs(PLOT_POWER_SPECTRUM_KWARGS, kwargs_norm)
 
-    # data selection
-    dat_subset =
-        subset(dat, sample_selection = sample_selection, interval_selection = interval_selection, channel_selection = channel_selection)
+    chan_fn = _to_channel_func(channel_selection)
+    channels_to_plot = get_selected_channels(dat.layout, chan_fn)
 
-    # Create figure and main axis
+    combined_sel = _combine_interval_sample(interval_selection, sample_selection)
+    n_rows = nrow(dat.data)
+    all_rows = combined_sel isa _AllSamples
+    selected_samples = all_rows ? (1:n_rows) : get_selected_samples(dat, combined_sel)
+
+    signals = if all_rows || selected_samples == 1:n_rows
+        [dat.data[!, ch] for ch in channels_to_plot]
+    else
+        [dat.data[!, ch][selected_samples] for ch in channels_to_plot]
+    end
+
     fig = _eegfun_figure()
     ax = Axis(fig[1, 1])
 
-    _plot_power_spectrum!(fig, ax, dat_subset.data, dat_subset.layout.data.label, sample_rate(dat_subset); kwargs_norm...)
+    _plot_power_spectrum!(fig, ax, signals, channels_to_plot, sample_rate(dat); kwargs_norm...)
 
-    # Add legend if requested
-    if plot_kwargs[:legend]
-        n_channels = length(dat_subset.layout.data.label)
-        n_cols = n_channels > 10 ? cld(n_channels, 20) : 1
-        axislegend(ax, nbanks = n_cols)
+    if plot_kwargs[:legend] && !isempty(channels_to_plot)
+        n_channels = length(channels_to_plot)
+        axislegend(ax, nbanks = n_channels > 10 ? cld(n_channels, 20) : 1)
     end
 
-    if plot_kwargs[:display_plot]
-        _display_figure(fig)
-    end
-
+    plot_kwargs[:display_plot] && _display_figure(fig)
     _set_window_title("Makie")
     return (fig = fig, axes = [ax])
-
 end
 
+function _fill_normalized_ica_row!(
+    dat_matrix::Matrix{Float64},
+    row_idx::Int,
+    col::AbstractVector,
+    selected_samples::AbstractVector{Int},
+    mean_c::Float64,
+    scale_c::Float64,
+)
+    @inbounds @simd for j in eachindex(selected_samples)
+        dat_matrix[row_idx, j] = (Float64(col[selected_samples[j]]) - mean_c) / scale_c
+    end
+    return nothing
+end
 
 """
     plot_ica_component_spectrum(dat::ContinuousData, ica_result::InfoIca; component_selection::Function = components(), kwargs...)
@@ -550,45 +390,15 @@ Plot power spectrum of ICA component(s) with interactive controls for axis scali
 - `show_legend::Bool`: Whether to show the legend with component variance percentages (default: true).
 - `display_plot::Bool`: Whether to display the plot (default: true).
 
-# Features
-- Interactive checkboxes to toggle between linear and log scales for both axes
-- Automatic multi-column legend for many components with variance percentages
-- Frequency band indicators (δ, θ, α, β, γ) below the main plot
-- Responsive grid layout with controls in the top-right corner
-
 # Returns
-- `fig::Figure`: The Makie Figure containing the power spectrum plot.
-- `ax::Axis`: The axis containing the plot.
+- Named tuple `(fig, axes)` containing the Makie `Figure` and `[ax]`.
 
 # Examples
 ```julia
-# Plot all components (default)
 plot_ica_component_spectrum(dat, ica_result)
-
-# Plot specific components
 plot_ica_component_spectrum(dat, ica_result, component_selection = components([1, 3, 5]))
-
-# Plot components 1-10
-plot_ica_component_spectrum(dat, ica_result, component_selection = components(1:10))
-
-# Plot all components except 1 and 2
-plot_ica_component_spectrum(dat, ica_result, component_selection = components_not([1, 2]))
-
-# Plot component 1 only
-plot_ica_component_spectrum(dat, ica_result, component_selection = components(1))
-
-# With sample selection
-plot_ica_component_spectrum(dat, ica_result, component_selection = components(1), sample_selection = samples_not(:is_extreme_value_100))
-
-# With dB units (EEGLAB-style)
 plot_ica_component_spectrum(dat, ica_result, component_selection = components(1), unit = :dB)
 ```
-"""
-
-"""
-    plot_ica_component_spectrum(data::ContinuousData, ica::InfoIca, components::Union{Int,Vector{Int}})
-
-Plot the power spectrum of specified ICA components.
 """
 function plot_ica_component_spectrum(
     dat::ContinuousData,
@@ -598,63 +408,52 @@ function plot_ica_component_spectrum(
     component_selection = components(),
     kwargs...,
 )
-    # Merge user kwargs with defaults
     kwargs_norm = _normalize_plot_kwargs(kwargs)
     plot_kwargs = _merge_plot_kwargs(PLOT_POWER_SPECTRUM_KWARGS, kwargs_norm)
-    # Get selected components using the predicate
-    selected_components = get_selected_components(ica_result, component_selection)
 
-    # If empty, warn and return early
+    selected_components = get_selected_components(ica_result, component_selection)
     if isempty(selected_components)
         @minimal_warning "No components selected for ICA spectrum plot"
         return (fig = _eegfun_figure(), axes = Axis[])
     end
 
-    # Debug: verify selected components
-    @debug "plot_ica_component_spectrum: selected_components = $selected_components"
-    # Combine interval and sample selection (consistent with subset() pattern)
     combined_sel = _combine_interval_sample(interval_selection, sample_selection)
+    n_rows = nrow(dat.data)
+    selected_samples = combined_sel isa _AllSamples ? (1:n_rows) : get_selected_samples(dat, combined_sel)
 
-    # Apply combined selection
-    selected_samples = get_selected_samples(dat, combined_sel)
+    ica_labels = ica_result.layout.data[!, :label]
+    n_ica_ch = length(ica_labels)
+    dat_matrix = Matrix{Float64}(undef, n_ica_ch, length(selected_samples))
+    scale_val = ica_result.scale
+    for (ci, ch) in enumerate(ica_labels)
+        _fill_normalized_ica_row!(dat_matrix, ci, dat.data[!, ch], selected_samples, ica_result.mean[ci], scale_val)
+    end
 
-    # Prepare data matrix for selected samples only (centered using ica_result.mean)
-    relevant_cols = vcat(ica_result.layout.data.label)
-    dat_matrix = permutedims(Matrix(dat.data[selected_samples, relevant_cols]))
-    dat_matrix .-= ica_result.mean
-    dat_matrix ./= ica_result.scale
+    proj = (@view ica_result.unmixing[selected_components, :]) * dat_matrix
 
-    # Calculate component activations for selected samples
-    components = ica_result.unmixing * dat_matrix
-    fs = dat.sample_rate
+    n_sel = length(selected_components)
+    components_to_plot = Vector{Symbol}(undef, n_sel)
+    component_signals = Vector{Vector{Float64}}(undef, n_sel)
+    component_labels = Vector{String}(undef, n_sel)
+    for (i, comp_idx) in enumerate(selected_components)
+        components_to_plot[i] = Symbol("IC_", comp_idx)
+        component_signals[i] = proj[i, :]
+        component_labels[i] = @sprintf("IC %d (%.1f%%)", comp_idx, ica_result.variance[comp_idx] * 100)
+    end
 
-    # Prepare component signals, symbols, and variance labels
-    components_to_plot = [Symbol("IC_$(comp_idx)") for comp_idx in selected_components]
-    component_signals = [components[comp_idx, :] for comp_idx in selected_components]
-    component_labels = String[@sprintf("IC %d (%.1f%%)", comp_idx, ica_result.variance[comp_idx] * 100) for comp_idx in selected_components]
-
-    # Create figure and axis
     fig = _eegfun_figure()
     ax = Axis(fig[1, 1])
 
     _plot_power_spectrum!(fig, ax, component_signals, components_to_plot, sample_rate(dat); line_labels = component_labels, kwargs_norm...)
 
-    # Add custom legend with component variance percentages if requested
     if plot_kwargs[:legend]
-        # Calculate number of columns based on number of components
-        ncols = length(selected_components) > 10 ? ceil(Int, length(selected_components) / 10) : 1
-
-        # Place legend on the axis itself
+        ncols = n_sel > 10 ? cld(n_sel, 10) : 1
         axislegend(ax, nbanks = ncols)
     end
 
-    if plot_kwargs[:display_plot]
-        _display_figure(fig)
-    end
-
+    plot_kwargs[:display_plot] && _display_figure(fig)
     return (fig = fig, axes = [ax])
 end
-
 
 """
     plot_channel_spectrum(dat::SpectrumData; kwargs...)
@@ -662,23 +461,16 @@ end
 Plot a pre-computed power spectrum with interactive controls.
 """
 function plot_channel_spectrum(dat::SpectrumData; channel_selection = channels(), kwargs...)
-    title_str = _generate_window_title(dat)
-    _set_window_title(title_str)
+    _set_window_title(_generate_window_title(dat))
 
     selected_channels = get_selected_channels(dat, channel_selection; include_meta = false, include_extra = false)
-
-    # Filter to only channels that actually exist in the spectrum data
     all_names = propertynames(dat.data)
-    available_channels = [ch for ch in all_names if ch != :freq]
-    valid_channels = [ch for ch in selected_channels if ch in available_channels]
+    valid_channels = [ch for ch in selected_channels if ch != :freq && ch in all_names]
+    isempty(valid_channels) && @minimal_error "No valid channels found in spectrum data."
 
-    if isempty(valid_channels)
-        @minimal_error "No valid channels found in spectrum data."
-    end
-
-    # Pre-extract vectors
-    freq_data = Vector{Vector{Float64}}([Float64.(dat.data.freq) for _ in valid_channels])
-    power_raw_data = Vector{Vector{Float64}}([Float64.(dat.data[!, ch]) for ch in valid_channels])
+    shared_freq = Float64.(dat.data[!, :freq])
+    freq_data = fill(shared_freq, length(valid_channels))
+    power_raw_data = Vector{Float64}[Float64.(dat.data[!, ch]) for ch in valid_channels]
 
     kwargs_norm = _normalize_plot_kwargs(kwargs)
     plot_kwargs = _merge_plot_kwargs(PLOT_POWER_SPECTRUM_KWARGS, kwargs_norm)
@@ -690,14 +482,10 @@ function plot_channel_spectrum(dat::SpectrumData; channel_selection = channels()
 
     if plot_kwargs[:legend]
         n_channels = length(valid_channels)
-        n_cols = n_channels > 10 ? cld(n_channels, 20) : 1
-        axislegend(ax, nbanks = n_cols)
+        axislegend(ax, nbanks = n_channels > 10 ? cld(n_channels, 20) : 1)
     end
 
-    if plot_kwargs[:display_plot]
-        _display_figure(fig)
-    end
-
+    plot_kwargs[:display_plot] && _display_figure(fig)
     _set_window_title("Makie")
     return (fig = fig, axes = [ax])
 end

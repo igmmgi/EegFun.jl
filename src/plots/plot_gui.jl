@@ -1,4 +1,3 @@
-"""Shared font sizes and widget dimensions for the interactive GUI."""
 const UI_STYLE = (label_font = 20, button_font = 18, textbox_font = 16, input_width = 160, input_height = 30)
 
 Base.@kwdef mutable struct GUIState
@@ -30,23 +29,18 @@ Base.@kwdef mutable struct GUIState
     ica_components::Observable{String} = Observable("")
 end
 
-"""Create a styled button for GUI selection actions."""
-function _create_select_button(parent, label)
-    Button(
-        parent,
-        label = label,
-        fontsize = UI_STYLE.button_font,
-        width = UI_STYLE.input_width,
-        height = UI_STYLE.input_height,
-        buttoncolor = :lightgrey,
-        buttoncolor_hover = :grey,
-        buttoncolor_active = :green,
-    )
-end
+_create_select_button(parent, label) = Button(
+    parent,
+    label = label,
+    fontsize = UI_STYLE.button_font,
+    width = UI_STYLE.input_width,
+    height = UI_STYLE.input_height,
+    buttoncolor = :lightgrey,
+    buttoncolor_hover = :grey,
+    buttoncolor_active = :green,
+)
 
-"""Create a styled textbox for GUI text input."""
 function _create_textbox(parent; width = nothing, placeholder = "", boxcolor_obs = nothing, halign = :center)
-    bc = isnothing(boxcolor_obs) ? Observable(:white) : boxcolor_obs
     Textbox(
         parent,
         placeholder = placeholder,
@@ -54,122 +48,70 @@ function _create_textbox(parent; width = nothing, placeholder = "", boxcolor_obs
         width = isnothing(width) ? UI_STYLE.input_width : width,
         height = UI_STYLE.input_height,
         halign = halign,
-        boxcolor = bc,
+        boxcolor = isnothing(boxcolor_obs) ? Observable(:white) : boxcolor_obs,
         cornerradius = 0,
     )
 end
 
-"""Create a styled dropdown menu for GUI option selection."""
-function _create_menu(parent; options = ["Select"], width = nothing, height = nothing)
-    Menu(
-        parent,
-        options = options,
-        width = isnothing(width) ? UI_STYLE.input_width : width,
-        height = isnothing(height) ? UI_STYLE.input_height : height,
-        fontsize = UI_STYLE.textbox_font,
-    )
-end
+_create_menu(parent; options = ["Select"], width = nothing, height = nothing) = Menu(
+    parent,
+    options = options,
+    width = isnothing(width) ? UI_STYLE.input_width : width,
+    height = isnothing(height) ? UI_STYLE.input_height : height,
+    fontsize = UI_STYLE.textbox_font,
+)
 
-"""Create a styled label for the GUI."""
-function _create_label(parent, text; fontsize = UI_STYLE.label_font, color = :black)
-    Label(parent, text, fontsize = fontsize, color = color)
-end
+_create_label(parent, text; fontsize = UI_STYLE.label_font, color = :black) = Label(parent, text, fontsize = fontsize, color = color)
 
-"""Truncate a path string to a maximum length, showing the end with '...' prefix."""
-function _truncate_path(path::String, max_length::Int = 20)
-    if length(path) <= max_length
-        return path
-    end
-    # Show last (max_length - 3) characters with "..." prefix (3 chars for "...")
-    return "..." * path[(end-(max_length-4)):end]
-end
+_truncate_path(path::String, max_length::Int = 20) = length(path) <= max_length ? path : "..." * path[(end-(max_length-4)):end]
 
 """
-    plot_gui()
+    plot_gui(; display_plot::Bool = true)
 
-Interactive GUI for quick data plotting and visualization.
+Launch the interactive GUI for quick EEG data exploration and visualization.
 
-# GUI Structure
-
-**Column 1: File & Plot Selection**
-- Directory and file browser
-- Plot type dropdown with hierarchical submenus:
-  - Common plots: Data Browser, Epochs, ERP, ERP Image, Topography
-  - Time-Frequency >: Time-Frequency, Power Spectrum
-  - ICA > : Components, Activation
-  - ERP Analysis > : ERP GUI
-  - Diagnostic Plots >: Artifact Detection, Triggers, Channel Summary,
-    Joint Probability, Correlation Heatmap, Global Field Power,
-    Layout View, Filter Response
-
-**Column 2: Data Selection & Layout**
-- Participant, Condition, Epoch filters (integers, space/comma-separated)
-- Layout type: Single, Single Avg, Grid, Topo
-- Channel selection with multi-select support
-
-**Column 3: Axis Settings**
-- X, Y, Z axis limits (validated numeric input with range checking)
-- Baseline correction window and type
-- Display options (invert Y-axis)
-
-# Supported Plot Types
-
-See EegFun.jl documentation for complete plot type details and data requirements.
+Provides file/directory browsing, plot-type selection (Data Browser, Epochs, ERP,
+Topography, ERP Image, Time-Frequency, ICA, ERP Analysis, and Diagnostic plots),
+participant/condition/epoch/channel filtering, and axis/baseline controls.
 
 # Examples
-
 ```julia
-# Launch GUI
 EegFun.plot_gui()
-
-# Navigate to data directory, select file and plot type
-# Configure channels and axis limits as needed
-# Click "Plot" to generate visualization
 ```
 """
 function plot_gui(; display_plot::Bool = true)
     _set_window_title("PLOT GUI")
-    # Dynamic sizing using Auto() rather than strict Fixed everywhere
     gui_fig = _eegfun_figure(size = (700, 600), title = "Plot GUI", backgroundcolor = :lightgrey, figure_padding = (20, 20, 20, 20))
     main_layout = GridLayout(gui_fig[1, 1:3], rowgap = 2, colgap = 4)
 
-
-    # Pre-emptively create the channel_menu so it can live in GUIState
     channel_menu = _create_menu(main_layout[10, 2], options = ["Select"])
-
     gui_state = GUIState(; channel_menu = channel_menu)
 
     _build_file_column!(main_layout, gui_state)
     _build_filter_column!(main_layout, gui_state)
     _build_axis_column!(main_layout, gui_state)
 
-    # Set columns sizes
-    colsize!(main_layout, 1, Fixed(UI_STYLE.input_width))  # pin col 1 so widgets don't drift on resize
+    colsize!(main_layout, 1, Fixed(UI_STYLE.input_width))
     colsize!(main_layout, 2, Auto())
     colsize!(main_layout, 3, Auto())
 
     screen = display_plot ? _display_in_screen(gui_fig) : nothing
     _set_window_title("Makie")
-
     return (fig = gui_fig, axes = Axis[], screen = screen)
 end
 
 function _build_file_column!(main_layout, gui_state)
-    # Select Directory Section
     directory_select_button = _create_select_button(main_layout[1, 1], "Select Directory")
     directory_label_text = Observable("Dir:")
     _create_label(main_layout[2, 1], directory_label_text, fontsize = UI_STYLE.textbox_font, color = :gray)
 
-    # Select File Section
     file_select_button = _create_select_button(main_layout[3, 1], "Select File")
     file_pattern_input = _create_textbox(main_layout[4, 1], placeholder = "", halign = :left)
 
-    # Layout Section
     layout_select_button = _create_select_button(main_layout[5, 1], "Select Layout")
     layout_label_text = Observable("File:")
     _create_label(main_layout[6, 1], layout_label_text, fontsize = UI_STYLE.textbox_font, color = :gray)
 
-    # Plot Type Section
     _create_label(main_layout[7, 1], "Plot Type")
     plottype_options = [
         "Select",
@@ -185,17 +127,13 @@ function _build_file_column!(main_layout, gui_state)
         "Diagnostic Plots >",
     ]
     plottype_dropdown = _create_menu(main_layout[8, 1], options = plottype_options)
-
-    # Submenu dropdown
     submenu_dropdown = _create_menu(main_layout[9, 1], options = ["---"])
 
     component_bc = Observable(:lightgrey)
     component_input = _create_textbox(main_layout[10, 1], placeholder = "", boxcolor_obs = component_bc)
 
-    # Events
     on(directory_select_button.clicks) do _
-        default_path = gui_state.directory[] != "" ? gui_state.directory[] : pwd()
-        dir_path = pick_folder(default_path)
+        dir_path = pick_folder(_gui_dir(gui_state))
         if !isnothing(dir_path) && dir_path != ""
             gui_state.directory[] = dir_path
             directory_label_text[] = "." * _truncate_path(String(strip(dir_path)))
@@ -203,8 +141,7 @@ function _build_file_column!(main_layout, gui_state)
     end
 
     on(file_select_button.clicks) do _
-        default_path = gui_state.directory[] != "" ? gui_state.directory[] : pwd()
-        filename = pick_file(default_path)
+        filename = pick_file(_gui_dir(gui_state))
         if !isnothing(filename) && filename != ""
             file_pattern_input.displayed_string[] = ""
             file_pattern_input.displayed_string[] = basename(filename)
@@ -212,29 +149,14 @@ function _build_file_column!(main_layout, gui_state)
         end
     end
 
-    last_validated_file = Ref{String}("__uninit__")
-    function validate_file_input(value)
-        val = strip(value)
-        if val == last_validated_file[]
-            return
-        end
-        last_validated_file[] = val
+    _bind_textbox_validation!(file_pattern_input) do val
         if !isempty(val) && val != basename(gui_state.filename[])
             gui_state.filename[] = val
         end
     end
-    on(file_pattern_input.stored_string) do value
-        validate_file_input(value)
-    end
-    on(file_pattern_input.focused) do is_focused
-        if !is_focused
-            validate_file_input(file_pattern_input.displayed_string[])
-        end
-    end
 
     on(layout_select_button.clicks) do _
-        default_path = gui_state.directory[] != "" ? gui_state.directory[] : pwd()
-        filename = pick_file(default_path)
+        filename = pick_file(_gui_dir(gui_state))
         if !isnothing(filename) && filename != ""
             basename_only = basename(filename)
             gui_state.layout_file[] = filename
@@ -252,11 +174,9 @@ function _build_file_column!(main_layout, gui_state)
         end
     end
 
-    updating_submenu = Ref{Bool}(false)
+    updating_submenu = Ref(false)
     on(plottype_dropdown.selection) do selection
-        if selection == "Select" || selection == "─────────────────"
-            return
-        end
+        (selection == "Select" || selection == "─────────────────") && return
         updating_submenu[] = true
         try
             if selection == "ICA >"
@@ -285,28 +205,12 @@ function _build_file_column!(main_layout, gui_state)
     end
 
     on(submenu_dropdown.selection) do selection
-        if updating_submenu[] || isnothing(selection) || selection == "Select"
-            return
-        end
+        (updating_submenu[] || isnothing(selection) || selection == "Select") && return
         gui_state.plottype[] = selection
     end
 
-    last_validated_component = Ref{String}("__uninit__")
-    function validate_component_input(value)
-        val = strip(value)
-        if val == last_validated_component[]
-            return
-        end
-        last_validated_component[] = val
+    _bind_textbox_validation!(component_input) do val
         gui_state.ica_components[] = val
-    end
-    on(component_input.stored_string) do value
-        validate_component_input(value)
-    end
-    on(component_input.focused) do is_focused
-        if !is_focused
-            validate_component_input(component_input.displayed_string[])
-        end
     end
 end
 
@@ -326,32 +230,27 @@ function _build_filter_column!(main_layout, gui_state)
     layout_dropdown = _create_menu(main_layout[8, 2], options = ["Single", "Single Avg", "Grid", "Topo"])
 
     _create_label(main_layout[9, 2], "Channel(s)")
-    # channel_menu is already in layout at [10, 2] by plot_gui setup
-
     selected_channels_text = Observable("Channels: ")
     _create_label(main_layout[11, 2], selected_channels_text, fontsize = UI_STYLE.textbox_font, color = :gray)
 
-    # Connections
     setup_multi_int_callback(participant_input, participant_bc, "Participant", gui_state.participant)
     setup_multi_int_callback(condition_input, condition_bc, "Condition", gui_state.condition)
     setup_multi_int_callback(epoch_input, epoch_bc, "Epoch", gui_state.epoch)
 
     on(layout_dropdown.selection) do selection
-        if !isnothing(selection)
-            if selection == "Single Avg"
-                gui_state.layout_type[] = "single"
-                gui_state.average_channels[] = true
-            else
-                gui_state.layout_type[] = lowercase(selection)
-                gui_state.average_channels[] = false
-            end
+        isnothing(selection) && return
+        if selection == "Single Avg"
+            gui_state.layout_type[] = "single"
+            gui_state.average_channels[] = true
+        else
+            gui_state.layout_type[] = lowercase(selection)
+            gui_state.average_channels[] = false
         end
     end
 
     resetting_channel_menu = Ref(false)
     on(gui_state.channel_menu.selection) do selection
-        resetting_channel_menu[] && return
-        isnothing(selection) && return
+        (resetting_channel_menu[] || isnothing(selection)) && return
         if selection == "Select"
             gui_state.electrodes[] = String[]
         elseif selection in gui_state.electrodes[]
@@ -359,11 +258,7 @@ function _build_filter_column!(main_layout, gui_state)
         else
             gui_state.electrodes[] = vcat(gui_state.electrodes[], selection)
         end
-        if isempty(gui_state.electrodes[])
-            selected_channels_text[] = "Selected: "
-        else
-            selected_channels_text[] = "Selected: " * join(gui_state.electrodes[], ", ")
-        end
+        selected_channels_text[] = isempty(gui_state.electrodes[]) ? "Selected: " : "Selected: " * join(gui_state.electrodes[], ", ")
         resetting_channel_menu[] = true
         try
             gui_state.channel_menu.i_selected[] = 0
@@ -373,35 +268,21 @@ function _build_filter_column!(main_layout, gui_state)
     end
 end
 
+function _create_limit_pair!(main_layout, row, label_str)
+    min_bc = Observable(:white)
+    max_bc = Observable(:white)
+    _create_label(main_layout[row, 3], label_str, fontsize = UI_STYLE.textbox_font)
+    sub = GridLayout(main_layout[row+1, 3], tellwidth = false, colgap = 8)
+    min_in = _create_textbox(sub[1, 1], width = 80, boxcolor_obs = min_bc)
+    max_in = _create_textbox(sub[1, 2], width = 80, boxcolor_obs = max_bc)
+    return min_in, max_in, min_bc, max_bc
+end
+
 function _build_axis_column!(main_layout, gui_state)
-    xmin_bc = Observable(:white)
-    xmax_bc = Observable(:white)
-    ymin_bc = Observable(:white)
-    ymax_bc = Observable(:white)
-    zmin_bc = Observable(:white)
-    zmax_bc = Observable(:white)
-    bl_start_bc = Observable(:white)
-    bl_end_bc = Observable(:white)
-
-    _create_label(main_layout[1, 3], "X Limits", fontsize = UI_STYLE.textbox_font)
-    x_limits_layout = GridLayout(main_layout[2, 3], tellwidth = false, colgap = 8)
-    xmin_input = _create_textbox(x_limits_layout[1, 1], width = 80, boxcolor_obs = xmin_bc)
-    xmax_input = _create_textbox(x_limits_layout[1, 2], width = 80, boxcolor_obs = xmax_bc)
-
-    _create_label(main_layout[3, 3], "Y Limits", fontsize = UI_STYLE.textbox_font)
-    y_limits_layout = GridLayout(main_layout[4, 3], tellwidth = false, colgap = 8)
-    ymin_input = _create_textbox(y_limits_layout[1, 1], width = 80, boxcolor_obs = ymin_bc)
-    ymax_input = _create_textbox(y_limits_layout[1, 2], width = 80, boxcolor_obs = ymax_bc)
-
-    _create_label(main_layout[5, 3], "Z Limits", fontsize = UI_STYLE.textbox_font)
-    z_limits_layout = GridLayout(main_layout[6, 3], tellwidth = false, colgap = 8)
-    zmin_input = _create_textbox(z_limits_layout[1, 1], width = 80, boxcolor_obs = zmin_bc)
-    zmax_input = _create_textbox(z_limits_layout[1, 2], width = 80, boxcolor_obs = zmax_bc)
-
-    _create_label(main_layout[7, 3], "Baseline", fontsize = UI_STYLE.textbox_font)
-    baseline_layout = GridLayout(main_layout[8, 3], tellwidth = false, colgap = 8)
-    baseline_start = _create_textbox(baseline_layout[1, 1], width = 80, boxcolor_obs = bl_start_bc)
-    baseline_end = _create_textbox(baseline_layout[1, 2], width = 80, boxcolor_obs = bl_end_bc)
+    xmin_input, xmax_input, xmin_bc, xmax_bc = _create_limit_pair!(main_layout, 1, "X Limits")
+    ymin_input, ymax_input, ymin_bc, ymax_bc = _create_limit_pair!(main_layout, 3, "Y Limits")
+    zmin_input, zmax_input, zmin_bc, zmax_bc = _create_limit_pair!(main_layout, 5, "Z Limits")
+    baseline_start, baseline_end, bl_start_bc, bl_end_bc = _create_limit_pair!(main_layout, 7, "Baseline")
 
     _create_label(main_layout[9, 3], "Baseline Type TF", fontsize = UI_STYLE.textbox_font)
     baseline_type =
@@ -422,7 +303,6 @@ function _build_axis_column!(main_layout, gui_state)
         height = 50,
     )
 
-    # Callbacks
     x_check = () -> check_range(gui_state.xlim, xmin_bc, xmax_bc, "X Limits")
     y_check = () -> check_range(gui_state.ylim, ymin_bc, ymax_bc, "Y Limits")
     z_check = () -> check_range(gui_state.zlim, zmin_bc, zmax_bc, "Z Limits")
@@ -445,160 +325,116 @@ function _build_axis_column!(main_layout, gui_state)
     setup_numeric_callback(baseline_end, bl_end_bc, "Baseline end", v -> gui_state.baseline_end[] = v; range_check = bl_check)
 
     on(baseline_type.selection) do selection
-        if !isnothing(selection) && selection != "Select"
-            gui_state.baseline_type[] = selection
-        end
+        !isnothing(selection) && selection != "Select" && (gui_state.baseline_type[] = selection)
     end
-
     on(invert_y_checkbox.checked) do is_checked
         gui_state.invert_y[] = is_checked
     end
 
     plot_dispatch = Dict{String,Function}(
-        "Data Browser"    => gs -> _plot_databrowser(gs),
-        "Epochs"          => gs -> _plot_epochs(gs),
-        "ERP"             => gs -> _plot_erp(gs),
-        "ERP Image"       => gs -> _plot_erp_image(gs),
-        "Topography"      => gs -> _plot_topography(gs),
-        "Time-Frequency"  => gs -> _plot_time_frequency(gs),
-        "Components"      => gs -> _plot_ica(gs),
-        "Activation"      => gs -> _plot_ica_activation(gs),
-        "ERP GUI"         => gs -> _plot_erp_measurement_gui(gs),
-        "Channel Summary" => gs -> _plot_channel_summary(gs),
-        "Layout View"     => gs -> _plot_layout(gs),
+        "Data Browser" => _plot_databrowser,
+        "Epochs" => _plot_epochs,
+        "ERP" => _plot_erp,
+        "ERP Image" => _plot_erp_image,
+        "Topography" => _plot_topography,
+        "Time-Frequency" => _plot_time_frequency,
+        "Components" => _plot_ica,
+        "Activation" => _plot_ica_activation,
+        "ERP GUI" => _plot_erp_measurement_gui,
+        "Channel Summary" => _plot_channel_summary,
+        "Layout View" => _plot_layout,
     )
 
     on(plot_button.clicks) do _
         plot_type = gui_state.plottype[]
-        if plot_type == "Select" || startswith(plot_type, "─") || plot_type == "select"
-            return
-        end
+        (plot_type == "Select" || startswith(plot_type, "─") || plot_type == "select") && return
         handler = get(plot_dispatch, plot_type, nothing)
-        if !isnothing(handler)
-            handler(gui_state)
-        else
-            @minimal_warning "Unsupported plot type: $plot_type"
-        end
+        isnothing(handler) ? @minimal_warning("Unsupported plot type: $plot_type") : handler(gui_state)
     end
 end
 
-
-
-
-"""GUI bridge: load data and open the databrowser."""
 function _plot_databrowser(gui_state)
-
-    # Check if we have the required files
-    if gui_state.filename[] == ""
-        @minimal_warning "Requested plot settings incompatible: recheck!"
-        return
-    end
-
-    file_ext = lowercase(splitext(gui_state.filename[])[2])
-    if file_ext ∉ [".bdf", ".jld2"]
+    fname = gui_state.filename[]
+    file_ext = lowercase(splitext(fname)[2])
+    if fname == "" || file_ext ∉ (".bdf", ".jld2")
         @minimal_warning "Requested plot settings incompatible: recheck!"
         return
     end
 
     _guarded("Data Browser") do
         if file_ext == ".jld2"
-            # Screen must be created for single datasets to open in a separate window.
-            # For Vectors, the Vector dispatch handles its own screens — creating one
-            # upfront would produce a spurious empty window.
             _guarded_async("Data Browser") do
-                dat = read_data(gui_state.filename[])
+                dat = read_data(fname)
                 isnothing(dat) && return
                 dat = _apply_gui_filters(dat, gui_state)
                 isnothing(dat) && return
                 if dat isa Vector
                     plot_databrowser(dat)
                 else
-                    new_screen = _create_screen()
-                    plot_databrowser(dat; screen = new_screen)
+                    plot_databrowser(dat; screen = _create_screen())
                 end
             end
-        else # Load from raw eeg data file
+        else
             layout = nothing
             if gui_state.layout_file[] != ""
                 layout = read_layout(gui_state.layout_file[])
                 polar_to_cartesian_xy!(layout)
             end
-
-            dat = read_raw_data(gui_state.filename[])
-            if isnothing(layout)
-                dat = create_eegfun_data(dat)
-            else
-                dat = create_eegfun_data(dat, layout)
-            end
-
-            # Update electrode menu with actual channel labels from the loaded data
+            raw = read_raw_data(fname)
+            dat = isnothing(layout) ? create_eegfun_data(raw) : create_eegfun_data(raw, layout)
             gui_state.channel_menu.options = vcat(["Select"], string.(channel_labels(dat)))
             _guarded_async("Data Browser") do
-                new_screen = _create_screen()
-                plot_databrowser(dat; screen = new_screen)
+                plot_databrowser(dat; screen = _create_screen())
             end
         end
     end
 end
 
-"""GUI bridge: load epoch data and call `plot_epochs`."""
 function _plot_epochs(gui_state)
     isnothing(_validate_file(gui_state)) && return
-
     fname = gui_state.filename[]
-    is_pattern = _is_pattern(fname)
+    cond_list = _parse_gui_int_field(gui_state.condition[])
+    if isnothing(cond_list)
+        @minimal_warning "Requested plot settings incompatible: recheck!"
+        return
+    end
+    cond_sel = isempty(cond_list) ? conditions() : conditions(cond_list)
+    selected_channels = _gui_selected_channels(gui_state)
 
-    if is_pattern
-        # Pattern mode — parse participant/condition filters and forward to plot_epochs
-        cond_list = _parse_gui_int_field(gui_state.condition[])
-        if isnothing(cond_list)
-            @minimal_warning "Requested plot settings incompatible: recheck!"
-            return
-        end
-        cond_sel = isempty(cond_list) ? conditions() : conditions(cond_list)
-        selected_channels = isempty(gui_state.electrodes[]) ? channels() : channels(Symbol.(gui_state.electrodes[]))
-
+    if _is_pattern(fname)
         res = _resolve_batch_files_helper(gui_state)
         isnothing(res) && return
-        files, part_sel, input_dir_resolved = res
-
+        _, part_sel, _ = res
         _guarded_async("Epochs") do
-            layout_sym = Symbol(gui_state.layout_type[])
             plot_epochs(
                 fname;
-                input_dir             = _gui_dir(gui_state),
+                input_dir = _gui_dir(gui_state),
                 participant_selection = part_sel,
-                condition_selection   = cond_sel,
-                channel_selection     = selected_channels,
-                layout                = layout_sym,
-                xlim                  = _gui_lim(gui_state.xlim[]),
-                ylim                  = _gui_lim(gui_state.ylim[]),
-                yreversed             = gui_state.invert_y[],
+                condition_selection = cond_sel,
+                channel_selection = selected_channels,
+                layout = Symbol(gui_state.layout_type[]),
+                xlim = _gui_lim(gui_state.xlim[]),
+                ylim = _gui_lim(gui_state.ylim[]),
+                yreversed = gui_state.invert_y[],
             )
         end
         return
     end
 
-    # .jld2 mode — apply condition + epoch filters from GUI
-    cond_list  = _parse_gui_int_field(gui_state.condition[])
     epoch_list = _parse_gui_int_field(gui_state.epoch[])
-    if isnothing(cond_list) || isnothing(epoch_list)
+    if isnothing(epoch_list)
         @minimal_warning "Requested plot settings incompatible: recheck!"
         return
     end
-    cond_sel  = isempty(cond_list) ? conditions() : conditions(cond_list)
     epoch_sel = isempty(epoch_list) ? epochs() : epochs(epoch_list)
 
-    selected_channels = isempty(gui_state.electrodes[]) ? channels() : channels(Symbol.(gui_state.electrodes[]))
-
     _guarded_async("Epochs") do
-        layout_sym = Symbol(gui_state.layout_type[])
         plot_epochs(
             fname;
             channel_selection = selected_channels,
             condition_selection = cond_sel,
             epoch_selection = epoch_sel,
-            layout = layout_sym,
+            layout = Symbol(gui_state.layout_type[]),
             average_channels = gui_state.average_channels[],
             xlim = _gui_lim(gui_state.xlim[]),
             ylim = _gui_lim(gui_state.ylim[]),
@@ -607,36 +443,29 @@ function _plot_epochs(gui_state)
     end
 end
 
-"""GUI bridge: load ERP data and call `plot_erp`."""
 function _plot_erp(gui_state)
     isnothing(_validate_file(gui_state)) && return
-
     fname = gui_state.filename[]
-    input_dir = _gui_dir(gui_state)
-    is_pattern = _is_pattern(fname)
+    cond_list = _parse_gui_int_field(gui_state.condition[])
+    if isnothing(cond_list)
+        @minimal_warning "Requested plot settings incompatible: recheck!"
+        return
+    end
+    cond_sel = isempty(cond_list) ? conditions() : conditions(cond_list)
+    selected_channels = _gui_selected_channels(gui_state)
+    baseline = _gui_lim((gui_state.baseline_start[], gui_state.baseline_end[]))
 
-    if is_pattern
-        # Pattern mode — parse all relevant GUI filters and forward to plot_erp
-        cond_list = _parse_gui_int_field(gui_state.condition[])
-        if isnothing(cond_list)
-            @minimal_warning "Requested plot settings incompatible: recheck!"
-            return
-        end
-        cond_sel = isempty(cond_list) ? conditions() : conditions(cond_list)
-        selected_channels = isempty(gui_state.electrodes[]) ? channels() : channels(Symbol.(gui_state.electrodes[]))
-
+    if _is_pattern(fname)
         res = _resolve_batch_files_helper(gui_state)
         isnothing(res) && return
-        files, part_sel, input_dir_resolved = res
-
+        _, part_sel, _ = res
+        input_dir = _gui_dir(gui_state)
         _guarded_async("ERP") do
-            layout_sym = Symbol(gui_state.layout_type[])
-            baseline = _gui_lim((gui_state.baseline_start[], gui_state.baseline_end[]))
             plot_erp(
                 fname;
                 input_dir = input_dir,
                 participant_selection = part_sel,
-                layout = layout_sym,
+                layout = Symbol(gui_state.layout_type[]),
                 channel_selection = selected_channels,
                 condition_selection = cond_sel,
                 baseline_interval = baseline,
@@ -649,23 +478,10 @@ function _plot_erp(gui_state)
         return
     end
 
-    # .jld2 mode — apply condition filter from GUI
-    cond_list = _parse_gui_int_field(gui_state.condition[])
-    if isnothing(cond_list)
-        @minimal_warning "Requested plot settings incompatible: recheck!"
-        return
-    end
-    cond_sel = isempty(cond_list) ? conditions() : conditions(cond_list)
-
-    selected_channels = isempty(gui_state.electrodes[]) ? channels() : channels(Symbol.(gui_state.electrodes[]))
-
-    baseline = _gui_lim((gui_state.baseline_start[], gui_state.baseline_end[]))
-
     _guarded_async("ERP") do
-        layout_sym = Symbol(gui_state.layout_type[])
         plot_erp(
             fname;
-            layout = layout_sym,
+            layout = Symbol(gui_state.layout_type[]),
             condition_selection = cond_sel,
             channel_selection = selected_channels,
             baseline_interval = baseline,
@@ -677,38 +493,28 @@ function _plot_erp(gui_state)
     end
 end
 
-"""GUI bridge: load data and call `plot_topography`."""
 function _plot_topography(gui_state)
     isnothing(_validate_file(gui_state)) && return
-
     fname = gui_state.filename[]
-    input_dir = _gui_dir(gui_state)
-    is_pattern = _is_pattern(fname)
-
-    # Shared setup
-    selected_channels = isempty(gui_state.electrodes[]) ? channels() : channels(Symbol.(gui_state.electrodes[]))
+    selected_channels = _gui_selected_channels(gui_state)
 
     function _do_topo_plot(data)
         data = _apply_gui_filters(data, gui_state)
         isnothing(data) && return
 
-        # Build baseline interval from GUI
         baseline_interval = _gui_lim((gui_state.baseline_start[], gui_state.baseline_end[]))
-
         !isnothing(baseline_interval) && baseline!(data, baseline_interval)
 
-        # xlim → interval_selection (time window to average over); zlim/ylim → colorrange
-        x_lim        = _gui_lim(gui_state.xlim[])
+        x_lim = _gui_lim(gui_state.xlim[])
         interval_sel = !isnothing(x_lim) ? times(x_lim[1], x_lim[2]) : times()
-        z_lim        = _gui_lim(gui_state.zlim[])
-        y_lim        = _gui_lim(gui_state.ylim[])
-        color_range  = !isnothing(z_lim) ? z_lim : y_lim
+        z_lim = _gui_lim(gui_state.zlim[])
+        y_lim = _gui_lim(gui_state.ylim[])
+        color_range = !isnothing(z_lim) ? z_lim : y_lim
         extra_kwargs = isnothing(color_range) ? (;) : (colorrange = color_range,)
 
         if data isa Vector{<:ErpData} || data isa ErpData
             plot_topography(data; channel_selection = selected_channels, interval_selection = interval_sel, extra_kwargs...)
         elseif data isa Vector{<:EpochData} || data isa EpochData
-            # Blank or unparseable epoch field defaults to epoch 1
             epoch_str = strip(gui_state.epoch[])
             epoch_num = isempty(epoch_str) ? 1 : something(tryparse(Int, epoch_str), 1)
             plot_topography(data, epoch_num; channel_selection = selected_channels, interval_selection = interval_sel, extra_kwargs...)
@@ -717,35 +523,27 @@ function _plot_topography(gui_state)
         end
     end
 
-    if is_pattern
-        cond_list = _parse_gui_int_field(gui_state.condition[])
-        if isnothing(cond_list)
+    if _is_pattern(fname)
+        if isnothing(_parse_gui_int_field(gui_state.condition[]))
             @minimal_warning "Requested plot settings incompatible: recheck!"
             return
         end
-
         res = _resolve_batch_files_helper(gui_state)
         isnothing(res) && return
-        files, part_sel, input_dir = res
+        files, _, input_dir = res
 
         _guarded_async("Topography") do
             for file in sort(files, by = _natural_sort_key)
                 @info "Plotting: $file"
                 data = read_data(joinpath(input_dir, file))
-                isnothing(data) && continue
-                _do_topo_plot(data)
+                !isnothing(data) && _do_topo_plot(data)
             end
         end
         return
     end
 
-    # .jld2 mode
     _guarded_async("Topography") do
         data = read_data(fname)
-        if isnothing(data)
-            @minimal_warning "Requested plot settings incompatible: recheck!"
-            return
-        end
-        _do_topo_plot(data)
+        isnothing(data) ? @minimal_warning("Requested plot settings incompatible: recheck!") : _do_topo_plot(data)
     end
 end

@@ -1,46 +1,57 @@
-# === NOTE ON SPELLING: COLOR vs COLOUR ===
-# This codebase uses "color" (American spelling) throughout to maintain
-# consistency with Makie.jl's API, which uses "color" in all its attributes
-# (e.g., colormap, colorbar, strokecolor, etc.). While "colour" may be the
-# preferred spelling in some regions, we follow Makie's convention for
-# consistency and to avoid confusion when working with Makie's API.
-# =============================================================================
-
-"""
-    _find_continuous_regions(mask::AbstractVector{Bool}, time_points::AbstractVector{<:Real})
-
-Find continuous regions where mask is true, returning `(start_time, end_time)` tuples
-expanded by `±dt/2` so single-sample significant clusters have width `dt` instead of `0.0`.
-"""
-function _find_continuous_regions(mask::AbstractVector{Bool}, time_points::AbstractVector{<:Real})
-
-    regions = Vector{Tuple{Float64,Float64}}()
-    if isempty(mask) || !any(mask)
-        return regions
+function _estimate_dt(time_points::AbstractVector{<:Real})::Float64
+    n = length(time_points)
+    n <= 1 && return 0.001
+    time_points isa AbstractRange && return Float64(step(time_points))
+    @inbounds d1 = Float64(time_points[2] - time_points[1])
+    tol = 1e-9 * max(1.0, abs(d1))
+    @inbounds for i = 2:(n-1)
+        if abs(Float64(time_points[i+1] - time_points[i]) - d1) > tol
+            return Float64(median(diff(time_points)))
+        end
     end
+    return d1
+end
 
-    dt = length(time_points) > 1 ? Float64(median(diff(time_points))) : 0.001
-    half_dt = dt / 2.0
+function _find_continuous_regions(mask::AbstractVector{Bool}, time_points::AbstractVector{<:Real})
+    regions = Tuple{Float64,Float64}[]
+    (isempty(mask) || !any(mask)) && return regions
 
+    half_dt = _estimate_dt(time_points) * 0.5
     in_region = false
     start_idx = 0
 
-    for (i, is_sig) in enumerate(mask)
-        if is_sig && !in_region # Start of a new region
+    @inbounds for i in eachindex(mask)
+        is_sig = mask[i]
+        if is_sig && !in_region
             in_region = true
             start_idx = i
-        elseif !is_sig && in_region # End of a region
+        elseif !is_sig && in_region
             in_region = false
             push!(regions, (Float64(time_points[start_idx]) - half_dt, Float64(time_points[i-1]) + half_dt))
         end
     end
-
-    # Handle case where region extends to end
     if in_region
         push!(regions, (Float64(time_points[start_idx]) - half_dt, Float64(time_points[end]) + half_dt))
     end
-
     return regions
+end
+
+function _parse_positive_cm(tb::Textbox, fallback::Float64)::Float64
+    val = tryparse(Float64, tb.displayed_string[])
+    (isnothing(val) || val <= 0.0) && (val = tryparse(Float64, tb.stored_string[]))
+    return (isnothing(val) || val <= 0.0) ? fallback : val
+end
+
+function _parse_menu_dpi(scale_menu::Menu)::Int
+    scale_str = scale_menu.selection[]
+    isnothing(scale_str) && return 72
+    parsed = tryparse(Int, first(eachsplit(scale_str)))
+    return something(parsed, 72)
+end
+
+function _set_textbox_str!(tb::Textbox, s::String)
+    tb.displayed_string[] = s
+    tb.stored_string[] = s
 end
 
 function _open_save_settings_dialog(fig)
@@ -74,11 +85,8 @@ function _open_save_settings_dialog(fig)
     Label(size_grid[1, 6], "Lock Aspect", font = :bold)
     colgap!(size_grid, 6)
 
-    # Initial values
-    w_box.displayed_string[] = string(w_orig_cm)
-    w_box.stored_string[] = string(w_orig_cm)
-    h_box.displayed_string[] = string(h_orig_cm)
-    h_box.stored_string[] = string(h_orig_cm)
+    _set_textbox_str!(w_box, string(w_orig_cm))
+    _set_textbox_str!(h_box, string(h_orig_cm))
 
     Label(fig_settings[5, 1], "Output Pixels:", halign = :left, font = :bold)
     pixel_label = Label(fig_settings[5, 2], "", halign = :left)
@@ -89,41 +97,14 @@ function _open_save_settings_dialog(fig)
     export_button = Button(fig_settings[7, 1:2], label = "Select File & Save...", font = :bold)
 
     function update_pixel_display()
-        fmt = format_menu.selection[]
-        if fmt in ("PDF", "SVG")
+        if format_menu.selection[] in ("PDF", "SVG")
             pixel_label.text[] = "N/A (Vector Format)"
             return
         end
-
-        w_cm = tryparse(Float64, w_box.displayed_string[])
-        if isnothing(w_cm) || w_cm <= 0.0
-            w_cm = tryparse(Float64, w_box.stored_string[])
-        end
-        if isnothing(w_cm) || w_cm <= 0.0
-            w_cm = w_orig_cm
-        end
-
-        h_cm = tryparse(Float64, h_box.displayed_string[])
-        if isnothing(h_cm) || h_cm <= 0.0
-            h_cm = tryparse(Float64, h_box.stored_string[])
-        end
-        if isnothing(h_cm) || h_cm <= 0.0
-            h_cm = h_orig_cm
-        end
-
-        scale_str = scale_menu.selection[]
-        dpi_val = 72
-        if !isnothing(scale_str)
-            parsed_dpi = tryparse(Int, first(split(scale_str)))
-            if !isnothing(parsed_dpi)
-                dpi_val = parsed_dpi
-            end
-        end
-
-        w_px = round(Int, (w_cm / 2.54) * dpi_val)
-        h_px = round(Int, (h_cm / 2.54) * dpi_val)
-
-        pixel_label.text[] = "$(w_px) × $(h_px) px"
+        w_cm = _parse_positive_cm(w_box, w_orig_cm)
+        h_cm = _parse_positive_cm(h_box, h_orig_cm)
+        dpi_val = _parse_menu_dpi(scale_menu)
+        pixel_label.text[] = "$(round(Int, (w_cm / 2.54) * dpi_val)) × $(round(Int, (h_cm / 2.54) * dpi_val)) px"
     end
 
     on(scale_menu.selection) do _
@@ -143,10 +124,7 @@ function _open_save_settings_dialog(fig)
             if lock_toggle.active[]
                 h_curr = tryparse(Float64, h_box.stored_string[])
                 h_new = round(w_val * (h_orig / w_orig), digits = 2)
-                if isnothing(h_curr) || abs(h_curr - h_new) > 0.01
-                    h_box.displayed_string[] = string(h_new)
-                    h_box.stored_string[] = string(h_new)
-                end
+                (isnothing(h_curr) || abs(h_curr - h_new) > 0.01) && _set_textbox_str!(h_box, string(h_new))
             end
             update_pixel_display()
         end
@@ -158,10 +136,7 @@ function _open_save_settings_dialog(fig)
             if lock_toggle.active[]
                 w_curr = tryparse(Float64, w_box.stored_string[])
                 w_new = round(h_val * (w_orig / h_orig), digits = 2)
-                if isnothing(w_curr) || abs(w_curr - w_new) > 0.01
-                    w_box.displayed_string[] = string(w_new)
-                    w_box.stored_string[] = string(w_new)
-                end
+                (isnothing(w_curr) || abs(w_curr - w_new) > 0.01) && _set_textbox_str!(w_box, string(w_new))
             end
             update_pixel_display()
         end
@@ -171,9 +146,7 @@ function _open_save_settings_dialog(fig)
         if locked
             w_val = tryparse(Float64, w_box.stored_string[])
             if !isnothing(w_val) && w_val > 0.0
-                h_new = round(w_val * (h_orig / w_orig), digits = 2)
-                h_box.displayed_string[] = string(h_new)
-                h_box.stored_string[] = string(h_new)
+                _set_textbox_str!(h_box, string(round(w_val * (h_orig / w_orig), digits = 2)))
                 update_pixel_display()
             end
         end
@@ -184,61 +157,22 @@ function _open_save_settings_dialog(fig)
     on(export_button.clicks) do _
         fmt = format_menu.selection[]
         trans = transparent_toggle.active[]
-
-        # Determine dimensions in cm
-        w_str = w_box.displayed_string[]
-        w_cm = tryparse(Float64, w_str)
-        if isnothing(w_cm) || w_cm <= 0.0
-            w_cm = tryparse(Float64, w_box.stored_string[])
-        end
-        if isnothing(w_cm) || w_cm <= 0.0
-            w_cm = w_orig_cm
-        end
-
-        h_str = h_box.displayed_string[]
-        h_cm = tryparse(Float64, h_str)
-        if isnothing(h_cm) || h_cm <= 0.0
-            h_cm = tryparse(Float64, h_box.stored_string[])
-        end
-        if isnothing(h_cm) || h_cm <= 0.0
-            h_cm = h_orig_cm
-        end
-
-        scale_str = scale_menu.selection[]
-        dpi_val = 72
-        if !isnothing(scale_str)
-            parsed_dpi = tryparse(Int, first(split(scale_str)))
-            if !isnothing(parsed_dpi)
-                dpi_val = parsed_dpi
-            end
-        end
-
-        # Calculate final size in points
-        w_target_pt = (w_cm / 2.54) * 72.0
-        h_target_pt = (h_cm / 2.54) * 72.0
-
-        ext_map = Dict("PNG" => ".png", "PDF" => ".pdf", "SVG" => ".svg", "JPG" => ".jpg")
-        filter_ext = ext_map[fmt]
+        w_target_pt = (_parse_positive_cm(w_box, w_orig_cm) / 2.54) * 72.0
+        h_target_pt = (_parse_positive_cm(h_box, h_orig_cm) / 2.54) * 72.0
+        dpi_val = _parse_menu_dpi(scale_menu)
+        filter_ext = "." * lowercase(fmt)
 
         @async begin
             try
-                # Close settings window
                 screen = Makie.getscreen(fig_settings.scene)
-                if !isnothing(screen)
-                    close(screen)
-                end
+                !isnothing(screen) && close(screen)
 
-                # Open save file dialog with specific filter
                 path = NativeFileDialog.save_file(pwd(); filterlist = lowercase(fmt))
                 if !isempty(path)
-                    # Append correct extension if missing
-                    if !endswith(lowercase(path), filter_ext)
-                        path = path * filter_ext
-                    end
+                    endswith(lowercase(path), filter_ext) || (path *= filter_ext)
 
-                    # Handle transparency
                     orig_bg = fig.scene.backgroundcolor[]
-                    orig_content_bgs = Dict()
+                    orig_content_bgs = Dict{Any,Any}()
                     if trans
                         fig.scene.backgroundcolor[] = RGBAf(0, 0, 0, 0)
                         for content in fig.content
@@ -249,10 +183,8 @@ function _open_save_settings_dialog(fig)
                         end
                     end
 
-                    # Store original size and resize figure temporarily
                     w_orig_sz, h_orig_sz = size(fig.scene)
                     resize!(fig.scene, (w_target_pt, h_target_pt))
-
                     try
                         if filter_ext in (".pdf", ".svg")
                             _save_vector_figure(path, fig; pt_per_unit = 1.0)
@@ -261,9 +193,7 @@ function _open_save_settings_dialog(fig)
                         end
                         @info "Figure saved to: $path"
                     finally
-                        # Restore original figure size
                         resize!(fig.scene, (w_orig_sz, h_orig_sz))
-
                         if trans
                             fig.scene.backgroundcolor[] = orig_bg
                             for (content, bg) in orig_content_bgs
@@ -281,7 +211,6 @@ function _open_save_settings_dialog(fig)
     _display_in_screen(fig_settings)
 end
 
-# === MAKIE BACKEND EXTENSION STATE ===
 mutable struct MakieExtensionState
     glmakie_active::Bool
     create_screen::Function
@@ -305,12 +234,10 @@ const MAKIE_EXT_STATE = MakieExtensionState(
         end
     end,
     (path, fig; pt_per_unit = 1.0) -> begin
-        if string(Makie.current_backend()) == "CairoMakie"
-            Makie.save(path, fig; pt_per_unit = pt_per_unit)
-        else
+        if string(Makie.current_backend()) != "CairoMakie"
             @minimal_warning "Saving vector figures (.pdf/.svg) with optimal quality requires CairoMakie. Please run `using CairoMakie`. Falling back to default Makie save."
-            Makie.save(path, fig; pt_per_unit = pt_per_unit)
         end
+        Makie.save(path, fig; pt_per_unit = pt_per_unit)
     end,
     (title::String) -> begin
         backend = Makie.current_backend()
@@ -324,45 +251,12 @@ const MAKIE_EXT_STATE = MakieExtensionState(
     end,
 )
 
-"""
-    _create_screen(; size = nothing)
-
-Create an interactive Makie screen. If GLMakie is loaded, creates a `GLMakie.Screen`.
-Otherwise, provides an informative error.
-"""
-function _create_screen(; size = nothing)
-    return MAKIE_EXT_STATE.create_screen(; size = size)
-end
-
-"""
-    _display_in_screen(fig; size = nothing)
-
-Display a figure in an interactive screen. If GLMakie is loaded, displays in a `GLMakie.Screen`.
-Otherwise, falls back to standard `display(fig)`.
-"""
-function _display_in_screen(fig; size = nothing)
-    return MAKIE_EXT_STATE.display_screen(fig; size = size)
-end
-
-"""
-    _save_vector_figure(path, fig; pt_per_unit = 1.0)
-
-Save a figure as vector graphics (.pdf or .svg). If CairoMakie is loaded, uses CairoMakie backend.
-Otherwise, warns the user to load CairoMakie and falls back to standard Makie save.
-"""
-function _save_vector_figure(path, fig; pt_per_unit = 1.0)
-    return MAKIE_EXT_STATE.save_vector(path, fig; pt_per_unit = pt_per_unit)
-end
-
+_create_screen(; size = nothing) = MAKIE_EXT_STATE.create_screen(; size = size)
+_display_in_screen(fig; size = nothing) = MAKIE_EXT_STATE.display_screen(fig; size = size)
+_save_vector_figure(path, fig; pt_per_unit = 1.0) = MAKIE_EXT_STATE.save_vector(path, fig; pt_per_unit = pt_per_unit)
 _is_glmakie_available() = MAKIE_EXT_STATE.glmakie_active
+_set_window_title(title::String) = MAKIE_EXT_STATE.set_title(title)
 
-"""
-    _check_interactive_demo_backend(demo_name::String = "Interactive demo") -> Bool
-
-Check if an interactive backend (GLMakie) is active or available. If GLMakie is loaded
-in `Main`, it is activated. If no suitable interactive backend is available, warns the user
-with activation instructions and returns `false`.
-"""
 function _check_interactive_demo_backend(demo_name::String = "Interactive demo")
     if isdefined(Main, :GLMakie)
         try
@@ -370,7 +264,6 @@ function _check_interactive_demo_backend(demo_name::String = "Interactive demo")
         catch
         end
     end
-
     backend = Makie.current_backend()
     if backend === missing || string(backend) == "CairoMakie" || (!_is_glmakie_available() && !isdefined(Main, :GLMakie))
         @minimal_warning """
@@ -385,17 +278,10 @@ function _check_interactive_demo_backend(demo_name::String = "Interactive demo")
     return true
 end
 
-"""
-    _display_demo_figure(fig)
-
-Safely display an interactive demo figure. Avoids hard crashes if no display screen or backend is available.
-"""
 function _display_demo_figure(fig)
     isnothing(fig) && return nothing
     backend = Makie.current_backend()
-    if backend === missing || isnothing(backend) || string(backend) == "CairoMakie"
-        return nothing
-    end
+    (backend === missing || isnothing(backend) || string(backend) == "CairoMakie") && return nothing
     try
         display(fig)
     catch e
@@ -404,67 +290,29 @@ function _display_demo_figure(fig)
     return nothing
 end
 
-function _has_focused_textbox(fig::Figure)::Bool
-    for block in fig.content
-        if block isa Textbox && block.focused[]
-            return true
-        end
-    end
-    return false
-end
+_has_focused_textbox(fig::Figure)::Bool = any(block -> block isa Textbox && block.focused[], fig.content)
 
 function _display_figure(fig)
-    # Register Ctrl+S keyboard shortcut for saving the figure (ignoring focused Textboxes)
     on(events(fig).keyboardbutton) do event
         if event.action == Keyboard.press && event.key == Keyboard.s
             kb_state = events(fig).keyboardstate
-            ctrl_held = (Keyboard.left_control in kb_state) || (Keyboard.right_control in kb_state)
-            if ctrl_held && !_has_focused_textbox(fig)
+            if (Keyboard.left_control in kb_state || Keyboard.right_control in kb_state) && !_has_focused_textbox(fig)
                 _open_save_settings_dialog(fig)
             end
         end
     end
-
     _display_in_screen(fig)
 end
 
-
-"""
-    _set_window_title(title::String)
-
-Set the window title for the active backend if supported (e.g., GLMakie).
-"""
-function _set_window_title(title::String)
-    return MAKIE_EXT_STATE.set_title(title)
-end
-
-"""
-    _create_figure_with_axis(data; title_suffix::String = "", figure_kwargs...)
-
-Create a Figure and Axis with window title set from data.
-
-# Arguments
-- `data`: Data object to generate window title from (passed to `_generate_window_title`)
-- `title_suffix::String`: Optional suffix to append to the generated title
-- `figure_kwargs...`: Keyword arguments passed to `Figure()` constructor
-
-# Returns
-- `fig::Figure`: The created figure
-- `ax::Axis`: The created axis at position `[1, 1]`
-"""
 function _create_figure_with_axis(data; title_suffix::String = "", figure_kwargs...)
     title = _generate_window_title(data)
-    if !isempty(title_suffix)
-        title = title * title_suffix
-    end
+    !isempty(title_suffix) && (title *= title_suffix)
     _set_window_title(title)
     fig = _eegfun_figure(; figure_kwargs...)
     ax = Axis(fig[1, 1])
     return (fig = fig, axes = [ax])
 end
 
-# --- Theme Resolution Helpers ---
-# Shared helper: resolve a theme attribute from a Makie scene
 _resolve_from_scene(scene, attr::Symbol, user_val, default_val) =
     isnothing(user_val) ? (haskey(Makie.theme(scene), attr) ? Makie.theme(scene)[attr][] : default_val) : user_val
 
@@ -528,16 +376,14 @@ const _STANDARD_KWARG_ALIASES = Dict{Symbol,Symbol}(
     :n_topos => :n_topo,
 )
 
-"""
-    _normalize_plot_kwargs(kwargs, extra_aliases = nothing) -> Dict{Symbol,Any}
+@inline _has_kwarg_key(kw::Union{AbstractDict{Symbol},Base.Pairs{Symbol},NamedTuple}, k::Symbol) = haskey(kw, k)
+@inline _has_kwarg_key(kw, k::Symbol) = any(p -> Symbol(first(p)) === k, pairs(kw))
 
-Map legacy/outlier keyword argument names onto standardized `EegFun` plot keyword names
-before validating with `_merge_plot_kwargs`. Explicit canonical keys take precedence.
-"""
 function _normalize_plot_kwargs(kwargs, extra_aliases::Union{Nothing,AbstractDict{Symbol,Symbol}} = nothing)::Dict{Symbol,Any}
-    raw = Dict{Symbol,Any}(Symbol(k) => v for (k, v) in pairs(kwargs))
     out = Dict{Symbol,Any}()
-    for (k, v) in raw
+    sizehint!(out, length(kwargs))
+    for (raw_k, v) in pairs(kwargs)
+        k = Symbol(raw_k)
         target = if !isnothing(extra_aliases) && haskey(extra_aliases, k)
             extra_aliases[k]
         elseif haskey(_STANDARD_KWARG_ALIASES, k)
@@ -546,14 +392,9 @@ function _normalize_plot_kwargs(kwargs, extra_aliases::Union{Nothing,AbstractDic
             k
         end
 
-        if target != k
-            # Canonical key explicitly passed by user takes precedence over alias
-            haskey(raw, target) && continue
-            if k == :ylogscale && target == :yscale && v isa Bool
-                out[target] = v ? :log10 : :linear
-            else
-                out[target] = v
-            end
+        if target !== k
+            _has_kwarg_key(kwargs, target) && continue
+            out[target] = (k === :ylogscale && target === :yscale && v isa Bool) ? (v ? :log10 : :linear) : v
         else
             out[k] = v
         end
@@ -561,47 +402,15 @@ function _normalize_plot_kwargs(kwargs, extra_aliases::Union{Nothing,AbstractDic
     return out
 end
 
-
-
-"""
-    _get_colorbar_position(pos::Union{Symbol, Tuple}, row_span, col_span)
-
-Converts a symbolic position (:right, :left, :top, :bottom) into a (row, col) grid coordinate
-relative to the given row and column spans of the main plot(s). 
-Returns a tuple (row, col) suitable for indexing into a Makie Figure (e.g. fig[row, col]).
-"""
 function _get_colorbar_position(pos, row_span, col_span)
-    if pos isa Tuple
-        return pos
-    elseif pos == :right
-        return (row_span, last(col_span) + 1)
-    elseif pos == :left
-        return (row_span, first(col_span) - 1)
-    elseif pos == :bottom
-        return (last(row_span) + 1, col_span)
-    elseif pos == :top
-        return (first(row_span) - 1, col_span)
-    else
-        return (row_span, last(col_span) + 1) # Default to right
-    end
+    pos isa Tuple && return pos
+    pos == :right && return (row_span, last(col_span) + 1)
+    pos == :left && return (row_span, first(col_span) - 1)
+    pos == :bottom && return (last(row_span) + 1, col_span)
+    pos == :top && return (first(row_span) - 1, col_span)
+    return (row_span, last(col_span) + 1)
 end
 
-# === AXIS STYLING FUNCTIONS ===
-
-"""
-    _set_axis_grid!(ax; xgrid = false, ygrid = false, xminorgrid = false, yminorgrid = false)
-
-Apply grid settings to the axis.
-
-# Arguments
-- `ax`: Makie Axis object
-
-# Keyword Arguments
-- `xgrid`: Whether to show x-axis grid
-- `ygrid`: Whether to show y-axis grid  
-- `xminorgrid`: Whether to show x-axis minor grid
-- `yminorgrid`: Whether to show y-axis minor grid
-"""
 function _set_axis_grid!(ax; xgrid = false, ygrid = false, xminorgrid = false, yminorgrid = false)
     ax.xgridvisible = xgrid
     ax.ygridvisible = ygrid
@@ -609,21 +418,15 @@ function _set_axis_grid!(ax; xgrid = false, ygrid = false, xminorgrid = false, y
     ax.yminorgridvisible = yminorgrid
 end
 
-"""
-    _set_axis_properties!(ax; xlim = nothing, ylim = nothing, xlabel = "", ylabel = "", yreversed = false)
+function _make_step_ticks(step_val)
+    return (vmin, vmax) -> begin
+        start_v = ceil(vmin / step_val) * step_val
+        end_v = floor(vmax / step_val) * step_val
+        ticks = collect(start_v:step_val:(end_v+1e-9))
+        return ticks, string.(round.(ticks, sigdigits = 4))
+    end
+end
 
-Apply axis limits, labels, and direction to the axis.
-
-# Arguments
-- `ax`: Makie Axis object
-
-# Keyword Arguments
-- `xlim`: X-axis limits as (min, max) tuple or nothing for auto-scaling
-- `ylim`: Y-axis limits as (min, max) tuple or nothing for auto-scaling
-- `xlabel`: Label for x-axis (default: empty string)
-- `ylabel`: Label for y-axis (default: empty string)
-- `yreversed`: Whether to reverse the y-axis (default: false)
-"""
 function _set_axis_properties!(
     ax;
     xlim = nothing,
@@ -634,53 +437,15 @@ function _set_axis_properties!(
     scale_x_value = nothing,
     scale_y_value = nothing,
 )
-
-    # Set axis labels
     ax.xlabel = xlabel
     ax.ylabel = ylabel
     ax.yreversed = yreversed
-
-    # Set exact tick spacing if provided by the user
-    if !isnothing(scale_x_value)
-        ax.xticks = (vmin, vmax) -> begin
-            start_x = ceil(vmin / scale_x_value) * scale_x_value
-            end_x = floor(vmax / scale_x_value) * scale_x_value
-            ticks = collect(start_x:scale_x_value:(end_x+1e-9))
-            labels = string.(round.(ticks, sigdigits = 4))
-            return ticks, labels
-        end
-    end
-
-    if !isnothing(scale_y_value)
-        ax.yticks = (vmin, vmax) -> begin
-            start_y = ceil(vmin / scale_y_value) * scale_y_value
-            end_y = floor(vmax / scale_y_value) * scale_y_value
-            ticks = collect(start_y:scale_y_value:(end_y+1e-9))
-            labels = string.(round.(ticks, sigdigits = 4))
-            return ticks, labels
-        end
-    end
-
-    # Set axis limits
+    !isnothing(scale_x_value) && (ax.xticks = _make_step_ticks(scale_x_value))
+    !isnothing(scale_y_value) && (ax.yticks = _make_step_ticks(scale_y_value))
     !isnothing(xlim) && xlims!(ax, xlim[1], xlim[2])
     !isnothing(ylim) && ylims!(ax, ylim[1], ylim[2])
-
 end
 
-"""
-    _set_origin_lines!(ax; add_xy_origin = true, color = :gray, linewidth = 0.5, alpha = 0.7)
-
-Add origin lines at x=0 and y=0 to the axis.
-
-# Arguments
-- `ax`: Makie Axis object
-
-# Keyword Arguments
-- `add_xy_origin`: Whether to add origin lines at x=0 and y=0
-- `color`: Color of the origin lines
-- `linewidth`: Line width of the origin lines
-- `alpha`: Transparency of the origin lines
-"""
 function _set_origin_lines!(ax; add_xy_origin = true, color = :gray, linewidth = 1, alpha = 0.8)
     if add_xy_origin
         hlines!(ax, 0, color = color, linewidth = linewidth, alpha = alpha)
@@ -688,11 +453,6 @@ function _set_origin_lines!(ax; add_xy_origin = true, color = :gray, linewidth =
     end
 end
 
-"""
-    _add_origin_scale_indicator!(ax; show_scale_indicator = false, scale_x_value = 0.1, scale_y_value = 10.0, scale_x_label = "s", scale_y_label = "μV")
-
-Replace outer spines and ticks with crosshair axes passing through the origin.
-"""
 function _add_origin_scale_indicator!(
     ax;
     axis_type = :standard,
@@ -701,363 +461,191 @@ function _add_origin_scale_indicator!(
     xlabel = "s",
     ylabel = "μV",
 )
-    if axis_type == :origin
-        # Hide standard spines and decorations
-        hidedecorations!(ax)
-        hidespines!(ax)
+    axis_type == :origin || return
+    hidedecorations!(ax)
+    hidespines!(ax)
 
-        # Draw the thick scale bars starting from (0,0)?
-        # No, for crosshair axes, the origin lines themselves ARE the axes.
-        # We can just keep the hlines! and vlines! from _set_origin_lines! (which are already drawn)
-        # But we'll add our own thick crosshair lines if we want them to stand out
-        linecolor = _resolve_theme_linecolor(ax, nothing)
-        textcolor = _resolve_theme_textcolor(ax, nothing)
-        hlines!(ax, 0, color = linecolor, linewidth = 1, overdraw = true)
-        vlines!(ax, 0, color = linecolor, linewidth = 1, overdraw = true)
+    linecolor = _resolve_theme_linecolor(ax, nothing)
+    textcolor = _resolve_theme_textcolor(ax, nothing)
+    hlines!(ax, 0, color = linecolor, linewidth = 1, overdraw = true)
+    vlines!(ax, 0, color = linecolor, linewidth = 1, overdraw = true)
 
-        # Compute tick positions dynamically based on scale_x_value and scale_y_value
-        x_ticks_obs = lift(ax.finallimits) do lims
-            min_x, max_x = lims.origin[1], lims.origin[1] + lims.widths[1]
-            start_x = ceil(min_x / scale_x_value) * scale_x_value
-            end_x = floor(max_x / scale_x_value) * scale_x_value
-            # Floating point issues can make range collection problematic, so we use a small epsilon
-            collect(start_x:scale_x_value:(end_x+1e-9))
-        end
-
-        y_ticks_obs = lift(ax.finallimits) do lims
-            min_y, max_y = lims.origin[2], lims.origin[2] + lims.widths[2]
-            start_y = ceil(min_y / scale_y_value) * scale_y_value
-            end_y = floor(max_y / scale_y_value) * scale_y_value
-            collect(start_y:scale_y_value:(end_y+1e-9))
-        end
-
-        # Format labels
-        x_labels_obs = lift(x_ticks_obs) do ticks
-            [string(round(t, sigdigits = 3)) for t in ticks]
-        end
-        y_labels_obs = lift(y_ticks_obs) do ticks
-            [string(round(t, sigdigits = 3)) for t in ticks]
-        end
-
-        # Tick markers (small lines crossing the axes)
-        x_pts_obs = lift(x_ticks_obs) do ticks
-            [Point2f(t, 0.0) for t in ticks if abs(t) > 1e-9]
-        end
-        y_pts_obs = lift(y_ticks_obs) do ticks
-            [Point2f(0.0, t) for t in ticks if abs(t) > 1e-9]
-        end
-        scatter!(ax, x_pts_obs, marker = '|', markersize = 10, color = linecolor, overdraw = true, xautolimits = false, yautolimits = false)
-        scatter!(ax, y_pts_obs, marker = '-', markersize = 10, color = linecolor, overdraw = true, xautolimits = false, yautolimits = false)
-
-        # Text labels
-        x_lbls = lift(x_labels_obs, x_ticks_obs) do labels, ticks
-            [l for (l, t) in zip(labels, ticks) if abs(t) > 1e-9]
-        end
-        y_lbls = lift(y_labels_obs, y_ticks_obs) do labels, ticks
-            [l for (l, t) in zip(labels, ticks) if abs(t) > 1e-9]
-        end
-        text!(
-            ax,
-            x_pts_obs,
-            text = x_lbls,
-            align = (:center, :top),
-            offset = (0, -8),
-            color = textcolor,
-            fontsize = 12,
-            overdraw = true,
-            xautolimits = false,
-            yautolimits = false,
-        )
-        text!(
-            ax,
-            y_pts_obs,
-            text = y_lbls,
-            align = (:right, :center),
-            offset = (-8, 0),
-            color = textcolor,
-            fontsize = 12,
-            overdraw = true,
-            xautolimits = false,
-            yautolimits = false,
-        )
-
-        # Axis labels (Time and Amplitude)
-        # Place them at the end of the axes
-        x_axis_label_pos = lift(ax.finallimits) do lims
-            Point2f(lims.origin[1] + lims.widths[1], 0.0)
-        end
-        y_axis_label_pos = lift(ax.finallimits) do lims
-            Point2f(0.0, lims.origin[2] + lims.widths[2])
-        end
-        text!(
-            ax,
-            x_axis_label_pos,
-            text = string(" ", xlabel),
-            align = (:left, :center),
-            color = textcolor,
-            fontsize = 14,
-            overdraw = true,
-            xautolimits = false,
-            yautolimits = false,
-        )
-        text!(
-            ax,
-            y_axis_label_pos,
-            text = string(ylabel, " "),
-            align = (:center, :bottom),
-            color = textcolor,
-            fontsize = 14,
-            overdraw = true,
-            xautolimits = false,
-            yautolimits = false,
-        )
+    x_ticks_obs = lift(ax.finallimits) do lims
+        min_x, max_x = lims.origin[1], lims.origin[1] + lims.widths[1]
+        collect((ceil(min_x/scale_x_value)*scale_x_value):scale_x_value:(floor(max_x/scale_x_value)*scale_x_value+1e-9))
     end
+    y_ticks_obs = lift(ax.finallimits) do lims
+        min_y, max_y = lims.origin[2], lims.origin[2] + lims.widths[2]
+        collect((ceil(min_y/scale_y_value)*scale_y_value):scale_y_value:(floor(max_y/scale_y_value)*scale_y_value+1e-9))
+    end
+
+    x_pts_obs = lift(ticks -> [Point2f(t, 0.0) for t in ticks if abs(t) > 1e-9], x_ticks_obs)
+    y_pts_obs = lift(ticks -> [Point2f(0.0, t) for t in ticks if abs(t) > 1e-9], y_ticks_obs)
+    x_lbls = lift(ticks -> [string(round(t, sigdigits = 3)) for t in ticks if abs(t) > 1e-9], x_ticks_obs)
+    y_lbls = lift(ticks -> [string(round(t, sigdigits = 3)) for t in ticks if abs(t) > 1e-9], y_ticks_obs)
+
+    scatter!(ax, x_pts_obs, marker = '|', markersize = 10, color = linecolor, overdraw = true, xautolimits = false, yautolimits = false)
+    scatter!(ax, y_pts_obs, marker = '-', markersize = 10, color = linecolor, overdraw = true, xautolimits = false, yautolimits = false)
+
+    text!(
+        ax,
+        x_pts_obs,
+        text = x_lbls,
+        align = (:center, :top),
+        offset = (0, -8),
+        color = textcolor,
+        fontsize = 12,
+        overdraw = true,
+        xautolimits = false,
+        yautolimits = false,
+    )
+    text!(
+        ax,
+        y_pts_obs,
+        text = y_lbls,
+        align = (:right, :center),
+        offset = (-8, 0),
+        color = textcolor,
+        fontsize = 12,
+        overdraw = true,
+        xautolimits = false,
+        yautolimits = false,
+    )
+
+    x_axis_label_pos = lift(lims -> Point2f(lims.origin[1] + lims.widths[1], 0.0), ax.finallimits)
+    y_axis_label_pos = lift(lims -> Point2f(0.0, lims.origin[2] + lims.widths[2]), ax.finallimits)
+    text!(
+        ax,
+        x_axis_label_pos,
+        text = string(" ", xlabel),
+        align = (:left, :center),
+        color = textcolor,
+        fontsize = 14,
+        overdraw = true,
+        xautolimits = false,
+        yautolimits = false,
+    )
+    text!(
+        ax,
+        y_axis_label_pos,
+        text = string(ylabel, " "),
+        align = (:center, :bottom),
+        color = textcolor,
+        fontsize = 14,
+        overdraw = true,
+        xautolimits = false,
+        yautolimits = false,
+    )
 end
 
-# === WINDOW TITLE AND STRING ABBREVIATION UTILITIES ===
+const _SPLIT_PARTS_RE = r"([A-Z][a-z]*|[a-z]+)(\d*)|(_)|(\d+)"
 
-"""
-    _split_into_parts(s::String)
-
-Split a string into parts on uppercase letters, underscores, and trailing digits.
-Returns a vector of parts, e.g., "ExampleCondition1" -> ["Example", "Condition", "1"]
-
-# Arguments
-- `s::String`: String to split
-
-# Returns
-- `Vector{String}`: Vector of parts
-"""
 function _split_into_parts(s::String)
-    # Use regex to split: match words (uppercase or lowercase, with optional trailing digits), underscores, or standalone digits
-    # Pattern: ([A-Z][a-z]*|[a-z]+)(\d*) - word with optional trailing digits, (_) - underscore, (\d+) - standalone digits
     parts = String[]
-    pattern = r"([A-Z][a-z]*|[a-z]+)(\d*)|(_)|(\d+)"
-
-    for m in eachmatch(pattern, s)
-        if !isnothing(m.captures[3])  # Underscore
+    isempty(s) && return parts
+    for m in eachmatch(_SPLIT_PARTS_RE, s)
+        if !isnothing(m.captures[3])
             push!(parts, "_")
-        elseif !isnothing(m.captures[4])  # Standalone digits
-            push!(parts, m.captures[4])
-        else  # Word with optional digits
-            word = m.captures[1]
+        elseif !isnothing(m.captures[4])
+            push!(parts, String(m.captures[4]))
+        else
+            push!(parts, String(m.captures[1]))
             digits = m.captures[2]
-            push!(parts, word)
-            !isempty(digits) && push!(parts, digits)
+            !isempty(digits) && push!(parts, String(digits))
         end
     end
-
     return parts
 end
 
-"""
-    _generate_window_title(datasets; max_total_length::Int = 80, max_name_length::Int = 30)
-
-Generate a window title from datasets, including file names and condition names.
-Handles single and multiple conditions, with automatic shortening if needed.
-
-Works with any type that has `.file` and `.condition_name` fields.
-
-If all datasets share the same file name, uses format: "FileName: Cond1, Cond2, Cond3"
-If datasets have different file names, uses format: "FileX:Cond1, FileY:Cond2"
-
-# Arguments
-- `datasets`: Vector of datasets (must have `.file` and `.condition_name` fields)
-- `max_total_length::Int`: Maximum total length of the result string
-- `max_name_length::Int`: Maximum length for each individual "file:condition" pair
-
-# Returns
-- `String`: Window title string
-"""
 function _generate_window_title(datasets::Vector{<:EegData}; max_total_length::Int = 80, max_name_length::Int = 20)
-
     isempty(datasets) && return ""
     length(datasets) == 1 && return "$(datasets[1].file):$(datasets[1].condition_name)"
 
-    # Check if all datasets have the same file name
     first_file = datasets[1].file
-    all_same_file = all(dataset.file == first_file for dataset in datasets)
-
-    if all_same_file
-        condition_names = [data.condition_name for data in datasets]
+    if all(d -> d.file == first_file, datasets)
+        condition_names = [d.condition_name for d in datasets]
         condition_str = _shorten_condition_names(
             condition_names;
             max_total_length = max_total_length - length(first_file) - 2,
             max_name_length = max_name_length,
         )
         return "$first_file: $condition_str"
-    else
-        file_condition_pairs = ["$(data.file):$(data.condition_name)" for data in datasets]
-        return _shorten_condition_names(file_condition_pairs; max_total_length = max_total_length, max_name_length = max_name_length)
     end
+    file_condition_pairs = ["$(d.file):$(d.condition_name)" for d in datasets]
+    return _shorten_condition_names(file_condition_pairs; max_total_length = max_total_length, max_name_length = max_name_length)
 end
 
 _generate_window_title(datasets::EegData) = "$(datasets.file):$(datasets.condition_name)"
-
-"""
-    _generate_window_title(datasets::ContinuousData)
-
-Generate a window title from ContinuousData, using just the filename.
-
-# Arguments
-- `datasets::ContinuousData`: ContinuousData object
-
-# Returns
-- `String`: Window title string (just the filename)
-"""
 _generate_window_title(datasets::ContinuousData) = datasets.file
 
-"""
-    _generate_window_title(datasets::Vector{ContinuousData}; 
-                          max_total_length::Int = 80,
-                          max_name_length::Int = 30)
-
-Generate a window title from a vector of ContinuousData objects.
-
-If all datasets share the same file name, uses format: "FileName"
-If datasets have different file names, uses format: "File1, File2, File3"
-
-# Arguments
-- `datasets::Vector{ContinuousData}`: Vector of ContinuousData objects
-- `max_total_length::Int`: Maximum total length of the result string
-- `max_name_length::Int`: Maximum length for each individual filename
-
-# Returns
-- `String`: Window title string
-"""
 function _generate_window_title(datasets::Vector{ContinuousData}; max_total_length::Int = 80, max_name_length::Int = 20)
     isempty(datasets) && return ""
     length(datasets) == 1 && return datasets[1].file
-
-    # Check if all datasets have the same file name
     first_file = datasets[1].file
-    all_same_file = all(dataset.file == first_file for dataset in datasets)
-
-    all_same_file && return first_file
-
-    file_names = [data.file for data in datasets]
-    return _shorten_condition_names(file_names; max_total_length = max_total_length, max_name_length = max_name_length)
-
+    all(d -> d.file == first_file, datasets) && return first_file
+    return _shorten_condition_names([d.file for d in datasets]; max_total_length = max_total_length, max_name_length = max_name_length)
 end
 
-"""
-    _abbreviate_name(name::String, common_prefix_parts::Vector{String})
+function _write_abbreviated_part!(io::IOBuffer, part::String)
+    isempty(part) && return
+    if part == "_" || isdigit(part[1])
+        write(io, part)
+    else
+        write(io, uppercase(part[1]))
+        n = min(3, length(part))
+        n >= 2 && write(io, SubString(part, 2, n))
+    end
+end
 
-Create an intelligent abbreviation of a name by:
-- Abbreviating the common prefix parts (taking first letters)
-- Preserving the unique suffix parts
+function _abbreviate_parts(parts::Vector{String})
+    io = IOBuffer()
+    for part in parts
+        _write_abbreviated_part!(io, part)
+    end
+    return String(take!(io))
+end
 
-# Arguments
-- `name::String`: The name to abbreviate
-- `common_prefix_parts::Vector{String}`: Common prefix parts found across all names
+function _abbreviate_parts_with_prefix(name_parts::Vector{String}, n_prefix::Int)
+    io = IOBuffer()
+    for i = 1:min(n_prefix, length(name_parts))
+        _write_abbreviated_part!(io, name_parts[i])
+    end
+    for i = (n_prefix+1):length(name_parts)
+        write(io, name_parts[i])
+    end
+    return String(take!(io))
+end
 
-# Returns
-- `String`: Abbreviated name
-"""
 function _abbreviate_name(name::String, common_prefix_parts::Vector{String})
     isempty(common_prefix_parts) && return name
-
-    # abbreviate: take first 2-3 letters of each (or first letter if short)
     name_parts = _split_into_parts(name)
-    abbrev_prefix = ""
+    io = IOBuffer()
     for part in common_prefix_parts
-        if part == "_"
-            abbrev_prefix *= "_"
-        elseif !isempty(part)
-            if isdigit(part[1])
-                abbrev_prefix *= part  # Keep numbers as-is
-            else
-                # Take first 2-3 letters, or first letter if part is very short
-                n = length(part) >= 3 ? 3 : (length(part) >= 2 ? 2 : 1)
-                abbrev_prefix *= uppercase(part[1]) * part[2:min(n, length(part))]
-            end
-        end
+        _write_abbreviated_part!(io, part)
     end
-
-    # Get the unique suffix parts (everything after the common prefix)
-    unique_suffix = join(name_parts[(length(common_prefix_parts)+1):end], "")
-
-    return abbrev_prefix * unique_suffix
+    for i = (length(common_prefix_parts)+1):length(name_parts)
+        write(io, name_parts[i])
+    end
+    return String(take!(io))
 end
 
-"""
-    _find_common_prefix_parts(names::Vector{String})
-
-Find common prefix parts across a list of names, splitting on uppercase letters and underscores.
-
-# Arguments
-- `names::Vector{String}`: Vector of names to analyze
-
-# Returns
-- `Vector{String}`: Common prefix parts
-"""
-function _find_common_prefix_parts(names::Vector{String})
-    isempty(names) && return String[]
-    length(names) == 1 && return String[]
-
-    # Split all names into parts
-    all_parts = [_split_into_parts(name) for name in names]
-
-    # Find common prefix parts
+function _common_prefix_from_parts(all_parts::Vector{Vector{String}})
+    length(all_parts) <= 1 && return String[]
     first_parts = all_parts[1]
-    common_parts = String[]
-
+    n_common = 0
     for (i, part) in enumerate(first_parts)
-        if all(get(parts, i, nothing) == part for parts in all_parts)
-            push!(common_parts, part)
+        if all(parts -> i <= length(parts) && parts[i] == part, all_parts)
+            n_common = i
         else
             break
         end
     end
-
-    # Don't use if too short (less than 2 parts)
-    return length(common_parts) >= 2 ? common_parts : String[]
+    return n_common >= 2 ? first_parts[1:n_common] : String[]
 end
 
-"""
-    _abbreviate_parts(parts::Vector{String})
+_find_common_prefix_parts(names::Vector{String}) =
+    length(names) <= 1 ? String[] : _common_prefix_from_parts([_split_into_parts(name) for name in names])
 
-Abbreviate a list of parts by taking first 2-3 letters of each word part.
-"""
-function _abbreviate_parts(parts::Vector{String})
-    abbrev = ""
-    for part in parts
-        if part == "_"
-            abbrev *= "_"
-        elseif !isempty(part)
-            if isdigit(part[1])
-                abbrev *= part
-            else
-                n = min(3, length(part))
-                abbrev *= uppercase(part[1]) * part[2:n]
-            end
-        end
-    end
-    return abbrev
-end
-
-
-"""
-    _shorten_condition_names(condition_names::Vector{String}; 
-                            max_total_length::Int = 40,
-                            max_name_length::Int = 30,
-                            separator::String = ", ",
-                            show_ends::Int = 3)
-
-Shorten a list of condition names while preserving identification.
-Uses intelligent abbreviation to create shorter but still identifiable names.
-If the total is still too long, shows first and last N conditions with "..." in between.
-
-# Arguments
-- `condition_names::Vector{String}`: Vector of condition names
-- `max_total_length::Int`: Maximum total length of the result string
-- `max_name_length::Int`: Maximum length for each individual name (after abbreviation)
-- `separator::String`: Separator between names
-- `show_ends::Int`: Number of conditions to show at start/end when truncating
-
-# Returns
-- `String`: Shortened condition name string
-"""
 function _shorten_condition_names(
     condition_names::Vector{String};
     max_total_length::Int = 80,
@@ -1068,55 +656,36 @@ function _shorten_condition_names(
     isempty(condition_names) && return ""
     length(condition_names) == 1 && return condition_names[1]
 
-    # Try intelligent abbreviation
-    common_prefix_parts = _find_common_prefix_parts(condition_names)
-    if isempty(common_prefix_parts)
-        abbreviated_names = [_abbreviate_parts(_split_into_parts(name)) for name in condition_names]
-    else
-        abbreviated_names = [_abbreviate_name(name, common_prefix_parts) for name in condition_names]
-    end
+    all_parts = [_split_into_parts(name) for name in condition_names]
+    common_prefix = _common_prefix_from_parts(all_parts)
+    n_prefix = length(common_prefix)
+    abbreviated_names =
+        n_prefix == 0 ? [_abbreviate_parts(parts) for parts in all_parts] :
+        [_abbreviate_parts_with_prefix(parts, n_prefix) for parts in all_parts]
 
-    # Use original if abbreviation didn't help (less than 20% shorter)
-    avg_original = sum(length(name) for name in condition_names) / length(condition_names)
-    avg_abbreviated = sum(length(name) for name in abbreviated_names) / length(abbreviated_names)
-    if avg_abbreviated >= avg_original * 0.8
-        abbreviated_names = condition_names
-    end
+    orig_len = sum(length, condition_names)
+    abbrev_len = sum(length, abbreviated_names)
+    abbrev_len >= orig_len * 0.8 && (abbreviated_names = condition_names)
 
-    # Truncate individual names and join
-    final_names = [length(n) > max_name_length ? n[1:max_name_length] * "…" : n for n in abbreviated_names]
+    final_names = [length(n) > max_name_length ? first(n, max_name_length) * "…" : n for n in abbreviated_names]
     full_string = join(final_names, separator)
 
-    # If still too long, show first N and last N
     if length(full_string) > max_total_length && length(condition_names) > 2 * show_ends
-        first_part = join(final_names[1:show_ends], separator)
-        last_part = join(final_names[(end-show_ends+1):end], separator)
-        return first_part * separator * "…" * separator * last_part
+        return join(@view(final_names[1:show_ends]), separator) *
+               separator *
+               "…" *
+               separator *
+               join(@view(final_names[(end-show_ends+1):end]), separator)
     end
-
     return full_string
 end
 
-# === BASELINE HELPER FUNCTIONS ===
-
-"""
-    _extract_baseline_values(interval::Interval)
-
-Extract numeric baseline values from interval using multiple dispatch.
-Returns (start, stop) tuple or (nothing, nothing) if interval is nothing.
-"""
 _extract_baseline_values(::Nothing) = (nothing, nothing)
 _extract_baseline_values(interval::AbstractRange) = (first(interval), last(interval))
 _extract_baseline_values(interval::Tuple) = (interval[1], interval[2])
 _extract_baseline_values(interval::AbstractVector{<:Real}) = (Float64(interval[1]), Float64(interval[2]))
 _extract_baseline_values(interval::TimeSelection) = (Float64(interval.start), Float64(interval.stop))
 
-"""
-    _parse_baseline_values(start_str::String, stop_str::String)
-
-Parse numeric baseline values from textbox strings.
-Returns (start, stop) tuple or (-Inf, Inf) for empty strings, or (nothing, nothing) on parse error.
-"""
 function _parse_baseline_values(start_str::String, stop_str::String)
     (start_str == " " || stop_str == " ") && return -Inf, Inf
     start_val = tryparse(Float64, start_str)
@@ -1128,12 +697,6 @@ function _parse_baseline_values(start_str::String, stop_str::String)
     return start_val, stop_val
 end
 
-"""
-    _create_baseline_textbox(layout, row, label, obs, placeholder, width)
-
-Helper to create and connect a textbox to an observable.
-Returns the created Textbox.
-"""
 function _create_baseline_textbox(layout, row, label, obs, placeholder, width)
     Label(layout[row, 1], label, width = 60)
     tb = Textbox(layout[row, 2], placeholder = placeholder, width = width)
