@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <title>Redirecting to EegFun Interactive Demos…</title>
+  <noscript>
+    <meta http-equiv="refresh" content="0; url=https://feed-fluid-council-action.trycloudflare.com/ica-optimization">
+  </noscript>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      margin: 0;
+      background: #f8fafc;
+      color: #1e293b;
+    }
+    .box {
+      text-align: center;
+      padding: 2rem 2.5rem;
+      background: #ffffff;
+      border-radius: 12px;
+      border: 1px solid #e2e8f0;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+      max-width: 480px;
+    }
+    a {
+      color: #3F63D9;
+      font-weight: 600;
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div class="box">
+    <p>Redirecting to <strong>EegFun Interactive Demos</strong>…</p>
+    <p><a id="fallback-link" href="https://feed-fluid-council-action.trycloudflare.com/ica-optimization">Click here if you are not redirected automatically</a></p>
+  </div>
+  <script>
+    (function() {
+      var targetBase = "https://feed-fluid-council-action.trycloudflare.com";
+      var prefix = "/EegFun.jl/apps";
+      var path = window.location.pathname || "/";
+      if (path === prefix || path === prefix + "/") {
+        path = "/ica-optimization";
+      } else if (path.indexOf(prefix + "/") === 0) {
+        path = path.slice(prefix.length);
+        if (path.length > 1 && path.endsWith("/")) {
+          path = path.slice(0, -1);
+        }
+      } else {
+        path = "/ica-optimization";
+      }
+      var params = new URLSearchParams(window.location.search || "");
+      if (params.has("to")) {
+        var toRoute = params.get("to") || "/";
+        if (toRoute.charAt(0) !== "/") toRoute = "/" + toRoute;
+        params.delete("to");
+        var rem = params.toString();
+        var destTo = targetBase + toRoute + (rem ? "?" + rem : "") + (window.location.hash || "");
+        var linkTo = document.getElementById("fallback-link");
+        if (linkTo) linkTo.href = destTo;
+        window.location.replace(destTo);
+        return;
+      }
+      var dest = targetBase + path + (window.location.search || "") + (window.location.hash || "");
+      var link = document.getElementById("fallback-link");
+      if (link) link.href = dest;
+      window.location.replace(dest);
+    })();
+  </script>
+</body>
+</html>
