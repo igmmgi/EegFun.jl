@@ -1,16 +1,7 @@
-# === TYPES AND STRUCTURES ===
-
 """
     ConfigParameter{T}
 
-A struct to define configuration parameters with type and validation constraints.
-
-# Fields
-- `description::String`: Human-readable description of the parameter
-- `default::Union{Nothing,T}`: Default value (or nothing if required)
-- `allowed::Union{Nothing,Vector{Any}}`: List of allowed values (or nothing if any value is allowed)
-- `min::Union{Nothing,T}`: Minimum value for numeric parameters (or nothing)
-- `max::Union{Nothing,T}`: Maximum value for numeric parameters (or nothing)
+Specification for a typed configuration parameter with optional default, allowed values, and numeric bounds.
 """
 @kwdef struct ConfigParameter{T}
     description::String
@@ -20,46 +11,31 @@ A struct to define configuration parameters with type and validation constraints
     max::Union{Nothing,T} = nothing
 end
 
-# === PARAMETER CONSTRUCTOR HELPERS ===
-
-"""Create a `ConfigParameter{T}` with common defaults."""
 function _param(::Type{T}, desc, default = nothing; allowed = nothing, min = nothing, max = nothing) where {T}
     ConfigParameter{T}(description = desc, default = default, allowed = allowed, min = min, max = max)
 end
 
-"""Create a string (or string-vector) parameter."""
-string_param(desc, default = ""; allowed = nothing) = _param(Union{Vector{String},String}, desc, default, allowed = allowed)
-"""Create a simple `String` parameter."""
-simple_string_param(desc, default = ""; allowed = nothing) = _param(String, desc, default, allowed = allowed)
-"""Create a Symbol parameter."""
-symbol_param(desc, default; allowed = nothing) = _param(Symbol, desc, default, allowed = allowed)
-"""Create a `Bool` parameter."""
+string_param(desc, default = ""; allowed = nothing) = _param(Union{Vector{String},String}, desc, default; allowed = allowed)
+simple_string_param(desc, default = ""; allowed = nothing) = _param(String, desc, default; allowed = allowed)
+symbol_param(desc, default; allowed = nothing) = _param(Symbol, desc, default; allowed = allowed)
 bool_param(desc, default = false) = _param(Bool, desc, default)
-"""Create a numeric parameter with optional min/max bounds."""
-number_param(desc, default, min = nothing, max = nothing) = _param(Real, desc, default, min = min, max = max)
-"""Create a numeric vector parameter (`Vector{Real}`)."""
+number_param(desc, default, min = nothing, max = nothing) = _param(Real, desc, default; min = min, max = max)
 number_vector_param(desc, default) = _param(Vector{Real}, desc, default)
-"""Create a channel-groups parameter (`Vector{Vector{String}}`)."""
 channel_groups_param(desc, default) = _param(Vector{Vector{String}}, desc, default)
 
-"""Generate the standard set of filter parameters (apply, type, method, func, freq, order) for a given prefix."""
 function _filter_param_spec(prefix, apply, type, freq, min_freq, max_freq, order, min_order, max_order)
     Dict(
         "$prefix.apply" => bool_param("Apply: true/false", apply),
-        "$prefix.type" => symbol_param("Filter type identifier", type, allowed = [:hp, :lp]),
-        "$prefix.method" => symbol_param("Filter method", :iir, allowed = [:fir, :iir]),
-        "$prefix.func" => symbol_param("Filter function", :filtfilt, allowed = [:filt, :filtfilt]),
+        "$prefix.type" => symbol_param("Filter type identifier", type; allowed = [:hp, :lp]),
+        "$prefix.method" => symbol_param("Filter method", :iir; allowed = [:fir, :iir]),
+        "$prefix.func" => symbol_param("Filter function", :filtfilt; allowed = [:filt, :filtfilt]),
         "$prefix.freq" => number_param("Cutoff frequency (Hz)", freq, min_freq, max_freq),
         "$prefix.order" => number_param("Filter order", order, min_order, max_order),
     )
 end
 
-
-# === PARAMETER DEFINITIONS ===
-
 # fmt: off
 const PARAMETERS = Dict{String,ConfigParameter}(
-
     # File paths and settings
     "files.input.directory" => simple_string_param("Directory containing raw data files.", "."),
     "files.input.raw_data_files" => string_param("Pattern (regex or explicit list) for raw data files to process.", "\\.bdf"),
@@ -68,7 +44,7 @@ const PARAMETERS = Dict{String,ConfigParameter}(
     "files.input.epoch_condition_file" => simple_string_param("TOML file that defines the condition epochs.", ""),
     "files.output.directory" => simple_string_param("Directory for processed output files", "./preprocessed_files"),
 
-    # What data should we save?
+    # Output saving flags
     "files.output.save_continuous_data_raw" => bool_param("Save continuous data original?", false),
     "files.output.save_continuous_data_corrected" => bool_param("Save continuous data cleaned?", false),
     "files.output.save_ica_data" => bool_param("Save ICA results?", true),
@@ -109,14 +85,14 @@ const PARAMETERS = Dict{String,ConfigParameter}(
 
     # Autoreject adaptive artifact rejection settings
     "preprocess.autoreject.apply" => bool_param("Apply Autoreject adaptive artifact rejection and repair?", false),
-    "preprocess.autoreject.mode" => symbol_param("Autoreject mode (:local or :global).", :local, allowed = [:local, :global]),
+    "preprocess.autoreject.mode" => symbol_param("Autoreject mode (:local or :global).", :local; allowed = [:local, :global]),
     "preprocess.autoreject.n_folds" => number_param("Number of cross-validation folds for Autoreject.", 10, 2, 50),
     "preprocess.autoreject.n_candidates" => number_param("Number of candidate thresholds to evaluate per channel.", 30, 5, 100),
     "preprocess.autoreject.consensus_perc" => number_param("Consensus rejection threshold (fraction of bad channels).", 0.2, 0.0, 1.0),
     "preprocess.autoreject.max_repair_perc" => number_param("Maximum fraction of bad channels to repair in an epoch.", 0.1, 0.0, 1.0),
     "preprocess.autoreject.repair_method" => symbol_param(
         "Channel repair method (:spherical_spline or :neighbor_interpolation).",
-        :spherical_spline,
+        :spherical_spline;
         allowed = [:spherical_spline, :neighbor_interpolation],
     ),
     "preprocess.autoreject.seed" => number_param("Random seed for cross-validation splits.", 42),
@@ -125,7 +101,7 @@ const PARAMETERS = Dict{String,ConfigParameter}(
     "preprocess.ica.apply" => bool_param("Independent Component Analysis (ICA) true/false.", true),
     "preprocess.ica.percentage_of_data" => number_param("Percentage of data to use for ICA (0-100).", 100.0, 0.0, 100.0),
     "preprocess.ica.component_method" =>
-        symbol_param("Method for identifying artifact components (:correlation).", :correlation, allowed = [:correlation]),
+        symbol_param("Method for identifying artifact components (:correlation).", :correlation; allowed = [:correlation]),
 
     # CleanLine settings
     "preprocess.cleanline.apply" => bool_param("Apply CleanLine algorithm to remove line noise?", false),
@@ -142,7 +118,7 @@ const PARAMETERS = Dict{String,ConfigParameter}(
     "preprocess.resample.apply" => bool_param("Apply resampling/downsampling?", false),
     "preprocess.resample.target_rate" => number_param("Target sampling rate in Hz (e.g. 512, 256).", 512),
 
-    # Filtering settings - using helper function
+    # Filtering settings
     _filter_param_spec("preprocess.filter.highpass", true, :hp, 0.1, 0.01, 20.0, 1, 1, 4)...,
     _filter_param_spec("preprocess.filter.lowpass", false, :lp, 30.0, 5.00, 500.0, 3, 1, 8)...,
     _filter_param_spec("preprocess.filter.ica_highpass", true, :hp, 1.0, 1.00, 20.0, 1, 1, 4)...,
@@ -150,17 +126,10 @@ const PARAMETERS = Dict{String,ConfigParameter}(
 )
 # fmt: on
 
-# === VALIDATION TYPES ===
-
 """
     ValidationResult
 
-Result of parameter validation.
-
-# Fields
-- `success::Bool`: Whether validation succeeded
-- `error::Union{Nothing,String}`: Error message if validation failed, nothing if validation succeeded (default: nothing)
-- `key_path::Union{Nothing,String}`: Path of TOML keys to the parameter that failed validation, nothing if validation succeeded (default: nothing)
+Result of configuration parameter validation (`success`, `error`, `key_path`).
 """
 @kwdef struct ValidationResult
     success::Bool
@@ -168,34 +137,29 @@ Result of parameter validation.
     key_path::Union{Nothing,String} = nothing
 end
 
-
-# === MAIN CONFIGURATION FUNCTIONS ===
-
-"""
-    _generate_default_config() -> Dict{String,Any}
-
-Generate a nested configuration dictionary populated with default values from `PARAMETERS`.
-"""
 function _generate_default_config()
     config = Dict{String,Any}()
     for (path, param) in PARAMETERS
-        isnothing(param.default) && continue
+        def = param.default
+        isnothing(def) && continue
 
-        parts = split(path, ".")
         current = config
-        for i = 1:(length(parts)-1)
-            key = String(parts[i])
-            if !haskey(current, key)
-                current[key] = Dict{String,Any}()
+        start_idx = 1
+        while true
+            dot_idx = findnext('.', path, start_idx)
+            if isnothing(dot_idx)
+                leaf_key = SubString(path, start_idx)
+                current[String(leaf_key)] = def isa Vector ? deepcopy(def) : def
+                break
             end
-            current = current[key]
+            seg = String(SubString(path, start_idx, dot_idx - 1))
+            current = get!(() -> Dict{String,Any}(), current, seg)::Dict{String,Any}
+            start_idx = dot_idx + 1
         end
-        current[String(parts[end])] = param.default
     end
     return config
 end
 
-# Normalize legacy parameter spellings in-place before merging/validation.
 function _normalize_legacy_config!(user_config::AbstractDict)
     if haskey(user_config, "preprocess") && user_config["preprocess"] isa AbstractDict
         prep = user_config["preprocess"]
@@ -205,18 +169,14 @@ function _normalize_legacy_config!(user_config::AbstractDict)
             if !haskey(prep, "layout") || !(prep["layout"] isa AbstractDict)
                 prep["layout"] = Dict{String,Any}()
             end
-            if !haskey(prep["layout"], "neighbor_criterion")
-                prep["layout"]["neighbor_criterion"] = val
-            end
+            !haskey(prep["layout"], "neighbor_criterion") && (prep["layout"]["neighbor_criterion"] = val)
         end
         if haskey(prep, "layout") && prep["layout"] isa AbstractDict
             layout_cfg = prep["layout"]
             if haskey(layout_cfg, "neighbour_criterion")
                 @minimal_warning "'preprocess.layout.neighbour_criterion' is deprecated; use 'preprocess.layout.neighbor_criterion' instead."
                 val = pop!(layout_cfg, "neighbour_criterion")
-                if !haskey(layout_cfg, "neighbor_criterion")
-                    layout_cfg["neighbor_criterion"] = val
-                end
+                !haskey(layout_cfg, "neighbor_criterion") && (layout_cfg["neighbor_criterion"] = val)
             end
         end
     end
@@ -224,127 +184,70 @@ function _normalize_legacy_config!(user_config::AbstractDict)
 end
 
 """
-    read_config(config_file::String)
+    read_config(config_file::String) -> Dict{String,Any}
 
-Load, validate, and merge configuration from a TOML file with default parameters.
-
-# Arguments
-- `config_file::String`: Path to the configuration file
-
-# Returns
-- `Dict{String,Any}`: The loaded and validated configuration dictionary
+Load, normalize, merge with defaults, and validate a TOML configuration file.
 """
 function read_config(config_file::String)
+    !isfile(config_file) && @minimal_error "Configuration file not found: $config_file"
     default_config = _generate_default_config()
 
-    if !isfile(config_file)
-        @minimal_error "Configuration file not found: $config_file"
-    end
-
-    user_config = Dict{String,Any}()
     @info "Loading config file: $config_file"
-    try
-        user_config = TOML.parsefile(config_file)
+    user_config = try
+        TOML.parsefile(config_file)
     catch e
         @minimal_error "Error parsing TOML file: $(sprint(showerror, e))"
     end
 
     _normalize_legacy_config!(user_config)
-
-    # Merge, convert types, and validate
     config = _merge_configs(default_config, user_config)
-
-    # Convert Any arrays to proper types (fixes Julia 1.12 TOML parsing issue)
     _convert_any_arrays!(config)
 
     validation_result = _validate_config(config)
-    if !validation_result.success
-        @minimal_error validation_result.error
-    end
-
+    !validation_result.success && @minimal_error validation_result.error
     return config
 end
 
+function _convert_param_value(::ConfigParameter{T}, value, new_path::String) where {T}
+    if T == Vector{Vector{String}} && value isa Vector && eltype(value) == Any
+        try
+            return [item isa Vector ? String.(item) : [String(item)] for item in value]
+        catch e
+            @minimal_error "Failed to convert $new_path from Any array to $T: $(sprint(showerror, e))"
+        end
+    elseif T == Symbol && value isa AbstractString
+        return Symbol(value)
+    elseif (T <: Vector || T == Vector{Real}) && value isa Vector
+        try
+            inner_type = T == Vector{Real} ? Float64 : eltype(T)
+            return inner_type.(value)
+        catch e
+            @minimal_error "Failed to convert $new_path from $(typeof(value)) to $T: $(sprint(showerror, e))"
+        end
+    end
+    return value
+end
 
-# === TYPE CONVERSION FUNCTIONS ===
-
-"""
-    _convert_any_arrays!(config::Dict)
-
-Convert Any arrays in the config to their proper types based on parameter specifications.
-This fixes the issue where TOML.jl in Julia 1.12 returns Any arrays instead of typed arrays.
-"""
-function _convert_any_arrays!(config::Dict; path = "")
+function _convert_any_arrays!(config::Dict; path::String = "")
     for (key, value) in config
         new_path = isempty(path) ? key : "$path.$key"
-
-        if isa(value, Dict)
-            # Recursively process nested dictionaries
+        if value isa Dict
             _convert_any_arrays!(value; path = new_path)
         elseif haskey(PARAMETERS, new_path)
-            # Convert this parameter if we have type information
-            param_spec = PARAMETERS[new_path]
-            param_type = typeof(param_spec).parameters[1]
-
-            # Handle Vector{Vector{String}} case (like hEOG_channels, vEOG_channels)
-            if param_type == Vector{Vector{String}} && isa(value, Vector) && eltype(value) == Any
-                try
-                    # Convert Any[["F9"], ["F10"]] -> Vector{Vector{String}}
-                    converted_value = Vector{Vector{String}}()
-                    for item in value
-                        if isa(item, Vector)
-                            push!(converted_value, String.(item))
-                        else
-                            push!(converted_value, [String(item)])
-                        end
-                    end
-                    config[key] = converted_value
-                catch e
-                    @minimal_error "Failed to convert $new_path from Any array to $param_type: $(sprint(showerror, e))"
-                end
-            elseif param_type == Symbol && isa(value, AbstractString)
-                config[key] = Symbol(value)
-            elseif (param_type <: Vector || param_type == Vector{Real}) && isa(value, Vector)
-                # Handle other Vector types (including Vector{Real})
-                try
-                    inner_type = param_type == Vector{Real} ? Float64 : param_type.parameters[1]
-                    config[key] = inner_type.(value)
-                catch e
-                    @minimal_error "Failed to convert $new_path from $(typeof(value)) to $param_type: $(sprint(showerror, e))"
-                end
-            end
+            config[key] = _convert_param_value(PARAMETERS[new_path], value, new_path)
         end
     end
 end
 
-# === CONFIGURATION MERGING FUNCTIONS ===
-
-"""
-    _merge_configs(default_config::Dict, user_config::Dict)
-
-Merge user config onto defaults, maintaining simple value structure.
-
-# Arguments
-- `default_config::Dict`: The default configuration
-- `user_config::Dict`: The user configuration to merge
-
-# Returns
-- `Dict`: The merged configuration
-"""
 function _merge_configs(default_config::Dict, user_config::Dict)
     result = copy(default_config)
     _merge_nested!(result, user_config)
     return result
 end
 
-"""Recursively merge `source` into `target`, overwriting leaf values."""
 function _merge_nested!(target::Dict, source::Dict)
     for (key, value) in source
-        if !haskey(target, key)
-            target[key] = value
-            continue
-        end
-        if isa(value, Dict) && isa(target[key], Dict)
+        if haskey(target, key) && value isa Dict && target[key] isa Dict
             _merge_nested!(target[key], value)
         else
             target[key] = value
@@ -352,156 +255,95 @@ function _merge_nested!(target::Dict, source::Dict)
     end
 end
 
-
-# === CONFIGURATION VALIDATION FUNCTIONS ===
-
-"""
-    _validate_config(config::Dict; path="")
-
-Validate config values against their metadata definitions.
-
-# Arguments
-- `config::Dict`: The configuration to validate
-- `path::String`: The current path in the configuration (for nested validation)
-
-# Returns
-- `ValidationResult`: Result of the validation
-"""
-function _validate_config(config::Dict; path = "")
+function _validate_config(config::Dict; path::String = "")
     for (key, value) in config
         new_path = isempty(path) ? key : "$path.$key"
-        if isa(value, Dict) # Recursively validate nested dictionary
+        if value isa Dict
             result = _validate_config(value; path = new_path)
             !result.success && return result
-        else # Check if we have data for this parameter
-            if haskey(PARAMETERS, new_path)
-                result = _validate_parameter(value, PARAMETERS[new_path], new_path)
-                !result.success && return result
-            else # Unknown parameter?
-                return ValidationResult(success = false, error = "Unknown parameter: $new_path", key_path = new_path)
-            end
+        elseif haskey(PARAMETERS, new_path)
+            result = _validate_parameter(value, PARAMETERS[new_path], new_path)
+            !result.success && return result
+        else
+            return ValidationResult(success = false, error = "Unknown parameter: $new_path", key_path = new_path)
         end
     end
     return ValidationResult(success = true)
 end
 
-"""
-    _validate_parameter(value, parameter_spec::ConfigParameter, parameter_name::String)
-
-Helper function to validate a single parameter value against its specification.
-
-# Arguments
-- `value`: The value to validate
-- `parameter_spec::ConfigParameter`: The parameter specification to validate against
-- `parameter_name::String`: The full name of the parameter in the configuration (e.g., "filtering.highpass.cutoff")
-
-# Returns
-- `ValidationResult`: Result of the validation
-"""
 function _validate_parameter(value, parameter_spec::ConfigParameter{T}, parameter_name::String) where {T}
-    param_type = T
+    fail(msg) = ValidationResult(success = false, error = msg, key_path = parameter_name)
 
-    # Helper function for creating validation errors
-    """Create a failed `ValidationResult` for this parameter."""
-    function validation_error(msg)
-        ValidationResult(success = false, error = msg, key_path = parameter_name)
-    end
-
-    # Check if value is the right type
-    if param_type <: Number
-        value isa Number || return validation_error("$parameter_name must be a number, got $(typeof(value))")
-    elseif param_type == Vector{Real} || param_type <: AbstractVector{<:Real}
+    if T <: Number
+        value isa Number || return fail("$parameter_name must be a number, got $(typeof(value))")
+    elseif T == Vector{Real} || T <: AbstractVector{<:Real}
         (value isa AbstractVector && eltype(value) <: Real) ||
-            return validation_error("$parameter_name must be a vector of numbers, got $(typeof(value))")
+            return fail("$parameter_name must be a vector of numbers, got $(typeof(value))")
     else
-        # Check type compatibility (fixed for Julia 1.12 TOML parsing)
-        value isa param_type || return validation_error("$parameter_name must be of type $param_type, got $(typeof(value))")
+        value isa T || return fail("$parameter_name must be of type $T, got $(typeof(value))")
     end
 
-    # Check min/max constraints
-    !isnothing(parameter_spec.min) &&
-        value < parameter_spec.min &&
-        return validation_error("$parameter_name ($value) must be >= $(parameter_spec.min)")
+    !isnothing(parameter_spec.min) && value < parameter_spec.min && return fail("$parameter_name ($value) must be >= $(parameter_spec.min)")
 
-    !isnothing(parameter_spec.max) &&
-        value > parameter_spec.max &&
-        return validation_error("$parameter_name ($value) must be <= $(parameter_spec.max)")
+    !isnothing(parameter_spec.max) && value > parameter_spec.max && return fail("$parameter_name ($value) must be <= $(parameter_spec.max)")
 
-    # Check allowed values if they exist
     !isnothing(parameter_spec.allowed) &&
         !(value in parameter_spec.allowed) &&
-        return validation_error("$parameter_name ($value) must be one of: $(join(parameter_spec.allowed, ", "))")
+        return fail("$parameter_name ($value) must be one of: $(join(parameter_spec.allowed, ", "))")
 
     return ValidationResult(success = true)
 end
 
-
-
-
-# === PARAMETER INFORMATION DISPLAY FUNCTIONS ===
-
 """
-    show_parameter_info(; parameter_name::String="")
+    show_parameter_info(; parameter_name::String = "")
 
-Display information about configuration parameters. If parameter_name is empty, shows all parameters.
-If parameter_name is provided, shows detailed information about that specific parameter.
-
-# Arguments
-- `parameter_name::String`: Optional path to a specific parameter (e.g., "filtering.highpass.cutoff")
+Display documentation for all configuration parameters, a section prefix, or a single parameter.
 """
 function show_parameter_info(; parameter_name::String = "")
     isempty(parameter_name) ? _show_all_parameters() : _show_specific_parameter(parameter_name)
 end
 
-"""Print an overview of every configuration parameter, grouped by section."""
 function _show_all_parameters()
     @info "Available Configuration Parameters:"
     @info "==================================="
-
     sections = _group_parameters_by_section()
-    sorted_sections = sort(collect(keys(sections)))
-
-    for section in sorted_sections
+    for section in sort!(collect(keys(sections)))
         _display_section(section, sections[section])
     end
-
     @info "Use show_parameter_info(\"section\") for section overview"
     @info "Use show_parameter_info(\"section.parameter\") for specific parameter details"
 end
 
-"""Print all parameters in one top-level section."""
 function _display_section(section, section_data)
     @info "[$section]"
     @info "-"^(length(section) + 2)
-
-    sorted_subsections = sort(collect(keys(section_data)))
-
-    for subsection in sorted_subsections
-        _display_subsection(subsection, section_data[subsection])
-    end
+    _display_grouped_params(section_data)
 end
 
-"""Print all parameters in one subsection."""
+@inline function _leaf_param_name(path::String)
+    idx = findlast('.', path)
+    return isnothing(idx) ? path : path[(idx+1):end]
+end
+
 function _display_subsection(subsection, params)
     !isempty(subsection) && @info "  [$subsection]"
-
-    sorted_params = sort(params, by = first)
-    for (path, parameter_spec) in sorted_params
-        param_name = String(last(split(path, ".")))
-        indent = isempty(subsection) ? "  " : "    "
-        @info "$indent$param_name: $(parameter_spec.description)"
+    indent = isempty(subsection) ? "  " : "    "
+    for (path, parameter_spec) in sort(params; by = first)
+        @info "$indent$(_leaf_param_name(path)): $(parameter_spec.description)"
     end
 end
 
-"""Show details or section overview for a specific parameter name."""
+function _display_grouped_params(grouped_params::Dict{String,Vector{Tuple{String,ConfigParameter}}})
+    for subsection in sort!(collect(keys(grouped_params)))
+        _display_subsection(subsection, grouped_params[subsection])
+    end
+end
+
 function _show_specific_parameter(parameter_name)
     if haskey(PARAMETERS, parameter_name)
         _show_parameter_details(parameter_name)
     else
-        matching_params = collect(filter(keys(PARAMETERS)) do key
-            startswith(key, parameter_name)
-        end)
-
+        matching_params = [k for k in keys(PARAMETERS) if startswith(k, parameter_name)]
         if !isempty(matching_params)
             _show_section_overview(parameter_name, matching_params)
         else
@@ -511,14 +353,7 @@ function _show_specific_parameter(parameter_name)
     end
 end
 
-"""
-    _show_parameter_details(parameter_name::String)
-
-Show detailed information about a specific parameter.
-"""
-function _show_parameter_details(parameter_name::String)
-    _show_parameter_details(parameter_name, PARAMETERS[parameter_name])
-end
+_show_parameter_details(parameter_name::String) = _show_parameter_details(parameter_name, PARAMETERS[parameter_name])
 
 function _show_parameter_details(parameter_name::String, parameter_spec::ConfigParameter{T}) where {T}
     @info "Parameter: $parameter_name"
@@ -531,104 +366,53 @@ function _show_parameter_details(parameter_name::String, parameter_spec::ConfigP
         max_str = isnothing(parameter_spec.max) ? "" : " ≤ $(parameter_spec.max)"
         @info "Range: $(min_str)value$(max_str)"
     end
-
-    if !isnothing(parameter_spec.allowed)
-        @info "Allowed values: $(join(parameter_spec.allowed, ", "))"
-    end
-
-    # Print default value or mark as required
-    if isnothing(parameter_spec.default)
-        @info "[REQUIRED]"
-    else
-        @info "Default: $(parameter_spec.default)"
-    end
+    !isnothing(parameter_spec.allowed) && @info "Allowed values: $(join(parameter_spec.allowed, ", "))"
+    @info isnothing(parameter_spec.default) ? "[REQUIRED]" : "Default: $(parameter_spec.default)"
 end
 
-"""
-    _show_section_overview(section_name::String, matching_params::Vector{String})
-
-Show overview of all parameters in a section.
-"""
 function _show_section_overview(section_name::String, matching_params::Vector{String})
     @info "Section: $section_name"
     @info "="^(length(section_name) + 9)
-
-    grouped_params = _group_params_by_subsection(section_name, matching_params)
-    _display_grouped_params(grouped_params)
-
+    _display_grouped_params(_group_params_by_subsection(section_name, matching_params))
     @info ""
     @info "Use show_parameter_info(\"$section_name.parameter_name\") for detailed information about a specific parameter"
 end
 
-"""Group matching parameters into a dict keyed by subsection name."""
 function _group_params_by_subsection(section_name::String, matching_params::Vector{String})
     sections = Dict{String,Vector{Tuple{String,ConfigParameter}}}()
-
     for param_path in matching_params
         subsection = _extract_subsection(section_name, param_path)
-        get!(sections, subsection, Tuple{String,ConfigParameter}[])
-        push!(sections[subsection], (param_path, PARAMETERS[param_path]))
+        push!(get!(() -> Tuple{String,ConfigParameter}[], sections, subsection), (param_path, PARAMETERS[param_path]))
     end
-
     return sections
 end
 
-"""Extract the subsection portion of a parameter path relative to the section prefix."""
 function _extract_subsection(section_name::String, param_path::String)
-    section_prefix = section_name * "."
-    if !startswith(param_path, section_prefix)
-        return ""
-    end
-
-    subsection_path = param_path[(length(section_prefix)+1):end]
-    subsection_parts = split(subsection_path, ".")
-
-    return length(subsection_parts) > 1 ? join(subsection_parts[1:(end-1)], ".") : ""
+    n_sec = ncodeunits(section_name)
+    (ncodeunits(param_path) > n_sec && startswith(param_path, section_name) && codeunit(param_path, n_sec + 1) == UInt8('.')) || return ""
+    last_dot = findlast('.', param_path)
+    return (isnothing(last_dot) || last_dot <= n_sec + 1) ? "" : param_path[(n_sec+2):(last_dot-1)]
 end
-
-"""Print parameters grouped by subsection."""
-function _display_grouped_params(grouped_params::Dict{String,Vector{Tuple{String,ConfigParameter}}})
-    sorted_subsections = sort(collect(keys(grouped_params)))
-
-    for subsection in sorted_subsections
-        !isempty(subsection) && @info "  [$subsection]"
-
-        sorted_params = sort(grouped_params[subsection], by = first)
-        for (path, parameter_spec) in sorted_params
-            param_name = String(last(split(path, ".")))
-            indent = isempty(subsection) ? "  " : "    "
-            @info "$indent$param_name: $(parameter_spec.description)"
-        end
-    end
-end
-
-# === TEMPLATE GENERATION FUNCTIONS ===
 
 """
-    generate_config_template(; filename::String="config_template.toml")
+    generate_config_template(; filename::String = "config_template.toml")
 
-Generate and save a template TOML configuration file with all available parameters and their default values.
-
-# Arguments
-- `filename::String`: Name of the template file to create (keyword argument, default: "config_template.toml")
+Generate and save a commented TOML configuration template with all parameters and defaults.
 """
 function generate_config_template(; filename::String = "config_template.toml")
-    if !endswith(filename, ".toml")
-        filename = filename * ".toml"
-    end
+    endswith(filename, ".toml") || (filename *= ".toml")
     try
         @info "Starting config template generation"
-        open(filename, "w") do io
-            _write_template_header(io)
-            _write_template_sections(io)
-        end
+        buf = IOBuffer(; sizehint = 16384)
+        _write_template_header(buf)
+        _write_template_sections(buf)
+        write(filename, take!(buf))
         @info "Configuration template saved to: $filename"
     catch e
         @minimal_error "Failed to save configuration template: $(sprint(showerror, e))"
     end
 end
 
-"""Write the TOML template file header comment block."""
 function _write_template_header(io::IO)
     println(io, "# EEG Processing Configuration Template")
     println(io, "# Generated on ", Dates.format(now(), "yyyy-mm-dd HH:MM:SS"))
@@ -639,74 +423,46 @@ function _write_template_header(io::IO)
     println(io)
 end
 
-"""Write all parameter sections to the TOML template file."""
 function _write_template_sections(io::IO)
     sections = _group_parameters_by_section()
-    sorted_sections = sort(collect(keys(sections)))
-
-    for section in sorted_sections
+    for section in sort!(collect(keys(sections)))
         _write_section(io, section, sections[section])
     end
 end
 
-"""Write a single top-level section and its subsections to the TOML template."""
 function _write_section(io::IO, section::String, section_data::Dict{String,Vector{Tuple{String,ConfigParameter}}})
     println(io, "\n# $section Settings")
     println(io, "[$section]")
-
-    sorted_subsections = sort(collect(keys(section_data)))
-
-    for subsection in sorted_subsections
+    for subsection in sort!(collect(keys(section_data)))
         _write_subsection(io, section, subsection, section_data[subsection])
     end
 end
 
-"""Write a subsection header and its parameter entries to the TOML template."""
 function _write_subsection(io::IO, section::String, subsection::String, params::Vector{Tuple{String,ConfigParameter}})
     if !isempty(subsection)
         println(io, "\n# $subsection Settings")
         println(io, "[$section.$subsection]")
     end
-
-    sorted_params = sort(params, by = first)
-    for (path, parameter_spec) in sorted_params
-        param_name = String(last(split(path, ".")))
+    for (path, parameter_spec) in sort(params; by = first)
         _write_parameter_docs(io, parameter_spec)
-        _write_parameter_value(io, param_name, parameter_spec.default)
+        _write_parameter_value(io, _leaf_param_name(path), parameter_spec.default)
     end
 end
 
-# === UTILITY FUNCTIONS ===
-
-"""
-    _group_parameters_by_section()
-
-Group configuration parameters by section and subsection.
-
-# Returns
-- `Dict`: A nested dictionary mapping sections and subsections to parameter specs
-"""
 function _group_parameters_by_section()
     sections = Dict{String,Dict{String,Vector{Tuple{String,ConfigParameter}}}}()
-
     for (path, parameter_spec) in PARAMETERS
-        parts = split(path, ".")
-        section = parts[1]
-        subsection = length(parts) > 2 ? join(parts[2:(end-1)], ".") : ""
+        first_dot = findfirst('.', path)
+        last_dot = findlast('.', path)
+        section = isnothing(first_dot) ? path : path[1:(first_dot-1)]
+        subsection = (isnothing(first_dot) || first_dot == last_dot) ? "" : path[(first_dot+1):(last_dot-1)]
 
-        get!(sections, section, Dict{String,Vector{Tuple{String,ConfigParameter}}}())
-        get!(sections[section], subsection, Tuple{String,ConfigParameter}[])
-        push!(sections[section][subsection], (path, parameter_spec))
+        sec_dict = get!(() -> Dict{String,Vector{Tuple{String,ConfigParameter}}}(), sections, section)
+        push!(get!(() -> Tuple{String,ConfigParameter}[], sec_dict, subsection), (path, parameter_spec))
     end
-
     return sections
 end
 
-"""
-    _write_parameter_docs(io::IO, parameter_spec::ConfigParameter)
-
-Write parameter documentation to the given IO stream.
-"""
 function _write_parameter_docs(io::IO, parameter_spec::ConfigParameter{T}) where {T}
     println(io, "\n# $(parameter_spec.description)")
     println(io, "# Type: $T")
@@ -717,50 +473,29 @@ function _write_parameter_docs(io::IO, parameter_spec::ConfigParameter{T}) where
         println(io, "# Range: $(min_str)value$(max_str)")
     end
 
-    if !isnothing(parameter_spec.allowed)
-        println(io, "# Allowed values: $(join(parameter_spec.allowed, ", "))")
-    end
+    !isnothing(parameter_spec.allowed) && println(io, "# Allowed values: $(join(parameter_spec.allowed, ", "))")
 
-    # Print default value or mark as required/optional
     if isnothing(parameter_spec.default)
-        if occursin("(optional)", lowercase(parameter_spec.description))
-            println(io, "# [OPTIONAL]")
-        else
-            println(io, "# [REQUIRED]")
-        end
+        println(io, occursin("(optional)", lowercase(parameter_spec.description)) ? "# [OPTIONAL]" : "# [REQUIRED]")
     else
         println(io, "# Default: $(parameter_spec.default)")
     end
 end
 
-"""
-    _format_toml_value(value) -> String
-
-Recursively format a value for TOML output.
-"""
 function _format_toml_value(value)
-    if value isa String
-        return "\"$(replace(value, "\\" => "\\\\"))\""
-    elseif value isa Symbol
-        return "\"$(value)\""
-    elseif value isa Vector
-        return isempty(value) ? "[]" : "[" * join([_format_toml_value(v) for v in value], ", ") * "]"
-    elseif value isa Bool
-        return value ? "true" : "false"
-    else
-        return string(value)
+    value isa String && return "\"$(replace(value, "\\" => "\\\\"))\""
+    value isa Symbol && return "\"$(value)\""
+    if value isa Vector
+        return isempty(value) ? "[]" : "[" * join((_format_toml_value(v) for v in value), ", ") * "]"
     end
+    value isa Bool && return value ? "true" : "false"
+    return string(value)
 end
 
-"""
-    _write_parameter_value(io::IO, param_name::String, value)
-
-Write a parameter value to the given IO stream in the appropriate TOML format.
-"""
 function _write_parameter_value(io::IO, param_name::String, value)
     if isnothing(value)
         println(io, "# $param_name = ")
     else
-        println(io, "$param_name = $(_format_toml_value(value))")
+        println(io, param_name, " = ", _format_toml_value(value))
     end
 end

@@ -1,195 +1,143 @@
-"""
-    _epoch_and_file_summary(all_epoch_counts::Vector{DataFrame})
+function _file_percentage_summary(files::AbstractVector{S}, pcts::AbstractVector{<:Real}) where {S}
+    file_idx = Dict{S,Int}()
+    unique_files = S[]
+    sums = Float64[]
+    counts = Int[]
+    @inbounds for i in eachindex(files, pcts)
+        f = files[i]
+        idx = get(file_idx, f, 0)
+        if idx == 0
+            push!(unique_files, f)
+            push!(sums, Float64(pcts[i]))
+            push!(counts, 1)
+            file_idx[f] = length(unique_files)
+        else
+            sums[idx] += Float64(pcts[i])
+            counts[idx] += 1
+        end
+    end
+    @inbounds for k in eachindex(sums)
+        sums[k] = round(sums[k] / counts[k]; digits = 1)
+    end
+    return DataFrame(AbstractVector[unique_files, sums], [:file, :percentage]; copycols = false)
+end
 
-Combine epoch counts from all files and create averaged version.
-
-# Arguments
-- `all_epoch_counts::Vector{DataFrame}`: Vector of DataFrames with epoch counts per file
-
-# Returns
-- `Tuple{DataFrame, DataFrame}`: (combined_counts, avg_counts)
-  - `combined_counts`: All epoch counts concatenated
-  - `avg_counts`: Averaged percentage per file (grouped by file)
-"""
 function _epoch_and_file_summary(all_epoch_counts::Vector{DataFrame})
-    epoch_summary = vcat(all_epoch_counts...)
-    file_summary = combine(groupby(epoch_summary, [:file]), :percentage => mean => :percentage)
-    file_summary.percentage = round.(file_summary.percentage; digits = 1)
+    epoch_summary = reduce(vcat, all_epoch_counts)
+    file_summary = _file_percentage_summary(epoch_summary.file, epoch_summary.percentage)
     return epoch_summary, file_summary
 end
 
-"""
-    _merge_summaries(new_epoch_summary::DataFrame, new_file_summary::DataFrame, output_directory::String)
+function _merge_jld2_summary(path::String, new_df::DataFrame, new_files::Set)
+    merged = if isfile(path)
+        existing = JLD2.load(path, "data")
+        keep = [!in(f, new_files) for f in existing.file]
+        vcat(existing[keep, :], new_df)
+    else
+        new_df
+    end
+    return sort(merged, :file; by = _natural_sort_key)
+end
 
-Merge new summaries with existing summaries, replacing data for files that already exist.
-
-# Arguments
-- `new_epoch_summary::DataFrame`: New epoch summary data
-- `new_file_summary::DataFrame`: New file summary data
-- `output_directory::String`: Directory where summary files are stored
-
-# Returns
-- `Tuple{DataFrame, DataFrame}`: (merged_epoch_summary, merged_file_summary)
-"""
 function _merge_summaries(new_epoch_summary::DataFrame, new_file_summary::DataFrame, output_directory::String)
-    epoch_path = joinpath(output_directory, "epoch_summary.jld2")
-    file_path = joinpath(output_directory, "file_summary.jld2")
-
-    # Get list of files in new data (for replacement)
-    new_files = unique(new_epoch_summary.file)
-
-    # Load and merge epoch summary
-    if isfile(epoch_path)
-        existing_epoch = JLD2.load(epoch_path, "data")
-        # Remove rows for files that are being updated
-        existing_epoch = existing_epoch[.!in.(existing_epoch.file, Ref(new_files)), :]
-        merged_epoch = vcat(existing_epoch, new_epoch_summary)
-    else
-        merged_epoch = new_epoch_summary
-    end
-
-    # Load and merge file summary
-    if isfile(file_path)
-        existing_file = JLD2.load(file_path, "data")
-        # Remove rows for files that are being updated
-        existing_file = existing_file[.!in.(existing_file.file, Ref(new_files)), :]
-        merged_file = vcat(existing_file, new_file_summary)
-    else
-        merged_file = new_file_summary
-    end
-
-    # Sort by filename using natural sorting (file_1, file_2, ..., file_10)
-    merged_epoch = sort(merged_epoch, :file, by = _natural_sort_key)
-    merged_file = sort(merged_file, :file, by = _natural_sort_key)
-
+    new_files = Set(new_epoch_summary.file)
+    merged_epoch = _merge_jld2_summary(joinpath(output_directory, "epoch_summary.jld2"), new_epoch_summary, new_files)
+    merged_file = _merge_jld2_summary(joinpath(output_directory, "file_summary.jld2"), new_file_summary, new_files)
     return merged_epoch, merged_file
 end
 
 """
-    compare_rejections(rejection_step1::Vector{EpochRejectionInfo}, rejection_step2::Vector{EpochRejectionInfo})
+    compare_rejections(rejection1::Vector{EpochRejectionInfo}, rejection2::Vector{EpochRejectionInfo}) -> DataFrame
 
-Compare rejection results before and after repair to show repair effectiveness.
-
-# Arguments
-- `rejection_step1::Vector{EpochRejectionInfo}`: Rejection info before repair
-- `rejection_step2::Vector{EpochRejectionInfo}`: Rejection info after repair
-
-# Returns
-- `DataFrame`: Comparison table with detailed statistics per condition showing:
-  - Original number of epochs
-  - Rejected before repair (step1)
-  - Rejected after repair (step2)
-  - Successfully repaired epochs
-  - Percentage of step1 rejections that were repaired
-  - Final percentage of epochs kept
-
-# Examples
-```julia
-rejection_step1 = detect_bad_epochs_automatic(epochs, name="step1")
-repair_artifacts!(epochs, rejection_step1)
-rejection_step2 = detect_bad_epochs_automatic(epochs, name="step2")
-comparison = compare_rejections(rejection_step1, rejection_step2)
-```
+Compare epoch rejection counts before (`rejection1`) and after (`rejection2`) channel repair per condition.
 """
 function compare_rejections(rejection1::Vector{EpochRejectionInfo}, rejection2::Vector{EpochRejectionInfo})
-    comparison_data = []
+    n = min(length(rejection1), length(rejection2))
+    conds = Vector{Int}(undef, n)
+    cond_names = Vector{String}(undef, n)
+    n_orig = Vector{Int}(undef, n)
+    rej_before = Vector{Int}(undef, n)
+    rej_after = Vector{Int}(undef, n)
+    rep_ok = Vector{Int}(undef, n)
+    pct_rep = Vector{Float64}(undef, n)
+    pct_kept = Vector{Float64}(undef, n)
 
-    for (info1, info2) in zip(rejection1, rejection2)
-        # Get unique epoch indices rejected in each step
-        epochs_rejected_step1 = unique_epochs(info1)
-        epochs_rejected_step2 = unique_epochs(info2)
+    @inbounds for idx = 1:n
+        info1 = rejection1[idx]
+        info2 = rejection2[idx]
+        s1 = unique_epochs(info1)
+        s2 = unique_epochs(info2)
 
-        # Calculate statistics
         n_original = info1.info.n
-        n_rejected_step1 = length(epochs_rejected_step1)
-        n_rejected_step2 = length(epochs_rejected_step2)
+        n1 = length(s1)
+        n2 = length(s2)
+        s2_set = Set{Int}(s2)
+        n_still_bad = count(in(s2_set), s1)
+        n_repaired = n1 - n_still_bad
 
-        # Epochs that were rejected in step1 but NOT in step2 (successfully repaired)
-        epochs_repaired = setdiff(epochs_rejected_step1, epochs_rejected_step2)
-        n_repaired = length(epochs_repaired)
-
-        # Epochs rejected in BOTH steps (repair didn't help)
-        epochs_still_bad = intersect(epochs_rejected_step1, epochs_rejected_step2)
-        n_still_bad = length(epochs_still_bad)
-
-        # New rejections in step2 (epochs that weren't rejected in step1)
-        # This can happen if repair introduces artifacts or if thresholds are slightly different
-        epochs_new_rejections = setdiff(epochs_rejected_step2, epochs_rejected_step1)
-        n_new_rejections = length(epochs_new_rejections)
-
-        # Verify: n_rejected_step2 should equal n_still_bad + n_new_rejections
-        # Verify: n_rejected_step1 should equal n_repaired + n_still_bad
-        @assert n_rejected_step2 == n_still_bad + n_new_rejections "Logic error: n_rejected_step2 ($n_rejected_step2) != n_still_bad ($n_still_bad) + n_new_rejections ($n_new_rejections)"
-        @assert n_rejected_step1 == n_repaired + n_still_bad "Logic error: n_rejected_step1 ($n_rejected_step1) != n_repaired ($n_repaired) + n_still_bad ($n_still_bad)"
-
-        # Calculate key percentages
-        pct_repaired = n_rejected_step1 > 0 ? round(100 * n_repaired / n_rejected_step1, digits = 1) : 0.0
-        pct_final_kept = round(100 * (n_original - n_rejected_step2) / n_original, digits = 1)
-
-        push!(
-            comparison_data,
-            (
-                condition = info1.info.number,
-                condition_name = info1.info.name,
-                n_original = n_original,
-                rejected_before_repair = n_rejected_step1,
-                rejected_after_repair = n_rejected_step2,
-                successfully_repaired = n_repaired,
-                pct_repaired = pct_repaired,
-                pct_final_kept = pct_final_kept,
-            ),
-        )
+        conds[idx] = info1.info.number
+        cond_names[idx] = info1.info.name
+        n_orig[idx] = n_original
+        rej_before[idx] = n1
+        rej_after[idx] = n2
+        rep_ok[idx] = n_repaired
+        pct_rep[idx] = n1 > 0 ? round(100.0 * n_repaired / n1; digits = 1) : 0.0
+        pct_kept[idx] = round(100.0 * (n_original - n2) / n_original; digits = 1)
     end
 
-    return DataFrame(comparison_data)
+    return DataFrame(
+        AbstractVector[conds, cond_names, n_orig, rej_before, rej_after, rep_ok, pct_rep, pct_kept],
+        [
+            :condition,
+            :condition_name,
+            :n_original,
+            :rejected_before_repair,
+            :rejected_after_repair,
+            :successfully_repaired,
+            :pct_repaired,
+            :pct_final_kept,
+        ];
+        copycols = false,
+    )
 end
 
 """
-    summarize_electrode_repairs(continuous_repairs::Vector{ContinuousRepairInfo})
+    summarize_electrode_repairs(continuous_repairs::Vector{ContinuousRepairInfo}) -> DataFrame
+    summarize_electrode_repairs(file_pattern::String; input_dir::String = pwd()) -> Tuple{DataFrame,DataFrame}
 
-Summarize electrode repairs from a vector of ContinuousRepairInfo objects (continuous level only).
-Each ContinuousRepairInfo is treated as coming from a separate participant.
-
-# Arguments
-- `continuous_repairs::Vector{ContinuousRepairInfo}`: Vector of ContinuousRepairInfo objects
-
-# Returns
-- `DataFrame`: Summary table with columns:
-  - `electrode::Symbol`: Electrode name
-  - `n_participants::Int`: Number of participants where this electrode was repaired at the continuous level
+Summarize continuous-level electrode repairs across participants (either directly from a `Vector{ContinuousRepairInfo}`
+or loaded from matching `*_artifact_info.jld2` files in `input_dir`).
 """
 function summarize_electrode_repairs(continuous_repairs::Vector{ContinuousRepairInfo})
-    electrode_participants = Dict{Symbol,Set{Int}}()
+    counts = Dict{Symbol,Int}()
+    last_seen = Dict{Symbol,Int}()
 
     for (participant_idx, repair_info) in enumerate(continuous_repairs)
-        # Count continuous repairs (1 per participant)
         for ch in repair_info.repaired
-            if !haskey(electrode_participants, ch)
-                electrode_participants[ch] = Set{Int}()
+            if get(last_seen, ch, 0) != participant_idx
+                last_seen[ch] = participant_idx
+                counts[ch] = get(counts, ch, 0) + 1
             end
-            push!(electrode_participants[ch], participant_idx)
         end
     end
 
-    # Create DataFrame sorted by number of participants (descending)
-    summary_data = [
-        (electrode = ch, n_participants = length(participants)) for
-        (ch, participants) in sort(collect(electrode_participants), by = x -> length(x[2]), rev = true)
-    ]
-
-    return DataFrame(summary_data)
+    isempty(counts) && return DataFrame(electrode = Symbol[], n_participants = Int[])
+    electrodes = collect(keys(counts))
+    n_parts = [counts[ch] for ch in electrodes]
+    perm = sortperm(n_parts; rev = true)
+    return DataFrame(AbstractVector[electrodes[perm], n_parts[perm]], [:electrode, :n_participants]; copycols = false)
 end
-function summarize_electrode_repairs(file_pattern::String; input_dir::String = pwd())
-    files = sort(_find_batch_files(file_pattern, input_dir), by = _natural_sort_key)
 
-    empty_return =
-        (DataFrame(file = String[], repaired = String[], skipped = String[]), DataFrame(electrode = Symbol[], n_participants = Int[]))
+function summarize_electrode_repairs(file_pattern::String; input_dir::String = pwd())
+    files = sort!(_find_batch_files(file_pattern, input_dir); by = _natural_sort_key)
     if isempty(files)
         @minimal_warning "No JLD2 files found matching pattern '$file_pattern' in $input_dir"
-        return empty_return
+        return DataFrame(file = String[], repaired = String[], skipped = String[]), DataFrame(electrode = Symbol[], n_participants = Int[])
     end
 
-    per_file_data = []
+    files_col = String[]
+    rep_col = String[]
+    skip_col = String[]
     continuous_repairs = ContinuousRepairInfo[]
 
     for file in files
@@ -201,134 +149,99 @@ function summarize_electrode_repairs(file_pattern::String; input_dir::String = p
             @minimal_warning "Failed to load artifact info from $file_path: $(sprint(showerror, e))"
             continue
         end
-        base_filename = replace(file, "_artifact_info.jld2" => "")
+
         file_repaired = Symbol[]
-        file_skipped  = Symbol[]
+        file_skipped = Symbol[]
         if !isnothing(artifact_info)
             for repair_info in artifact_info.continuous_repairs
                 append!(file_repaired, repair_info.repaired)
                 append!(file_skipped, repair_info.skipped)
-                if !isempty(repair_info.repaired)
-                    push!(continuous_repairs, repair_info)
-                end
+                !isempty(repair_info.repaired) && push!(continuous_repairs, repair_info)
             end
         end
-        push!(
-            per_file_data,
-            (
-                file     = base_filename,
-                repaired = isempty(file_repaired) ? "none" : join(sort(string.(unique(file_repaired))), ", "),
-                skipped  = isempty(file_skipped) ? "" : join(sort(string.(unique(file_skipped))), ", "),
-            ),
-        )
+        push!(files_col, replace(file, "_artifact_info.jld2" => ""))
+        push!(rep_col, isempty(file_repaired) ? "none" : join(sort!(string.(unique!(file_repaired))), ", "))
+        push!(skip_col, isempty(file_skipped) ? "" : join(sort!(string.(unique!(file_skipped))), ", "))
     end
 
-    per_file_df  = DataFrame(per_file_data)
-    aggregate_df = summarize_electrode_repairs(continuous_repairs)
-    return per_file_df, aggregate_df
+    per_file_df = DataFrame(AbstractVector[files_col, rep_col, skip_col], [:file, :repaired, :skipped]; copycols = false)
+    return per_file_df, summarize_electrode_repairs(continuous_repairs)
 end
 
-
-
-
+function _empty_ica_summary()
+    return (
+        DataFrame(
+            file = String[],
+            total_components = Int[],
+            vEOG = Int[],
+            hEOG = Int[],
+            ECG = Int[],
+            line_noise = Int[],
+            channel_noise = Int[],
+        ),
+        DataFrame(component_type = String[], avg_per_participant = Float64[]),
+    )
+end
 
 """
-    summarize_ica_components(ica_components::Vector{ArtifactComponents})
+    summarize_ica_components(ica_components::Vector{ArtifactComponents}) -> Tuple{DataFrame,DataFrame}
+    summarize_ica_components(file_pattern::String; input_dir::String = pwd()) -> Tuple{DataFrame,DataFrame}
 
-Summarize ICA components removed across all participants.
-
-# Arguments
-- `ica_components::Vector{ArtifactComponents}`: Vector of ArtifactComponents objects
-
-# Returns
-- `DataFrame`: Summary table with columns:
-  - `file::String`: Filename (empty string when called with Vector{ArtifactComponents})
-  - `total_components::Int`: Total number of ICA components removed
-  - `vEOG::Int`: Number of vEOG components
-  - `hEOG::Int`: Number of hEOG components
-  - `ECG::Int`: Number of ECG components
-  - `line_noise::Int`: Number of line noise components
-  - `channel_noise::Int`: Number of channel noise components
-- `DataFrame`: Average summary with columns:
-  - `component_type::String`: Type of component
-  - `avg_per_participant::Float64`: Average number of components per participant
+Summarize removed ICA artifact components per participant and on average across participants.
 """
 function summarize_ica_components(ica_components::Vector{ArtifactComponents})
-    if isempty(ica_components)
-        return DataFrame(
-            file = String[],
-            total_components = Int[],
-            vEOG = Int[],
-            hEOG = Int[],
-            ECG = Int[],
-            line_noise = Int[],
-            channel_noise = Int[],
-        ),
-        DataFrame(component_type = String[], avg_per_participant = Float64[])
+    n = length(ica_components)
+    n == 0 && return _empty_ica_summary()
+
+    files_col = fill("", n)
+    total_col = Vector{Int}(undef, n)
+    veog_col = Vector{Int}(undef, n)
+    heog_col = Vector{Int}(undef, n)
+    ecg_col = Vector{Int}(undef, n)
+    ln_col = Vector{Int}(undef, n)
+    cn_col = Vector{Int}(undef, n)
+
+    @inbounds for i = 1:n
+        ca = ica_components[i]
+        veog_col[i] = length(get(ca.eog, :vEOG, Int[]))
+        heog_col[i] = length(get(ca.eog, :hEOG, Int[]))
+        ecg_col[i] = length(ca.ecg)
+        ln_col[i] = length(ca.line_noise)
+        cn_col[i] = length(ca.channel_noise)
+        total_col[i] = length(unique(get_all_ica_components(ca)))
     end
 
-    # Per-file summary
-    per_file_data = []
-    for component_artifacts in ica_components
-        vEOG_count = length(get(component_artifacts.eog, :vEOG, Int[]))
-        hEOG_count = length(get(component_artifacts.eog, :hEOG, Int[]))
-        ecg_count = length(component_artifacts.ecg)
-        line_noise_count = length(component_artifacts.line_noise)
-        channel_noise_count = length(component_artifacts.channel_noise)
-        total_count = length(unique(get_all_ica_components(component_artifacts)))
+    per_file_df = DataFrame(
+        AbstractVector[files_col, total_col, veog_col, heog_col, ecg_col, ln_col, cn_col],
+        [:file, :total_components, :vEOG, :hEOG, :ECG, :line_noise, :channel_noise];
+        copycols = false,
+    )
 
-        push!(
-            per_file_data,
-            (
-                file = "",  # No filename when called with Vector{ArtifactComponents}
-                total_components = total_count,
-                vEOG = vEOG_count,
-                hEOG = hEOG_count,
-                ECG = ecg_count,
-                line_noise = line_noise_count,
-                channel_noise = channel_noise_count,
-            ),
-        )
-    end
-
-    per_file_df = DataFrame(per_file_data)
-
-    # Average summary
-    avg_data = [
-        (component_type = "vEOG", avg_per_participant = round(mean(per_file_df.vEOG), digits = 2)),
-        (component_type = "hEOG", avg_per_participant = round(mean(per_file_df.hEOG), digits = 2)),
-        (component_type = "ECG", avg_per_participant = round(mean(per_file_df.ECG), digits = 2)),
-        (component_type = "line_noise", avg_per_participant = round(mean(per_file_df.line_noise), digits = 2)),
-        (component_type = "channel_noise", avg_per_participant = round(mean(per_file_df.channel_noise), digits = 2)),
-        (component_type = "total", avg_per_participant = round(mean(per_file_df.total_components), digits = 2)),
+    avg_vals = Float64[
+        round(mean(veog_col); digits = 2),
+        round(mean(heog_col); digits = 2),
+        round(mean(ecg_col); digits = 2),
+        round(mean(ln_col); digits = 2),
+        round(mean(cn_col); digits = 2),
+        round(mean(total_col); digits = 2),
     ]
-
-    avg_df = DataFrame(avg_data)
-
+    avg_df = DataFrame(
+        AbstractVector[["vEOG", "hEOG", "ECG", "line_noise", "channel_noise", "total"], avg_vals],
+        [:component_type, :avg_per_participant];
+        copycols = false,
+    )
     return per_file_df, avg_df
 end
-function summarize_ica_components(file_pattern::String; input_dir::String = pwd())
-    # Find matching files using _find_batch_files
-    files = _find_batch_files(file_pattern, input_dir)
 
+function summarize_ica_components(file_pattern::String; input_dir::String = pwd())
+    files = _find_batch_files(file_pattern, input_dir)
     if isempty(files)
         @minimal_warning "No JLD2 files found matching pattern '$file_pattern' in $input_dir"
-        return DataFrame(
-            file = String[],
-            total_components = Int[],
-            vEOG = Int[],
-            hEOG = Int[],
-            ECG = Int[],
-            line_noise = Int[],
-            channel_noise = Int[],
-        ),
-        DataFrame(component_type = String[], avg_per_participant = Float64[])
+        return _empty_ica_summary()
     end
 
-    # Load all ArtifactInfo objects and extract ArtifactComponents with filenames
     ica_components = ArtifactComponents[]
     filenames = String[]
-
     for file in files
         file_path = joinpath(input_dir, file)
         isfile(file_path) || continue
@@ -340,22 +253,14 @@ function summarize_ica_components(file_pattern::String; input_dir::String = pwd(
         end
         if !isnothing(artifact_info) && !isnothing(artifact_info.ica_components)
             push!(ica_components, artifact_info.ica_components)
-            push!(filenames, file)
+            push!(filenames, replace(file, "_artifact_info.jld2" => ""))
         end
     end
 
-    # Get summary from vector version
     per_file_df, avg_df = summarize_ica_components(ica_components)
-
-    # Update filenames in per_file_df: extract base filename
-    for (i, filename) in enumerate(filenames)
-        # Extract base filename (remove "_artifact_info.jld2" suffix)
-        base_filename = replace(filename, "_artifact_info.jld2" => "")
-        per_file_df.file[i] = base_filename
+    for i in eachindex(filenames)
+        per_file_df.file[i] = filenames[i]
     end
-
-    # Sort by filename using natural sorting (handles numeric parts correctly: Flank_C_3 before Flank_C_12)
-    sort!(per_file_df, :file, by = _natural_sort_key)
-
+    sort!(per_file_df, :file; by = _natural_sort_key)
     return per_file_df, avg_df
 end

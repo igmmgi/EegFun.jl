@@ -1,165 +1,83 @@
 """
-FieldTrip data importer for EegFun.jl
+    read_fieldtrip(filepath::String, layout::Layout)
 
-Loads FieldTrip .mat files and converts to EegFun data structures.
-"""
-
-
-"""
-    read_fieldtrip(filepath::String, layout::Layout) → ContinuousData/EpochData/ErpData
-
-Load FieldTrip .mat file and convert to EegFun data structure.
+Load a FieldTrip `.mat` file and convert it to `ContinuousData`, `EpochData`, or `ErpData`.
 
 # Arguments
-- `filepath::String`: Path to FieldTrip .mat file
-- `layout::Layout`: Channel layout (FieldTrip doesn't store layout in data files)
-
-# Returns
-- `ContinuousData`: For single-trial continuous data
-- `EpochData`: For multi-trial epoched data
-- `ErpData`: For averaged ERP data
-
-# Example
-```julia
-using EegFun
-# We need to specify a layout to pass to our EegFun data types
-layout = EegFun.read_layout("./resources/layouts/biosemi/biosemi64.csv")
-data = EegFun.read_fieldtrip("./resources/data/fieldtrip/continuous.mat", layout)
-```
+- `filepath::String`: Path to FieldTrip `.mat` file
+- `layout::Layout`: Channel layout
 """
 function read_fieldtrip(filepath::String, layout::Layout)
     @info "Loading FieldTrip .mat file: $filepath"
-
     mat_data = matread(filepath)
 
-    # We need to try and figure our what kind of data is in the Matlab mat file
     ft = nothing
     is_erp = false
     for (key, value) in mat_data
-        if value isa Dict
-            # Check for avg (ERP) first, then trial (continuous/epoched)
-            if haskey(value, "avg") && haskey(value, "time")
-                ft = value
-                is_erp = true
-                @info "Found FieldTrip ERP data in variable: $key"
-                break
-            elseif haskey(value, "trial") && haskey(value, "fsample")
-                ft = value
-                @info "Found FieldTrip data in variable: $key"
-                break
-            end
+        value isa AbstractDict || continue
+        if haskey(value, "avg") && haskey(value, "time")
+            ft = value
+            is_erp = true
+            @info "Found FieldTrip ERP data in variable: $key"
+            break
+        elseif haskey(value, "trial") && haskey(value, "fsample")
+            ft = value
+            @info "Found FieldTrip data in variable: $key"
+            break
         end
     end
 
-    if isnothing(ft)
-        @minimal_error("Could not find FieldTrip data structure in file. Expected a dict with 'trial'+'fsample' or 'avg'+'time' fields.")
-    end
+    isnothing(ft) &&
+        @minimal_error("Could not find FieldTrip data structure in file. Expected a dict with 'trial'+'fsample' or 'avg'+'time' fields.",)
 
-    # Handle ERP data differently (has 'avg' instead of 'trial', infer sample rate from time)
     if is_erp
-        # Infer sample rate from time vector
         time_vec = vec(ft["time"])
-        if length(time_vec) > 1
-            dt = time_vec[2] - time_vec[1]
-            sample_rate = Int(round(1.0 / dt))
-        else
+        length(time_vec) > 1 ||
             @minimal_error("Invalid ERP data: time vector has only $(length(time_vec)) point(s). Cannot infer sample rate.")
-        end
+        sample_rate = round(Int, 1.0 / (time_vec[2] - time_vec[1]))
         @info "Detected averaged ERP data, inferred sample rate: $sample_rate Hz"
         return _fieldtrip_to_erpdata(ft, filepath, layout, sample_rate)
     end
 
-    # Handle trial-based data (continuous (1 trial) or epoched)
     n_trials = length(ft["trial"])
-    sample_rate = Int(ft["fsample"])
+    sample_rate = round(Int, ft["fsample"])
     @info "Found $n_trials trial(s), sample rate: $sample_rate Hz"
-    # Detect data type and convert
-    if n_trials == 1 # Single trial: continuous data
+    if n_trials == 1
         @info "Detected continuous data"
         return _fieldtrip_to_continuousdata(ft, filepath, layout, sample_rate)
-    else # Multiple trials: epoched data
-        @info "Detected epoched data with $n_trials trials"
-        return _fieldtrip_to_epochdata(ft, filepath, layout, sample_rate)
     end
+    @info "Detected epoched data with $n_trials trials"
+    return _fieldtrip_to_epochdata(ft, filepath, layout, sample_rate)
 end
 
-
-# === Helper Functions ===
-"""
-Remove BDF Status channel if present (last channel named "Status").
-Returns updated channel labels and data matrix.
-"""
-function _remove_status_channel(ch_labels::Vector, data_matrix::AbstractMatrix)
+function _extract_ft_channel_names(ch_labels::AbstractVector)::Vector{Symbol}
     if !isempty(ch_labels) && lowercase(string(ch_labels[end])) == "status"
         @info "Detected BDF Status channel, removing it"
-        return ch_labels[1:(end-1)], data_matrix[1:(end-1), :]
+        return [Symbol(ch_labels[i]) for i = 1:(length(ch_labels)-1)]
     end
-    return ch_labels, data_matrix
+    return [Symbol(c) for c in ch_labels]
 end
 
-"""
-Extract time vector from FieldTrip data.
-Handles both cell array format (one vector per trial) and shared numeric matrix format.
-"""
-function _extract_time_vector(time_data)
-    if time_data isa AbstractMatrix && eltype(time_data) <: Number && size(time_data, 1) == 1
-        # Shared numeric time vector: (1 x n_timepoints)
-        return vec(time_data)
-    else
-        # Cell array: extract first trial's time vector
-        # This is needed for our custom stripped down version
-        return vec(time_data[1])
-    end
+function _extract_time_vector(time_data)::Vector{Float64}
+    raw = (time_data isa AbstractMatrix && eltype(time_data) <: Number && size(time_data, 1) == 1) ? vec(time_data) : vec(time_data[1])
+    return raw isa Vector{Float64} ? raw : [Float64(x) for x in raw]
 end
 
-"""
-Create metadata (condition name and analysis info) from filepath and sample rate.
-"""
-function _create_metadata(filepath::String, sample_rate::Int)
-    condition_name = basename(filepath)
-    analysis_info = AnalysisInfo(sample_rate = Float64(sample_rate))
-    return condition_name, analysis_info
-end
+function _fieldtrip_to_continuousdata(ft::AbstractDict, filepath::String, layout::Layout, sample_rate::Int)
+    ch_names = _extract_ft_channel_names(vec(ft["label"]))
+    data_matrix = ft["trial"][1]
+    time_raw = vec(ft["time"][1])
+    time_vec = time_raw isa Vector{Float64} ? copy(time_raw) : [Float64(x) for x in time_raw]
 
-"""
-Create trigger columns (zeros for ERP/continuous without events).
-"""
-function _create_trigger_columns(n_timepoints::Int)
-    trigger_vec = zeros(Int, n_timepoints)
-    trigger_info_vec = fill("", n_timepoints)
-    return trigger_vec, trigger_info_vec
-end
-
-
-"""
-Convert FieldTrip continuous data to EegFun ContinuousData.
-"""
-function _fieldtrip_to_continuousdata(ft::Dict, filepath::String, layout::Layout, sample_rate::Int)
-    # Extract channel labels and data
-    ch_labels = vec(ft["label"])
-    data_matrix = ft["trial"][1]  # [channels × timepoints]
-    time_vec = vec(ft["time"][1])
-
-    # Remove Status channel if present
-    ch_labels, data_matrix = _remove_status_channel(ch_labels, data_matrix)
-
-    ch_names = Symbol.(ch_labels)
-    n_channels, n_timepoints = size(data_matrix)
-
+    n_channels = length(ch_names)
+    n_timepoints = size(data_matrix, 2)
     @info "Data: $n_channels channels × $n_timepoints timepoints"
 
-    # Create DataFrame
-    df = DataFrame(data_matrix', ch_names)
+    trigger_vec = zeros(Int, n_timepoints)
+    trigger_info_vec = fill("", n_timepoints)
 
-    # Extract events from cfg.event if available (BDF files use struct-of-arrays format)
-    trigger_vec, trigger_info_vec = _create_trigger_columns(n_timepoints)
-
-    if haskey(ft, "cfg") && haskey(ft["cfg"], "event") && !isempty(ft["cfg"]["event"])
-
+    if haskey(ft, "cfg") && ft["cfg"] isa AbstractDict && haskey(ft["cfg"], "event") && !isempty(ft["cfg"]["event"])
         events = ft["cfg"]["event"]
-
-        # NOTE: Event extraction has primarily been tested with BDF data imported into MATLAB.
-        # FieldTrip events are stored as struct-of-arrays (like EEGLAB)
         sample_idx = findfirst(==("sample"), events.names)
         value_idx = findfirst(==("value"), events.names)
         type_idx = findfirst(==("type"), events.names)
@@ -167,157 +85,109 @@ function _fieldtrip_to_continuousdata(ft::Dict, filepath::String, layout::Layout
         if !isnothing(sample_idx)
             samples = events.values[sample_idx]
             @info "Extracting $(length(samples)) events from cfg.event"
-
-            values = !isnothing(value_idx) ? events.values[value_idx] : nothing
+            vals = !isnothing(value_idx) ? events.values[value_idx] : nothing
             types = !isnothing(type_idx) ? events.values[type_idx] : nothing
 
             for i in eachindex(samples)
-                sample = Int(round(samples[i]))
-
-                if 1 <= sample <= n_timepoints
-                    # Extract trigger value
-                    if !isnothing(values) && i <= length(values)
-                        val = values[i]
-                        if val isa AbstractArray
-                            !isempty(val) && (trigger_vec[sample] = Int(first(val)))
-                        elseif !isnan(val)
-                            trigger_vec[sample] = Int(val)
-                        end
+                s = round(Int, samples[i])
+                (1 <= s <= n_timepoints) || continue
+                if !isnothing(vals) && i <= length(vals)
+                    val = vals[i]
+                    if val isa AbstractArray
+                        !isempty(val) && (trigger_vec[s] = Int(first(val)))
+                    elseif !isnan(val)
+                        trigger_vec[s] = Int(val)
                     end
-
-                    # Extract trigger type/info
-                    if !isnothing(types) && i <= length(types)
-                        typ = types[i]
-                        if typ isa AbstractArray
-                            !isempty(typ) && (trigger_info_vec[sample] = string(first(typ)))
-                        else
-                            trigger_info_vec[sample] = string(typ)
-                        end
-                    end
+                end
+                if !isnothing(types) && i <= length(types)
+                    typ = types[i]
+                    trigger_info_vec[s] = typ isa AbstractArray ? (isempty(typ) ? "" : string(first(typ))) : string(typ)
                 end
             end
         end
     end
 
-    insertcols!(df, 1, :time => time_vec, :sample => collect(1:n_timepoints), :trigger => trigger_vec, :trigger_info => trigger_info_vec)
+    cols = Vector{AbstractVector}(undef, 4 + n_channels)
+    cols[1] = time_vec
+    cols[2] = collect(1:n_timepoints)
+    cols[3] = trigger_vec
+    cols[4] = trigger_info_vec
+    _extract_channel_cols!(cols, 4, data_matrix, n_channels, n_timepoints)
+    df = DataFrame(cols, vcat([:time, :sample, :trigger, :trigger_info], ch_names); copycols = false)
 
-    # Create ContinuousData
-    _, analysis_info = _create_metadata(filepath, sample_rate)
-    continuous_data = ContinuousData(filepath, df, copy(layout), sample_rate, analysis_info)
-
+    continuous_data = ContinuousData(filepath, df, copy(layout), sample_rate, AnalysisInfo(sample_rate = Float64(sample_rate)))
     @info "Successfully converted to ContinuousData"
     return continuous_data
 end
 
-
-"""
-Convert FieldTrip epoched data to EegFun EpochData.
-"""
-function _fieldtrip_to_epochdata(ft::Dict, filepath::String, layout::Layout, sample_rate::Int)
-    # Extract channel labels
-    ch_labels = vec(ft["label"])
-    ch_names = Symbol.(ch_labels)
-
-    n_trials = length(ft["trial"])
-    n_channels, n_timepoints = size(ft["trial"][1])
-
+function _fieldtrip_to_epochdata(ft::AbstractDict, filepath::String, layout::Layout, sample_rate::Int)
+    ch_names = [Symbol(c) for c in vec(ft["label"])]
+    trials = ft["trial"]
+    n_trials = length(trials)
+    n_channels, n_timepoints = size(trials[1])
     @info "Data: $n_channels channels × $n_timepoints timepoints × $n_trials trials"
 
-    # Extract time vector (handles both cell array and shared matrix formats)
     times = _extract_time_vector(ft["time"])
+    has_ti = haskey(ft, "trialinfo") && !isempty(ft["trialinfo"])
+    trial_triggers = has_ti ? vec(ft["trialinfo"]) : nothing
 
-    # Extract trial info (trigger codes)
-    if haskey(ft, "trialinfo") && !isempty(ft["trialinfo"])
-        trial_triggers = vec(ft["trialinfo"])
-    else
-        trial_triggers = fill(0, n_trials)
-    end
-
-    # Convert trials to Vector{DataFrame}
     epoch_dataframes = Vector{DataFrame}(undef, n_trials)
     time_zero_idx = find_closest_time_index(times, 0.0)
-    sample_col = collect(1:n_timepoints)
+    col_names = vcat([:time, :sample, :epoch, :trigger, :trigger_info], ch_names)
+    sample_template = collect(1:n_timepoints)
 
-    for trial_idx = 1:n_trials
-        # Create DataFrame with transposed data
-        df = DataFrame(ft["trial"][trial_idx]', ch_names)
-
-        # Create trigger vectors with trigger at time=0 (stimulus onset)
-        trigger_vec, trigger_info_vec = _create_trigger_columns(n_timepoints)
-
-        # Set trigger at time=0
-        if trial_idx <= length(trial_triggers)
-            trigger_code = Int(round(trial_triggers[trial_idx]))
-            if trigger_code != 0
-                trigger_vec[time_zero_idx] = trigger_code
-                trigger_info_vec[time_zero_idx] = string(trigger_code)
+    @inbounds for trial_idx = 1:n_trials
+        cols = Vector{AbstractVector}(undef, 5 + n_channels)
+        cols[1] = copy(times)
+        cols[2] = copy(sample_template)
+        cols[3] = fill(trial_idx, n_timepoints)
+        trig_vec = zeros(Int, n_timepoints)
+        info_vec = fill("", n_timepoints)
+        if !isnothing(trial_triggers) && trial_idx <= length(trial_triggers)
+            code = round(Int, trial_triggers[trial_idx])
+            if code != 0
+                trig_vec[time_zero_idx] = code
+                info_vec[time_zero_idx] = string(code)
             end
         end
-
-        insertcols!(
-            df,
-            1,
-            :time => times,
-            :sample => copy(sample_col),
-            :epoch => fill(trial_idx, n_timepoints),
-            :trigger => trigger_vec,
-            :trigger_info => trigger_info_vec,
-        )
-
-        epoch_dataframes[trial_idx] = df
+        cols[4] = trig_vec
+        cols[5] = info_vec
+        _extract_channel_cols!(cols, 5, trials[trial_idx], n_channels, n_timepoints)
+        epoch_dataframes[trial_idx] = DataFrame(cols, copy(col_names); copycols = false)
     end
 
-    # Create EpochData
-    condition_name, analysis_info = _create_metadata(filepath, sample_rate)
     epoch_data = EpochData(
         filepath,
-        1,  # condition number (here, this is essentially a placeholder)
-        condition_name,
+        1,
+        basename(filepath),
         epoch_dataframes,
         copy(layout),
         sample_rate,
-        analysis_info,
+        AnalysisInfo(sample_rate = Float64(sample_rate)),
     )
-
     @info "Successfully converted to EpochData with $n_trials epochs"
     return epoch_data
 end
 
-"""
-Convert FieldTrip ERP data to EegFun ErpData.
-"""
-function _fieldtrip_to_erpdata(ft::Dict, filepath::String, layout::Layout, sample_rate::Int)
-    # Extract channel labels and data
-    ch_labels = vec(ft["label"])
-    data_matrix = ft["avg"]  # [channels × timepoints]
-    time_vec = vec(ft["time"])
+function _fieldtrip_to_erpdata(ft::AbstractDict, filepath::String, layout::Layout, sample_rate::Int)
+    ch_names = _extract_ft_channel_names(vec(ft["label"]))
+    data_matrix = ft["avg"]
+    time_raw = vec(ft["time"])
+    time_vec = time_raw isa Vector{Float64} ? copy(time_raw) : [Float64(x) for x in time_raw]
 
-    # Remove Status channel if present
-    ch_labels, data_matrix = _remove_status_channel(ch_labels, data_matrix)
-
-    ch_names = Symbol.(ch_labels)
-    n_channels, n_timepoints = size(data_matrix)
-
+    n_channels = length(ch_names)
+    n_timepoints = size(data_matrix, 2)
     @info "Data: $n_channels channels × $n_timepoints timepoints"
 
-    # Create DataFrame with time and trigger columns
-    df = DataFrame(data_matrix', ch_names)
-    trigger_vec, trigger_info_vec = _create_trigger_columns(n_timepoints)
-    insertcols!(df, 1, :time => time_vec, :sample => collect(1:n_timepoints), :trigger => trigger_vec, :trigger_info => trigger_info_vec)
+    cols = Vector{AbstractVector}(undef, 4 + n_channels)
+    cols[1] = time_vec
+    cols[2] = collect(1:n_timepoints)
+    cols[3] = zeros(Int, n_timepoints)
+    cols[4] = fill("", n_timepoints)
+    _extract_channel_cols!(cols, 4, data_matrix, n_channels, n_timepoints)
+    df = DataFrame(cols, vcat([:time, :sample, :trigger, :trigger_info], ch_names); copycols = false)
 
-    # Create ErpData
-    condition_name, analysis_info = _create_metadata(filepath, sample_rate)
-    erp_data = ErpData(
-        filepath,
-        1,  # condition number
-        condition_name,
-        df,
-        copy(layout),
-        sample_rate,
-        analysis_info,
-        1,  # n_epochs (unknown for FieldTrip ERP, default to 1)
-    )
-
+    erp_data = ErpData(filepath, 1, basename(filepath), df, copy(layout), sample_rate, AnalysisInfo(sample_rate = Float64(sample_rate)), 1)
     @info "Successfully converted to ErpData"
     return erp_data
 end
