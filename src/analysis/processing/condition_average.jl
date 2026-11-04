@@ -1,117 +1,139 @@
-"""
-Condition averages for ERP and time-frequency data (in-memory and batch).
-"""
-
-# === AVERAGE-SPECIFIC VALIDATION ===
-
-"""Generate default output directory name for condition averaging."""
-function _condition_average_default_output_dir(input_dir::String, pattern::String, groups::Vector{Vector{Int}})
+function _condition_average_default_output_dir(input_dir::String, pattern::String, groups::AbstractVector{<:AbstractVector{<:Integer}})
     groups_str = join([join(group, "-") for group in groups], "_")
-    joinpath(input_dir, "averages_$(clean_pattern(pattern))_$(groups_str)")
+    return joinpath(input_dir, "averages_$(clean_pattern(pattern))_$(groups_str)")
 end
 
-# === AVERAGE-SPECIFIC PROCESSING ===
+function _linear_average_df(dfs::AbstractVector{DataFrame}, cond_chs::Set{Symbol})::DataFrame
+    df1 = dfs[1]
+    col_names = propertynames(df1)
+    n_rows = nrow(df1)
+    n_dfs = length(dfs)
+    inv_n = 1.0 / n_dfs
+    out_cols = Vector{Any}(undef, length(col_names))
 
-"""
-Create an average wave by averaging data across conditions (ERP data, or TF power and phase).
-"""
+    for (j, col) in enumerate(col_names)
+        c1 = df1[!, j]
+        if col in cond_chs
+            out = Vector{Float64}(undef, n_rows)
+            if c1 isa Vector{Float64}
+                v1 = c1::Vector{Float64}
+                @inbounds @simd for i = 1:n_rows
+                    out[i] = v1[i]
+                end
+            else
+                @inbounds @simd for i = 1:n_rows
+                    out[i] = Float64(c1[i])
+                end
+            end
+            for m = 2:n_dfs
+                cm = dfs[m][!, col]
+                if cm isa Vector{Float64}
+                    vm = cm::Vector{Float64}
+                    @inbounds @simd for i = 1:n_rows
+                        out[i] += vm[i]
+                    end
+                else
+                    @inbounds @simd for i = 1:n_rows
+                        out[i] += Float64(cm[i])
+                    end
+                end
+            end
+            if n_dfs > 1
+                @inbounds @simd for i = 1:n_rows
+                    out[i] *= inv_n
+                end
+            end
+            out_cols[j] = out
+        else
+            out_cols[j] = copy(c1)
+        end
+    end
+    return DataFrame(out_cols, col_names; copycols = false)
+end
+
+function _circular_average_df(dfs::AbstractVector{DataFrame}, cond_chs::Set{Symbol})::DataFrame
+    df1 = dfs[1]
+    col_names = propertynames(df1)
+    n_rows = nrow(df1)
+    out_cols = Vector{Any}(undef, length(col_names))
+    cos_sum = Vector{Float64}(undef, n_rows)
+
+    for (j, col) in enumerate(col_names)
+        if col in cond_chs
+            sin_sum = zeros(Float64, n_rows)
+            fill!(cos_sum, 0.0)
+            for df in dfs
+                p = df[!, col]
+                @inbounds @simd for i = 1:n_rows
+                    s, c = sincos(Float64(p[i]))
+                    sin_sum[i] += s
+                    cos_sum[i] += c
+                end
+            end
+            @inbounds @simd for i = 1:n_rows
+                sin_sum[i] = atan(sin_sum[i], cos_sum[i])
+            end
+            out_cols[j] = sin_sum
+        else
+            out_cols[j] = copy(df1[!, j])
+        end
+    end
+    return DataFrame(out_cols, col_names; copycols = false)
+end
+
 function _create_average_wave(dats::AbstractVector{T}, conditions::AbstractVector{<:Integer}, avg_cond::Int) where {T<:ConditionAverageData}
-    # Validate that all datasets have the same structure
     for i = 2:length(dats)
         _have_same_structure(dats[1], dats[i]) || @minimal_error("Data have inconsistent structure")
     end
 
-    # Copy the first dataset's channel data (all containers) and accumulate the others in place
-    avg_frames = map(copy, _data_frames(dats[1]))
-    n = length(dats)
-    inv_n = 1.0 / n
+    cond_chs = Set{Symbol}(_condition_channels(dats[1]))
     for ch in _condition_channels(dats[1])
-        if all(d -> all(df -> hasproperty(df, ch), _data_frames(d)), dats)
-            if dats[1] isa TimeFreqData
-                col_pow = avg_frames[1][!, ch]
-                for i = 2:n
-                    col_pow .+= dats[i].data_power[!, ch]
-                end
-                col_pow .*= inv_n
-                avg_frames[2][!, ch] = _circular_phase_mean([d.data_phase[!, ch] for d in dats])
-            else
-                for (k, avg_df) in enumerate(avg_frames)
-                    col = avg_df[!, ch]
-                    for i = 2:n
-                        col .+= _data_frames(dats[i])[k][!, ch]
-                    end
-                    col .*= inv_n
-                end
-            end
-        else
+        if !all(d -> all(df -> hasproperty(df, ch), _data_frames(d)), dats)
             @minimal_warning "Channel $ch not found in all conditions, keeping values from first condition"
+            delete!(cond_chs, ch)
         end
     end
 
-    # ERP: total number of epochs contributing to the average
+    avg_frames = if dats[1] isa TimeFreqData
+        pow_dfs = DataFrame[d.data_power for d in dats]
+        pha_dfs = DataFrame[d.data_phase for d in dats]
+        (_linear_average_df(pow_dfs, cond_chs), _circular_average_df(pha_dfs, cond_chs))
+    else
+        n_containers = length(_data_frames(dats[1]))
+        ntuple(k -> _linear_average_df(DataFrame[_data_frames(d)[k] for d in dats], cond_chs), n_containers)
+    end
+
     n_epochs = dats[1] isa ErpData ? sum(d.n_epochs for d in dats) : 0
     return _derive_condition(dats[1], avg_cond, "average_$(join(conditions, "_"))", avg_frames; n_epochs = n_epochs)
 end
 
-"""
-Process a single ERP file through condition averaging pipeline.
-Returns BatchResult with success/failure info.
-"""
-function _condition_average_process_file(filepath::String, output_path::String, condition_groups::Vector{Vector{Int}})
+function _condition_average_process_file(
+    filepath::String,
+    output_path::String,
+    condition_groups::AbstractVector{<:AbstractVector{<:Integer}},
+)
     filename = basename(filepath)
-
-    # Read data (using read_data which finds by type)
     file_data = read_data(filepath)
+    isnothing(file_data) && return BatchResult(false, filename, "No data variables found")
 
-    if isnothing(file_data)
-        return BatchResult(false, filename, "No data variables found")
-    end
-
-    # Dispatch to the appropriate in-memory condition_average based on data type
     if file_data isa AbstractVector{<:ErpData} || file_data isa AbstractVector{<:TimeFreqData}
         average_waves = condition_average(file_data, condition_groups)
         jldsave(output_path; data = average_waves, format_version = EEGFUN_FORMAT_VERSION)
         return BatchResult(true, filename, "Created $(length(average_waves)) average(s)")
-    else
-        return BatchResult(false, filename, "Invalid data type: expected Vector{ErpData} or Vector{TimeFreqData}, got $(typeof(file_data))")
     end
+    return BatchResult(false, filename, "Invalid data type: expected Vector{ErpData} or Vector{TimeFreqData}, got $(typeof(file_data))")
 end
 
-# === IN-MEMORY API FUNCTION ===
-
 """
-    condition_average(data::Vector{<:ErpData}, condition_groups::Vector{Vector{Int}}) -> Vector{ErpData}
-    condition_average(data::Vector{TimeFreqData}, condition_groups::Vector{Vector{Int}}) -> Vector{TimeFreqData}
-    condition_average(file_pattern::String, condition_groups::Vector{Vector{Int}};
-    input_dir::String = pwd(), participant_selection::Function = participants(),
-    output_dir = nothing)
+    condition_average(data::AbstractVector{<:Union{ErpData, TimeFreqData}}, condition_groups) -> Vector
+    condition_average(file_pattern::String, condition_groups; input_dir = pwd(),
+                      participant_selection = participants(), output_dir = nothing)
 
-Create condition average waves (or time-frequency averages), or batch-process JLD2 files.
-
-For each group of condition indices, averages the EEG channels (or TF power/phase) across those
-conditions. The `file_pattern` method loads JLD2 files and saves results to a new directory.
-
-# Arguments
-- `data`: `Vector{<:ErpData}` or `Vector{TimeFreqData}`, one element per condition
-- `condition_groups`: Groups of condition indices to average (e.g., `[[1, 2], [3, 4]]`)
-
-# Example
-```julia
-erps = EegFun.average_epochs(epochs)
-avg_waves = EegFun.condition_average(erps, [[1, 2], [3, 4]])
-
-# Batch
-EegFun.condition_average("erps_unrejected", [[1, 2], [3, 4]])
-```
+Average ERP waveforms or time-frequency representations (linear power, circular phase) across each
+group of condition indices in `condition_groups`, or batch-process matching JLD2 files.
 """
 function condition_average(data::AbstractVector{T}, condition_groups) where {T<:ConditionAverageData}
-    groups = if isempty(condition_groups)
-        condition_groups
-    elseif first(condition_groups) isa Integer
-        [condition_groups]
-    else
-        condition_groups
-    end
+    groups = isempty(condition_groups) ? condition_groups : (first(condition_groups) isa Integer ? [condition_groups] : condition_groups)
 
     tag = _kind_tag(T)
     @info "Creating $(tag)condition average waves..."
@@ -121,16 +143,10 @@ function condition_average(data::AbstractVector{T}, condition_groups) where {T<:
     average_waves = T[]
 
     for (group_idx, conditions) in enumerate(groups)
-        # Find data for each condition in the group (.condition match with positional fallback)
         group_data = T[]
         all_found = true
-
         for cond in conditions
-            found_idx = if use_cond_field
-                findfirst(d -> d.condition == cond, data)
-            else
-                (1 <= cond <= length(data)) ? cond : nothing
-            end
+            found_idx = use_cond_field ? findfirst(d -> d.condition == cond, data) : ((1 <= cond <= length(data)) ? cond : nothing)
             if isnothing(found_idx)
                 @minimal_warning "Condition $cond not found. Skipping group $conditions."
                 all_found = false
@@ -138,23 +154,14 @@ function condition_average(data::AbstractVector{T}, condition_groups) where {T<:
             end
             push!(group_data, data[found_idx])
         end
-
         all_found || continue
-
-        avg_wave = _create_average_wave(group_data, conditions, group_idx)
-        push!(average_waves, avg_wave)
+        push!(average_waves, _create_average_wave(group_data, conditions, group_idx))
     end
 
-    if isempty(average_waves)
-        @minimal_error("No valid condition groups found")
-    end
-
+    isempty(average_waves) && @minimal_error("No valid condition groups found")
     @info "Created $(length(average_waves)) $(tag)average wave(s)"
     return average_waves
 end
-
-# === BATCH API FUNCTION ===
-
 
 function condition_average(
     file_pattern::String,
@@ -163,22 +170,14 @@ function condition_average(
     participant_selection = participants(),
     output_dir::Union{String,Nothing} = nothing,
 )
-
     _with_batch_logging("condition averaging", "condition_average.log", input_dir, output_dir) do ctx
         @log_call "condition_average"
-
-        # Validation
-
         error_msg = _validate_condition_groups(condition_groups)
-        if !isnothing(error_msg)
-            @minimal_error(error_msg)
-        end
+        !isnothing(error_msg) && @minimal_error(error_msg)
 
-        # Setup directories
         output_dir = _prepare_output_dir!(ctx, _condition_average_default_output_dir(input_dir, file_pattern, condition_groups))
-
         process_fn = (input_path, output_path) -> _condition_average_process_file(input_path, output_path, condition_groups)
-        result = batch_process(process_fn, file_pattern, input_dir, output_dir, participant_selection, "Creating averages")
+        return batch_process(process_fn, file_pattern, input_dir, output_dir, participant_selection, "Creating averages")
     end
 end
 

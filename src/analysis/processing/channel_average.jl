@@ -1,61 +1,91 @@
-function _circular_colmeans(df::DataFrame, cols::AbstractVector{Symbol})::Vector{Float64}
+function _linear_colmeans_idx(df::DataFrame, idxs::Vector{Int})::Vector{Float64}
+    n = nrow(df)
+    isempty(idxs) && return Float64[]
+    out = Vector{Float64}(undef, n)
+    c1 = df[!, idxs[1]]
+    if c1 isa Vector{Float64}
+        v1 = c1::Vector{Float64}
+        @inbounds @simd for i = 1:n
+            out[i] = v1[i]
+        end
+    else
+        @inbounds @simd for i = 1:n
+            out[i] = Float64(c1[i])
+        end
+    end
+    for m = 2:length(idxs)
+        cm = df[!, idxs[m]]
+        if cm isa Vector{Float64}
+            vm = cm::Vector{Float64}
+            @inbounds @simd for i = 1:n
+                out[i] += vm[i]
+            end
+        else
+            @inbounds @simd for i = 1:n
+                out[i] += Float64(cm[i])
+            end
+        end
+    end
+    if length(idxs) > 1
+        k_f64 = Float64(length(idxs))
+        @inbounds @simd for i = 1:n
+            out[i] /= k_f64
+        end
+    end
+    return out
+end
+
+function _circular_colmeans_idx(df::DataFrame, idxs::Vector{Int})::Vector{Float64}
     n = nrow(df)
     sin_sum = zeros(Float64, n)
     cos_sum = zeros(Float64, n)
-    for col in cols
-        vals = df[!, col]
+    for idx in idxs
+        vals = df[!, idx]
         @inbounds @simd for i = 1:n
             s, c = sincos(Float64(vals[i]))
             sin_sum[i] += s
             cos_sum[i] += c
         end
     end
-    out = Vector{Float64}(undef, n)
     @inbounds @simd for i = 1:n
-        out[i] = atan(sin_sum[i], cos_sum[i])
+        sin_sum[i] = atan(sin_sum[i], cos_sum[i])
     end
-    return out
+    return sin_sum
+end
+
+_circular_colmeans(df::DataFrame, cols::AbstractVector{Symbol})::Vector{Float64} =
+    _circular_colmeans_idx(df, Int[columnindex(df, c) for c in cols])
+
+function _assign_group_mean!(df::DataFrame, grp::Vector{Symbol}, lbl::Symbol, circular::Bool)
+    idxs = Int[columnindex(df, c) for c in grp]
+    df[!, lbl] = circular ? _circular_colmeans_idx(df, idxs) : _linear_colmeans_idx(df, idxs)
+    return nothing
+end
+
+function _assign_group_mean!(dfs::AbstractVector{<:DataFrame}, grp::Vector{Symbol}, lbl::Symbol, circular::Bool)
+    isempty(dfs) && return nothing
+    idxs = Int[columnindex(dfs[1], c) for c in grp]
+    work = length(dfs) * nrow(dfs[1]) * max(1, length(idxs))
+    min_work = circular ? 65_536 : 1_000_000
+    if length(dfs) >= 8 && Threads.nthreads() > 1 && work >= min_work
+        Threads.@threads :static for e in eachindex(dfs)
+            dfs[e][!, lbl] = circular ? _circular_colmeans_idx(dfs[e], idxs) : _linear_colmeans_idx(dfs[e], idxs)
+        end
+    else
+        for df in dfs
+            df[!, lbl] = circular ? _circular_colmeans_idx(df, idxs) : _linear_colmeans_idx(df, idxs)
+        end
+    end
+    return nothing
 end
 
 """
-    channel_average!(dat::EegData; channel_selections = [channels()],
-                     output_labels = nothing,
-                     include_extra::Bool = false,
-                     reduce::Bool = false) -> EegData
+    channel_average!(dat::EegData; channel_selections = [channels()], output_labels = nothing,
+                     include_extra::Bool = false, reduce::Bool = false) -> EegData
 
-Create averaged channels for each provided channel-selection predicate and add them to `dat`.
-
-Works for all EEG data types, including time-frequency data (where power is averaged linearly and phase circularly).
-
-- `channel_selections` is a vector of channel predicates (see `EegFun.channels(...)`) that defaults to `[EegFun.channels()]` (all channels).
-- For every predicate, the selected channels are averaged to produce a new column.
-- Output labels default to the underscore-joined contributing channel labels (e.g., `:Fp1_Fp2`).
-- Can be used for single or multiple channel selections by passing a vector with one or more functions.
-
-Layout handling
-- `reduce = false` (default): append averaged columns to data and averaged channels to layout.
-- `reduce = true`: replace data with metadata + averaged columns and create new layout with only averaged channels.
-
-Examples
-```julia
-# Average all channels (default)
-EegFun.channel_average!(dat)
-
-# Single channel selection
-EegFun.channel_average!(dat; channel_selections = [EegFun.channels([:Fp1, :Fp2])])
-
-# Multiple channel selections (append columns and layout)
-EegFun.channel_average!(dat; channel_selections = [EegFun.channels([:Fp1, :Fp2]), EegFun.channels([:O1, :O2])])
-
-# Average by patterns with custom labels
-EegFun.channel_average!(dat;
-    channel_selections = [x -> startswith.(string.(x), "F"), x -> startswith.(string.(x), "P")],
-    output_labels = [:F_avg, :P_avg],
-)
-
-# Produce a reduced dataset (meta + averages only) with new layout
-EegFun.channel_average!(dat; channel_selections = [EegFun.channels([:Fp1, :Fp2])], reduce = true)
-```
+Average each group of selected channels in `dat` (linearly for amplitude/power, circularly for TF phase).
+Output labels default to `:avg` when all channels are selected, or underscore-joined channel names otherwise.
+When `reduce = true`, keeps only metadata and the averaged channels in both data and layout.
 """
 function channel_average!(
     dat::EegData;
@@ -65,14 +95,12 @@ function channel_average!(
     include_extra::Bool = false,
     reduce::Bool = false,
 )
-    # Handle singular `channel_selection` or plural `channel_selections`
     selections = if !isnothing(channel_selection)
         [channel_selection]
     elseif !isnothing(channel_selections)
-        # Check if user passed a single group directly, e.g. [:Fz, :Cz], ["Fz", "Cz"], or channels(...)
-        if channel_selections isa AbstractVector{Symbol} || channel_selections isa AbstractVector{<:AbstractString}
-            [channel_selections]
-        elseif channel_selections isa Function
+        if channel_selections isa AbstractVector{Symbol} ||
+           channel_selections isa AbstractVector{<:AbstractString} ||
+           channel_selections isa Function
             [channel_selections]
         else
             channel_selections
@@ -82,72 +110,53 @@ function channel_average!(
     end
 
     if !isnothing(output_labels)
-        if output_labels isa Union{Symbol,AbstractString}
-            output_labels = [Symbol(output_labels)]
-        else
-            output_labels = Symbol.(output_labels)
-        end
+        output_labels = output_labels isa Union{Symbol,AbstractString} ? [Symbol(output_labels)] : Symbol.(output_labels)
     end
 
-    # Resolve actual channel groups via layout-backed channel_labels (include_extra = false by default)
-    selected_channel_groups::Vector{Vector{Symbol}} =
-        [get_selected_channels(dat, sel; include_meta = false, include_extra = include_extra) for sel in selections]
-
-    # Validate channel groups
+    selected_channel_groups =
+        Vector{Symbol}[get_selected_channels(dat, sel; include_meta = false, include_extra = include_extra) for sel in selections]
     if any(isempty, selected_channel_groups)
-        empty_selections = findall(isempty, selected_channel_groups)
-        @minimal_error "Channel selections at indices $empty_selections produced no channels"
+        @minimal_error "Channel selections at indices $(findall(isempty, selected_channel_groups)) produced no channels"
     end
 
-    # Determine labels (explicit if/else for clarity)
     if isnothing(output_labels)
         original_channels = channel_labels(dat)
-
         labels = Vector{Symbol}(undef, length(selected_channel_groups))
         for (i, grp) in enumerate(selected_channel_groups)
-            # Check if this group covers all layout channel columns
             is_all = !isempty(original_channels) && length(grp) == length(original_channels) && all(in(original_channels), grp)
             labels[i] = is_all ? :avg : Symbol(join(string.(grp), "_"))
         end
     else
-        # Accept Vector of Symbol/String; coerce to Symbol
-        if length(output_labels) != length(selected_channel_groups)
+        length(output_labels) == length(selected_channel_groups) ||
             @minimal_error "N output_labels ($(length(output_labels))) must match N channel selections ($(length(selected_channel_groups)))"
-        end
         labels = Symbol.(output_labels)
     end
 
-    # Apply for each channel selection (for TF data: arithmetic mean on power, circular mean on phase)
     frames = _data_frames(dat)
     is_tf = dat isa Union{TimeFreqData,TimeFreqEpochData}
+    existing = Set(all_labels(dat))
     for (grp, lbl) in zip(selected_channel_groups, labels)
-        if lbl ∈ all_labels(dat)
-            @minimal_warning "Overwriting existing channel '$(lbl)'"
-        end
+        lbl in existing && @minimal_warning "Overwriting existing channel '$(lbl)'"
+        push!(existing, lbl)
         @info "channel_average!: $(_print_vector(grp)) → :$(lbl)"
         if is_tf
-            _foreach_df(df -> df[!, lbl] = _colmeans(df, grp), frames[1])
-            _foreach_df(df -> df[!, lbl] = _circular_colmeans(df, grp), frames[2])
+            _assign_group_mean!(frames[1], grp, lbl, false)
+            _assign_group_mean!(frames[2], grp, lbl, true)
         else
             for container in frames
-                _foreach_df(df -> df[!, lbl] = _colmeans(df, grp), container)
+                _assign_group_mean!(container, grp, lbl, false)
             end
         end
     end
 
-    # Handle data and layout based on reduce parameter
+    avg_layout = _layout_from_groups(dat.layout, selected_channel_groups, labels)
     if reduce
-        # Replace data with metadata + averaged columns only
         meta_cols = meta_labels(dat)
         _set_data_frames!(dat, map(container -> _map_df(df -> _reduced_df(df, meta_cols, labels), container), frames))
-        # Create new layout with only averaged channels
-        dat.layout = _layout_from_groups(dat.layout, selected_channel_groups, labels)
+        dat.layout = avg_layout
     else
-        # Append averaged channels to existing layout
-        avg_layout = _layout_from_groups(dat.layout, selected_channel_groups, labels)
         dat.layout = _append_layouts(dat.layout, avg_layout)
     end
-
     return dat
 end
 
@@ -160,28 +169,18 @@ end
 
 """
     channel_average(dat, args...; kwargs...)
+    channel_average(file_pattern::String, channel_selections::AbstractVector;
+                    output_labels = nothing, input_dir::String = pwd(),
+                    participant_selection = participants(), condition_selection = conditions(),
+                    output_dir = nothing, reduce::Bool = false)
 
-Non-mutating version of `channel_average!`.
+Non-mutating version of [`channel_average!`](@ref), or batch-process matching JLD2 files into `output_dir`.
 """
-function channel_average(dat::EegData, args...; kwargs...)
-    return channel_average!(copy(dat), args...; kwargs...)
-end
+channel_average(dat::EegData, args...; kwargs...) = channel_average!(copy(dat), args...; kwargs...)
+channel_average(dat::AbstractVector{<:EegData}; kwargs...) = [channel_average(d; kwargs...) for d in dat]
 
-function channel_average(dat::AbstractVector{<:EegData}; kwargs...)
-    return [channel_average(d; kwargs...) for d in dat]
-end
+_default_channel_average_output_dir(input_dir::String, pattern::String) = joinpath(input_dir, "averaged_channels_$(clean_pattern(pattern))")
 
-# === BATCH PROCESSING (FILE PATTERN) ===
-
-"""Generate default output directory name for channel averaging."""
-function _default_channel_average_output_dir(input_dir::String, pattern::String)
-    joinpath(input_dir, "averaged_channels_$(clean_pattern(pattern))")
-end
-
-"""
-Process a single file through channel averaging pipeline.
-Returns BatchResult with success/failure info.
-"""
 function _process_channel_average_file(
     filepath::String,
     output_path::String,
@@ -191,79 +190,20 @@ function _process_channel_average_file(
     reduce::Bool,
 )
     filename = basename(filepath)
-
-    # Read data
     data = read_data(filepath)
-    if isnothing(data)
-        return BatchResult(false, filename, "No data variables found")
-    end
-
-    # Validate that data is valid EEG data (Vector of ErpData or EpochData)
+    isnothing(data) && return BatchResult(false, filename, "No data variables found")
     if !(data isa AbstractVector{<:Union{ErpData,EpochData}})
         return BatchResult(false, filename, "Invalid data type: expected Vector{ErpData} or Vector{EpochData}")
     end
 
-    # Select conditions
     data = _condition_select(data, condition_selection)
-
-    # Apply channel averaging to each data item
-    foreach(data) do item
-        channel_average!(item, channel_selections = channel_selections, output_labels = output_labels, reduce = reduce)
+    for item in data
+        channel_average!(item; channel_selections = channel_selections, output_labels = output_labels, reduce = reduce)
     end
-
-    # Save (always use "data" as variable name since read_data finds by type)
     jldsave(output_path; data = data, format_version = EEGFUN_FORMAT_VERSION)
-
-    n_groups = length(channel_selections)
-    return BatchResult(true, filename, "Averaged $n_groups channel group(s)")
+    return BatchResult(true, filename, "Averaged $(length(channel_selections)) channel group(s)")
 end
 
-"""
-    channel_average(file_pattern::String, channel_selections::Vector{Function}; 
-                    output_labels::Union{Vector{Symbol}, Nothing} = nothing,
-                    input_dir::String = pwd(), 
-                    participant_selection::Function = participants(),
-                    condition_selection::Function = conditions(),
-                    output_dir::Union{String, Nothing} = nothing,
-                    reduce::Bool = false)
-
-Batch process EEG data files to average specified channels using predicates.
-
-Load JLD2 files containing EEG data, average specified channel groups,
-and saves the resulting data with new averaged channels to a new directory.
-
-# Arguments
-- `file_pattern::String`: Pattern to match JLD2 files (e.g., "erps_unrejected", "epochs_unrejected")
-- `channel_selections::Vector{Function}`: Channel selection predicates (e.g., `[channels([:Fp1, :Fp2]), channels([:PO7, :PO8])]`)
-- `output_labels::Union{Vector{Symbol}, Nothing}`: Labels for averaged channels (default: auto-generated from selection)
-- `input_dir::String`: Input directory containing JLD2 files (default: current directory)
-- `participant_selection::Function`: Participant selection predicate (default: `participants()` for all)
-- `condition_selection::Function`: Condition selection predicate (default: `conditions()` for all)
-- `output_dir::Union{String, Nothing}`: Output directory (default: auto-generated)
-- `reduce::Bool`: Whether to keep only averaged channels (true) or append to existing (false, default)
-
-# Examples
-```julia
-# Average frontal and parietal channels using predicates
-channel_average("erps_unrejected", [channels([:Fp1, :Fp2]), channels([:PO7, :PO8])])
-
-# With custom output labels
-channel_average("erps_unrejected", 
-                [channels([:Fp1, :Fp2]), channels([:PO7, :PO8])],
-                output_labels = [:frontal, :parietal])
-
-# Process specific participants and conditions
-channel_average("erps_unrejected", [channels([:Fp1, :Fp2])], 
-                input_dir = "/path/to/data", 
-                participants = [1, 2, 3], 
-                conditions = [1, 2])
-
-# Create reduced dataset with only averaged channels
-channel_average("erps_unrejected", 
-                [channels([:Fp1, :Fp2]), channels([:PO7, :PO8])], 
-                reduce = true)
-```
-"""
 function channel_average(
     file_pattern::String,
     channel_selections::AbstractVector;
@@ -274,123 +214,109 @@ function channel_average(
     output_dir::Union{String,Nothing} = nothing,
     reduce::Bool = false,
 )
-
     _with_batch_logging("channel averaging", "channel_average.log", input_dir, output_dir) do ctx
         @log_call "channel_average"
-
-        # Generate output labels if not provided
         if isnothing(output_labels)
             output_labels = [Symbol("avg_$i") for i = 1:length(channel_selections)]
         end
+        length(output_labels) == length(channel_selections) || @minimal_error(
+            "Number of output_labels ($(length(output_labels))) must match number of channel_selections ($(length(channel_selections)))"
+        )
 
-        # Validate output labels length matches channel selections
-        if length(output_labels) != length(channel_selections)
-            @minimal_error(
-                "Number of output_labels ($(length(output_labels))) must match number of channel_selections ($(length(channel_selections)))"
-            )
-        end
-
-        # Setup directories
         output_dir = _prepare_output_dir!(ctx, _default_channel_average_output_dir(input_dir, file_pattern))
-
         process_fn =
             (input_path, output_path) ->
                 _process_channel_average_file(input_path, output_path, channel_selections, output_labels, condition_selection, reduce)
-
         return batch_process(process_fn, file_pattern, input_dir, output_dir, participant_selection, "Averaging channels")
     end
 end
 
-
-"""Create a reduced DataFrame containing only metadata and the (already computed) averaged columns."""
 function _reduced_df(df::DataFrame, meta_cols::AbstractVector{Symbol}, labels::AbstractVector{Symbol})
-    new_df = isempty(meta_cols) ? DataFrame() : df[!, meta_cols]
-    for lbl in labels
-        new_df[!, lbl] = df[!, lbl]
+    n_meta = length(meta_cols)
+    n_lbl = length(labels)
+    col_names = Vector{Symbol}(undef, n_meta + n_lbl)
+    out_cols = Vector{Any}(undef, n_meta + n_lbl)
+    for (i, c) in enumerate(meta_cols)
+        col_names[i] = c
+        out_cols[i] = copy(df[!, c])
     end
-    return new_df
+    for (j, lbl) in enumerate(labels)
+        col_names[n_meta+j] = lbl
+        out_cols[n_meta+j] = df[!, lbl]
+    end
+    return DataFrame(out_cols, col_names; copycols = false)
 end
 
-
-
-"""Build a layout with one row per averaged channel group, using mean coordinates."""
 function _layout_from_groups(layout::Layout, channel_groups::Vector{Vector{Symbol}}, labels::Vector{Symbol})::Layout
     df = layout.data
     isempty(df) && return Layout(DataFrame(), nothing, nothing, nothing)
 
-    # Ensure coordinates once
     work_layout = copy(layout)
     _ensure_all_coordinates!(work_layout)
     wdf = work_layout.data
     labels_in_layout = df[!, :label]
+    x3 = wdf[!, :x3]
+    y3 = wdf[!, :y3]
+    z3 = wdf[!, :z3]
 
-    # Build new rows
-    new_rows = DataFrame[]
+    out_labels = Symbol[]
+    out_incs = Float64[]
+    out_azis = Float64[]
     for (grp, lbl) in zip(channel_groups, labels)
-        sel_idx = findall(in(grp), labels_in_layout)
-        isempty(sel_idx) && continue
+        mx = 0.0
+        my = 0.0
+        mz = 0.0
+        cnt = 0
+        for i in eachindex(labels_in_layout)
+            if labels_in_layout[i] in grp
+                mx += Float64(x3[i])
+                my += Float64(y3[i])
+                mz += Float64(z3[i])
+                cnt += 1
+            end
+        end
+        cnt == 0 && continue
+        inv_cnt = 1.0 / cnt
+        mx *= inv_cnt
+        my *= inv_cnt
+        mz *= inv_cnt
+        norm_m = sqrt(mx^2 + my^2 + mz^2)
+        norm_m == 0 && continue
 
-        # Calculate averaged coordinates
-        coords = _average_coordinates(wdf[sel_idx, :])
-        isnothing(coords) && continue
-
-        # Create row with averaged coordinates
-        row = _create_layout_row(df, lbl, coords)
-        push!(new_rows, row)
+        push!(out_labels, lbl)
+        push!(out_incs, acos(clamp(mz / norm_m, -1.0, 1.0)) * (180 / pi))
+        push!(out_azis, atan(my, mx) * (180 / pi))
     end
 
-    # Build new layout and ensure coordinates
-    new_df = isempty(new_rows) ? df[1:0, :] : reduce(vcat, new_rows)
+    if isempty(out_labels)
+        new_df = df[1:0, :]
+    else
+        new_df = DataFrame()
+        :label in propertynames(df) && (new_df[!, :label] = out_labels)
+        :inc in propertynames(df) && (new_df[!, :inc] = out_incs)
+        :azi in propertynames(df) && (new_df[!, :azi] = out_azis)
+    end
     new_layout = Layout(new_df, nothing, nothing, nothing)
     _ensure_all_coordinates!(new_layout)
     return new_layout
 end
 
-"""Ensure the layout has both 3D and 2D coordinate columns."""
 function _ensure_all_coordinates!(layout::Layout)
     _ensure_coordinates_3d!(layout)
     _ensure_coordinates_2d!(layout)
     return layout
 end
 
-"""Average 3D Cartesian coordinates across rows and convert to polar (inc, azi)."""
-function _average_coordinates(coord_df)
-
-    # Average 3D Cartesian coordinates first 
-    mx, my, mz = mean(Float64.(coord_df[!, :x3])), mean(Float64.(coord_df[!, :y3])), mean(Float64.(coord_df[!, :z3]))
-    norm_m = sqrt(mx^2 + my^2 + mz^2)
-    norm_m == 0 && return nothing
-
-    inc_deg = acos(clamp(mz / norm_m, -1.0, 1.0)) * (180 / pi)
-    azi_deg = atan(my, mx) * (180 / pi)
-
-    return (inc = inc_deg, azi = azi_deg)
-end
-
-"""Create a single-row layout DataFrame from a label and polar coordinates."""
-function _create_layout_row(template_df, label, coords)
-    new_df = DataFrame()
-    if :label in propertynames(template_df)
-        new_df[!, :label] = [label]
-    end
-    if :inc in propertynames(template_df)
-        new_df[!, :inc] = [coords.inc]
-    end
-    if :azi in propertynames(template_df)
-        new_df[!, :azi] = [coords.azi]
-    end
-    return new_df
-end
-
-"""Append averaged channel rows to an existing layout."""
 function _append_layouts(base_layout::Layout, avg_layout::Layout)::Layout
-    # Ensure both layouts have coordinates
     base_copy = copy(base_layout)
     _ensure_all_coordinates!(base_copy)
-    avg_copy = copy(avg_layout)
-    _ensure_all_coordinates!(avg_copy)
-
-    # Simple append - no complex merging needed
-    combined_df = vcat(base_copy.data, avg_copy.data)
-    return Layout(combined_df, nothing, nothing, nothing)
+    if isempty(avg_layout.data)
+        return Layout(base_copy.data, nothing, nothing, nothing)
+    end
+    if !hasproperty(avg_layout.data, :x3) || !hasproperty(avg_layout.data, :x2)
+        avg_copy = copy(avg_layout)
+        _ensure_all_coordinates!(avg_copy)
+        return Layout(vcat(base_copy.data, avg_copy.data), nothing, nothing, nothing)
+    end
+    return Layout(vcat(base_copy.data, avg_layout.data), nothing, nothing, nothing)
 end

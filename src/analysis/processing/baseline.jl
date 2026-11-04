@@ -1,17 +1,3 @@
-"""
-    _apply_baseline!(dat::DataFrame, channels, baseline_interval)
-
-Internal function that applies baseline correction to specified channels in a DataFrame.
-
-# Arguments
-- `dat::DataFrame`: The data to baseline correct
-- `channels::Vector{Symbol}`: Names of channels to correct
-- `baseline_interval::Tuple{Int,Int}`: Time interval for baseline calculation
-
-# Notes
-- Subtracts the mean of the baseline interval from each specified channel
-- Modifies the input DataFrame in-place
-"""
 function _apply_baseline!(dat::DataFrame, ch_indices::Vector{Int}, baseline_interval::Tuple{Int,Int})
     start_idx, end_idx = baseline_interval
     inv_len = 1.0 / (end_idx - start_idx + 1)
@@ -28,63 +14,40 @@ function _apply_baseline!(dat::DataFrame, ch_indices::Vector{Int}, baseline_inte
                 col_f64[i] -= mean_val
             end
         else
-            mean_val = mean(view(col, start_idx:end_idx))
+            mean_val = mean(@view col[start_idx:end_idx])
             dat[!, col_idx] = col .- mean_val
         end
     end
+    return nothing
 end
 
-function _apply_baseline!(dat::DataFrame, channels::AbstractVector{Symbol}, baseline_interval::Tuple{Int,Int})
-    ch_indices = [columnindex(dat, ch) for ch in channels]
-    _apply_baseline!(dat, ch_indices, baseline_interval)
-end
+_apply_baseline!(dat::DataFrame, channels::AbstractVector{Symbol}, baseline_interval::Tuple{Int,Int}) =
+    _apply_baseline!(dat, Int[columnindex(dat, ch) for ch in channels], baseline_interval)
 
-"""
-    _apply_baseline!(dat::Vector{DataFrame}, channels, baseline_interval)
-
-Internal function that applies baseline correction to each DataFrame in a vector using broadcasting.
-"""
 function _apply_baseline!(dat::AbstractVector{DataFrame}, channels::AbstractVector{Symbol}, baseline_interval::Tuple{Int,Int})
     isempty(dat) && return nothing
-    ch_indices = [columnindex(dat[1], ch) for ch in channels]
-    Threads.@threads for df in dat
-        _apply_baseline!(df, ch_indices, baseline_interval)
+    ch_indices = Int[columnindex(dat[1], ch) for ch in channels]
+    if length(dat) > 1 && Threads.nthreads() > 1 && length(dat) * length(ch_indices) * nrow(dat[1]) >= 65_536
+        Threads.@threads for df in dat
+            _apply_baseline!(df, ch_indices, baseline_interval)
+        end
+    else
+        for df in dat
+            _apply_baseline!(df, ch_indices, baseline_interval)
+        end
     end
+    return nothing
 end
 
 """
-    baseline!(dat::EegData, baseline_interval::Interval; channel_selection = channels()) -> EegData
-    baseline!(dat::EegData; channel_selection = channels()) -> EegData
-    baseline!(dat::Vector{EpochData}, baseline_interval::Interval; channel_selection = channels()) -> Vector{EpochData}
-    baseline!(dat::Vector{EpochData}; channel_selection = channels()) -> Vector{EpochData}
-    baseline!(dat::Vector{ErpData}, baseline_interval::Interval; channel_selection = channels()) -> Vector{ErpData}
-    baseline!(dat::Vector{ErpData}; channel_selection = channels()) -> Vector{ErpData}
+    baseline!(dat::EegData, baseline_interval::Interval = times(); channel_selection = channels()) -> EegData
+    baseline!(dat::AbstractVector{<:EegData}, baseline_interval::Interval = times(); channel_selection = channels())
 
-Apply baseline correction in-place. Subtracts the mean amplitude over `baseline_interval`
-from each selected channel. Omitting `baseline_interval` uses the full time range.
-
-# Arguments
-- `dat`: `EegData` (any subtype), `Vector{EpochData}`, or `Vector{ErpData}`
-- `baseline_interval`: time range as a tuple `(-0.2, 0.0)` or a range `-0.2:0.0`
-- `channel_selection`: channel predicate (default: all channels)
-
-# Examples
-```julia
-# Correct all channels over -200 to 0 ms
-baseline!(erp, (-0.2, 0.0))
-
-# Correct a channel subset
-baseline!(epochs, (-0.2, 0.0), channel_selection = channels([:Fz, :Cz, :Pz]))
-
-# Correct using entire time range
-baseline!(erp)
-```
+Subtract the mean amplitude over `baseline_interval` from each selected channel in-place.
+Omitting `baseline_interval` uses the full time range.
 """
 function baseline!(dat::EegData, baseline_interval::Interval = times(); channel_selection = channels())
-    # Validate baseline interval
-    baseline_interval = _validate_baseline_interval(dat, baseline_interval)
-
-    # Get selected channels
+    bl_idx = _validate_baseline_interval(dat, baseline_interval)
     selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
     if isempty(selected_channels)
         @minimal_warning "No channels selected for baseline correction"
@@ -92,10 +55,10 @@ function baseline!(dat::EegData, baseline_interval::Interval = times(); channel_
     end
 
     time = time_vector(dat)
-    t_start = round(time[baseline_interval[1]], digits = 3)
-    t_end = round(time[baseline_interval[2]], digits = 3)
-    @info "Applying baseline correction to $(length(selected_channels)) channels over interval $(baseline_interval[1]):$(baseline_interval[2]) ($(t_start) to $(t_end) s)"
-    _apply_baseline!(dat.data, selected_channels, baseline_interval)
+    t_start = round(time[bl_idx[1]], digits = 3)
+    t_end = round(time[bl_idx[2]], digits = 3)
+    @info "Applying baseline correction to $(length(selected_channels)) channels over interval $(bl_idx[1]):$(bl_idx[2]) ($(t_start) to $(t_end) s)"
+    _apply_baseline!(dat.data, selected_channels, bl_idx)
     return dat
 end
 
@@ -106,35 +69,20 @@ function baseline!(dat::AbstractVector{<:EegData}, baseline_interval::Interval =
     return dat
 end
 
-# NOTE: Non-mutating version kept for consistency with other processing functions,
-# though baseline correction is typically fast enough to be done in-place.
 """
     baseline(dat, args...; kwargs...)
+    baseline(file_pattern::String, baseline_interval; input_dir = pwd(),
+             participant_selection = participants(), condition_selection = conditions(), output_dir = nothing)
 
-Non-mutating version of `baseline!`.
+Non-mutating or batch JLD2 version of [`baseline!`](@ref).
 """
-function baseline(dat::EegData, args...; kwargs...)
-    return baseline!(copy(dat), args...; kwargs...)
-end
+baseline(dat::EegData, args...; kwargs...) = baseline!(copy(dat), args...; kwargs...)
+baseline(dat::AbstractVector{<:EegData}, args...; kwargs...) = [baseline(d, args...; kwargs...) for d in dat]
 
-function baseline(dat::AbstractVector{<:EegData}, args...; kwargs...)
-    return [baseline(d, args...; kwargs...) for d in dat]
-end
+_default_baseline_output_dir(input_dir::String, pattern::String, baseline_interval::Tuple{Real,Real}) =
+    joinpath(input_dir, "baseline_$(clean_pattern(pattern))_$(baseline_interval[1])_to_$(baseline_interval[2])")
 
-
-# === BASELINE-SPECIFIC HELPERS ===
-"""Generate default output directory name for baseline operation."""
-function _default_baseline_output_dir(input_dir::String, pattern::String, baseline_interval::Tuple{Real,Real})
-    interval_str = "$(baseline_interval[1])_to_$(baseline_interval[2])"
-    joinpath(input_dir, "baseline_$(clean_pattern(pattern))_$(interval_str)")
-end
-
-
-# === BASELINE INTERVAL CONVERSION (Multiple Dispatch) ===
-
-"""Helper to convert and validate baseline intervals to (start, stop) tuples"""
 function _to_interval(interval::Tuple{Real,Real})
-    length(interval) == 2 || @minimal_error("Baseline interval tuple must have 2 elements (start, stop), got: $interval")
     start, stop = Float64(interval[1]), Float64(interval[2])
     start > stop && @minimal_error("Baseline start ($start) must be <= stop ($stop)")
     return (start, stop)
@@ -153,92 +101,43 @@ function _to_interval(interval::AbstractVector{<:Real})
     return (start, stop)
 end
 
-
-"""
-    _validate_baseline_interval(baseline_interval::Interval) -> Tuple{Real,Real}
-
-Validate baseline interval structure (without data). Returns normalized (start, stop) tuple.
-Converts ranges to tuples.
-
-# Arguments
-- `baseline_interval::Interval`: Interval to validate
-
-# Returns
-- `Tuple{Real,Real}`: Normalized (start, stop) tuple
-
-# Throws
-- `EegFunError`: If interval structure is invalid
-"""
-function _validate_baseline_interval(baseline_interval::Interval)::Tuple{Real,Real}
-    return _to_interval(baseline_interval)
-end
-
-# Special case for AllSelection: simply use the entire time vector
+_validate_baseline_interval(baseline_interval::Interval)::Tuple{Real,Real} = _to_interval(baseline_interval)
 _validate_baseline_interval(time::AbstractVector, ::AllSelection)::Tuple{Int,Int} = (1, length(time))
 
-"""
-    _validate_baseline_interval(time::AbstractVector, baseline_interval::Interval) -> Tuple{Int,Int}
-
-Validate and convert baseline interval to (start_idx, stop_idx) tuple with bounds checking.
-
-# Arguments
-- `time::AbstractVector`: Time points vector
-- `baseline_interval::Interval`: Interval to validate
-
-# Returns
-- `Tuple{Int,Int}`: Validated (start_idx, stop_idx) tuple
-
-# Throws
-- `EegFunError`: If interval is invalid
-"""
 function _validate_baseline_interval(time::AbstractVector, baseline_interval::Interval)::Tuple{Int,Int}
-    # First normalize (convert tuple/range, validate structure) using multiple dispatch
     baseline_tuple = _to_interval(baseline_interval)
-
-    # Validate that time values are within the data's time range
     time_min, time_max = first(time), last(time)
-    start_time, stop_time = baseline_tuple[1], baseline_tuple[2]
-
+    start_time, stop_time = baseline_tuple
     if start_time < time_min || stop_time > time_max
         @minimal_error "Invalid baseline_interval: $(baseline_tuple) - time values must be within data range ($(time_min) to $(time_max))"
     end
 
-    # Convert time tuple to index tuple
     result = _find_idx_start_end(time, start_time, stop_time)
-
-    # Check if interval was found
-    if isnothing(result)
-        @minimal_error "Invalid baseline_interval: $(baseline_tuple) - interval not found in time vector (range: $(time_min) to $(time_max))"
-    end
+    isnothing(result) && @minimal_error(
+        "Invalid baseline_interval: $(baseline_tuple) - interval not found in time vector (range: $(time_min) to $(time_max))"
+    )
 
     start_idx, stop_idx = result
-
-    # Validate bounds (should always pass if range check passed, but keep for safety)
     if !(1 <= start_idx <= length(time)) || !(1 <= stop_idx <= length(time)) || !(start_idx <= stop_idx)
         @minimal_error "Invalid baseline_interval: ($start_idx, $stop_idx) (time vector length: $(length(time)))"
     end
-
     return (start_idx, stop_idx)
 end
 
 function _validate_baseline_interval(dat::MultiDataFrameEeg, baseline_interval::Interval)::Tuple{Int,Int}
     if baseline_interval isa Function
-        # assume all data have the same time, so we just use the first epoch to get indices
-        mask = baseline_interval(dat.data[1])
-        indices = findall(mask)
-        isempty(indices) && @minimal_error "Baseline window selection returned no samples!"
+        indices = findall(baseline_interval(dat.data[1]))
+        isempty(indices) && @minimal_error("Baseline window selection returned no samples!")
         return (first(indices), last(indices))
     end
-    return _validate_baseline_interval(dat.data[1].time, baseline_interval) # assume all data have the same time
+    return _validate_baseline_interval(dat.data[1].time, baseline_interval)
 end
 
 function _validate_baseline_interval(dat::SingleDataFrameEeg, baseline_interval::Interval)::Tuple{Int,Int}
     if baseline_interval isa Function
-        mask = baseline_interval(dat.data)
-        indices = findall(mask)
-        isempty(indices) && @minimal_error "Baseline window selection returned no samples!"
-        # Check for contiguity (warn if not, but proceed)
-        if !all(diff(indices) .== 1)
+        indices = findall(baseline_interval(dat.data))
+        isempty(indices) && @minimal_error("Baseline window selection returned no samples!")
+        if length(indices) > 1 && indices[end] - indices[1] + 1 != length(indices)
             @minimal_warning "Selected baseline window is not contiguous!"
         end
         return (first(indices), last(indices))
@@ -246,76 +145,19 @@ function _validate_baseline_interval(dat::SingleDataFrameEeg, baseline_interval:
     return _validate_baseline_interval(dat.data.time, baseline_interval)
 end
 
-
-
-
-
-"""
-Process a single file through baseline correction pipeline.
-Returns BatchResult with success/failure info.
-"""
 function _process_baseline_file(filepath::String, output_path::String, baseline_interval::Interval, condition_selection::Function)
     filename = basename(filepath)
-
-    # Read data
     data = read_data(filepath)
-    if isnothing(data)
-        return BatchResult(false, filename, "No data variables found")
-    end
-
-    # Validate that data is valid EEG data (Vector of ErpData or EpochData)
-    if !(data isa AbstractVector{<:Union{ErpData,EpochData}})
+    isnothing(data) && return BatchResult(false, filename, "No data variables found")
+    data isa AbstractVector{<:Union{ErpData,EpochData}} ||
         return BatchResult(false, filename, "Invalid data type: expected Vector{ErpData} or Vector{EpochData}")
-    end
 
-    # Select conditions
     data = _condition_select(data, condition_selection)
-
-    # Apply baseline correction (mutates data in-place)
-    baseline!.(data, Ref(baseline_interval))
-
-    # Save (always use "data" as variable name since read_data finds by type)
+    baseline!(data, baseline_interval)
     jldsave(output_path; data = data, format_version = EEGFUN_FORMAT_VERSION)
-
     return BatchResult(true, filename, "Baseline corrected successfully")
 end
 
-
-"""
-    baseline(file_pattern::String, baseline_interval; 
-             input_dir::String = pwd(), 
-             participant_selection::Function = participants(),
-             condition_selection::Function = conditions(),
-             output_dir::Union{String, Nothing} = nothing)
-
-Apply baseline correction to EEG/ERP data from JLD2 files and save to a new directory.
-
-# Arguments
-- `file_pattern::String`: Pattern to match files ("epochs", "erps", "cleaned", "original", or custom)
-- `baseline_interval`: Baseline interval as:
-  - Tuple: `(-0.2, 0.0)` - time range in seconds
-  - Range: `-0.2:0` - time range using range syntax
-- `input_dir::String`: Input directory containing JLD2 files (default: current directory)
-- `participant_selection::Function`: Participant selection predicate (default: `participants()` for all)
-- `condition_selection::Function`: Condition selection predicate (default: `conditions()` for all)
-- `output_dir::Union{String, Nothing}`: Output directory (default: creates subdirectory based on baseline settings)
-
-# Notes
-- For in-memory data with function-based baseline selection, use `baseline!(data, samples((-0.2, 0.0)))` instead
-
-# Example
-```julia
-# Baseline correct all epochs from -0.2 to 0.0 seconds
-baseline("epochs", (-0.2, 0.0))
-
-# Baseline correct specific participant
-baseline("epochs", (-0.2, 0.0), participant_selection=participants(3))
-
-# Baseline correct specific participants and conditions
-baseline("epochs", (-0.2, 0.0), participant_selection=participants([3, 4]), condition_selection=conditions([1, 2]))
-
-```
-"""
 function baseline(
     file_pattern::String,
     baseline_interval::Interval;
@@ -324,17 +166,11 @@ function baseline(
     condition_selection = conditions(),
     output_dir::Union{String,Nothing} = nothing,
 )
-
     _with_batch_logging("baseline correction", "baseline.log", input_dir, output_dir) do ctx
         @log_call "baseline"
-
-        # Validate and normalize baseline interval (validates tuple structure)
-        baseline_interval = _validate_baseline_interval(baseline_interval)
-
-        # Setup directories
-        output_dir = _prepare_output_dir!(ctx, _default_baseline_output_dir(input_dir, file_pattern, baseline_interval))
-
-        process_fn = (input_path, output_path) -> _process_baseline_file(input_path, output_path, baseline_interval, condition_selection)
-        result = batch_process(process_fn, file_pattern, input_dir, output_dir, participant_selection, "Baseline correction")
+        bl_tuple = _validate_baseline_interval(baseline_interval)
+        output_dir = _prepare_output_dir!(ctx, _default_baseline_output_dir(input_dir, file_pattern, bl_tuple))
+        process_fn = (input_path, output_path) -> _process_baseline_file(input_path, output_path, bl_tuple, condition_selection)
+        batch_process(process_fn, file_pattern, input_dir, output_dir, participant_selection, "Baseline correction")
     end
 end

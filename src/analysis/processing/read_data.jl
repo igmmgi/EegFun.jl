@@ -1,14 +1,7 @@
-
 """
-    read_raw_data(filepath::String; kwargs...) -> Union{BiosemiDataFormat.BiosemiData, BrainVisionDataFormat.BrainVisionData, EuropeanDataFormat.EdfData, FunctionalImageFormat.FifData, ExtensibleDataFormat.XdfData}
+    read_raw_data(filepath::String; header_only::Bool = false, kwargs...)
 
-Read raw EEG data from various file formats (BDF, BrainVision, EDF, FIF, XDF).
-
-# Arguments
-- `filepath::String`: Path to the raw data file.
-
-# Returns
-- Raw data object from the underlying reader library.
+Read raw EEG data from `filepath` (dispatching on `.bdf`, `.vhdr`/`.eeg`/`.vmrk`, `.edf`, `.fif`/`.fiff`, or `.xdf`/`.xdfz`/`.xdf.gz`).
 """
 function read_raw_data(filepath::String; header_only::Bool = false, kwargs...)
     ext = get_file_extension(filepath)
@@ -22,7 +15,6 @@ function read_raw_data(filepath::String; header_only::Bool = false, kwargs...)
         return read_fif(filepath; kwargs...)
     elseif ext == ".xdf" || ext == ".xdfz" || ext == ".xdf.gz"
         return read_xdf(filepath; kwargs...)
-    else
-        @minimal_error "Unsupported file extension: $ext"
     end
+    @minimal_error "Unsupported file extension: $ext"
 end

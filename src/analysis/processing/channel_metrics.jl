@@ -1,25 +1,53 @@
-# === CORRELATION ANALYSIS ===
+@inline function _contiguous_sample_range(selected_samples::Vector{Int})
+    n = length(selected_samples)
+    n == 0 && return 1:0
+    first_s = @inbounds selected_samples[1]
+    last_s = @inbounds selected_samples[n]
+    last_s - first_s + 1 == n || return nothing
+    @inbounds for i = 2:n
+        selected_samples[i] == first_s + i - 1 || return nothing
+    end
+    return first_s:last_s
+end
+
+function _extract_channel_sample_matrix(dat::DataFrame, selected_samples::Vector{Int}, selected_channels::Vector{Symbol})::Matrix{Float64}
+    n_s = length(selected_samples)
+    n_ch = length(selected_channels)
+    X = Matrix{Float64}(undef, n_s, n_ch)
+    contig = _contiguous_sample_range(selected_samples)
+
+    for (c, ch) in enumerate(selected_channels)
+        col = dat[!, ch]
+        if col isa Vector{Float64}
+            col_f = col::Vector{Float64}
+            if !isnothing(contig)
+                @inbounds copyto!(X, (c - 1) * n_s + 1, col_f, first(contig), n_s)
+            else
+                @inbounds @simd for s = 1:n_s
+                    X[s, c] = col_f[selected_samples[s]]
+                end
+            end
+        elseif !isnothing(contig)
+            s0 = first(contig) - 1
+            @inbounds for s = 1:n_s
+                X[s, c] = Float64(col[s0+s])
+            end
+        else
+            @inbounds for s = 1:n_s
+                X[s, c] = Float64(col[selected_samples[s]])
+            end
+        end
+    end
+    return X
+end
 
 """
-    correlation_matrix(dat::SingleDataFrameEeg; channel_selection::Function = channels())
+    correlation_matrix(dat::SingleDataFrameEeg; sample_selection = samples(),
+                       interval_selection::Interval = times(), channel_selection = channels(),
+                       include_extra::Bool = false) -> DataFrame
 
-Calculate the correlation matrix between EEG channels.
-
-# Arguments
-- `dat::SingleDataFrameEeg`: The EEG data object
-- `channel_selection::Function`: Function that returns boolean vector for channel filtering (default: channels() - all channels)
-
-# Returns
-- `DataFrame`: Correlation matrix with channel names as both row and column names
-
-# Examples
-```julia
-# Calculate correlation matrix for all channels
-cm = correlation_matrix(dat)
-
-# Calculate correlation matrix for specific channels
-cm = correlation_matrix(dat, channel_selection = channels([:Fp1, :Fp2, :F3, :F4]))
-```
+Compute the Pearson correlation matrix across selected EEG channels, returned as a `DataFrame`
+with a leading `:row` column of channel symbols.
 """
 function correlation_matrix(
     dat::SingleDataFrameEeg;
@@ -28,97 +56,132 @@ function correlation_matrix(
     channel_selection = channels(),
     include_extra::Bool = false,
 )::DataFrame
-    selected_channels = EegFun.get_selected_channels(dat, channel_selection; include_meta = false, include_extra = include_extra)
-    isempty(selected_channels) && @minimal_error "No channels selected for correlation matrix"
-    combined_sel = _combine_interval_sample(interval_selection, sample_selection)
-    selected_samples = EegFun.get_selected_samples(dat, combined_sel)
+    selected_channels = get_selected_channels(dat, channel_selection; include_meta = false, include_extra = include_extra)
+    isempty(selected_channels) && @minimal_error("No channels selected for correlation matrix")
+    selected_samples = get_selected_samples(dat, _combine_interval_sample(interval_selection, sample_selection))
     return _correlation_matrix(dat.data, selected_samples, selected_channels)
 end
 
-"""
-    _correlation_matrix(df::DataFrame, channels::Vector{Symbol})
-
-Internal function to calculate correlation matrix for specified channels.
-
-# Arguments
-- `df::DataFrame`: DataFrame containing the data
-- `channels::Vector{Symbol}`: Vector of channel symbols to include
-
-# Returns
-- `DataFrame`: Correlation matrix with channel names as both row and column names
-"""
-function _correlation_matrix(dat::DataFrame, selected_samples::Vector{Int}, selected_channels::Vector{Symbol})::DataFrame
+function _extract_unit_centered_matrix(dat::DataFrame, selected_samples::Vector{Int}, selected_channels::Vector{Symbol})::Matrix{Float64}
     n_s = length(selected_samples)
     n_ch = length(selected_channels)
-    X = Matrix{Float64}(undef, n_s, n_ch)
+    Z = Matrix{Float64}(undef, n_s, n_ch)
+    contig = _contiguous_sample_range(selected_samples)
+    inv_n = 1.0 / n_s
+
     for (c, ch) in enumerate(selected_channels)
         col = dat[!, ch]
-        if col isa Vector{Float64}
+        if col isa Vector{Float64} && !isnothing(contig)
             col_f = col::Vector{Float64}
+            s0 = first(contig) - 1
+            sum_x = 0.0
             @inbounds @simd for s = 1:n_s
-                X[s, c] = col_f[selected_samples[s]]
+                sum_x += col_f[s0+s]
+            end
+            μ = sum_x * inv_n
+            ss = 0.0
+            @inbounds @simd for s = 1:n_s
+                d = col_f[s0+s] - μ
+                Z[s, c] = d
+                ss = muladd(d, d, ss)
+            end
+            if ss > 0.0
+                inv_norm = 1.0 / sqrt(ss)
+                @inbounds @simd for s = 1:n_s
+                    Z[s, c] *= inv_norm
+                end
+            else
+                @inbounds fill!(@view(Z[:, c]), NaN)
             end
         else
-            @inbounds for s = 1:n_s
-                X[s, c] = Float64(col[selected_samples[s]])
+            sum_x = 0.0
+            if col isa Vector{Float64}
+                col_f = col::Vector{Float64}
+                @inbounds @simd for s = 1:n_s
+                    sum_x += col_f[selected_samples[s]]
+                end
+                μ = sum_x * inv_n
+                ss = 0.0
+                @inbounds @simd for s = 1:n_s
+                    d = col_f[selected_samples[s]] - μ
+                    Z[s, c] = d
+                    ss = muladd(d, d, ss)
+                end
+            elseif !isnothing(contig)
+                s0 = first(contig) - 1
+                @inbounds for s = 1:n_s
+                    sum_x += Float64(col[s0+s])
+                end
+                μ = sum_x * inv_n
+                ss = 0.0
+                @inbounds for s = 1:n_s
+                    d = Float64(col[s0+s]) - μ
+                    Z[s, c] = d
+                    ss = muladd(d, d, ss)
+                end
+            else
+                @inbounds for s = 1:n_s
+                    sum_x += Float64(col[selected_samples[s]])
+                end
+                μ = sum_x * inv_n
+                ss = 0.0
+                @inbounds for s = 1:n_s
+                    d = Float64(col[selected_samples[s]]) - μ
+                    Z[s, c] = d
+                    ss = muladd(d, d, ss)
+                end
+            end
+            if ss > 0.0
+                inv_norm = 1.0 / sqrt(ss)
+                @inbounds @simd for s = 1:n_s
+                    Z[s, c] *= inv_norm
+                end
+            else
+                @inbounds fill!(@view(Z[:, c]), NaN)
             end
         end
     end
-    df = DataFrame(cor(X), selected_channels)
-    insertcols!(df, 1, :row => selected_channels)
-    return df
+    return Z
+end
+
+function _cor_to_dataframe(R::Matrix{Float64}, row_labels::Vector{Symbol}, col_labels::Vector{Symbol})::DataFrame
+    n_cols = length(col_labels)
+    out_names = Vector{Symbol}(undef, n_cols + 1)
+    out_cols = Vector{AbstractVector}(undef, n_cols + 1)
+    out_names[1] = :row
+    out_cols[1] = copy(row_labels)
+    for j = 1:n_cols
+        out_names[j+1] = col_labels[j]
+        out_cols[j+1] = R[:, j]
+    end
+    return DataFrame(out_cols, out_names; copycols = false)
+end
+
+function _correlation_matrix(dat::DataFrame, selected_samples::Vector{Int}, selected_channels::Vector{Symbol})::DataFrame
+    if length(selected_samples) <= 1
+        X = _extract_channel_sample_matrix(dat, selected_samples, selected_channels)
+        return _cor_to_dataframe(cor(X), selected_channels, selected_channels)
+    end
+    Z = _extract_unit_centered_matrix(dat, selected_samples, selected_channels)
+    R = Z' * Z
+    n_ch = length(selected_channels)
+    @inbounds for j = 1:n_ch
+        for i = 1:n_ch
+            R[i, j] = i == j && !isnan(R[i, i]) ? 1.0 : clamp(R[i, j], -1.0, 1.0)
+        end
+    end
+    return _cor_to_dataframe(R, selected_channels, selected_channels)
 end
 
 """
-    correlation_matrix_dual_selection(dat::SingleDataFrameEeg; 
-                                     sample_selection::Function = samples(),
-    interval_selection::Interval = times(),
-                                     channel_selection1::Function = channels(),
-                                     channel_selection2::Function = channels(),
-                                     include_extra_selection1::Bool = false,
-                                     include_extra_selection2::Bool = true)
+    correlation_matrix_dual_selection(dat::SingleDataFrameEeg; sample_selection = samples(),
+                                      interval_selection::Interval = times(),
+                                      channel_selection1 = channels(), channel_selection2 = channels(),
+                                      include_extra_selection1::Bool = false,
+                                      include_extra_selection2::Bool = true) -> DataFrame
 
-Calculate correlation matrix between two sets of channels using a single sample selection.
-
-Particularly useful for calculating correlations between all EEG channels
-and EOG channels using the same time points.
-
-# Arguments
-- `dat::SingleDataFrameEeg`: The EEG data object
-- `sample_selection::Function`: Function for sample selection (default: samples())
-- `channel_selection1::Function`: Function for channel selection for first set (default: channels())
-- `channel_selection2::Function`: Function for channel selection for second set (default: channels())
-- `include_extra_selection1::Bool`: Whether to include extra channels for first set (default: false)
-- `include_extra_selection2::Bool`: Whether to include extra channels for second set (default: true)
-
-# Returns
-- `DataFrame`: Correlation matrix with first channel set as rows and second channel set as columns
-
-# Examples
-```julia
-# Calculate correlations between all channels and EOG channels
-cm = correlation_matrix_dual_selection(dat, 
-    sample_selection = samples(),  # All samples
-    channel_selection1 = channels(),  # All EEG channels
-    channel_selection2 = channels([:vEOG, :hEOG])  # EOG channels
-)
-
-# Calculate correlations between frontal channels and EOG channels
-cm = correlation_matrix_dual_selection(dat,
-    sample_selection = samples_not(:is_extreme_value_100),
-    channel_selection1 = channels([:Fp1, :Fp2, :F3, :F4, :F5, :F6, :F7, :F8]),
-    channel_selection2 = channels([:vEOG, :hEOG])
-)
-
-# Include extra channels for EOG set but not EEG set
-cm = correlation_matrix_dual_selection(dat,
-    sample_selection = samples(),
-    channel_selection1 = channels(),  # EEG channels only
-    channel_selection2 = channels([:vEOG, :hEOG]),  # EOG channels
-    include_extra_selection1 = false,  # No extra channels for EEG
-    include_extra_selection2 = true    # Include extra channels for EOG
-)
-```
+Compute the cross-correlation matrix between two channel sets (`channel_selection1` as rows,
+`channel_selection2` as columns) over a shared sample selection.
 """
 function correlation_matrix_dual_selection(
     dat::SingleDataFrameEeg;
@@ -129,108 +192,42 @@ function correlation_matrix_dual_selection(
     include_extra_selection1::Bool = false,
     include_extra_selection2::Bool = true,
 )::DataFrame
-    # Get selected channels for both sets with separate include_extra settings
     selected_channels1 = get_selected_channels(dat, channel_selection1; include_meta = false, include_extra = include_extra_selection1)
     selected_channels2 = get_selected_channels(dat, channel_selection2; include_meta = false, include_extra = include_extra_selection2)
+    isempty(selected_channels1) && @minimal_error("No channels selected for first channel set")
+    isempty(selected_channels2) && @minimal_error("No channels selected for second channel set")
 
-    isempty(selected_channels1) && @minimal_error "No channels selected for first channel set"
-    isempty(selected_channels2) && @minimal_error "No channels selected for second channel set"
-
-    # Get selected samples (same for both channel sets)
-    combined_sel = _combine_interval_sample(interval_selection, sample_selection)
-    selected_samples = get_selected_samples(dat, combined_sel)
-
+    selected_samples = get_selected_samples(dat, _combine_interval_sample(interval_selection, sample_selection))
     return _correlation_matrix_dual_selection(dat.data, selected_samples, selected_channels1, selected_channels2)
 end
 
-"""
-    _correlation_matrix_dual_selection(df::DataFrame, samples::Vector{Int}, channels1::Vector{Symbol}, 
-                                      channels2::Vector{Symbol})
-
-Internal function to calculate correlation matrix between two sets of channels with the same sample selection.
-
-# Arguments
-- `df::DataFrame`: DataFrame containing the data
-- `samples::Vector{Int}`: Sample indices (same for both channel sets)
-- `channels1::Vector{Symbol}`: First set of channels (rows)
-- `channels2::Vector{Symbol}`: Second set of channels (columns)
-
-# Returns
-- `DataFrame`: Correlation matrix with first channel set as rows and second channel set as columns
-"""
 function _correlation_matrix_dual_selection(
     dat::DataFrame,
     selected_samples::Vector{Int},
     selected_channels1::Vector{Symbol},
     selected_channels2::Vector{Symbol},
 )::DataFrame
-    n_s = length(selected_samples)
-    n_ch1 = length(selected_channels1)
-    n_ch2 = length(selected_channels2)
-
-    matrix1 = Matrix{Float64}(undef, n_s, n_ch1)
-    for (c, ch) in enumerate(selected_channels1)
-        col = dat[!, ch]
-        if col isa Vector{Float64}
-            col_f = col::Vector{Float64}
-            @inbounds @simd for s = 1:n_s
-                matrix1[s, c] = col_f[selected_samples[s]]
-            end
-        else
-            @inbounds for s = 1:n_s
-                matrix1[s, c] = Float64(col[selected_samples[s]])
-            end
-        end
+    if length(selected_samples) <= 1
+        matrix1 = _extract_channel_sample_matrix(dat, selected_samples, selected_channels1)
+        matrix2 = _extract_channel_sample_matrix(dat, selected_samples, selected_channels2)
+        return _cor_to_dataframe(cor(matrix1, matrix2), selected_channels1, selected_channels2)
     end
-
-    matrix2 = Matrix{Float64}(undef, n_s, n_ch2)
-    for (c, ch) in enumerate(selected_channels2)
-        col = dat[!, ch]
-        if col isa Vector{Float64}
-            col_f = col::Vector{Float64}
-            @inbounds @simd for s = 1:n_s
-                matrix2[s, c] = col_f[selected_samples[s]]
-            end
-        else
-            @inbounds for s = 1:n_s
-                matrix2[s, c] = Float64(col[selected_samples[s]])
-            end
-        end
+    Z1 = _extract_unit_centered_matrix(dat, selected_samples, selected_channels1)
+    Z2 = _extract_unit_centered_matrix(dat, selected_samples, selected_channels2)
+    R = Z1' * Z2
+    @inbounds for k in eachindex(R)
+        R[k] = clamp(R[k], -1.0, 1.0)
     end
-
-    # Calculate correlation matrix: cor(X,Y) returns Y×X, so transpose to get channels1 × channels2
-    corr_matrix = collect(cor(matrix2, matrix1)')
-
-    # Create DataFrame with proper column and row names
-    df = DataFrame(corr_matrix, selected_channels2)
-    insertcols!(df, 1, :row => selected_channels1)
-
-    return df
+    return _cor_to_dataframe(R, selected_channels1, selected_channels2)
 end
 
 """
-    channel_joint_probability(dat::SingleDataFrameEeg; channel_selection::Function = channels(), threshold::Real = 5.0, normalize::Int = 2, discret::Int = 1000)
+    channel_joint_probability(dat::SingleDataFrameEeg; sample_selection = samples(),
+                              interval_selection::Interval = times(), channel_selection = channels(),
+                              include_extra::Bool = false, threshold::Real = 5.0,
+                              normalize::Int = 2, discret::Int = 1000) -> DataFrame
 
-Calculate joint probability of extreme values across EEG channels.
-
-# Arguments
-- `dat::SingleDataFrameEeg`: The EEG data object
-- `channel_selection::Function`: Function that returns boolean vector for channel filtering (default: channels() - all channels)
-- `threshold::Real`: Threshold for extreme value detection (default: 5.0)
-- `normalize::Int`: Normalization method (default: 2)
-- `discret::Int`: Number of discretization bins (default: 1000)
-
-# Returns
-- `DataFrame`: Joint probability data with channel names and probability values
-
-# Examples
-```julia
-# Calculate joint probability for all channels
-jp = channel_joint_probability(dat)
-
-# Calculate joint probability with custom threshold
-jp = channel_joint_probability(dat, threshold = 0.3)
-```
+Compute per-channel joint probability (negative log-likelihood) and threshold-based rejection flags.
 """
 function channel_joint_probability(
     dat::SingleDataFrameEeg;
@@ -243,10 +240,8 @@ function channel_joint_probability(
     discret::Int = 1000,
 )::DataFrame
     selected_channels = get_selected_channels(dat, channel_selection; include_meta = false, include_extra = include_extra)
-    isempty(selected_channels) && @minimal_error "No channels selected for joint probability calculation"
-    combined_sel = _combine_interval_sample(interval_selection, sample_selection)
-    selected_samples = get_selected_samples(dat, combined_sel)
-
+    isempty(selected_channels) && @minimal_error("No channels selected for joint probability calculation")
+    selected_samples = get_selected_samples(dat, _combine_interval_sample(interval_selection, sample_selection))
     return _channel_joint_probability(
         dat.data,
         selected_samples,
@@ -257,64 +252,52 @@ function channel_joint_probability(
     )
 end
 
-"""
-    _channel_joint_probability(df::DataFrame, channels::Vector{Symbol}, threshold::Float64, normalize::Int, discret::Int)
+function _vec_joint_probability_value(data::AbstractVector{<:Real}, bins::Int, sortbox::Vector{Int})::Float64
+    n = length(data)
+    n == 0 && @minimal_error("Cannot compute probability for empty data vector")
 
-Internal function to calculate joint probability for specified channels.
+    if bins > 0
+        min_v = Float64(@inbounds data[1])
+        max_v = min_v
+        @inbounds for i = 2:n
+            v = Float64(data[i])
+            v < min_v && (min_v = v)
+            v > max_v && (max_v = v)
+        end
+        range_val = max_v - min_v
+        range_val == 0.0 && return n * log(Float64(n))
 
-# Arguments
-- `df::DataFrame`: DataFrame containing the data
-- `channels::Vector{Symbol}`: Vector of channel symbols to include
-- `threshold::Float64`: Threshold for extreme value detection
-- `normalize::Int`: Normalization method
-- `discret::Int`: Number of discretization bins
+        fill!(sortbox, 0)
+        bm1 = bins - 1
+        @inbounds for i = 1:n
+            bin = clamp(floor(Int, (Float64(data[i]) - min_v) / range_val * bm1) + 1, 1, bins)
+            sortbox[bin] += 1
+        end
 
-# Returns
-- `DataFrame`: Joint probability data with channel names and probability values
-"""
-function _channel_joint_probability(
-    dat::DataFrame,
-    selected_samples::Vector{Int},
-    selected_channels::Vector{Symbol};
-    threshold::Real = 5.0,
-    normval::Int = 2,
-    discret::Int = 1000,
-)
-    @info "channel_joint_probability: Computing probability for channels $(_print_vector(selected_channels))"
-
-    # Select the specified channels and filter by samples
-    data = select(dat[selected_samples, :], selected_channels)
-
-    # Convert to matrix and compute joint probability
-    jp, indelec = _joint_probability(Matrix{Float64}(Matrix(data)'), threshold, normval, discret)
-    return DataFrame(channel = selected_channels, jp = jp, rejection = indelec)
+        inv_n = 1.0 / n
+        jp_val = 0.0
+        @inbounds for b = 1:bins
+            c = sortbox[b]
+            c > 0 && (jp_val -= c * log(c * inv_n))
+        end
+        return jp_val
+    else
+        μ, σ = mean(data), std(data)
+        σ == 0 && return n * log(Float64(n))
+        inv_sqrt2pi = 1.0 / sqrt(2π)
+        sum_p = 0.0
+        sum_z2 = 0.0
+        @inbounds for i = 1:n
+            z = (Float64(data[i]) - μ) / σ
+            z2 = z * z
+            sum_z2 += z2
+            sum_p += exp(-0.5 * z2) * inv_sqrt2pi
+        end
+        return 0.5 * sum_z2 - n * log(inv_sqrt2pi / sum_p)
+    end
 end
 
-"""
-    _joint_probability(signal::AbstractMatrix{<:Real}, threshold::Real, normalize::Int, discret::Int = 1000)
-
-Calculate joint probability of extreme values in a signal matrix.
-
-# Arguments
-- `signal::AbstractMatrix{<:Real}`: Signal data matrix (channels × samples)
-- `threshold::Real`: Threshold for extreme value detection
-- `normalize::Int`: Normalization method
-- `discret::Int`: Number of discretization bins
-
-# Returns
-- `Tuple{Vector{Float64}, BitVector}`: Joint probability values for each channel and rejection flags
-"""
-function _joint_probability(signal::AbstractMatrix{<:Real}, threshold::Real, normalize::Int, discret::Int = 1000)
-    nbchan = size(signal, 1)
-    jp = zeros(nbchan)
-    dataProba = Vector{Float64}(undef, size(signal, 2)) # Pre-allocate
-
-    @inbounds for rc = 1:nbchan
-        compute_probability!(dataProba, view(signal, rc, :), discret)
-        jp[rc] = -sum(log, dataProba)
-    end
-
-    # Normalize the joint probability
+function _normalize_and_threshold_jp!(jp::Vector{Float64}, threshold::Real, normalize::Int)
     if normalize != 0
         tmpjp = normalize == 2 ? _trim_extremes(jp) : jp
         s = isempty(tmpjp) ? 0.0 : std(tmpjp)
@@ -325,88 +308,104 @@ function _joint_probability(signal::AbstractMatrix{<:Real}, threshold::Real, nor
             jp .= (jp .- μ) ./ s
         end
     end
-
-    rej = threshold != 0 ? (jp .> threshold) : falses(nbchan)
+    rej = threshold != 0 ? (jp .> threshold) : falses(length(jp))
     return jp, rej
 end
 
-"""
-    compute_probability!(probaMap::Vector{Float64}, data::AbstractVector{<:Real}, bins::Int)::Vector{Float64}
+function _channel_joint_probability(
+    dat::DataFrame,
+    selected_samples::Vector{Int},
+    selected_channels::Vector{Symbol};
+    threshold::Real = 5.0,
+    normval::Int = 2,
+    discret::Int = 1000,
+)
+    @info "channel_joint_probability: Computing probability for channels $(_print_vector(selected_channels))"
+    n_ch = length(selected_channels)
+    n_s = length(selected_samples)
+    contig = _contiguous_sample_range(selected_samples)
+    jp = Vector{Float64}(undef, n_ch)
 
-Compute probability distribution for a data vector.
+    _foreach_chunk(n_ch) do ch_range
+        sortbox = discret > 0 ? Vector{Int}(undef, discret) : Int[]
+        sample_buf = isnothing(contig) ? Vector{Float64}(undef, n_s) : Float64[]
+        for c in ch_range
+            col = dat[!, selected_channels[c]]
+            if !isnothing(contig)
+                jp[c] = _vec_joint_probability_value(@view(col[contig]), discret, sortbox)
+            else
+                if col isa Vector{Float64}
+                    col_f = col::Vector{Float64}
+                    @inbounds @simd for i = 1:n_s
+                        sample_buf[i] = col_f[selected_samples[i]]
+                    end
+                else
+                    @inbounds for i = 1:n_s
+                        sample_buf[i] = Float64(col[selected_samples[i]])
+                    end
+                end
+                jp[c] = _vec_joint_probability_value(sample_buf, discret, sortbox)
+            end
+        end
+    end
 
-# Arguments
-- `probaMap::Vector{Float64}`: Pre-allocated vector to store probability values
-- `data::AbstractVector{<:Real}`: Input data vector
-- `bins::Int`: Number of bins for discretization
+    jp, indelec = _normalize_and_threshold_jp!(jp, threshold, normval)
+    return DataFrame(channel = copy(selected_channels), jp = jp, rejection = indelec; copycols = false)
+end
 
-# Returns
-- `Vector{Float64}`: Probability distribution (same as probaMap)
-"""
+function _joint_probability(signal::AbstractMatrix{<:Real}, threshold::Real, normalize::Int, discret::Int = 1000)
+    nbchan = size(signal, 1)
+    jp = Vector{Float64}(undef, nbchan)
+    sortbox = discret > 0 ? Vector{Int}(undef, discret) : Int[]
+
+    @inbounds for rc = 1:nbchan
+        jp[rc] = _vec_joint_probability_value(@view(signal[rc, :]), discret, sortbox)
+    end
+    return _normalize_and_threshold_jp!(jp, threshold, normalize)
+end
+
 function compute_probability!(probaMap::Vector{Float64}, data::AbstractVector{<:Real}, bins::Int)::Vector{Float64}
-    isempty(data) && @minimal_error "Cannot compute probability for empty data vector"
+    isempty(data) && @minimal_error("Cannot compute probability for empty data vector")
+    n = length(data)
 
     if bins > 0
         min_val, max_val = extrema(data)
         range_val = max_val - min_val
-
-        # Handle case where all values are the same (range_val == 0)
         if range_val == 0
-            # All values are identical - uniform probability
-            fill!(probaMap, 1.0 / length(data))
+            fill!(probaMap, 1.0 / n)
             return probaMap
         end
 
         sortbox = zeros(Int, bins)
-
-        # Single-pass binning and counting
+        bm1 = bins - 1
         @inbounds for x in data
-            bin = clamp(floor(Int, (x - min_val) / range_val * (bins - 1)) + 1, 1, bins)
+            bin = clamp(floor(Int, (x - min_val) / range_val * bm1) + 1, 1, bins)
             sortbox[bin] += 1
         end
-
-        # Compute probabilities
-        n = length(data)
+        inv_n = 1.0 / n
         @inbounds for (i, x) in enumerate(data)
-            bin = clamp(floor(Int, (x - min_val) / range_val * (bins - 1)) + 1, 1, bins)
-            probaMap[i] = sortbox[bin] / n
+            bin = clamp(floor(Int, (x - min_val) / range_val * bm1) + 1, 1, bins)
+            probaMap[i] = sortbox[bin] * inv_n
         end
     else
-        # Gaussian approximation
         μ, σ = mean(data), std(data)
-
-        # Handle case where all values are the same (σ == 0)
         if σ == 0
-            # All values are identical - uniform probability
-            fill!(probaMap, 1.0 / length(data))
+            fill!(probaMap, 1.0 / n)
             return probaMap
         end
-
-        inv_sqrt2pi = 1 / (√(2π))
+        inv_sqrt2pi = 1.0 / sqrt(2π)
+        sum_p = 0.0
         @inbounds for (i, x) in enumerate(data)
             z = (x - μ) / σ
-            probaMap[i] = exp(-0.5 * z * z) * inv_sqrt2pi
+            p = exp(-0.5 * z * z) * inv_sqrt2pi
+            probaMap[i] = p
+            sum_p += p
         end
-        sum_p = sum(probaMap)
         probaMap ./= sum_p
     end
-
     return probaMap
-
 end
 
-
-"""
-    _trim_extremes(x::Vector{Float64})
-
-Trim extreme values from a data vector using robust statistics.
-
-# Arguments
-- `x::Vector{Float64}`: Input data vector
-
-# Returns
-- `Vector{Float64}`: Data vector with extreme values trimmed
-"""
 function _trim_extremes(x::Vector{Float64})
     n = length(x)
     trim = round(Int, n * 0.1)
@@ -416,149 +415,33 @@ function _trim_extremes(x::Vector{Float64})
     return lo <= hi ? view(sorted, lo:hi) : view(sorted, 1:n)
 end
 
-# === CORRELATION MATRIX UTILITIES ===
-
 """
-    get_eog_channels(eog_cfg::EogConfig)
+    get_eog_channels(eog_cfg::EogConfig) -> Vector{Symbol}
 
-Extract EOG channel symbols from EogConfig.
-
-# Arguments
-- `eog_cfg::EogConfig`: The EOG configuration object
-
-# Returns
-- `Vector{Symbol}`: Vector of EOG channel symbols (e.g., [:vEOG, :hEOG])
-
-# Examples
-```julia
-eog_cfg = EogConfig(50.0, 30.0, [["Fp1", "Fp2"], ["IO1", "IO2"], ["vEOG"]], [["F9"], ["F10"], ["hEOG"]])
-eog_channels = get_eog_channels(eog_cfg)
-# Returns [:vEOG, :hEOG]
-```
+Return `[vEOG_output_symbol, hEOG_output_symbol]` from `eog_cfg`.
 """
-function get_eog_channels(eog_cfg::EogConfig)
-    vEOG_channel = Symbol(eog_cfg.vEOG_channels[3][1])
-    hEOG_channel = Symbol(eog_cfg.hEOG_channels[3][1])
-    return [vEOG_channel, hEOG_channel]
-end
+get_eog_channels(eog_cfg::EogConfig) = [Symbol(eog_cfg.vEOG_channels[3][1]), Symbol(eog_cfg.hEOG_channels[3][1])]
 
-"""
-    add_zscore_columns!(df::DataFrame, exclude_columns::Vector{Symbol} = [:row])
-
-Add z-score columns to a correlation matrix DataFrame.
-
-Add z-score columns for each numeric column in the DataFrame,
-excluding specified columns (default: :row).
-
-# Arguments
-- `df::DataFrame`: The correlation matrix DataFrame to modify
-- `exclude_columns::Vector{Symbol}`: Columns to exclude from z-score calculation (default: [:row])
-
-# Returns
-- `DataFrame`: The modified DataFrame with z-score columns added
-
-# Examples
-```julia
-# Add z-score columns to correlation matrix
-cm = correlation_matrix_dual_selection(dat, 
-    channel_selection1 = channels(),
-    channel_selection2 = channels([:vEOG, :hEOG])
-)
-add_zscore_columns!(cm)  # Adds z_vEOG, z_hEOG columns
-
-# Exclude additional columns from z-score calculation
-add_zscore_columns!(cm, [:row, :channel_name])
-```
-"""
 function add_zscore_columns!(df::DataFrame, exclude_columns::Vector{Symbol} = [:row])
-    # Get numeric columns (excluding specified columns)
-    numeric_columns = filter(col -> eltype(df[!, col]) <: Number && !(col in exclude_columns), names(df))
+    numeric_columns = [col for col in propertynames(df) if eltype(df[!, col]) <: Number && !(col in exclude_columns)]
+    isempty(numeric_columns) && @minimal_error("No numeric columns found for z-score calculation")
 
-    if isempty(numeric_columns)
-        @minimal_error "No numeric columns found for z-score calculation"
-        return df
-    end
-
-    # Add z-score columns for each numeric column
     for col in numeric_columns
-        z_col_name = Symbol("z_$(col)")
         values = df[!, col]
-
-        # Calculate z-scores (handle case where all values are the same)
-        if std(values) == 0
-            df[!, z_col_name] = zeros(length(values))
-        else
-            df[!, z_col_name] = (values .- mean(values)) ./ std(values)
-        end
+        s = std(values)
+        df[!, Symbol("z_$(col)")] = s == 0 ? zeros(length(values)) : (values .- mean(values)) ./ s
     end
-
     return df
 end
 
-"""
-    add_zscore_columns(df::DataFrame, exclude_columns::Vector{Symbol} = [:row])
-
-Non-mutating version of add_zscore_columns!.
-
-# Arguments
-- `df::DataFrame`: The correlation matrix DataFrame
-- `exclude_columns::Vector{Symbol}`: Columns to exclude from z-score calculation (default: [:row])
-
-# Returns
-- `DataFrame`: A new DataFrame with z-score columns added
-
-# Examples
-```julia
-# Create new DataFrame with z-score columns
-cm_with_z = add_zscore_columns(correlation_matrix_dual_selection(dat, 
-    channel_selection1 = channels(),
-    channel_selection2 = channels([:vEOG, :hEOG])
-))
-```
-"""
-function add_zscore_columns(df::DataFrame, exclude_columns::Vector{Symbol} = [:row])
-    df_copy = copy(df)
-    add_zscore_columns!(df_copy, exclude_columns)
-    return df_copy
-end
+add_zscore_columns(df::DataFrame, exclude_columns::Vector{Symbol} = [:row]) = add_zscore_columns!(copy(df), exclude_columns)
 
 """
-    correlation_matrix_eog(dat::SingleDataFrameEeg, eog_cfg::EogConfig; 
-                          sample_selection::Function = samples(),
-    interval_selection::Interval = times(),
-                          channel_selection::Function = channels(),
-                          include_extra::Bool = false)
+    correlation_matrix_eog(dat::SingleDataFrameEeg, eog_cfg::EogConfig; sample_selection = samples(),
+                           interval_selection::Interval = times(), channel_selection = channels(),
+                           include_extra::Bool = false) -> DataFrame
 
-Calculate correlation matrix between EEG channels and EOG channels using EogConfig.
-
-This is a convenience function that extracts EOG channel names from the EogConfig
-and calls correlation_matrix_dual_selection internally.
-
-# Arguments
-- `dat::SingleDataFrameEeg`: The EEG data object
-- `eog_cfg::EogConfig`: The EOG configuration object
-- `sample_selection::Function`: Function for sample selection (default: samples())
-- `channel_selection::Function`: Function for channel selection for EEG channels (default: channels())
-- `include_extra::Bool`: Whether to include extra channels (default: false)
-
-# Returns
-- `DataFrame`: Correlation matrix with EEG channels as rows and EOG channels as columns
-
-# Examples
-```julia
-# Calculate correlations between all EEG channels and EOG channels
-cm = correlation_matrix_eog(dat, eog_cfg)
-
-# Calculate correlations with specific sample and channel selection
-cm = correlation_matrix_eog(dat, eog_cfg,
-    sample_selection = samples_not(:is_extreme_value_100),
-    channel_selection = channels([:Fp1, :Fp2, :F3, :F4])
-)
-
-# Add z-score columns
-cm = correlation_matrix_eog(dat, eog_cfg)
-add_zscore_columns!(cm)
-```
+Compute the correlation matrix between EEG channels (`channel_selection`) and the EOG channels configured in `eog_cfg`.
 """
 function correlation_matrix_eog(
     dat::SingleDataFrameEeg,
@@ -568,7 +451,6 @@ function correlation_matrix_eog(
     channel_selection = channels(),
     include_extra::Bool = false,
 )::DataFrame
-    # Call the dual selection function
     return correlation_matrix_dual_selection(
         dat;
         sample_selection = sample_selection,
@@ -576,69 +458,28 @@ function correlation_matrix_eog(
         channel_selection1 = channel_selection,
         channel_selection2 = channels(get_eog_channels(eog_cfg)),
         include_extra_selection1 = include_extra,
-        include_extra_selection2 = true,  # EOG channels are typically extra channels
+        include_extra_selection2 = true,
     )
 end
 
-# === BAD CHANNEL IDENTIFICATION ===
-
 """
-    identify_bad_channels(summary_df::DataFrame, joint_prob_df::DataFrame; 
-                         zvar_criterion::Real = 3.0)::Vector{Symbol}
+    identify_bad_channels(summary_df::DataFrame, joint_prob_df::DataFrame; zvar_criterion::Real = 3.0) -> Vector{Symbol}
 
-Identify bad channels based on channel summary z-variance and joint probability criteria.
-
-# Arguments
-- `summary_df::DataFrame`: Channel summary DataFrame (output from channel_summary)
-- `joint_prob_df::DataFrame`: Joint probability DataFrame (output from channel_joint_probability)
-- `zvar_criterion::Real`: Z-variance threshold for bad channel identification (default: 3.0)
-
-# Returns
-- `Vector{Symbol}`: Vector of channel names identified as bad channels
-
-# Examples
-```julia
-# Get channel summary and joint probability
-summary_df = channel_summary(dat)
-joint_prob_df = channel_joint_probability(dat)
-
-# Identify bad channels with default criteria
-bad_channels = identify_bad_channels(summary_df, joint_prob_df)
-
-# Use custom z-variance criterion
-bad_channels = identify_bad_channels(summary_df, joint_prob_df, zvar_criterion = 2.5)
-```
+Return the union of channels flagged by `abs(zvar) > zvar_criterion` in `summary_df` or `rejection == true` in `joint_prob_df`.
 """
 function identify_bad_channels(summary_df::DataFrame, joint_prob_df::DataFrame; zvar_criterion::Real = 3.0)::Vector{Symbol}
-
-    # Identify bad channels based on z-variance criterion
     bad_by_zvar = summary_df[abs.(summary_df.zvar) .> zvar_criterion, :channel]
-
-    # Identify bad channels based on joint probability criterion
     bad_by_jp = joint_prob_df[joint_prob_df.rejection, :channel]
-
-    # Combine both criteria (union of bad channels)
-    all_bad_channels = unique(vcat(bad_by_zvar, bad_by_jp))
-
-    return all_bad_channels
+    return unique(vcat(bad_by_zvar, bad_by_jp))
 end
 
 """
     partition_channels_by_eog_correlation(bad_channels::Vector{Symbol}, eog_correlation_df::DataFrame;
                                           eog_channels::Vector{Symbol} = [:hEOG, :vEOG],
-                                          threshold::Real = 0.3,
-                                          use_z::Bool = false)::Tuple{Vector{Symbol},Vector{Symbol}}
+                                          threshold::Real = 0.3, use_z::Bool = false) -> Tuple{Vector{Symbol},Vector{Symbol}}
 
-Partition bad channels into two groups based on correlation with EOG columns:
-- First element: bad channels NOT highly correlated with EOG (retain for non-EOG handling)
-- Second element: bad channels correlated with EOG (prefer ICA handling)
-
-# Arguments
-- `bad_channels::Vector{Symbol}`: Vector of bad channel names
-- `eog_correlation_df::DataFrame`: EOG correlation matrix DataFrame
-- `eog_channels::Vector{Symbol}`: EOG columns to use (default: `[:hEOG, :vEOG]`)
-- `threshold::Real`: Correlation threshold (default: 0.3)
-- `use_z::Bool`: If true, use z-scored equivalents (e.g., `:z_hEOG`, `:z_vEOG`)
+Split `bad_channels` into `(non_eog_bad, eog_related)` according to whether any correlation in `eog_correlation_df`
+exceeds `threshold` in magnitude.
 """
 function partition_channels_by_eog_correlation(
     bad_channels::Vector{Symbol},
@@ -647,74 +488,40 @@ function partition_channels_by_eog_correlation(
     threshold::Real = 0.3,
     use_z::Bool = false,
 )::Tuple{Vector{Symbol},Vector{Symbol}}
-
-    if isempty(bad_channels)
-        return bad_channels, Symbol[]
-    end
-
+    isempty(bad_channels) && return bad_channels, Symbol[]
     if isempty(eog_channels)
         @minimal_warning "No EOG channels provided to partition_channels_by_eog_correlation."
         return bad_channels, Symbol[]
     end
 
-    cols_to_use = use_z ? [Symbol("z_$(ch)") for ch in eog_channels] : eog_channels
-
+    cols_to_use = [c for c in (use_z ? [Symbol("z_$(ch)") for ch in eog_channels] : eog_channels) if hasproperty(eog_correlation_df, c)]
+    row_col = eog_correlation_df.row
     eog_related = Symbol[]
     for ch in bad_channels
-        rows = eog_correlation_df[eog_correlation_df.row .== ch, :]
-        if nrow(rows) > 0
-            if any(hasproperty(rows, c) && abs(rows[1, c]) > threshold for c in cols_to_use)
-                push!(eog_related, ch)
-            end
+        r_idx = findfirst(==(ch), row_col)
+        if !isnothing(r_idx) && any(c -> abs(eog_correlation_df[r_idx, c]) > threshold, cols_to_use)
+            push!(eog_related, ch)
         end
     end
-
-    non_eog_bad = setdiff(bad_channels, eog_related)
-    return non_eog_bad, eog_related
+    return setdiff(bad_channels, eog_related), eog_related
 end
 
 """
-    check_channel_neighbors(bad_channels::Vector{Symbol}, layout::Layout)::Vector{Symbol}
+    check_channel_neighbors(bad_channels::Vector{Symbol}, layout::Layout) -> Vector{Symbol}
 
-Check which bad channels can be repaired using neighbor interpolation.
-A channel is repairable only if:
-- ALL of its neighbors are good (not in the bad_channels list)
-- There are at least 2 good neighbors (required for meaningful interpolation)
-This prevents bad channels from being used to repair other bad channels.
-
-# Arguments
-- `bad_channels::Vector{Symbol}`: Vector of bad channel names
-- `layout::Layout`: Layout object containing neighbor information
-
-# Returns
-- `Vector{Symbol}`: Bad channels that have ALL good neighbors (can be repaired)
-
-# Examples
-```julia
-# Check which bad channels can be repaired
-repairable_channels = check_channel_neighbors(bad_channels, layout)
-```
+Return channels in `bad_channels` that have at least 2 spatial neighbors in `layout` and none of their neighbors in `bad_channels`.
 """
 function check_channel_neighbors(bad_channels::Vector{Symbol}, layout::Layout)::Vector{Symbol}
-
-    if isempty(bad_channels)
-        return bad_channels
-    end
-
-    repairable_channels = Symbol[]
-
+    (isempty(bad_channels) || isnothing(layout.neighbors)) && return Symbol[]
+    bad_set = Set(bad_channels)
+    repairable = Symbol[]
     for bad_ch in bad_channels
-        # Check if this channel has neighbors defined in the layout
-        if !isnothing(layout.neighbors) && haskey(layout.neighbors, bad_ch)
-            neighbors = layout.neighbors[bad_ch]
-            # Only repair if ALL neighbors are good (not in bad_channels list)
-            # AND there are at least 2 good neighbors (need at least 2 for meaningful interpolation)
-            good_neighbors = setdiff(neighbors.channels, bad_channels)
-            if length(good_neighbors) == length(neighbors.channels) && length(good_neighbors) >= 2
-                push!(repairable_channels, bad_ch)
+        if haskey(layout.neighbors, bad_ch)
+            nbrs = layout.neighbors[bad_ch].channels
+            if length(nbrs) >= 2 && all(ch -> !(ch in bad_set), nbrs)
+                push!(repairable, bad_ch)
             end
         end
     end
-
-    return repairable_channels
+    return repairable
 end

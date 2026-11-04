@@ -1,55 +1,29 @@
 """
-    channel_delete!(dat::EegData, channels_to_delete::Union{Symbol, Vector{Symbol}})
+    channel_delete!(dat::EegData, channels_to_delete) -> EegData
 
-Delete channels from EEG data and layout.
-Modifies the data in place by removing both the data columns and the layout rows.
-
-# Arguments
-- `dat::EegData`: The EEG data object to modify
-- `channels_to_delete::Union{Symbol, Vector{Symbol}}`: Channel(s) to delete
-
-# Returns
-- `nothing` (modifies the data in place)
-
-# Examples
-```julia
-channel_delete!(dat, :Fp1)                 # Delete a single channel
-channel_delete!(dat, [:Fp1, :Fp2, :Diode]) # Delete multiple channels
-```
-
-# Notes
-- Only channels that exist in the data will be deleted
-- Updates both the data columns and the layout rows
-- Clears any cached neighbor information in the layout since channels have changed
+Delete specified channel(s) (`Symbol`, `String`, or vector thereof) from `dat` in place, updating
+both data columns and layout rows (clearing cached layout neighbors if layout channels change).
 """
 function channel_delete!(dat::EegData, channels_to_delete::AbstractVector{Symbol})
-
-    # Check which channels exist in the data columns (includes extra channels)
-    existing_data_channels = Set(all_labels(dat))
-    channels_in_data = intersect(existing_data_channels, Set(channels_to_delete))
-
-    # Check which channels exist in the layout (only for layout removal)
-    existing_layout_channels = Set(dat.layout.data.label)
-    channels_in_layout = intersect(existing_layout_channels, Set(channels_to_delete))
-
+    to_del = Set(channels_to_delete)
+    channels_in_data = intersect(Set(all_labels(dat)), to_del)
     if isempty(channels_in_data)
         @info "channel_delete!: No channels found to delete in data"
         return dat
     end
 
-    # Remove channels from layout (only if they exist in layout)
+    channels_in_layout = intersect(Set(dat.layout.data.label), to_del)
     if !isempty(channels_in_layout)
         filter!(:label => ∉(channels_in_layout), dat.layout.data)
-
-        # Clear neighbors if they exist (since channels have changed)
         if has_neighbors(dat.layout)
             @info "channel_delete!: Clearing neighbors since channels have changed"
             clear_neighbors!(dat.layout)
         end
     end
 
-    # Remove channels from data columns using multiple dispatch
-    _delete_data_columns!(dat, channels_in_data)
+    for container in _data_frames(dat)
+        _delete_data_columns!(container, channels_in_data)
+    end
 
     @info "channel_delete!: Deleted $(length(channels_in_data)) channel(s): $(join(string.(channels_in_data), ", "))"
     return dat
@@ -65,24 +39,17 @@ function channel_delete!(dat::AbstractVector{<:EegData}, channels_to_delete)
     return dat
 end
 
-# Multiple dispatch for different EEG data types
 function _delete_data_columns!(df::DataFrame, channels_to_delete::Set{Symbol})
     cols_to_remove = [c for c in propertynames(df) if c in channels_to_delete]
-    if !isempty(cols_to_remove)
-        select!(df, Not(cols_to_remove))
-    end
+    !isempty(cols_to_remove) && select!(df, Not(cols_to_remove))
     return nothing
 end
 
-function _delete_data_columns!(dat::SingleDataFrameEeg, channels_to_delete::Set{Symbol})
-    _delete_data_columns!(dat.data, channels_to_delete)
-end
-
-function _delete_data_columns!(dat::MultiDataFrameEeg, channels_to_delete::Set{Symbol})
-    isempty(dat.data) && return nothing
-    cols_to_remove = [c for c in propertynames(dat.data[1]) if c in channels_to_delete]
+function _delete_data_columns!(dfs::AbstractVector{<:DataFrame}, channels_to_delete::Set{Symbol})
+    isempty(dfs) && return nothing
+    cols_to_remove = [c for c in propertynames(dfs[1]) if c in channels_to_delete]
     if !isempty(cols_to_remove)
-        for df in dat.data
+        for df in dfs
             select!(df, Not(cols_to_remove))
         end
     end
@@ -90,34 +57,12 @@ function _delete_data_columns!(dat::MultiDataFrameEeg, channels_to_delete::Set{S
 end
 
 """
-    channel_delete(dat::EegData, channels_to_delete::Union{Symbol, Vector{Symbol}})
+    channel_delete(dat, channels_to_delete)
 
-Create a copy of EEG data with specified channels deleted.
-
-# Arguments
-- `dat::EegData`: The EEG data object to copy and modify
-- `channels_to_delete::Union{Symbol, Vector{Symbol}}`: Channel(s) to delete
-
-# Returns
-- `EegData`: A new EEG data object with channels deleted
-
-# Examples
-```julia
-new_dat = channel_delete(dat, :Fp1)                 # Delete a single channel
-new_dat = channel_delete(dat, [:Fp1, :Fp2, :Diode]) # Delete multiple channels
-```
-
-# Notes
-- Only channels that exist in the data will be deleted
-- Updates both the data columns and the layout rows
-- Clears any cached neighbor information in the layout since channels have changed
-- The original data is not modified
+Non-mutating version of [`channel_delete!`](@ref).
 """
 channel_delete(dat::EegData, channels_to_delete::AbstractVector{Symbol}) = channel_delete!(copy(dat), channels_to_delete)
 channel_delete(dat::EegData, channel::Symbol) = channel_delete(dat, [channel])
 channel_delete(dat::EegData, channel::AbstractString) = channel_delete(dat, [Symbol(channel)])
 channel_delete(dat::EegData, channels::AbstractVector{<:AbstractString}) = channel_delete(dat, Symbol.(channels))
-
-function channel_delete(dat::AbstractVector{<:EegData}, channels_to_delete)
-    return [channel_delete(d, channels_to_delete) for d in dat]
-end
+channel_delete(dat::AbstractVector{<:EegData}, channels_to_delete) = [channel_delete(d, channels_to_delete) for d in dat]

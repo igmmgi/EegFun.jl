@@ -1,84 +1,38 @@
-"""
-Batch combining of conditions for epoch data.
-"""
-
-# === COMBINE-CONDITIONS-SPECIFIC VALIDATION ===
-
-"""Validate that file pattern is for epochs data."""
 function _validate_epochs_pattern_combine(pattern::String)
     !contains(pattern, "epochs") &&
         return "condition_combine only works with epoch data. File pattern must contain 'epochs', got: '$pattern'"
     return nothing
 end
 
-"""Generate default output directory name for condition combining."""
 function _condition_combine_default_output_dir(input_dir::String, pattern::String, groups::AbstractVector{<:AbstractVector{<:Integer}})
     groups_str = join([join(group, "-") for group in groups], "_")
-    joinpath(input_dir, "combined_$(clean_pattern(pattern))_$(groups_str)")
+    return joinpath(input_dir, "combined_$(clean_pattern(pattern))_$(groups_str)")
 end
 
-# === COMBINE-CONDITIONS-SPECIFIC PROCESSING ===
-
-"""
-Process a single epochs file through condition combining pipeline.
-Returns BatchResult with success/failure info.
-"""
 function _condition_combine_process_file(
     filepath::String,
     output_path::String,
     condition_groups::AbstractVector{<:AbstractVector{<:Integer}},
 )
     filename = basename(filepath)
-
-    # Read data
     data = read_data(filepath)
-    if isnothing(data)
-        return BatchResult(false, filename, "No data variables found")
-    end
-
-    # Validate that data is valid EEG data (Vector of EpochData)
-    if !(data isa Vector{<:EpochData})
-        return BatchResult(false, filename, "Invalid data type: expected Vector{EpochData}")
-    end
+    isnothing(data) && return BatchResult(false, filename, "No data variables found")
+    !(data isa Vector{<:EpochData}) && return BatchResult(false, filename, "Invalid data type: expected Vector{EpochData}")
 
     combined_data = condition_combine(data, condition_groups)
-
-    # Save (always use "data" as variable name since read_data finds by type)
     jldsave(output_path; data = combined_data, format_version = EEGFUN_FORMAT_VERSION)
 
-    n_groups = length(condition_groups)
     total_epochs = sum(n_epochs(cond) for cond in combined_data)
-    return BatchResult(true, filename, "Combined into $n_groups group(s) with $total_epochs total epochs")
+    return BatchResult(true, filename, "Combined into $(length(condition_groups)) group(s) with $total_epochs total epochs")
 end
 
-# === IN-MEMORY API FUNCTION ===
-
 """
-    condition_combine(data::AbstractVector{<:EpochData}, condition_groups::AbstractVector{<:AbstractVector{<:Integer}})::Vector{EpochData}
-    condition_combine(file_pattern::String, condition_groups::AbstractVector{<:AbstractVector{<:Integer}};
-    input_dir::String = pwd(), participant_selection::Function = participants(),
-    output_dir = nothing)
+    condition_combine(data::AbstractVector{<:EpochData}, condition_groups)::Vector{EpochData}
+    condition_combine(file_pattern::String, condition_groups; input_dir = pwd(),
+                      participant_selection = participants(), output_dir = nothing)
 
-Combine epoch conditions by concatenating epochs from specified groups.
-
-For each group in `condition_groups`, epochs from those conditions are concatenated into a single
-new `EpochData` object. Conditions are matched by `.condition` number (falling back to positional
-indexing only if `.condition` numbers are non-unique or non-positive), and epoch DataFrames are
-copied so the returned `EpochData` objects never alias the input DataFrames.
-The `file_pattern` method saves results to a new JLD2 directory.
-
-# Arguments
-- `data::AbstractVector{<:EpochData}`: Vector of EpochData, one per condition
-- `condition_groups::AbstractVector{<:AbstractVector{<:Integer}}`: Groups of condition numbers to combine (e.g., `[[1, 2], [3, 4]]`)
-
-# Example
-```julia
-epochs = extract_epochs(dat, epoch_cfg, (-0.2, 1.0))
-combined = condition_combine(epochs, [[1, 2], [3, 4]])
-
-# Batch
-condition_combine("epochs", [[1, 2], [3, 4]])
-```
+Combine `EpochData` conditions by concatenating independent copies of epochs within each group in
+`condition_groups` (matching `.condition` numbers with positional fallback), or batch-process JLD2 files.
 """
 function condition_combine(
     data::AbstractVector{<:EpochData},
@@ -92,7 +46,7 @@ function condition_combine(
     cond_nums = Int[d.condition for d in data]
     use_cond_field = allunique(cond_nums) && all(>(0), cond_nums)
     max_condition = length(data)
-    combined_data = EpochData[]
+    combined_data = Vector{EpochData}(undef, length(condition_groups))
 
     for (group_idx, raw_conditions) in enumerate(condition_groups)
         isempty(raw_conditions) && @minimal_error("Condition group $group_idx cannot be empty")
@@ -103,26 +57,16 @@ function condition_combine(
         end
 
         invalid_conditions = filter(<(1), original_conditions)
-        if !isempty(invalid_conditions)
-            @minimal_error("Condition(s) $invalid_conditions must be positive integers (>= 1)")
-        end
+        !isempty(invalid_conditions) && @minimal_error("Condition(s) $invalid_conditions must be positive integers (>= 1)")
 
         condition_data = EpochData[]
         missing_conditions = Int[]
         for c in original_conditions
             if use_cond_field
                 idx = findfirst(d -> d.condition == c, data)
-                if isnothing(idx)
-                    push!(missing_conditions, c)
-                else
-                    push!(condition_data, data[idx])
-                end
+                isnothing(idx) ? push!(missing_conditions, c) : push!(condition_data, data[idx])
             else
-                if c < 1 || c > max_condition
-                    push!(missing_conditions, c)
-                else
-                    push!(condition_data, data[c])
-                end
+                (c < 1 || c > max_condition) ? push!(missing_conditions, c) : push!(condition_data, data[c])
             end
         end
 
@@ -131,13 +75,27 @@ function condition_combine(
             @minimal_error("Condition(s) $missing_conditions not found ($avail_str)")
         end
 
-        # Concatenate independent copies of epoch DataFrames
-        combined_data_frames = DataFrame[copy(df) for epoch_data in condition_data for df in epoch_data.data]
+        total_eps = sum(length(ed.data) for ed in condition_data)
+        src_dfs = Vector{DataFrame}(undef, total_eps)
+        pos = 0
+        for ed in condition_data, df in ed.data
+            pos += 1
+            src_dfs[pos] = df
+        end
 
-        # Create combined condition name
+        combined_data_frames = Vector{DataFrame}(undef, total_eps)
+        if total_eps >= 16 && Threads.nthreads() > 1
+            Threads.@threads :static for i = 1:total_eps
+                combined_data_frames[i] = copy(src_dfs[i])
+            end
+        else
+            for i = 1:total_eps
+                combined_data_frames[i] = copy(src_dfs[i])
+            end
+        end
+
         combined_condition_name = join([cond.condition_name for cond in condition_data], "_")
-
-        combined_epochs = EpochData(
+        combined_data[group_idx] = EpochData(
             condition_data[1].file,
             group_idx,
             combined_condition_name,
@@ -146,8 +104,6 @@ function condition_combine(
             condition_data[1].sample_rate,
             copy(condition_data[1].analysis_info),
         )
-
-        push!(combined_data, combined_epochs)
     end
 
     @info "Combined into $(length(combined_data)) group(s)"
@@ -157,9 +113,6 @@ end
 condition_combine(data::AbstractVector{<:EpochData}, condition_group::AbstractVector{<:Integer})::Vector{EpochData} =
     condition_combine(data, [collect(Int, condition_group)])
 
-# === BATCH API FUNCTION ===
-
-
 function condition_combine(
     file_pattern::String,
     condition_groups::AbstractVector{<:AbstractVector{<:Integer}};
@@ -167,32 +120,23 @@ function condition_combine(
     participant_selection = participants(),
     output_dir::Union{String,Nothing} = nothing,
 )
-
     _with_batch_logging("condition_combine", "condition_combine.log", input_dir, output_dir) do ctx
         @log_call "condition_combine"
 
-        # Validation
         error_msg = _validate_epochs_pattern_combine(file_pattern)
-        if !isnothing(error_msg)
-            @minimal_error(error_msg)
-        end
+        !isnothing(error_msg) && @minimal_error(error_msg)
 
         for (group_idx, grp) in enumerate(condition_groups)
             isempty(grp) && @minimal_error("Condition group $group_idx cannot be empty")
         end
 
-        # Validate and clean condition groups
         cleaned_groups = Vector{Int}[collect(Int, grp) for grp in condition_groups]
         error_msg = _validate_condition_groups(cleaned_groups)
-        if !isnothing(error_msg)
-            @minimal_error(error_msg)
-        end
+        !isnothing(error_msg) && @minimal_error(error_msg)
 
-        # Setup directories
         output_dir = _prepare_output_dir!(ctx, _condition_combine_default_output_dir(input_dir, file_pattern, cleaned_groups))
-
         process_fn = (input_path, output_path) -> _condition_combine_process_file(input_path, output_path, cleaned_groups)
-        result = batch_process(process_fn, file_pattern, input_dir, output_dir, participant_selection, "Combining conditions")
+        return batch_process(process_fn, file_pattern, input_dir, output_dir, participant_selection, "Combining conditions")
     end
 end
 

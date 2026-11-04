@@ -1,23 +1,21 @@
-# === FILTER TYPES AND STRUCTURES ===
-
 """
     FilterInfo
 
-A struct containing all information about a digital filter for EEG data processing.
+Metadata and DSP filter object for a configured digital EEG filter.
 
 # Fields
-- `filter_type::Symbol`: Filter type (:hp=highpass, :lp=lowpass)
-- `filter_object`: The actual DSP.jl filter object (ZeroPoleGain for IIR, Vector{Float64} for FIR)
-- `filter_method::Symbol`: Filter implementation (:iir or :fir)
+- `filter_type::Symbol`: `:hp` (highpass) or `:lp` (lowpass)
+- `filter_object::Union{ZeroPoleGain,Vector{Float64}}`: `ZeroPoleGain` for IIR or tap vector for FIR
+- `filter_method::Symbol`: `:iir` or `:fir`
 - `cutoff_freq::Float64`: Cutoff frequency in Hz
 - `sample_rate::Float64`: Sampling rate in Hz
 - `order::Int`: Filter order (for IIR filters)
-- `n_taps::Union{Nothing,Int}`: Number of taps (for FIR filters, nothing for IIR)
-- `transition_band::Float64`: Width of transition band in Hz
+- `n_taps::Union{Nothing,Int}`: Tap count for FIR filters (`nothing` for IIR)
+- `transition_band::Float64`: Transition band width in Hz
 """
 struct FilterInfo
     filter_type::Symbol
-    filter_object::Union{ZeroPoleGain,Vector{Float64}} # ZeroPoleGain for IIR, Vector{Float64} for FIR
+    filter_object::Union{ZeroPoleGain,Vector{Float64}}
     filter_method::Symbol
     cutoff_freq::Float64
     sample_rate::Float64
@@ -26,37 +24,15 @@ struct FilterInfo
     transition_band::Float64
 end
 
-# === FILTER CREATION ===
 """
-    create_lowpass_filter(cutoff_freq::Real, sample_rate::Real; 
-    filter_method::Symbol = :iir, 
-    order::Integer = 2, 
-    transition_width::Real = 0.1)::FilterInfo
+    create_lowpass_filter(cutoff_freq::Real, sample_rate::Real; filter_method::Symbol = :iir,
+                          order::Integer = 2, transition_width = nothing,
+                          transition_band_hz = nothing, min_taps::Int = 101) -> FilterInfo
 
-Create a digital filter object for the specified parameters.
-
-# Arguments
-- `cutoff_freq`: Cutoff frequency in Hz
-- `sample_rate`: Sampling rate in Hz
-- `filter_method`: String specifying filter implementation (:iir or :fir)
-- `order`: Filter order for IIR filters (default: 2, becomes effective order 4 with filtfilt)
-- `transition_width`: Relative width of transition band as fraction of cutoff (default: 0.1 for EEG)
-
-# Returns
-- `FilterInfo`: A struct containing all filter information and the actual filter object
-
-# Notes
-- NOTE: When using filtfilt (default), effective filter order is approximately doubled
-
-# Examples
-```julia
-# Create a lowpass filter and plot the response
-filter_info = create_lowpass_filter(30.0, 256.0)
-plot_filter_response(filter_info)
-print_filter_characteristics(filter_info)
-```
+Create a lowpass digital filter specification (`:iir` Butterworth or `:fir` Hamming-windowed).
+When applied with zero-phase `filtfilt` (default), effective filter order is doubled.
 """
-function create_lowpass_filter(
+create_lowpass_filter(
     cutoff_freq::Real,
     sample_rate::Real;
     filter_method::Symbol = :iir,
@@ -64,50 +40,26 @@ function create_lowpass_filter(
     transition_width::Union{Nothing,Real} = nothing,
     transition_band_hz::Union{Nothing,Real} = nothing,
     min_taps::Int = 101,
+) = _create_filter(
+    :lp,
+    cutoff_freq,
+    sample_rate;
+    filter_method = filter_method,
+    order = order,
+    transition_width = transition_width,
+    transition_band_hz = transition_band_hz,
+    min_taps = min_taps,
 )
-    return _create_filter(
-        :lp,
-        cutoff_freq,
-        sample_rate;
-        filter_method = filter_method,
-        order = order,
-        transition_width = transition_width,
-        transition_band_hz = transition_band_hz,
-        min_taps = min_taps,
-    )
-end
-
 
 """
-    create_highpass_filter(cutoff_freq::Real, sample_rate::Real; 
-    filter_method::Symbol = :iir, 
-    order::Integer = 2, 
-    transition_width::Real = 0.1)::FilterInfo
+    create_highpass_filter(cutoff_freq::Real, sample_rate::Real; filter_method::Symbol = :iir,
+                           order::Integer = 2, transition_width = nothing,
+                           transition_band_hz = nothing, min_taps::Int = 101) -> FilterInfo
 
-Create a digital filter object for the specified parameters.
-
-# Arguments
-- `cutoff_freq`: Cutoff frequency in Hz
-- `sample_rate`: Sampling rate in Hz
-- `filter_method`: String specifying filter implementation (:iir or :fir)
-- `order`: Filter order for IIR filters (default: 2, becomes effective order 4 with filtfilt)
-- `transition_width`: Relative width of transition band as fraction of cutoff (default: 0.1 for EEG)
-
-# Returns
-- `FilterInfo`: A struct containing all filter information and the actual filter object
-
-# Notes
-- NOTE: When using filtfilt (default), effective filter order is approximately doubled
-
-# Examples
-```julia
-# Create a highpass filter and plot the response
-filter_info = create_highpass_filter(0.1, 256.0)
-plot_filter_response(filter_info)
-print_filter_characteristics(filter_info)
-```
+Create a highpass digital filter specification (`:iir` Butterworth or `:fir` Hamming-windowed).
+When applied with zero-phase `filtfilt` (default), effective filter order is doubled.
 """
-function create_highpass_filter(
+create_highpass_filter(
     cutoff_freq::Real,
     sample_rate::Real;
     filter_method::Symbol = :iir,
@@ -115,19 +67,16 @@ function create_highpass_filter(
     transition_width::Union{Nothing,Real} = nothing,
     transition_band_hz::Union{Nothing,Real} = nothing,
     min_taps::Int = 101,
+) = _create_filter(
+    :hp,
+    cutoff_freq,
+    sample_rate;
+    filter_method = filter_method,
+    order = order,
+    transition_width = transition_width,
+    transition_band_hz = transition_band_hz,
+    min_taps = min_taps,
 )
-    return _create_filter(
-        :hp,
-        cutoff_freq,
-        sample_rate;
-        filter_method = filter_method,
-        order = order,
-        transition_width = transition_width,
-        transition_band_hz = transition_band_hz,
-        min_taps = min_taps,
-    )
-end
-
 
 function _resolve_transition_band_hz(
     cutoff_freq::Real,
@@ -136,22 +85,13 @@ function _resolve_transition_band_hz(
     transition_width::Union{Nothing,Real},
 )::Float64
     if isnothing(transition_width)
-        if filter_type == :hp
-            return min(max(0.25 * cutoff_freq, 2.0), Float64(cutoff_freq))
-        else
-            return min(max(0.25 * cutoff_freq, 2.0), sample_rate / 2.0 - cutoff_freq)
-        end
-    elseif transition_width <= 0
-        @minimal_error "transition_width must be positive: $transition_width"
-    elseif transition_width <= 1.0
-        return Float64(cutoff_freq * transition_width)
-    else
-        return Float64(transition_width)
+        bound = filter_type == :hp ? Float64(cutoff_freq) : (sample_rate / 2.0 - cutoff_freq)
+        return min(max(0.25 * cutoff_freq, 2.0), bound)
     end
+    transition_width <= 0 && @minimal_error("transition_width must be positive: $transition_width")
+    return transition_width <= 1.0 ? Float64(cutoff_freq * transition_width) : Float64(transition_width)
 end
 
-
-"""Internal: create a `FilterInfo` for the given filter type and parameters."""
 function _create_filter(
     filter_type::Symbol,
     cutoff_freq::Real,
@@ -162,110 +102,77 @@ function _create_filter(
     transition_band_hz::Union{Nothing,Real} = nothing,
     min_taps::Int = 101,
 )
+    filter_type in (:hp, :lp) || @minimal_error("filter_type '$filter_type' must be one of: (:hp, :lp)")
+    filter_method in (:iir, :fir) || @minimal_error("filter_method '$filter_method' must be one of: (:iir, :fir)")
+    order > 0 || @minimal_error("filter order must be positive: $order")
+    sample_rate > 0 || @minimal_error("sample_rate must be positive: $sample_rate")
+    (0 < cutoff_freq < sample_rate / 2) ||
+        @minimal_error("cutoff_freq must be between 0 and Nyquist frequency ($(sample_rate/2) Hz): $cutoff_freq")
 
-    # Input validation
-    valid_filter_types = (:hp, :lp)
-    if !(filter_type in valid_filter_types)
-        @minimal_error "filter_type '$filter_type' must be one of: $valid_filter_types"
-    end
-
-    valid_filter_methods = (:iir, :fir)
-    if !(filter_method in valid_filter_methods)
-        @minimal_error "filter_method '$filter_method' must be one of: $valid_filter_methods"
-    end
-
-    if order <= 0
-        @minimal_error "filter order must be positive: $order"
-    end
-
-    if sample_rate <= 0
-        @minimal_error "sample_rate must be positive: $sample_rate"
-    end
-
-    if !(cutoff_freq > 0 && cutoff_freq < sample_rate / 2)
-        @minimal_error "cutoff_freq must be between 0 and Nyquist frequency ($(sample_rate/2) Hz): $cutoff_freq"
-    end
-
-    # Create filter prototype/object based on type
-    filter_prototype = filter_type == :hp ? Highpass(cutoff_freq) : Lowpass(cutoff_freq)
-
-    # Determine transition band width in Hz (explicit Hz override or EEGLAB pop_eegfiltnew heuristic)
+    prototype = filter_type == :hp ? Highpass(cutoff_freq) : Lowpass(cutoff_freq)
     transition_band = if !isnothing(transition_band_hz)
-        transition_band_hz <= 0 && @minimal_error("transition_band_hz must be positive: $transition_band_hz")
+        transition_band_hz > 0 || @minimal_error("transition_band_hz must be positive: $transition_band_hz")
         Float64(transition_band_hz)
     else
         _resolve_transition_band_hz(cutoff_freq, sample_rate, filter_type, transition_width)
     end
-    n_taps = nothing
 
-    # Create filter with chosen method
     if filter_method == :iir
-        filter_object = digitalfilter(filter_prototype, Butterworth(order); fs = sample_rate)
-    elseif filter_method == :fir
-        n_taps = Int(ceil(4.0 * sample_rate / transition_band))
-        n_taps = max(n_taps, max(3, min_taps))
-        iseven(n_taps) && (n_taps += 1)  # Ensure odd tap count for symmetric linear-phase Type I FIR
-        filter_object = digitalfilter(filter_prototype, FIRWindow(hamming(n_taps)); fs = sample_rate)
+        fobj = digitalfilter(prototype, Butterworth(order); fs = sample_rate)
+        return FilterInfo(filter_type, fobj, filter_method, cutoff_freq, sample_rate, order, nothing, transition_band)
+    else
+        n_taps = max(ceil(Int, 4.0 * sample_rate / transition_band), max(3, min_taps))
+        iseven(n_taps) && (n_taps += 1)
+        fobj = digitalfilter(prototype, FIRWindow(hamming(n_taps)); fs = sample_rate)
+        return FilterInfo(filter_type, fobj, filter_method, cutoff_freq, sample_rate, order, n_taps, transition_band)
     end
-
-    # Create FilterInfo struct
-    filter_info = FilterInfo(filter_type, filter_object, filter_method, cutoff_freq, sample_rate, order, n_taps, transition_band)
-
-    return filter_info
 end
 
-
-# === FILTER APPLICATION ===
-
-"""
-    _ensure_fir_transition_width(dat::EegData, transition_width::Union{Nothing,Real}, cutoff_freq::Real, filter_type::Symbol = :hp) -> Float64
-
-Ensures that the FIR filter transition width (in Hz) is wide enough so `n_taps <= (min_length - 1) ÷ 3`
-for zero-phase `filtfilt`. Always returns the resolved transition width in Hz.
-"""
 function _ensure_fir_transition_width(
     dat::EegData,
     transition_width::Union{Nothing,Real},
     cutoff_freq::Real,
     filter_type::Symbol = :hp,
 )::Float64
-    min_length = dat.data isa Vector ? minimum(nrow.(dat.data)) : n_samples(dat)
-    if min_length < 10
-        @minimal_error("Data length ($min_length) is too short for zero-phase FIR filtering (minimum 10 samples required)")
-    end
+    min_length = dat.data isa Vector ? minimum(nrow, dat.data) : n_samples(dat)
+    min_length < 10 && @minimal_error("Data length ($min_length) is too short for zero-phase FIR filtering (minimum 10 samples required)")
     max_taps_raw = (min_length - 1) ÷ 3
     max_odd_taps = max(3, iseven(max_taps_raw) ? max_taps_raw - 1 : max_taps_raw)
-    min_required_transition_band = (4.0 * dat.sample_rate / max_odd_taps) * (1.0 + 1e-12)
-
+    min_req_tb = (4.0 * dat.sample_rate / max_odd_taps) * (1.0 + 1e-12)
     actual_tb = _resolve_transition_band_hz(cutoff_freq, dat.sample_rate, filter_type, transition_width)
-
-    if actual_tb < min_required_transition_band
-        @minimal_warning "FIR transition band $(round(actual_tb, digits=3)) Hz too narrow for data length $(min_length). Widening to $(round(min_required_transition_band, digits=3)) Hz to prevent crash."
-        return min_required_transition_band
+    if actual_tb < min_req_tb
+        @minimal_warning "FIR transition band $(round(actual_tb, digits=3)) Hz too narrow for data length $(min_length). Widening to $(round(min_req_tb, digits=3)) Hz to prevent crash."
+        return min_req_tb
     end
     return actual_tb
 end
 
-"""
-    _apply_filter!(dat::DataFrame, channels::Vector{Symbol}, filter; filter_func::Symbol = :filtfilt)
+@inline _prepared_filter_object(fobj::ZeroPoleGain) = convert(SecondOrderSections, fobj)
+@inline _prepared_filter_object(fobj::Vector{Float64}) = fobj
 
-Internal helper function to apply a digital filter to specified columns in a DataFrame.
-Modifies the data in place.
+@inline function _filter_column!(df::DataFrame, col_idx::Int, fobj, use_filtfilt::Bool)
+    col = df[!, col_idx]
+    if col isa Vector{Float64}
+        col_f = col::Vector{Float64}
+        col_f .= use_filtfilt ? filtfilt(fobj, col_f) : filt(fobj, col_f)
+    else
+        col .= use_filtfilt ? filtfilt(fobj, col) : filt(fobj, col)
+    end
+    return nothing
+end
 
-# Arguments
-- `dat::DataFrame`: DataFrame containing the data to filter
-- `channels::Vector{Symbol}`: Vector of column names to filter
-- `filter`: Digital filter object to apply (can be DSP.jl filter or FilterInfo)
-- `filter_func::Symbol`: Filtering function to use (default: :filtfilt for two-pass filtering, or :filt for one-pass filtering)
-"""
 function _apply_filter!(dat::DataFrame, channels::AbstractVector{Symbol}, filter::FilterInfo; filter_func::Symbol = :filtfilt)::Nothing
-    apply_fn = filter_func == :filtfilt ? filtfilt : filt
-    Threads.@threads for channel in channels
-        col = dat[!, channel]
-        if col isa Vector{Float64}
-            col .= apply_fn(filter.filter_object, col)
-        else
-            dat[!, channel] .= apply_fn(filter.filter_object, dat[!, channel])
+    isempty(channels) && return nothing
+    fobj = _prepared_filter_object(filter.filter_object)
+    use_filtfilt = filter_func == :filtfilt
+    col_indices = Int[columnindex(dat, ch) for ch in channels]
+    if length(col_indices) > 1 && length(col_indices) * nrow(dat) >= 8_192
+        Threads.@threads :static for idx in eachindex(col_indices)
+            _filter_column!(dat, col_indices[idx], fobj, use_filtfilt)
+        end
+    else
+        for col_idx in col_indices
+            _filter_column!(dat, col_idx, fobj, use_filtfilt)
         end
     end
     return nothing
@@ -277,21 +184,25 @@ function _apply_filter!(
     filter::FilterInfo;
     filter_func::Symbol = :filtfilt,
 )::Nothing
-    apply_fn = filter_func == :filtfilt ? filtfilt : filt
-    Threads.@threads for epoch in dat
-        for channel in channels
-            col = epoch[!, channel]
-            if col isa Vector{Float64}
-                col .= apply_fn(filter.filter_object, col)
-            else
-                epoch[!, channel] .= apply_fn(filter.filter_object, epoch[!, channel])
+    (isempty(dat) || isempty(channels)) && return nothing
+    fobj = _prepared_filter_object(filter.filter_object)
+    use_filtfilt = filter_func == :filtfilt
+    col_indices = Int[columnindex(dat[1], ch) for ch in channels]
+    if length(dat) > 1 && length(dat) * length(col_indices) * nrow(dat[1]) >= 8_192
+        Threads.@threads :static for ep_idx in eachindex(dat)
+            epoch = dat[ep_idx]
+            for col_idx in col_indices
+                _filter_column!(epoch, col_idx, fobj, use_filtfilt)
             end
+        end
+    else
+        for epoch in dat, col_idx in col_indices
+            _filter_column!(epoch, col_idx, fobj, use_filtfilt)
         end
     end
     return nothing
 end
 
-"""Update the data object's `analysis_info` HP/LP filter field from a `FilterInfo`."""
 function _update_filter_info!(dat::EegData, filter_info::FilterInfo)::Nothing
     if filter_info.filter_type == :hp
         dat.analysis_info.hp_filter = filter_info.cutoff_freq
@@ -301,23 +212,53 @@ function _update_filter_info!(dat::EegData, filter_info::FilterInfo)::Nothing
     return nothing
 end
 
+function _filter_eeg!(
+    dat::EegData,
+    cutoff_freq::Real,
+    filter_type::Symbol;
+    order::Int,
+    transition_width::Union{Nothing,Real} = nothing,
+    filter_method::Symbol = :iir,
+    channel_selection = channels(),
+    filter_func::Symbol = :filtfilt,
+)
+    selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
+    if isempty(selected_channels)
+        @minimal_warning "No channels selected for $(filter_type == :lp ? "lowpass" : "highpass") filtering"
+        return dat
+    end
+
+    transition_band_hz = nothing
+    min_taps = 101
+    if filter_method == :fir && filter_func == :filtfilt
+        transition_band_hz = _ensure_fir_transition_width(dat, transition_width, cutoff_freq, filter_type)
+        min_length = dat.data isa Vector ? minimum(nrow, dat.data) : n_samples(dat)
+        min_taps = min_length >= 304 ? 101 : 3
+    end
+
+    filter_info = _create_filter(
+        filter_type,
+        cutoff_freq,
+        dat.sample_rate;
+        filter_method = filter_method,
+        order = order,
+        transition_width = transition_width,
+        transition_band_hz = transition_band_hz,
+        min_taps = min_taps,
+    )
+    _update_filter_info!(dat, filter_info)
+    _apply_filter!(dat.data, selected_channels, filter_info; filter_func = filter_func)
+    return dat
+end
+
 """
-    lowpass_filter!(dat::EegData, cutoff_freq::Real; kwargs...)
+    lowpass_filter!(dat::EegData, cutoff_freq::Real; order::Int = 3, transition_width = nothing,
+                    filter_method::Symbol = :iir, channel_selection = channels(), filter_func::Symbol = :filtfilt)
+    lowpass_filter!(dat::EegData, filter_cfg::FilterConfig; section::Symbol = :lowpass)
 
-Apply a digital lowpass filter to EEG data. Modifies the data in place.
-
-# Arguments
-- `dat::EegData`: EegData object (ContinuousData, ErpData, or EpochData)
-- `cutoff_freq::Real`: Cutoff frequency in Hz
-
-# Keyword Arguments
-- `order::Integer`: Filter order (default: 3)
-- `transition_width::Real`: Relative width of transition band (default: 0.1)
-- `filter_method::Symbol`: Filter implementation (:iir or :fir)
-- `channel_selection::Function`: Channel selection predicate (default: channels() - all channels)
-- `filter_func::Symbol`: Filtering function (:filtfilt or :filt)
+Apply a digital lowpass filter to `dat` (or a `Vector` of `EegData`) in-place.
 """
-function lowpass_filter!(
+lowpass_filter!(
     dat::EegData,
     cutoff_freq::Real;
     order::Int = 3,
@@ -325,53 +266,25 @@ function lowpass_filter!(
     filter_method::Symbol = :iir,
     channel_selection = channels(),
     filter_func::Symbol = :filtfilt,
+) = _filter_eeg!(
+    dat,
+    cutoff_freq,
+    :lp;
+    order = order,
+    transition_width = transition_width,
+    filter_method = filter_method,
+    channel_selection = channel_selection,
+    filter_func = filter_func,
 )
-    selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
-    if isempty(selected_channels)
-        @minimal_warning "No channels selected for lowpass filtering"
-        return dat
-    end
-    @debug "lowpass_filter! applying lp filter at $cutoff_freq Hz to $(length(selected_channels)) channels"
-
-    transition_band_hz = nothing
-    min_taps = 101
-    if filter_method == :fir && filter_func == :filtfilt
-        transition_band_hz = _ensure_fir_transition_width(dat, transition_width, cutoff_freq, :lp)
-        min_length = dat.data isa Vector ? minimum(nrow.(dat.data)) : n_samples(dat)
-        min_taps = min_length >= 304 ? 101 : 3
-    end
-
-    filter_info = create_lowpass_filter(
-        cutoff_freq,
-        dat.sample_rate;
-        filter_method = filter_method,
-        order = order,
-        transition_width = transition_width,
-        transition_band_hz = transition_band_hz,
-        min_taps = min_taps,
-    )
-    _update_filter_info!(dat, filter_info)
-    _apply_filter!(dat.data, selected_channels, filter_info, filter_func = filter_func)
-    return dat
-end
 
 """
-    highpass_filter!(dat::EegData, cutoff_freq::Real; kwargs...)
+    highpass_filter!(dat::EegData, cutoff_freq::Real; order::Int = 1, transition_width = nothing,
+                     filter_method::Symbol = :iir, channel_selection = channels(), filter_func::Symbol = :filtfilt)
+    highpass_filter!(dat::EegData, filter_cfg::FilterConfig; section::Symbol = :highpass)
 
-Apply a digital highpass filter to EEG data. Modifies the data in place.
-
-# Arguments
-- `dat::EegData`: EegData object (ContinuousData, ErpData, or EpochData)
-- `cutoff_freq::Real`: Cutoff frequency in Hz
-
-# Keyword Arguments
-- `order::Integer`: Filter order (default: 1)
-- `transition_width::Real`: Relative width of transition band (default: 0.25)
-- `filter_method::Symbol`: Filter implementation (:iir or :fir)
-- `channel_selection::Function`: Channel selection predicate (default: channels() - all channels)
-- `filter_func::Symbol`: Filtering function (:filtfilt or :filt)
+Apply a digital highpass filter to `dat` (or a `Vector` of `EegData`) in-place.
 """
-function highpass_filter!(
+highpass_filter!(
     dat::EegData,
     cutoff_freq::Real;
     order::Int = 1,
@@ -379,54 +292,34 @@ function highpass_filter!(
     filter_method::Symbol = :iir,
     channel_selection = channels(),
     filter_func::Symbol = :filtfilt,
+) = _filter_eeg!(
+    dat,
+    cutoff_freq,
+    :hp;
+    order = order,
+    transition_width = transition_width,
+    filter_method = filter_method,
+    channel_selection = channel_selection,
+    filter_func = filter_func,
 )
-    selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
-    if isempty(selected_channels)
-        @minimal_warning "No channels selected for highpass filtering"
-        return dat
-    end
-    @debug "highpass_filter! applying hp filter at $cutoff_freq Hz to $(length(selected_channels)) channels"
-
-    transition_band_hz = nothing
-    min_taps = 101
-    if filter_method == :fir && filter_func == :filtfilt
-        transition_band_hz = _ensure_fir_transition_width(dat, transition_width, cutoff_freq, :hp)
-        min_length = dat.data isa Vector ? minimum(nrow.(dat.data)) : n_samples(dat)
-        min_taps = min_length >= 304 ? 101 : 3
-    end
-
-    filter_info = create_highpass_filter(
-        cutoff_freq,
-        dat.sample_rate;
-        filter_method = filter_method,
-        order = order,
-        transition_width = transition_width,
-        transition_band_hz = transition_band_hz,
-        min_taps = min_taps,
-    )
-    _update_filter_info!(dat, filter_info)
-    _apply_filter!(dat.data, selected_channels, filter_info, filter_func = filter_func)
-    return dat
-end
-
-# Generate non-mutating versions
-"""
-    lowpass_filter(dat, args...; kwargs...)
-
-Non-mutating version of `lowpass_filter!`.
-"""
-function lowpass_filter(dat::EegData, args...; kwargs...)
-    return lowpass_filter!(copy(dat), args...; kwargs...)
-end
 
 """
-    highpass_filter(dat, args...; kwargs...)
+    lowpass_filter(dat, cutoff_freq::Real; kwargs...)
+    lowpass_filter(file_pattern::String, cutoff_freq::Real; input_dir = pwd(),
+                   participant_selection = participants(), condition_selection = conditions(), output_dir = nothing)
 
-Non-mutating version of `highpass_filter!`.
+Non-mutating or batch JLD2 version of [`lowpass_filter!`](@ref).
 """
-function highpass_filter(dat::EegData, args...; kwargs...)
-    return highpass_filter!(copy(dat), args...; kwargs...)
-end
+lowpass_filter(dat::EegData, args...; kwargs...) = lowpass_filter!(copy(dat), args...; kwargs...)
+
+"""
+    highpass_filter(dat, cutoff_freq::Real; kwargs...)
+    highpass_filter(file_pattern::String, cutoff_freq::Real; input_dir = pwd(),
+                    participant_selection = participants(), condition_selection = conditions(), output_dir = nothing)
+
+Non-mutating or batch JLD2 version of [`highpass_filter!`](@ref).
+"""
+highpass_filter(dat::EegData, args...; kwargs...) = highpass_filter!(copy(dat), args...; kwargs...)
 
 function lowpass_filter!(dat::AbstractVector{<:EegData}, cutoff_freq::Real; kwargs...)
     for d in dat
@@ -442,20 +335,12 @@ function highpass_filter!(dat::AbstractVector{<:EegData}, cutoff_freq::Real; kwa
     return dat
 end
 
-function lowpass_filter(dat::AbstractVector{<:EegData}, cutoff_freq::Real; kwargs...)
-    return [lowpass_filter(d, cutoff_freq; kwargs...) for d in dat]
-end
+lowpass_filter(dat::AbstractVector{<:EegData}, cutoff_freq::Real; kwargs...) = [lowpass_filter(d, cutoff_freq; kwargs...) for d in dat]
+highpass_filter(dat::AbstractVector{<:EegData}, cutoff_freq::Real; kwargs...) = [highpass_filter(d, cutoff_freq; kwargs...) for d in dat]
 
-function highpass_filter(dat::AbstractVector{<:EegData}, cutoff_freq::Real; kwargs...)
-    return [highpass_filter(d, cutoff_freq; kwargs...) for d in dat]
-end
-
-"""Apply lowpass filter using settings from a `FilterConfig` section."""
 function lowpass_filter!(dat::EegData, filter_cfg::FilterConfig; section::Symbol = :lowpass)
     sec = getfield(filter_cfg, section)
-    if sec.apply
-        lowpass_filter!(dat, sec.freq; order = sec.order, filter_method = sec.method, filter_func = sec.func)
-    end
+    sec.apply && lowpass_filter!(dat, sec.freq; order = sec.order, filter_method = sec.method, filter_func = sec.func)
     return dat
 end
 
@@ -466,12 +351,9 @@ function lowpass_filter!(dat::AbstractVector{<:EegData}, filter_cfg::FilterConfi
     return dat
 end
 
-"""Apply highpass filter using settings from a `FilterConfig` section."""
 function highpass_filter!(dat::EegData, filter_cfg::FilterConfig; section::Symbol = :highpass)
     sec = getfield(filter_cfg, section)
-    if sec.apply
-        highpass_filter!(dat, sec.freq; order = sec.order, filter_method = sec.method, filter_func = sec.func)
-    end
+    sec.apply && highpass_filter!(dat, sec.freq; order = sec.order, filter_method = sec.method, filter_func = sec.func)
     return dat
 end
 
@@ -491,101 +373,115 @@ lowpass_filter(dat::AbstractVector{<:EegData}, filter_cfg::FilterConfig; section
 highpass_filter(dat::AbstractVector{<:EegData}, filter_cfg::FilterConfig; section::Symbol = :highpass) =
     [highpass_filter(d, filter_cfg; section = section) for d in dat]
 
+function _fir_freqresp(h::Vector{Float64}, w::AbstractVector{Float64})::Vector{ComplexF64}
+    n_pts = length(w)
+    m = length(h)
+    resp = Vector{ComplexF64}(undef, n_pts)
+    @inbounds for idx = 1:n_pts
+        u = cis(-w[idx])
+        acc = ComplexF64(h[m])
+        for k = (m-1):-1:1
+            acc = muladd(acc, u, h[k])
+        end
+        resp[idx] = acc
+    end
+    return resp
+end
 
-# === FILTER ANALYSIS AND CHARACTERIZATION ===
+function _find_db_crossings(mag_db::Vector{Float64}, target_db::Float64, threshold::Float64 = 0.5)::Vector{Int}
+    n = length(mag_db)
+    crossings = Int[]
+    best_idx = 1
+    best_diff = abs(mag_db[1] - target_db)
+    @inbounds for i = 2:(n-1)
+        d = abs(mag_db[i] - target_db)
+        if d < best_diff
+            best_diff = d
+            best_idx = i
+        end
+        if d < threshold && d <= abs(mag_db[i-1] - target_db) && d <= abs(mag_db[i+1] - target_db)
+            push!(crossings, i)
+        end
+    end
+    if n >= 2
+        d_end = abs(mag_db[n] - target_db)
+        d_end < best_diff && (best_idx = n)
+    end
+    isempty(crossings) && push!(crossings, best_idx)
+    return crossings
+end
 
 """
     get_filter_characteristics(filter_info::FilterInfo; npoints::Int = 1000, filter_func = :filtfilt)
 
-Calculate and return key characteristics of a digital filter.
-By default (`filter_func = :filtfilt`), magnitude attenuation in dB is doubled to reflect
-zero-phase forward-backward filtering. Pass `filter_func = :filt` for single-pass magnitude.
+Compute key frequency-response characteristics (`cutoff_freq_3db`, `cutoff_freq_6db`, `passband_ripple`,
+`stopband_atten`, `phase_delay`, `group_delay`, `transition_band`, `filter_type`) for `filter_info`.
+When `filter_func = :filtfilt` (default), dB attenuation reflects two-pass zero-phase filtering.
 """
 function get_filter_characteristics(filter_info::FilterInfo; npoints::Int = 1000, filter_func::Union{Symbol,Function} = :filtfilt)
-    # Calculate frequency response
-    freqs = exp10.(range(log10(0.01), log10(filter_info.sample_rate / 2), length = npoints))  # log spacing
-    w = 2π * freqs / filter_info.sample_rate
+    freqs = exp10.(range(log10(0.01), log10(filter_info.sample_rate / 2), length = npoints))
+    w = (2π / filter_info.sample_rate) .* freqs
 
-    # Get frequency response based on filter type
-    if filter_info.filter_method == :fir  # FIR filter coefficients
-        n = 0:(length(filter_info.filter_object)-1)
-        resp = [sum(filter_info.filter_object .* exp.(-im * w_k * n)) for w_k in w]
-    else  # Other filter types
-        resp = freqresp(filter_info.filter_object, w)
+    resp = if filter_info.filter_method == :fir
+        _fir_freqresp(filter_info.filter_object::Vector{Float64}, w)
+    else
+        freqresp(filter_info.filter_object, w)
     end
 
     is_zero_phase = (filter_func == :filtfilt || filter_func === filtfilt)
     db_scale = is_zero_phase ? 40.0 : 20.0
-    mag_db = db_scale .* log10.(abs.(resp))
-    phase = angle.(resp)
+    mag_db = Vector{Float64}(undef, npoints)
+    phase = Vector{Float64}(undef, npoints)
+    @inbounds for i = 1:npoints
+        mag_db[i] = db_scale * log10(abs(resp[i]))
+        phase[i] = angle(resp[i])
+    end
 
-    # Find -3dB and -6dB points using closest points method
-    diffs_3db = abs.(mag_db .- (-3))
-    diffs_6db = abs.(mag_db .- (-6))
+    cutoff_freq_3db = freqs[_find_db_crossings(mag_db, -3.0)]
+    cutoff_freq_6db = freqs[_find_db_crossings(mag_db, -6.0)]
+    fc = cutoff_freq_3db[1]
 
-    # Find local minima in the differences to detect crossings
-    function find_crossings(diffs, threshold = 0.5)
-        crossings = Int[]
-        for i = 2:(length(diffs)-1)
-            if diffs[i] < threshold && diffs[i] <= diffs[i-1] && diffs[i] <= diffs[i+1]
-                push!(crossings, i)
+    if filter_info.filter_type == :lp
+        passband_mask = freqs .<= fc
+        stopband_mask = freqs .>= (fc + filter_info.transition_band)
+    else
+        passband_mask = freqs .>= fc
+        stopband_mask = freqs .<= (fc - filter_info.transition_band)
+    end
+
+    passband_ripple = any(passband_mask) ? maximum(abs, @view mag_db[passband_mask]) : NaN
+    stopband_atten = if any(stopband_mask)
+        inf_floor = is_zero_phase ? -200.0 : -100.0
+        s = 0.0
+        cnt = 0
+        @inbounds for i = 1:npoints
+            if stopband_mask[i]
+                v = mag_db[i]
+                s += (v == -Inf ? inf_floor : v)
+                cnt += 1
             end
         end
-        return crossings
-    end
-
-    # Find crossings with more generous threshold
-    crossings_3db = find_crossings(diffs_3db, 0.5)  # Within 0.5 dB of -3dB point
-    crossings_6db = find_crossings(diffs_6db, 0.5)  # Within 0.5 dB of -6dB point
-
-    # If no crossings found, use points closest to target
-    if isempty(crossings_3db)
-        crossings_3db = [argmin(diffs_3db)]
-    end
-    if isempty(crossings_6db)
-        crossings_6db = [argmin(diffs_6db)]
-    end
-
-    # Convert to frequencies
-    cutoff_freq_3db = freqs[crossings_3db]
-    cutoff_freq_6db = freqs[crossings_6db]
-
-    # Use -3dB points for filter type detection and other calculations
-    cutoff_freq = cutoff_freq_3db
-
-    # Determine filter type and masks
-    if filter_info.filter_type == :lp
-        passband_mask = freqs .<= cutoff_freq[1]
-        stopband_mask = freqs .>= (cutoff_freq[1] + filter_info.transition_band)
-    else  # highpass
-        passband_mask = freqs .>= cutoff_freq[1]
-        stopband_mask = freqs .<= (cutoff_freq[1] - filter_info.transition_band)
-    end
-
-    # Calculate passband ripple and stopband attenuation (guarding empty masks)
-    passband_ripple = any(passband_mask) ? maximum(abs.(mag_db[passband_mask])) : NaN
-    stopband_atten = if any(stopband_mask)
-        stopband_db = replace(mag_db[stopband_mask], -Inf => (is_zero_phase ? -200.0 : -100.0))
-        mean(stopband_db)
+        s / cnt
     else
         NaN
     end
 
-    # Calculate single-pass delays
-    group_delay = -diff(DSP.unwrap(phase)) ./ diff(w)
-    phase_delay = -phase ./ w
-    if length(phase_delay) >= 2
-        phase_delay[1] = phase_delay[2] # Handle division by zero near DC
+    unwrapped = DSP.unwrap(phase)
+    group_delay = Vector{Float64}(undef, max(0, npoints - 1))
+    @inbounds for i = 1:(npoints-1)
+        group_delay[i] = -(unwrapped[i+1] - unwrapped[i]) / (w[i+1] - w[i])
     end
-    gd_mask = passband_mask[1:(end-1)]
+    phase_delay = -phase ./ w
+    length(phase_delay) >= 2 && (phase_delay[1] = phase_delay[2])
+    gd_mask = @view passband_mask[1:(end-1)]
 
     return (
         cutoff_freq_3db = cutoff_freq_3db,
         cutoff_freq_6db = cutoff_freq_6db,
         passband_ripple = passband_ripple,
         stopband_atten = stopband_atten,
-        phase_delay = any(passband_mask) ? mean(phase_delay[passband_mask]) : NaN,
-        group_delay = any(gd_mask) ? mean(group_delay[gd_mask]) : NaN,
+        phase_delay = any(passband_mask) ? mean(@view phase_delay[passband_mask]) : NaN,
+        group_delay = any(gd_mask) ? mean(@view group_delay[gd_mask]) : NaN,
         transition_band = filter_info.transition_band,
         filter_type = filter_info.filter_type,
     )
@@ -594,119 +490,69 @@ end
 """
     print_filter_characteristics(filter_info::FilterInfo; npoints::Int = 1000, filter_func = :filtfilt)
 
-Print a formatted summary of filter characteristics.
+Log a formatted summary of filter cutoff, transition band, stopband attenuation, and delay characteristics.
 """
 function print_filter_characteristics(filter_info::FilterInfo; npoints::Int = 1000, filter_func::Union{Symbol,Function} = :filtfilt)
-
     chars = get_filter_characteristics(filter_info; npoints = npoints, filter_func = filter_func)
-
     @info "--------------------------------------------------------------------------------"
     @info "Filter Characteristics: $(uppercase(string(chars.filter_type))) $(filter_info.cutoff_freq) Hz"
     @info "Cutoff: -3 dB = $(round.(chars.cutoff_freq_3db, digits=2)) Hz, -6 dB = $(round.(chars.cutoff_freq_6db, digits=2)) Hz"
     @info "Transition band: $(round(chars.transition_band, digits=1)) Hz"
     @info "Stopband attenuation: $(round(chars.stopband_atten, digits=1)) dB"
     @info "Single-pass characteristics: Group delay = $(round(chars.group_delay * 1000/filter_info.sample_rate, digits=1)) ms, Phase delay = $(round(chars.phase_delay * 1000/filter_info.sample_rate, digits=1)) ms "
-
+    return nothing
 end
 
-
-# === BATCH FILTERING API ===
-
-"""Generate default output directory name for filter operation."""
-function _default_filter_output_dir(input_dir::String, pattern::String, filter_type::Symbol, freq::Real)
+_default_filter_output_dir(input_dir::String, pattern::String, filter_type::Symbol, freq::Real) =
     joinpath(input_dir, "filtered_$(clean_pattern(pattern))_$(filter_type)_$(freq)hz")
-end
 
-"""Process a single file through filtering pipeline."""
 function _process_filter_file(filepath::String, output_path::String, filter_type::Symbol, cutoff_freq::Real, condition_selection)
     filename = basename(filepath)
-
-    # Read data
     data = read_data(filepath)
-    if isnothing(data)
-        return BatchResult(false, filename, "No data variables found")
-    end
-
-    # Validate that data is valid EEG data (Vector of ErpData or EpochData)
-    if !(data isa AbstractVector{<:Union{ErpData,EpochData}})
+    isnothing(data) && return BatchResult(false, filename, "No data variables found")
+    data isa AbstractVector{<:Union{ErpData,EpochData}} ||
         return BatchResult(false, filename, "Invalid data type: expected Vector{ErpData} or Vector{EpochData}")
-    end
 
-    # Select conditions
     data = _condition_select(data, condition_selection)
-
-    # Apply filter based on type
-    if filter_type == :lp
-        lowpass_filter!.(data, cutoff_freq)
-    else
-        highpass_filter!.(data, cutoff_freq)
-    end
-
-    # Save
+    filter_type == :lp ? lowpass_filter!(data, cutoff_freq) : highpass_filter!(data, cutoff_freq)
     jldsave(output_path; data = data, format_version = EEGFUN_FORMAT_VERSION)
-
     return BatchResult(true, filename, "Filtered successfully")
 end
 
-"""
-    lowpass_filter(file_pattern::String, cutoff_freq::Real; kwargs...)
-
-Batch lowpass filter EEG/ERP data from JLD2 files.
-
-# Arguments
-- `file_pattern::String`: Pattern to match files ("epochs", "erps", etc.)
-- `cutoff_freq::Real`: Cutoff frequency in Hz
-
-# Keyword Arguments
-- `input_dir::String`: Input directory (default: pwd())
-- `participant_selection::Function`: Participant selection (default: participants())
-- `condition_selection::Function`: Condition selection (default: conditions())
-- `output_dir::Union{String, Nothing}`: Output directory
-"""
-function lowpass_filter(
+lowpass_filter(
     file_pattern::String,
     cutoff_freq::Real;
     input_dir::String = pwd(),
     participant_selection = participants(),
     condition_selection = conditions(),
     output_dir::Union{String,Nothing} = nothing,
+) = _run_filter_batch(
+    file_pattern,
+    cutoff_freq,
+    :lp;
+    input_dir = input_dir,
+    participant_selection = participant_selection,
+    condition_selection = condition_selection,
+    output_dir = output_dir,
 )
-    return _run_filter_batch(
-        file_pattern,
-        cutoff_freq,
-        :lp;
-        input_dir = input_dir,
-        participant_selection = participant_selection,
-        condition_selection = condition_selection,
-        output_dir = output_dir,
-    )
-end
 
-"""
-    highpass_filter(file_pattern::String, cutoff_freq::Real; kwargs...)
-
-Batch highpass filter EEG/ERP data from JLD2 files.
-"""
-function highpass_filter(
+highpass_filter(
     file_pattern::String,
     cutoff_freq::Real;
     input_dir::String = pwd(),
     participant_selection = participants(),
     condition_selection = conditions(),
     output_dir::Union{String,Nothing} = nothing,
+) = _run_filter_batch(
+    file_pattern,
+    cutoff_freq,
+    :hp;
+    input_dir = input_dir,
+    participant_selection = participant_selection,
+    condition_selection = condition_selection,
+    output_dir = output_dir,
 )
-    return _run_filter_batch(
-        file_pattern,
-        cutoff_freq,
-        :hp;
-        input_dir = input_dir,
-        participant_selection = participant_selection,
-        condition_selection = condition_selection,
-        output_dir = output_dir,
-    )
-end
 
-"""Shared batch runner for lowpass/highpass filtering across JLD2 files."""
 function _run_filter_batch(
     file_pattern::String,
     cutoff_freq::Real,
@@ -723,18 +569,10 @@ function _run_filter_batch(
         output_dir,
     ) do ctx
         @info "  cutoff: $cutoff_freq Hz"
-
-        if cutoff_freq <= 0
-            @minimal_error("Cutoff frequency must be positive, got: $cutoff_freq")
-        end
-
-        # Setup directories
+        cutoff_freq <= 0 && @minimal_error("Cutoff frequency must be positive, got: $cutoff_freq")
         output_dir = _prepare_output_dir!(ctx, _default_filter_output_dir(input_dir, file_pattern, filter_type, cutoff_freq))
-
-        # Execute
         process_fn =
             (input_path, output_path) -> _process_filter_file(input_path, output_path, filter_type, cutoff_freq, condition_selection)
-
         return batch_process(process_fn, file_pattern, input_dir, output_dir, participant_selection, "Filtering")
     end
 end

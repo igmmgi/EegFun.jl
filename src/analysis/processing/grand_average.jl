@@ -1,72 +1,67 @@
-"""
-Grand averaging of ERP and time-frequency data across participants.
-"""
+_default_grand_average_output_dir(input_dir::String, pattern::String) = joinpath(input_dir, "grand_average_$(clean_pattern(pattern))")
 
-# === GRANDAVERAGE-SPECIFIC HELPERS ===
-
-"""Generate default output directory name for grand averaging."""
-function _default_grand_average_output_dir(input_dir::String, pattern::String)
-    joinpath(input_dir, "grand_average_$(clean_pattern(pattern))")
-end
-
-"""
-Create a grand average by averaging ERP data across participants for a specific condition.
-"""
 function _create_grand_average(erps::AbstractVector{<:ErpData}, cond_num::Int)
-    if isempty(erps)
-        @minimal_error("Cannot create grand average from empty ERP list")
-    end
-
-    # Validate that all ERPs have the same structure
+    isempty(erps) && @minimal_error("Cannot create grand average from empty ERP list")
     _have_same_structure(erps) || @minimal_error("ERPs have inconsistent structure")
 
     first_erp = erps[1]
-
-    # Get metadata columns and find common EEG channels across all ERPs
-    metadata_cols = meta_labels(first_erp)
-
-    # Find intersection of channels across all ERPs (only average channels that exist in all)
-    all_channel_sets = [setdiff(propertynames(erp.data), metadata_cols) for erp in erps]
-    eeg_channels = collect(intersect(all_channel_sets...))
-
-    # Create a copy of the first ERP's data as the base
-    grand_avg_data = copy(first_erp.data)
-
-    n_points = nrow(grand_avg_data)
-    n_erps = length(erps)
-
-    # Pre-allocate summation buffer
-    avg_buf = Vector{Float64}(undef, n_points)
-
-    # Average EEG channels across participants
-    for ch in eeg_channels
-        fill!(avg_buf, 0.0)
-
-        # Accumulate without creating matrix or intermediate arrays
-        for erp in erps
-            col_data = erp.data[!, ch]::Vector{Float64}
-            @inbounds @simd for i = 1:n_points
-                avg_buf[i] += col_data[i]
-            end
-        end
-
-        # Divide by N
-        @inbounds @simd for i = 1:n_points
-            avg_buf[i] /= n_erps
-        end
-
-        grand_avg_data[!, ch] = copy(avg_buf)
+    meta_set = Set{Symbol}(meta_labels(first_erp))
+    common_chs = Set{Symbol}(c for c in propertynames(first_erp.data) if c ∉ meta_set)
+    for m = 2:length(erps)
+        intersect!(common_chs, propertynames(erps[m].data))
     end
 
-    # Calculate total number of epochs across all participants
-    total_epochs = sum(erp.n_epochs for erp in erps)
-    grand_avg_cond_name = "grand_avg_$(first_erp.condition_name)"
+    df1 = first_erp.data
+    col_names = propertynames(df1)
+    n_points = nrow(df1)
+    n_erps = length(erps)
+    inv_n = 1.0 / n_erps
+    out_cols = Vector{Any}(undef, length(col_names))
 
-    # Use the layout and analysis info from the first ERP
+    for (j, col) in enumerate(col_names)
+        if col in common_chs
+            out = Vector{Float64}(undef, n_points)
+            c1 = df1[!, j]
+            if c1 isa Vector{Float64}
+                v1 = c1::Vector{Float64}
+                @inbounds @simd for i = 1:n_points
+                    out[i] = v1[i]
+                end
+            else
+                @inbounds @simd for i = 1:n_points
+                    out[i] = Float64(c1[i])
+                end
+            end
+            for m = 2:n_erps
+                cm = erps[m].data[!, col]
+                if cm isa Vector{Float64}
+                    vm = cm::Vector{Float64}
+                    @inbounds @simd for i = 1:n_points
+                        out[i] += vm[i]
+                    end
+                else
+                    @inbounds @simd for i = 1:n_points
+                        out[i] += Float64(cm[i])
+                    end
+                end
+            end
+            if n_erps > 1
+                @inbounds @simd for i = 1:n_points
+                    out[i] *= inv_n
+                end
+            end
+            out_cols[j] = out
+        else
+            out_cols[j] = copy(df1[!, j])
+        end
+    end
+
+    grand_avg_data = DataFrame(out_cols, col_names; copycols = false)
+    total_epochs = sum(erp.n_epochs for erp in erps)
     return ErpData(
         "grand_avg",
         cond_num,
-        grand_avg_cond_name,
+        "grand_avg_$(first_erp.condition_name)",
         grand_avg_data,
         copy(first_erp.layout),
         first_erp.sample_rate,
@@ -75,74 +70,46 @@ function _create_grand_average(erps::AbstractVector{<:ErpData}, cond_num::Int)
     )
 end
 
-"""
-Create a grand average by averaging TimeFreqData across participants for a specific condition.
-"""
 function _create_grand_average(tfs::AbstractVector{<:TimeFreqData}, cond_num::Int)
-    if isempty(tfs)
-        @minimal_error("Cannot create grand average from empty TF list")
-    end
-
-    # Validate consistent structure
+    isempty(tfs) && @minimal_error("Cannot create grand average from empty TF list")
     _have_same_structure(tfs) || @minimal_error("TF data for condition $cond_num have inconsistent structure")
 
-    # Get shared metadata
     ref_tf = tfs[1]
     electrodes = channel_labels(ref_tf)
     frequencies = Float64.(sort(unique(ref_tf.data_power.freq)))
     time_points = Float64.(sort(unique(ref_tf.data_power.time)))
 
-    # Extract 4D array and create grand average
     data_4d = _extract_tf_array(tfs, electrodes, frequencies, time_points)
     return _create_tf_grand_average(ref_tf, data_4d, electrodes, frequencies, time_points, cond_num)
 end
 
 _log_creating_grand_average(::Type{<:ErpData}, cond_num::Int, n::Int) =
     @info "Creating grand average for condition $cond_num (n=$n participants)"
-
 _log_creating_grand_average(::Type{<:TimeFreqData}, cond_num::Int, n::Int) =
     @info "Creating TF grand average for condition $cond_num (n=$n participants)"
-
 _log_created_grand_average(ga::ErpData) = @info "  ✓ Created grand average with $(nrow(ga.data)) time points"
-
 function _log_created_grand_average(ga::TimeFreqData)
     n_freqs = length(unique(ga.data_power.freq))
     n_times = length(unique(ga.data_power.time))
     @info "  ✓ Created TF grand average: $(n_freqs) freqs × $(n_times) times"
 end
 
-"""
-Create grand averages for all conditions in the grouped data.
-Returns Vector{T}.
-"""
 function _create_all_grand_averages(data_by_condition::AbstractDict{<:Integer,<:AbstractVector{T}}) where {T<:Union{ErpData,TimeFreqData}}
     grand_averages = T[]
-
-    # Sort conditions to ensure consistent ordering
     for cond_num in sort(collect(keys(data_by_condition)))
         condition_data = data_by_condition[cond_num]
         _log_creating_grand_average(T, cond_num, length(condition_data))
-
         if length(condition_data) < 2
             @minimal_warning "Only $(length(condition_data)) participant(s) for condition $cond_num. Skipping."
             continue
         end
-
-        # Create grand average
         grand_avg = _create_grand_average(condition_data, cond_num)
         push!(grand_averages, grand_avg)
-
         _log_created_grand_average(grand_avg)
     end
-
     return grand_averages
 end
 
-"""
-Resolve `condition_selection` against `items`, matching integer `conditions(...)` / `conditions_not(...)`
-selectors against each item's `.condition` field when unique positive condition numbers are present,
-with positional fallback otherwise.
-"""
 function _select_conditions_by_field(items::AbstractVector, condition_selection)
     isempty(items) && return Int[]
     (isnothing(condition_selection) || condition_selection === Colon()) && return collect(1:length(items))
@@ -150,8 +117,7 @@ function _select_conditions_by_field(items::AbstractVector, condition_selection)
     cond_func = _to_condition_func(condition_selection)
     cond_func === Colon() && return collect(1:length(items))
 
-    has_cond_field = all(x -> hasfield(typeof(x), :condition), items)
-    if has_cond_field
+    if all(x -> hasfield(typeof(x), :condition), items)
         cond_nums = Int[x.condition for x in items]
         if allunique(cond_nums) && all(>(0), cond_nums)
             if hasfield(typeof(cond_func), :condition_indices)
@@ -164,63 +130,37 @@ function _select_conditions_by_field(items::AbstractVector, condition_selection)
         end
     end
 
-    if items isa AbstractVector{<:EegFunData}
-        return get_selected_conditions(items, cond_func)
-    end
+    items isa AbstractVector{<:EegFunData} && return get_selected_conditions(items, cond_func)
     res = cond_func(1:length(items))
     return res isa AbstractVector{Bool} ? findall(res) : collect(Int, res)
 end
 
 """
-    grand_average(erps::Vector{ErpData}; condition_selection = conditions()) -> Vector{ErpData}
-    grand_average(tfs::Vector{TimeFreqData}; condition_selection = conditions()) -> Vector{TimeFreqData}
-    grand_average(rsa_data_list::Vector{RsaData}; compute_noise_ceiling::Bool = true) -> RsaData
-    grand_average(decoded_list::Vector{DecodedData}) -> DecodedData
-    grand_average(file_pattern::String; input_dir::String = pwd(),
-        participant_selection::Function = participants(), condition_selection::Function = conditions(),
-        output_dir = nothing)
+    grand_average(data::AbstractVector{<:Union{ErpData, TimeFreqData}}; condition_selection = conditions()) -> Vector
+    grand_average(rsa_data_list::AbstractVector{RsaData}; compute_noise_ceiling::Bool = true) -> RsaData
+    grand_average(decoded_list::AbstractVector{DecodedData}) -> DecodedData
+    grand_average(file_pattern::String; input_dir = pwd(), participant_selection = participants(),
+                  condition_selection = conditions(), output_dir = nothing)
 
-Create grand averages by averaging across participants.
-
-For `ErpData` / `TimeFreqData`: groups by condition and averages across participants.
-For `RsaData`: averages RDMs at each time point with optional noise ceiling.
-For `DecodedData`: averages classification accuracy across participants.
-The `file_pattern` method batch-processes JLD2 data files.
-
-# Examples
-```julia
-grand_avgs = grand_average([erp1, erp2, erp3])
-grand_avgs = grand_average(erps, condition_selection = conditions([1, 3]))
-grand_avgs = grand_average(tfs, condition_selection = conditions([1, 3]))
-grand_avg_rsa = grand_average([rsa_p1, rsa_p2, rsa_p3])
-grand_avg_decoding = grand_average([decoded_p1, decoded_p2])
-grand_average("erps_unrejected")
-```
+Average ERP, time-frequency, RSA, or decoding results across participants (per condition where
+applicable), or batch-process matching JLD2 files into `output_dir`.
 """
 function grand_average(data::AbstractVector{T}; condition_selection = conditions()) where {T<:Union{ErpData,TimeFreqData}}
     isempty(data) && @minimal_error("Cannot create grand average from empty $(T <: ErpData ? "ERP" : "TF") list")
 
-    # Group by condition
     data_by_condition = group_by_condition(data)
-
-    # Apply condition selection against representative condition objects (matching .condition numbers and names)
     all_cond_nums = collect(keys(data_by_condition))
     rep_items = T[first(data_by_condition[num]) for num in all_cond_nums]
     selected_indices = _select_conditions_by_field(rep_items, condition_selection)
     selected_cond_nums = all_cond_nums[selected_indices]
 
     filtered_groups = OrderedDict(num => data_by_condition[num] for num in selected_cond_nums)
-
     if isempty(filtered_groups)
         @minimal_warning "No conditions selected or found for grand averaging"
         return T[]
     end
-
-    # Create grand averages
     return _create_all_grand_averages(filtered_groups)
 end
-
-# === MAIN BATCH API FUNCTION ===
 
 function grand_average(
     file_pattern::String;
@@ -231,43 +171,30 @@ function grand_average(
 )
     _with_batch_logging("grand averaging", "grand_average.log", input_dir, output_dir) do ctx
         @log_call "grand_average"
-
-        # Setup directories
         output_dir = _prepare_output_dir!(ctx, _default_grand_average_output_dir(input_dir, file_pattern))
 
-        # Find files
         files = _find_batch_files(file_pattern, input_dir, participant_selection)
-
         if isempty(files)
             @minimal_warning "No JLD2 files found matching pattern '$file_pattern' in $input_dir"
             return nothing
         end
-
         @info "Found $(length(files)) JLD2 files matching pattern '$file_pattern'"
 
-        # Load all data — narrow to concrete type for dispatch
         all_data = _read_all_data_core(EegData, files, input_dir)
-
         if isempty(all_data)
             @minimal_warning "No valid data found in any files"
             return nothing
         end
 
-        # Narrow abstract Vector{EegData} to concrete type for dispatch
         T = typeof(all_data[1])
         typed_data = T[x for x in all_data]
-
-        # Dispatch to the appropriate Vector method
         grand_averages = grand_average(typed_data; condition_selection = condition_selection)
-
         if isempty(grand_averages)
             @minimal_warning "No grand averages created"
             return nothing
         end
 
-        # Save
-        output_file = "grand_average_$(clean_pattern(file_pattern)).jld2"
-        output_path = joinpath(output_dir, output_file)
+        output_path = joinpath(output_dir, "grand_average_$(clean_pattern(file_pattern)).jld2")
         jldsave(output_path; data = grand_averages, format_version = EEGFUN_FORMAT_VERSION)
 
         @info "Grand averaging complete! Created $(length(grand_averages)) grand averages"
