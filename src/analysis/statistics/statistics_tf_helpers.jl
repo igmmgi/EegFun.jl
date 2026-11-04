@@ -276,7 +276,4 @@ function _compute_t_matrix_tf(prepared::TFStatisticalData; tail::Symbol = :both,
     )
 end
 
-_compute_p_matrix_tf!(p_matrix::Array{Float64,3}, t_matrix::Array{Float64,3}, df::Float64, tail::Symbol) =
-    _compute_p_matrix(t_matrix, df, tail, p_matrix)
-
 const _compute_critical_t_values_tf = _compute_critical_t_values

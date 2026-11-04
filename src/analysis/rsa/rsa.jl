@@ -78,14 +78,6 @@ function _zscore_unit_norm!(dest::AbstractVector{Float64}, src::AbstractVector{F
     return true
 end
 
-function _prepare_rsa_data(epochs::AbstractVector{<:EpochData})
-    channels = channel_labels(epochs)
-    times = time_vector(epochs)
-    rows = isempty(epochs[1].data) ? (1:0) : (1:nrow(epochs[1].data[1]))
-    data_arrays, n_trials_per_condition = _extract_epoch_arrays(epochs, channels, rows)
-    return data_arrays, times, n_trials_per_condition
-end
-
 # Pre-allocated buffers for within-condition demeaned Ledoit-Wolf shrinkage covariance
 struct _PooledCovWorkspace
     residuals::Matrix{Float64}
@@ -205,17 +197,6 @@ function _compute_pooled_covariance!(
     end
 
     return out_cov
-end
-
-function _invert_spd_covariance!(out_inv::Matrix{Float64}, cov_mat::Matrix{Float64})
-    copyto!(out_inv, cov_mat)
-    chol = cholesky!(Symmetric(out_inv); check = false)
-    if issuccess(chol)
-        LinearAlgebra.inv!(chol)
-    else
-        copyto!(out_inv, pinv(cov_mat))
-    end
-    return out_inv
 end
 
 function _compute_inv_pooled_covariance!(
@@ -661,37 +642,6 @@ function _mantel_pvalue(
         extreme_count += is_ext(_eval_mantel_dot(u_neural, U_model, perm_buf))
     end
     return (extreme_count + 1) / (n_permutations + 1)
-end
-
-function _run_model_permutations(
-    neural_vec::AbstractVector{Float64},
-    model_vec::AbstractVector{Float64},
-    observed_corr::Float64,
-    correlation_type::Symbol,
-    n_permutations::Int;
-    tail::Symbol = :right,
-    exact_perms::Union{Nothing,Vector{Vector{Int}}} = nothing,
-    rng::AbstractRNG = Random.default_rng(),
-)
-    isnan(observed_corr) && return 1.0
-    L = length(neural_vec)
-    disc = 1 + 8 * L
-    r = isqrt(disc)
-    N = (r * r == disc && iseven(1 + r)) ? (1 + r) ÷ 2 : 0
-    N < 3 && return 1.0
-
-    rank_buf = Vector{Float64}(undef, L)
-    rank_perm = Vector{Int}(undef, L)
-    u_neural = Vector{Float64}(undef, L)
-    u_buf = Vector{Float64}(undef, L)
-    U_model = zeros(Float64, N, N)
-
-    n_src = correlation_type == :spearman ? _tiedrank!(rank_buf, rank_perm, neural_vec) : neural_vec
-    _zscore_unit_norm!(u_neural, n_src) || return 1.0
-    _fill_mantel_unit_matrix!(U_model, u_buf, rank_buf, rank_perm, model_vec, correlation_type) || return 1.0
-
-    perms = (!isnothing(exact_perms) || N <= 4) ? (isnothing(exact_perms) ? _all_permutations(N) : exact_perms) : nothing
-    return _mantel_pvalue(u_neural, U_model, observed_corr, n_permutations, tail, perms, Vector{Int}(undef, N), rng)
 end
 
 function _compute_model_correlations(

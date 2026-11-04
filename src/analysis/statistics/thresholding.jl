@@ -272,7 +272,6 @@ end
 
 const _threshold_t_matrix_parametric_tf! = _threshold_t_matrix_parametric!
 const _threshold_t_matrix_parametric_tf = _threshold_t_matrix_parametric
-const _collect_valid_t_values_tf = _collect_valid_t_values
 const _compute_nonparametric_threshold_common_tf = _compute_nonparametric_threshold_common
 const _compute_nonparametric_threshold_individual_tf = _compute_nonparametric_threshold_individual
 const _threshold_t_matrix_nonparametric_tf! = _threshold_t_matrix_nonparametric!

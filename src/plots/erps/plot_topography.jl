@@ -2,16 +2,6 @@
 
 const _UNIT_CIRCLE_200 = Tuple{Float32,Float32}[(Float32(cos(a)), Float32(sin(a))) for a in range(0, 2π, length = 200)]
 
-function _format_time_range(t_min::Real, t_max::Real, time_unit::Symbol)
-    if t_min == t_max
-        return time_unit == :ms ? @sprintf("%.0f ms", t_min * 1000) : @sprintf("%.3f s", t_min)
-    elseif time_unit == :ms
-        return @sprintf("%.0f to %.0f ms", t_min * 1000, t_max * 1000)
-    else
-        return @sprintf("%.3f to %.3f s", t_min, t_max)
-    end
-end
-
 function _symmetric_colorrange(A::AbstractArray)
     max_abs = 0.0
     has_valid = false
@@ -589,23 +579,6 @@ function plot_topography(
     display_plot && _display_figure(fig)
     _set_window_title("Makie")
     return (fig = fig, axes = [ax])
-end
-
-function _circle_mask!(dat::Matrix{<:AbstractFloat}, grid_scale::Int)
-    grid_scale <= 0 && @minimal_error "grid_scale must be positive"
-    size(dat) != (grid_scale, grid_scale) && @minimal_error "Data matrix must be $(grid_scale)×$(grid_scale)"
-
-    center = (grid_scale + 1) / 2
-    radius_squared = (grid_scale / 2)^2
-    @inbounds for row = 1:grid_scale
-        y_dist_squared = (center - row)^2
-        for col = 1:grid_scale
-            if (center - col)^2 + y_dist_squared > radius_squared
-                dat[col, row] = NaN
-            end
-        end
-    end
-    return dat
 end
 
 function _draw_smooth_circle_mask!(ax::Axis, x_bounds::Tuple, y_bounds::Tuple)

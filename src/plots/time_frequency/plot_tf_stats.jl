@@ -244,9 +244,6 @@ function _extract_tf_stats_matrix(
     end
 end
 
-_tf_power_matrix(tf_data::TimeFreqData, channel::Symbol, frequencies::Vector{Float64}, time_points::Vector{Float64}) =
-    _tf_extract_matrix(_tf_make_extractor(tf_data.data_power, frequencies, time_points), channel)
-
 @views _extract_tf_significance_mask(result::TFStatsResult, ch_idx::Int) =
     result.masks.positive[ch_idx, :, :] .| result.masks.negative[ch_idx, :, :]
 

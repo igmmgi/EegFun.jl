@@ -55,8 +55,6 @@ function _get_cached_head_mesh()
     end
 end
 
-_load_head_mesh() = _get_cached_head_mesh().mesh
-
 function _snap_to_mesh_cached(layout_df::DataFrame, hm::_CachedHeadMesh)
     inc_col = layout_df[!, :inc]
     azi_col = layout_df[!, :azi]
@@ -83,32 +81,6 @@ function _snap_to_mesh_cached(layout_df::DataFrame, hm::_CachedHeadMesh)
             end
         end
         snapped[i] = _HEAD_CENTER_3D + dir * (best_radius + 0.003f0)
-    end
-    return snapped
-end
-
-function _snap_to_mesh(layout_df, head_verts)
-    hm = _get_cached_head_mesh()
-    head_verts === hm.verts && return _snap_to_mesh_cached(layout_df, hm)
-    snapped = GeometryBasics.Point3f[]
-    for row in eachrow(layout_df)
-        inc_rad = deg2rad(row.inc)
-        azi_rad = deg2rad(row.azi)
-        dir = GeometryBasics.Point3f(sin(inc_rad) * cos(azi_rad), sin(inc_rad) * sin(azi_rad), cos(inc_rad))
-        best_radius = 0.100f0
-        best_dot = -Inf32
-        for v in head_verts
-            v_vec = v - _HEAD_CENTER_3D
-            v_dist = norm(v_vec)
-            if v_dist > 0
-                d = dot(v_vec / v_dist, dir)
-                if d > best_dot
-                    best_dot = d
-                    best_radius = v_dist
-                end
-            end
-        end
-        push!(snapped, _HEAD_CENTER_3D + dir * (best_radius + 0.003f0))
     end
     return snapped
 end

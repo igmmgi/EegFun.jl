@@ -310,22 +310,6 @@ function _apply_axis_properties!(ax::Axis; kwargs...)
     _draw_inner_title_if_requested!(ax; kwargs...)
 end
 
-function _add_scale_axis!(
-    fig::Figure;
-    scale_axis_x::Float64 = 0.95,
-    scale_axis_y::Float64 = 0.05,
-    scale_axis_width::Float64 = 0.10,
-    scale_axis_height::Float64 = 0.10,
-)
-    scale_ax = Axis(fig[scale_axis_x, scale_axis_y], width = scale_axis_width, height = scale_axis_height)
-    scale_ax.xlabel = ""
-    scale_ax.ylabel = ""
-    scale_ax.xticklabelsvisible = false
-    scale_ax.yticklabelsvisible = false
-    scale_ax.title = "Scale"
-    return scale_ax
-end
-
 function _draw_inner_title_if_requested!(ax::Axis; kwargs...)
     pos = get(kwargs, :plot_title_position, nothing)
     isnothing(pos) && return

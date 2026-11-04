@@ -304,15 +304,6 @@ function _display_figure(fig)
     _display_in_screen(fig)
 end
 
-function _create_figure_with_axis(data; title_suffix::String = "", figure_kwargs...)
-    title = _generate_window_title(data)
-    !isempty(title_suffix) && (title *= title_suffix)
-    _set_window_title(title)
-    fig = _eegfun_figure(; figure_kwargs...)
-    ax = Axis(fig[1, 1])
-    return (fig = fig, axes = [ax])
-end
-
 _resolve_from_scene(scene, attr::Symbol, user_val, default_val) =
     isnothing(user_val) ? (haskey(Makie.theme(scene), attr) ? Makie.theme(scene)[attr][] : default_val) : user_val
 

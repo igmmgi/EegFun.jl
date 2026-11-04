@@ -80,47 +80,6 @@ function create_test_batch_erp_data(; n_conditions = 2, fs = 1000, n_channels = 
     end
 end
 
-function create_test_epoch_data_with_rt(;
-    participant = 1,
-    condition = 1,
-    n_epochs = 5,
-    n_timepoints = 100,
-    n_channels = 3,
-    fs = 1000,
-    epoch_start = -0.2,
-    epoch_end = 0.8,
-    rt_range = (0.2, 0.6),
-    seed::Union{Int,Nothing} = nothing,
-)
-    return _with_seed(seed) do
-        time = collect(range(epoch_start, epoch_end, length = n_timepoints))
-        labels = _generate_channel_labels(n_channels)
-        dfs = Vector{DataFrame}(undef, n_epochs)
-        for epoch = 1:n_epochs
-            df = DataFrame(
-                time = copy(time),
-                sample = 1:n_timepoints,
-                participant = fill(participant, n_timepoints),
-                epoch = fill(epoch, n_timepoints),
-                rt = fill(rand() * (rt_range[2] - rt_range[1]) + rt_range[1], n_timepoints),
-            )
-            for ch in labels
-                df[!, ch] = _synthetic_signal(time, freq = 10.0, amp = condition * 0.5, noise = 0.1)
-            end
-            dfs[epoch] = df
-        end
-        return EpochData(
-            "test_data",
-            condition,
-            "condition_$condition",
-            dfs,
-            create_test_layout(n_channels = n_channels),
-            fs,
-            AnalysisInfo(sample_rate = fs),
-        )
-    end
-end
-
 function create_test_continuous_data_with_triggers(; n = 1000, fs = 1000, seed::Union{Int,Nothing} = nothing)
     return _with_seed(seed) do
         t = collect(0:(n-1)) ./ fs

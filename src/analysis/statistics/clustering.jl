@@ -82,33 +82,6 @@ end
 
 # === OBSERVED CLUSTER FINDING (2D & 3D BFS) ===
 
-function _set_cluster_polarity(clusters::Vector{Cluster}, polarity::Symbol)
-    polarity in (:positive, :negative) || @minimal_error "polarity must be :positive or :negative"
-    return [
-        Cluster(c.id, c.electrodes, c.time_indices, c.time_range, c.cluster_stat, c.p_value, c.is_significant, polarity, c.members) for
-        c in clusters
-    ]
-end
-
-function _set_cluster_polarity_tf(clusters::Vector{TFCluster}, polarity::Symbol)
-    polarity in (:positive, :negative) || @minimal_error "polarity must be :positive or :negative"
-    return [
-        TFCluster(
-            c.id,
-            c.electrodes,
-            c.freq_indices,
-            c.time_indices,
-            c.freq_range,
-            c.time_range,
-            c.cluster_stat,
-            c.p_value,
-            c.is_significant,
-            polarity,
-            c.pixels,
-        ) for c in clusters
-    ]
-end
-
 function _find_clusters_connected_components(
     mask::BitArray{2},
     electrodes::Vector{Symbol},
@@ -623,66 +596,4 @@ function _max_cluster_stat_tf(
     end
 
     return extreme_stat
-end
-
-# === THRESHOLD-FREE CLUSTER ENHANCEMENT (TFCE) ===
-
-function _compute_tfce(
-    t_map::AbstractMatrix{<:AbstractFloat},
-    electrodes::Vector{Symbol},
-    time_points::Vector{Float64},
-    spatial_connectivity::SparseMatrixCSC{Bool},
-    cluster_type::Symbol;
-    E::Float64 = 0.5,
-    H::Float64 = 2.0,
-    dh::Float64 = 0.1,
-)
-    n_electrodes, n_time = size(t_map)
-    tfce_map = zeros(Float64, n_electrodes, n_time)
-
-    has_finite = false
-    max_val = -Inf
-    min_val = Inf
-    @inbounds for x in t_map
-        if isfinite(x)
-            has_finite = true
-            xf = Float64(x)
-            xf > max_val && (max_val = xf)
-            xf < min_val && (min_val = xf)
-        end
-    end
-    has_finite || return tfce_map
-
-    mask = BitMatrix(undef, n_electrodes, n_time)
-    if max_val > 0.0
-        for h = dh:dh:max_val
-            @inbounds for i in eachindex(t_map)
-                x = t_map[i]
-                mask[i] = isfinite(x) && x >= h
-            end
-            for c in _find_clusters_connected_components(mask, electrodes, time_points, spatial_connectivity, cluster_type)
-                tfce_val = (length(c.members)^E) * (h^H) * dh
-                @inbounds for (e_idx, t_idx) in c.members
-                    tfce_map[e_idx, t_idx] += tfce_val
-                end
-            end
-        end
-    end
-
-    if min_val < 0.0
-        for h = (-dh):(-dh):min_val
-            @inbounds for i in eachindex(t_map)
-                x = t_map[i]
-                mask[i] = isfinite(x) && x <= h
-            end
-            for c in _find_clusters_connected_components(mask, electrodes, time_points, spatial_connectivity, cluster_type)
-                tfce_val = (length(c.members)^E) * (abs(h)^H) * dh
-                @inbounds for (e_idx, t_idx) in c.members
-                    tfce_map[e_idx, t_idx] -= tfce_val
-                end
-            end
-        end
-    end
-
-    return tfce_map
 end

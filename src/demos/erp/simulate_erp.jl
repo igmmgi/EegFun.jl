@@ -69,20 +69,6 @@ function _add_peak_vec!(
     return signal
 end
 
-function _peak_vec(
-    trials::Int,
-    samples::Int,
-    sample_rate::Int,
-    peak_freq::Float64,
-    peak_amp::Float64,
-    peak_latency::Float64,
-    jitter_amp::Float64,
-    jitter_latency::Float64,
-)
-    out = zeros(Float64, trials, samples)
-    return _add_peak_vec!(out, trials, samples, sample_rate, peak_freq, peak_amp, peak_latency, jitter_amp, jitter_latency)
-end
-
 function _noise_vec(trials::Int, samples::Int, sample_rate::Int, noise_amp::Float64)
     noise_amp == 0.0 && return zeros(Float64, trials, samples)
 

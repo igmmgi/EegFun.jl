@@ -84,21 +84,6 @@ function _shuffle_labels!(
     return shuffled_A, shuffled_B
 end
 
-const _shuffle_labels_tf! = _shuffle_labels!
-
-function _shuffle_labels(prepared::StatisticalData; rng::AbstractRNG = Random.default_rng())
-    shuffled_A = similar(prepared.analysis.data[1])
-    shuffled_B = similar(prepared.analysis.data[2])
-    return _shuffle_labels!(
-        shuffled_A,
-        shuffled_B,
-        prepared.analysis.data[1],
-        prepared.analysis.data[2],
-        prepared.analysis.design;
-        rng = rng,
-    )
-end
-
 function _start_permutation_progress(show_progress::Bool, n_permutations::Int, desc::String)
     show_progress || return nothing
     progress = Progress(n_permutations, desc = desc, showspeed = true)

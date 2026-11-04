@@ -115,16 +115,6 @@ end
 
 _condition_channels(dat::EegData) = channel_labels(dat)
 
-_circular_phase_diff(p1::Real, p2::Real) = rem2pi(Float64(p1) - Float64(p2), RoundNearest)
-function _circular_phase_diff(p1::AbstractVector{<:Real}, p2::AbstractVector{<:Real})::Vector{Float64}
-    n = length(p1)
-    out = Vector{Float64}(undef, n)
-    @inbounds @simd for i = 1:n
-        out[i] = rem2pi(Float64(p1[i]) - Float64(p2[i]), RoundNearest)
-    end
-    return out
-end
-
 function _circular_phase_mean!(
     out::AbstractVector,
     sin_sum::Vector{Float64},
@@ -138,19 +128,6 @@ function _circular_phase_mean!(
         _accum_sincos!(sin_sum, cos_sum, d.data_phase[!, ch])
     end
     _write_atan!(out, sin_sum, cos_sum, 1.0 / length(dats))
-    return out
-end
-
-function _circular_phase_mean(phases::AbstractVector{<:AbstractVector{<:Real}})::Vector{Float64}
-    isempty(phases) && return Float64[]
-    n_rows = length(phases[1])
-    sin_sum = zeros(Float64, n_rows)
-    cos_sum = zeros(Float64, n_rows)
-    for p in phases
-        _accum_sincos!(sin_sum, cos_sum, p)
-    end
-    out = Vector{Float64}(undef, n_rows)
-    _write_atan!(out, sin_sum, cos_sum, 1.0 / length(phases))
     return out
 end
 

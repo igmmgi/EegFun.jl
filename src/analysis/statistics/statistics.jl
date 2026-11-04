@@ -525,4 +525,3 @@ function analytic_test(prepared::TFStatisticalData; alpha::Real = 0.05, tail::Sy
 end
 
 const _compute_tf_cluster_pvalues = _compute_cluster_pvalues
-const _create_significance_mask_tf = _create_significance_mask

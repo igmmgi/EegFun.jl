@@ -474,21 +474,6 @@ function _create_interactive_trigger_plot_impl(
     return (fig = fig, axes = [ax])
 end
 
-function _create_interactive_trigger_plot(trigger_codes::Vector{Int16}, trigger_times::Vector{Float64}; kwargs...)
-    plot_kwargs = _merge_plot_kwargs(PLOT_TRIGGERS_KWARGS, kwargs)
-    return _create_interactive_trigger_plot_impl(trigger_codes, trigger_times, nothing, plot_kwargs)
-end
-
-function _create_interactive_trigger_plot(
-    trigger_codes::Vector{Int16},
-    trigger_times::Vector{Float64},
-    trigger_info::Vector{String};
-    kwargs...,
-)
-    plot_kwargs = _merge_plot_kwargs(PLOT_TRIGGERS_KWARGS, kwargs)
-    return _create_interactive_trigger_plot_impl(trigger_codes, trigger_times, trigger_info, plot_kwargs)
-end
-
 """
     plot_trigger_timing(dat::ContinuousData; kwargs...) -> NamedTuple
 

@@ -30,29 +30,6 @@ function _select_two_conditions(items::AbstractVector, design::Symbol, condition
     return cond1, cond2, selected_cond_nums
 end
 
-@inline function _fill_erp_slice!(data::Array{Float64,3}, p::Int, e::Int, col::Vector{Float64}, n_time::Int)
-    @inbounds @simd for t = 1:n_time
-        data[p, e, t] = col[t]
-    end
-end
-
-@inline function _fill_erp_slice!(data::Array{Float64,3}, p::Int, e::Int, col::AbstractVector, n_time::Int)
-    @inbounds for t = 1:n_time
-        data[p, e, t] = Float64(col[t])
-    end
-end
-
-function _extract_erp_array(erps::AbstractVector{<:ErpData}, electrodes::Vector{Symbol}, n_time::Int)
-    data = Array{Float64,3}(undef, length(erps), length(electrodes), n_time)
-    for (p, erp) in enumerate(erps)
-        df = erp.data
-        for (e, el) in enumerate(electrodes)
-            _fill_erp_slice!(data, p, e, df[!, el], n_time)
-        end
-    end
-    return data
-end
-
 @inline function _fill_baselined_slice!(
     data::Array{Float64,3},
     p::Int,

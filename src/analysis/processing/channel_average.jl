@@ -53,9 +53,6 @@ function _circular_colmeans_idx(df::DataFrame, idxs::Vector{Int})::Vector{Float6
     return sin_sum
 end
 
-_circular_colmeans(df::DataFrame, cols::AbstractVector{Symbol})::Vector{Float64} =
-    _circular_colmeans_idx(df, Int[columnindex(df, c) for c in cols])
-
 function _assign_group_mean!(df::DataFrame, grp::Vector{Symbol}, lbl::Symbol, circular::Bool)
     idxs = Int[columnindex(df, c) for c in grp]
     df[!, lbl] = circular ? _circular_colmeans_idx(df, idxs) : _linear_colmeans_idx(df, idxs)
