@@ -1,4 +1,3 @@
-# === DEFAULT KEYWORD ARGUMENTS ===
 const PLOT_ERP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Display parameters
     :display_plot => (true, "Display the plot (true/false)"),
@@ -49,8 +48,6 @@ const PLOT_ERP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
         NamedTuple(),
         "Additional kwargs passed directly to the Makie Legend block (see Makie's [Legend documentation](https://docs.makie.org/stable/reference/blocks/legend/) for available attributes).",
     ),
-
-    # Override specific legend parameters with custom defaults
     :legend => (true, "Show the legend (true/false)"),
     :legend_label => ("", "Title for the legend"),
     :legend_framevisible => (true, "Legend frame visible (true/false)"),
@@ -76,8 +73,6 @@ const PLOT_ERP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
         NamedTuple(),
         "Additional parameters to configure grid or topographical layouts (e.g., grid_dims, topo_plot_width, grid_rowgap)",
     ),
-
-    # General layout parameters
     :figure_padding => ((10, 30, 10, 10), "Padding around entire figure as (left, right, bottom, top) tuple (in pixels)"),
 
     # Highlight regions
@@ -87,8 +82,17 @@ const PLOT_ERP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     ),
 )
 
+function _order_plot_channels(selected_channels, all_channels, channel_plot_order)
+    plot_chs = [ch for ch in selected_channels if ch in all_channels]
+    if !isnothing(channel_plot_order)
+        ordered = Symbol[Symbol(ch) for ch in channel_plot_order if Symbol(ch) in plot_chs]
+        !isempty(ordered) && (plot_chs = ordered)
+    end
+    return plot_chs
+end
+
 """
-    plot_erp(filepath::String; 
+    plot_erp(filepath::String;
              input_dir::String = pwd(),
              participant_selection::Function = participants(),
              layout::Union{Symbol, PlotLayout} = :single,
@@ -100,11 +104,11 @@ const PLOT_ERP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
              baseline_interval::Interval = nothing,
              kwargs...)
 
-Load ERP data and create plots. Accepts either a direct `.jld2` filepath or a filename 
+Load ERP data and create plots. Accepts either a direct `.jld2` filepath or a filename
 pattern to discover and plot all matching files.
 
 # Arguments
-- `filepath::String`: Either a `.jld2` file path, or a pattern string (e.g. `"erps_final"`) 
+- `filepath::String`: Either a `.jld2` file path, or a pattern string (e.g. `"erps_final"`)
   to match against files in `input_dir`
 - `input_dir::String`: Directory to search for pattern-matched files (default: `pwd()`)
 - `participant_selection::Function`: Participant filter for pattern mode (default: `participants()`)
@@ -117,16 +121,9 @@ $(_generate_kwargs_doc(PLOT_ERP_KWARGS))
 
 # Examples
 ```julia
-# Load and plot from file
 plot_erp("grand_average_erps_final.jld2")
-
-# Plot all files matching pattern in current directory
 plot_erp("erps_final")
-
-# Plot specific participant
 plot_erp("erps_final", participant_selection = participants(1))
-
-# With channel selection
 plot_erp("erps_final", channel_selection = channels([:PO7, :PO8]), layout = :grid)
 ```
 """
@@ -143,15 +140,9 @@ function plot_erp(
     baseline_interval::Interval = nothing,
     kwargs...,
 )
-    # Detect: filepath (ends with .jld2) vs pattern
     if endswith(filepath, ".jld2")
-        # Direct file path — existing behavior
         data = read_data(filepath)
-        if isnothing(data)
-            @minimal_error "No data found in file: $filepath"
-        end
-
-        # Dispatch will handle ErpData vs Vector{ErpData} automatically
+        isnothing(data) && @minimal_error "No data found in file: $filepath"
         return plot_erp(
             data;
             layout = layout,
@@ -163,27 +154,17 @@ function plot_erp(
             baseline_interval = baseline_interval,
             kwargs...,
         )
-    else
-        # Pattern-based discovery — one plot per file
-        files = _find_batch_files(filepath, input_dir, participant_selection)
-        if isempty(files)
-            all_matching = _find_batch_files(filepath, input_dir)  # without participant filter
-            if isempty(all_matching)
-                @minimal_error "No ERP files matching pattern '$filepath' in $input_dir"
-            else
-                avail_ids = sort(unique(_extract_participant_id.(all_matching)))
-                @minimal_error "Pattern '$filepath' matched $(length(all_matching)) file(s), but none passed the participant selection. Available participant IDs: $avail_ids"
-            end
-        end
+    end
 
-        results = NamedTuple[]
-        for file in sort(files, by = _natural_sort_key)
-            file_path = joinpath(input_dir, file)
-            @info "Plotting: $file"
-            data = read_data(file_path)
-            isnothing(data) && continue
-
-            result = plot_erp(
+    files = _require_batch_files(filepath, input_dir, participant_selection; kind = "ERP")
+    results = NamedTuple[]
+    for file in files
+        @info "Plotting: $file"
+        data = read_data(joinpath(input_dir, file))
+        isnothing(data) && continue
+        push!(
+            results,
+            plot_erp(
                 data;
                 layout = layout,
                 condition_selection = condition_selection,
@@ -193,11 +174,10 @@ function plot_erp(
                 interval_selection = interval_selection,
                 baseline_interval = baseline_interval,
                 kwargs...,
-            )
-            push!(results, result)
-        end
-        return results
+            ),
+        )
     end
+    return results
 end
 
 function plot_erp(
@@ -210,11 +190,10 @@ function plot_erp(
     baseline_interval::Interval = nothing,
     kwargs...,
 )
-    # For single ErpData, condition_selection doesn't apply (there's only one condition)
     return plot_erp(
         [dat];
         layout = layout,
-        condition_selection = conditions(),  # Always select all (just the one condition)
+        condition_selection = conditions(),
         channel_selection = channel_selection,
         channel_plot_order = channel_plot_order,
         sample_selection = sample_selection,
@@ -235,14 +214,11 @@ function plot_erp(
     baseline_interval::Interval = nothing,
     kwargs...,
 )
-    # If there are datasets from multiple participants, automatically create separate windows
     file_ids = unique(d.file for d in datasets)
     if length(file_ids) > 1
-        results = NamedTuple[]
-        for file_id in file_ids
-            participant_data = filter(d -> d.file == file_id, datasets)
-            result = plot_erp(
-                participant_data;
+        return NamedTuple[
+            plot_erp(
+                filter(d -> d.file == file_id, datasets);
                 layout = layout,
                 condition_selection = condition_selection,
                 channel_selection = channel_selection,
@@ -251,13 +227,10 @@ function plot_erp(
                 interval_selection = interval_selection,
                 baseline_interval = baseline_interval,
                 kwargs...,
-            )
-            push!(results, result)
-        end
-        return results
+            ) for file_id in file_ids
+        ]
     end
 
-    # Prepare kwargs and data
     plot_kwargs, user_provided_color = _prepare_plot_kwargs(kwargs)
     dat_subset, all_channels, channel_selection_func, original_channels = _prepare_erp_data(
         datasets,
@@ -269,14 +242,12 @@ function plot_erp(
         baseline_interval = baseline_interval,
     )
 
-    variances_dict = Dict{Int,Tuple{DataFrames.DataFrame,Int}}()
-
     return _plot_erp_core(
         dat_subset,
         all_channels,
         channel_selection_func,
         original_channels,
-        variances_dict,
+        Dict{Int,Tuple{DataFrames.DataFrame,Int}}(),
         plot_kwargs,
         user_provided_color,
         layout,
@@ -286,9 +257,11 @@ function plot_erp(
 end
 
 """
-    plot_erp_errorbar(datasets::Vector{ErpData}; kwargs...)
+    plot_erp_errorbar(filepath::String; kwargs...)
+    plot_erp_errorbar(dataset::ErpData; kwargs...)
+    plot_erp_errorbar(datasets::AbstractVector{<:ErpData}; kwargs...)
 
-Plot ERP errorbars for multiple datasets.
+Plot grand-averaged ERP waveforms with across-participant error ribbons (`:sem`, `:within_sem`, or `:ci95`).
 """
 function plot_erp_errorbar(
     filepath::String;
@@ -303,35 +276,15 @@ function plot_erp_errorbar(
     baseline_interval::Interval = nothing,
     kwargs...,
 )
-    # Pattern-based discovery — one plot per file? No, plot_erp_errorbar groups them!
-    files = _find_batch_files(filepath, input_dir, participant_selection)
-    if isempty(files)
-        all_matching = _find_batch_files(filepath, input_dir)  # without participant filter
-        if isempty(all_matching)
-            @minimal_error "No ERP files matching pattern '$filepath' in $input_dir"
-        else
-            avail_ids = sort(unique(_extract_participant_id.(all_matching)))
-            @minimal_error "Pattern '$filepath' matched $(length(all_matching)) file(s), but none passed the participant selection. Available participant IDs: $avail_ids"
-        end
-    end
-
+    files = _require_batch_files(filepath, input_dir, participant_selection; kind = "ERP")
     datasets = ErpData[]
-    for file in sort(files, by = _natural_sort_key)
-        file_path = joinpath(input_dir, file)
+    for file in files
         @info "Loading: $file"
-        data = read_data(file_path)
+        data = read_data(joinpath(input_dir, file))
         isnothing(data) && continue
-
-        if data isa Vector{ErpData}
-            append!(datasets, data)
-        else
-            push!(datasets, data)
-        end
+        data isa Vector{ErpData} ? append!(datasets, data) : push!(datasets, data)
     end
-
-    if isempty(datasets)
-        @minimal_error "No data loaded from pattern: $filepath"
-    end
+    isempty(datasets) && @minimal_error "No data loaded from pattern: $filepath"
 
     return plot_erp_errorbar(
         datasets;
@@ -346,11 +299,6 @@ function plot_erp_errorbar(
     )
 end
 
-"""
-    plot_erp_errorbar(dataset::ErpData; kwargs...)
-
-Plot ERP errorbars for a single dataset.
-"""
 function plot_erp_errorbar(
     dat::ErpData;
     layout::Union{Symbol,PlotLayout} = :single,
@@ -374,11 +322,6 @@ function plot_erp_errorbar(
     )
 end
 
-"""
-    plot_erp_errorbar(datasets::AbstractVector{<:ErpData}; kwargs...)
-
-Plot ERP errorbars for multiple datasets.
-"""
 function plot_erp_errorbar(
     datasets::AbstractVector{<:ErpData};
     layout::Union{Symbol,PlotLayout} = :single,
@@ -390,7 +333,6 @@ function plot_erp_errorbar(
     baseline_interval::Interval = nothing,
     kwargs...,
 )
-    # Prepare kwargs and data
     plot_kwargs, user_provided_color = _prepare_plot_kwargs(kwargs)
     dat_subset, all_channels, channel_selection_func, original_channels = _prepare_erp_data(
         datasets,
@@ -404,8 +346,6 @@ function plot_erp_errorbar(
 
     @info "Averaging across participants dynamically..."
     dat_subset, variances_dict = _compute_dynamic_grand_averages(dat_subset, plot_kwargs[:error_bars])
-
-
 
     return _plot_erp_core(
         dat_subset,
@@ -421,7 +361,6 @@ function plot_erp_errorbar(
     )
 end
 
-
 function _plot_erp_core(
     dat_subset,
     all_channels,
@@ -434,126 +373,85 @@ function _plot_erp_core(
     baseline_interval,
     channel_plot_order,
 )
-    # Apply channel_selection to determine which channels to plot
-    # dat_subset has all channels, but we only plot the selected ones
     selected_channels = get_selected_channels(first(dat_subset), channel_selection_func; include_meta = false, include_extra = true)
-    # Preserve order from selected_channels (user's channel_selection order)
-    all_plot_channels = [ch for ch in selected_channels if ch in all_channels]
-
-    # Apply user-specified plotting order if provided
-    if !isnothing(channel_plot_order)
-        ordered = Symbol[Symbol(ch) for ch in channel_plot_order if Symbol(ch) in all_plot_channels]
-        if !isempty(ordered)
-            all_plot_channels = ordered
-        end
-    end
-
-    # Check if any channels remain after filtering
-    if isempty(all_plot_channels)
+    all_plot_channels = _order_plot_channels(selected_channels, all_channels, channel_plot_order)
+    isempty(all_plot_channels) &&
         @minimal_error "No valid channels found. Selected channels: $selected_channels, Available channels: $all_channels"
-    end
 
-    # set default plot title only for single layouts
-    # For grid/topo layouts, we want individual channel names, not a global title
     if isnothing(plot_kwargs[:plot_title]) && layout == :single
-        plot_kwargs[:plot_title] = length(all_plot_channels) == 1 ? string(all_plot_channels[1]) : "$(_print_vector(all_plot_channels))"
-        if plot_kwargs[:average_channels]
-            plot_kwargs[:plot_title] = "Avg: $(_print_vector(original_channels))"
+        plot_kwargs[:plot_title] = if plot_kwargs[:average_channels]
+            "Avg: $(_print_vector(original_channels))"
+        elseif length(all_plot_channels) == 1
+            string(all_plot_channels[1])
+        else
+            "$(_print_vector(all_plot_channels))"
         end
     end
 
-    # Generate window title from datasets or use provided window_title
-    if !isempty(plot_kwargs[:window_title])
-        title_str = plot_kwargs[:window_title]
-    else
-        title_str = _generate_window_title(dat_subset)
-    end
+    title_str = !isempty(plot_kwargs[:window_title]) ? plot_kwargs[:window_title] : _generate_window_title(dat_subset)
     _set_window_title(title_str)
 
     try
-        # Extract layout_* parameters, remove prefix, and pass to create_layout
         layout_kwargs = get(plot_kwargs, :layout_kwargs, (;))
-
-        # Create figure and apply layout system
         fontsize_kw = isnothing(plot_kwargs[:theme_fontsize]) ? (;) : (; fontsize = plot_kwargs[:theme_fontsize])
         fig = _eegfun_figure(; title = title_str, figure_padding = plot_kwargs[:figure_padding], fontsize_kw...)
 
         plot_layout = create_layout(layout, all_plot_channels, first(dat_subset).layout; layout_kwargs...)
 
-        # For :topo layout, set default legend_channel to last channel if not explicitly set
         if plot_layout.type == :topo && isempty(plot_kwargs[:legend_channel]) && !isempty(all_plot_channels)
             plot_kwargs[:legend_channel] = [all_plot_channels[end]]
-            plot_kwargs[:legend_position] = (5, -2) # and put it a bit outside the plot
+            plot_kwargs[:legend_position] = (5, -2)
         end
         axes, channels = _apply_layout!(fig, plot_layout; plot_kwargs...)
 
-        # Store line references for control panel (if interactive)
-        # Structure: line_refs[ax_idx][dataset_idx][channel_idx] = line
-        line_refs = plot_kwargs[:interactive] ? [Dict{Int,Dict{Symbol,Any}}() for _ in axes] : nothing
-
-        # Store legend references for linked interactions (if interactive)
-        legend_refs = plot_kwargs[:interactive] ? Vector{Union{Legend,Nothing}}(undef, length(axes)) : nothing
+        is_interactive = plot_kwargs[:interactive]
+        line_refs = is_interactive ? [Dict{Int,Dict{Symbol,Any}}() for _ in axes] : nothing
+        legend_refs = is_interactive ? Vector{Union{Legend,Nothing}}(undef, length(axes)) : nothing
 
         @info "plot_erp ($layout): $(_print_vector(all_plot_channels))"
 
-        # Now do the actual plotting for each axis
         for (ax_idx, (ax, channel)) in enumerate(zip(axes, channels))
             channels_to_plot = plot_layout.type == :single ? all_plot_channels : [channel]
-            @debug "plot_erp ($layout): $(_print_vector(channels_to_plot))"
-            ax_line_refs = plot_kwargs[:interactive] ? line_refs[ax_idx] : nothing
+            ax_line_refs = is_interactive ? line_refs[ax_idx] : nothing
             leg = _plot_erp!(
                 ax,
                 dat_subset,
-                channels_to_plot;
+                channels_to_plot,
+                plot_kwargs;
                 line_refs = ax_line_refs,
                 user_provided_color = user_provided_color,
                 variances_dict = variances_dict,
-                plot_kwargs...,
             )
-            if plot_kwargs[:interactive] && !isnothing(legend_refs)
+            if is_interactive && !isnothing(legend_refs)
                 legend_refs[ax_idx] = leg
             end
         end
 
-        # Draw highlight regions on all axes (before axis properties so they render behind)
         if !isnothing(plot_kwargs[:highlight_regions])
             for ax in axes
                 _draw_highlight_regions!(ax, plot_kwargs[:highlight_regions])
             end
         end
 
-        # Apply our axis stuff
         _apply_axis_properties!.(axes; plot_kwargs...)
-        _apply_layout_axis_properties!(axes, plot_layout; plot_kwargs...) # slightly different for grid and topo layouts
-
-        # Link axes for consistent navigation
+        _apply_layout_axis_properties!(axes, plot_layout; plot_kwargs...)
         length(axes) > 1 && linkaxes!(axes...)
 
-        # Add keyboard interactivity if enabled
-        if plot_kwargs[:interactive]
+        if is_interactive
             _setup_shared_interactivity!(fig, axes, :erp; zoom_step = plot_kwargs[:zoom_step])
-
-            # Disable default interactions that conflict with our custom selection (all axes)
             for ax in axes
                 deregister_interaction!(ax, :rectanglezoom)
             end
 
-            # Set up selection system for all axes (will work with linked axes)
             selection_state =
                 SharedSelectionState(axes; selection_color = plot_kwargs[:selection_color], selection_alpha = plot_kwargs[:selection_alpha])
 
-            # Set up control panel (press 'c' to open) - must be before selection to capture condition_checked
             condition_checked_ref = Ref{Union{Vector{Observable{Bool}},Nothing}}(nothing)
             _setup_erp_control_panel!(fig, dat_subset, axes, baseline_interval, line_refs, condition_checked_ref, legend_refs)
 
-            # Create right-click handler that has access to condition visibility
-            right_click_handler =
-                (selection_state, mouse_x, data) -> _handle_erp_right_click!(selection_state, mouse_x, data, condition_checked_ref)
-
-            # Set up selection system that works for all layouts
+            right_click_handler = (sel, mouse_x, data) -> _handle_erp_right_click!(sel, mouse_x, data, condition_checked_ref)
             _setup_unified_selection!(fig, axes, selection_state, dat_subset, right_click_handler)
 
-            # Set up channel selection events for topo and grid layouts
             if plot_layout.type in (:topo, :grid)
                 channel_rc_handler = (selected_chs, data) -> _show_channel_average_menu!(selected_chs, data, condition_checked_ref)
                 _setup_channel_selection_events!(
@@ -565,51 +463,25 @@ function _plot_erp_core(
                     channel_right_click_handler = channel_rc_handler,
                 )
             end
-
         end
 
-        # Draw supertitle if user explicitly provided a figure_title
         if !isempty(plot_kwargs[:figure_title])
             Label(fig[0, :], plot_kwargs[:figure_title], fontsize = plot_kwargs[:figure_title_fontsize], font = :bold, tellwidth = false)
         end
 
-        if plot_kwargs[:display_plot]
-            _display_figure(fig)
-        end
-
-        # Return named tuple - line_refs available for advanced use (e.g., plot_erp_measurements)
-        # Most users can ignore it via: (; fig, axes) = plot_erp(...)
+        plot_kwargs[:display_plot] && _display_figure(fig)
         return (fig = fig, axes = axes, line_refs = line_refs)
     finally
-        # reset default title
         _set_window_title("Makie")
     end
 end
 
-"""
-    plot_erp!(fig::Figure, ax::Axis, dat::ErpData; kwargs...)
-
-Plot ERP data on an existing axis, mutating the figure and axis.
-
-# Arguments
-- `fig::Figure`: The figure to plot on
-- `ax::Axis`: The axis to plot on  
-- `dat::ErpData`: The ERP data to plot
-- `kwargs...`: Additional plotting arguments (see PLOT_ERP_KWARGS)
-
-# Returns
-- `ax::Axis`: The axis that was plotted on
-"""
-plot_erp!(fig::Figure, ax::Axis, dat::ErpData; kwargs...) = plot_erp!(fig, ax, [dat]; kwargs...)
-function plot_erp!(fig::Figure, ax::Axis, datasets::AbstractVector{<:ErpData}; kwargs...)
-    # Extract special parameters before validation (like plot_erp does)
+function _plot_erp_on_existing_axis!(ax::Axis, datasets::AbstractVector{<:ErpData}; dynamic_grand_avg::Bool = false, kwargs...)
     baseline_interval = get(kwargs, :baseline_interval, nothing)
     channel_selection_func = get(kwargs, :channel_selection, channels())
     channel_plot_order = get(kwargs, :channel_plot_order, nothing)
 
-    # Remove them from kwargs before validation
-    filtered_kwargs = pairs(NamedTuple(filter(p -> p[1] ∉ [:baseline_interval, :channel_selection, :channel_plot_order], pairs(kwargs))))
-
+    filtered_kwargs = pairs(NamedTuple(filter(p -> p[1] ∉ (:baseline_interval, :channel_selection, :channel_plot_order), pairs(kwargs))))
     plot_kwargs, user_provided_color = _prepare_plot_kwargs(filtered_kwargs)
 
     dat_subset, all_channels, updated_channel_selection, _ = _prepare_erp_data(
@@ -620,191 +492,112 @@ function plot_erp!(fig::Figure, ax::Axis, datasets::AbstractVector{<:ErpData}; k
         sample_selection = get(plot_kwargs, :sample_selection, samples()),
         baseline_interval = baseline_interval,
     )
-    variances_dict = Dict{Int,Tuple{DataFrames.DataFrame,Int}}()
 
-    # Apply channel_selection to determine which channels to plot
-    selected_channels = get_selected_channels(first(dat_subset), updated_channel_selection; include_meta = false, include_extra = true)
-    # Preserve order from selected_channels (user's channel_selection order)
-    all_plot_channels = [ch for ch in selected_channels if ch in all_channels]
-
-    # Apply user-specified plotting order if provided
-    if !isnothing(channel_plot_order)
-        ordered = Symbol[Symbol(ch) for ch in channel_plot_order if Symbol(ch) in all_plot_channels]
-        if !isempty(ordered)
-            all_plot_channels = ordered
-        end
+    if dynamic_grand_avg
+        @info "Averaging across participants dynamically..."
+        dat_subset, variances_dict = _compute_dynamic_grand_averages(dat_subset, plot_kwargs[:error_bars])
+        sel_func = channel_selection_func
+    else
+        variances_dict = Dict{Int,Tuple{DataFrames.DataFrame,Int}}()
+        sel_func = updated_channel_selection
     end
 
-    _plot_erp!(
-        ax,
-        dat_subset,
-        all_plot_channels;
-        user_provided_color = user_provided_color,
-        variances_dict = variances_dict,
-        plot_kwargs...,
-    )
+    selected_channels = get_selected_channels(first(dat_subset), sel_func; include_meta = false, include_extra = true)
+    all_plot_channels = _order_plot_channels(selected_channels, all_channels, channel_plot_order)
+
+    _plot_erp!(ax, dat_subset, all_plot_channels, plot_kwargs; user_provided_color = user_provided_color, variances_dict = variances_dict)
     return ax
 end
 
 """
-    plot_erp_errorbar!(fig::Figure, ax::Axis, datasets::Vector{ErpData}; kwargs...)
+    plot_erp!(fig::Figure, ax::Axis, dat::ErpData; kwargs...)
+    plot_erp!(fig::Figure, ax::Axis, datasets::AbstractVector{<:ErpData}; kwargs...)
 
-Plot grand-averaged ERP data with error ribbons on an existing axis, mutating the figure and axis.
+Plot ERP data on an existing axis, mutating the figure and axis. Returns `ax`.
+"""
+plot_erp!(fig::Figure, ax::Axis, dat::ErpData; kwargs...) = plot_erp!(fig, ax, [dat]; kwargs...)
+plot_erp!(fig::Figure, ax::Axis, datasets::AbstractVector{<:ErpData}; kwargs...) =
+    _plot_erp_on_existing_axis!(ax, datasets; dynamic_grand_avg = false, kwargs...)
+
+"""
+    plot_erp_errorbar!(fig::Figure, ax::Axis, dat::ErpData; kwargs...)
+    plot_erp_errorbar!(fig::Figure, ax::Axis, datasets::AbstractVector{<:ErpData}; kwargs...)
+
+Plot grand-averaged ERP data with error ribbons on an existing axis, mutating the figure and axis. Returns `ax`.
 """
 plot_erp_errorbar!(fig::Figure, ax::Axis, dat::ErpData; kwargs...) = plot_erp_errorbar!(fig, ax, [dat]; kwargs...)
-"""
-    plot_erp_errorbar!(fig::Figure, ax::Axis, datasets::Vector{ErpData}; kwargs...)
+plot_erp_errorbar!(fig::Figure, ax::Axis, datasets::AbstractVector{<:ErpData}; kwargs...) =
+    _plot_erp_on_existing_axis!(ax, datasets; dynamic_grand_avg = true, kwargs...)
 
-Plot ERP errorbars for multiple datasets into an existing figure and axis.
-"""
-function plot_erp_errorbar!(fig::Figure, ax::Axis, datasets::AbstractVector{<:ErpData}; kwargs...)
-    # Extract special parameters before validation (like plot_erp does)
-    baseline_interval = get(kwargs, :baseline_interval, nothing)
-    channel_selection_func = get(kwargs, :channel_selection, channels())
-    channel_plot_order = get(kwargs, :channel_plot_order, nothing)
-
-    # Remove them from kwargs before validation
-    filtered_kwargs = pairs(NamedTuple(filter(p -> p[1] ∉ [:baseline_interval, :channel_selection, :channel_plot_order], pairs(kwargs))))
-
-    plot_kwargs, user_provided_color = _prepare_plot_kwargs(filtered_kwargs)
-
-    dat_subset, all_channels, _, _ = _prepare_erp_data(
-        datasets,
-        plot_kwargs;
-        condition_selection = conditions(),
-        channel_selection = channel_selection_func,
-        sample_selection = get(plot_kwargs, :sample_selection, samples()),
-        baseline_interval = baseline_interval,
-    )
-
-    @info "Averaging across participants dynamically..."
-    dat_subset, variances_dict = _compute_dynamic_grand_averages(dat_subset, plot_kwargs[:error_bars])
-
-    # Apply channel_selection to determine which channels to plot
-    selected_channels = get_selected_channels(first(dat_subset), channel_selection_func; include_meta = false, include_extra = true)
-    # Preserve order from selected_channels (user's channel_selection order)
-    all_plot_channels = [ch for ch in selected_channels if ch in all_channels]
-
-    # Apply user-specified plotting order if provided
-    if !isnothing(channel_plot_order)
-        ordered = Symbol[Symbol(ch) for ch in channel_plot_order if Symbol(ch) in all_plot_channels]
-        if !isempty(ordered)
-            all_plot_channels = ordered
-        end
-    end
-
-    _plot_erp!(
-        ax,
-        dat_subset,
-        all_plot_channels;
-        user_provided_color = user_provided_color,
-        variances_dict = variances_dict,
-        plot_kwargs...,
-    )
-    return ax
-end
-
-
-"""
-    _plot_erp!(ax::Axis, datasets::Vector{ErpData}, channels::Vector{Symbol}; kwargs...)
-
-Internal function to plot ERP data on an axis.
-Handles both single and multiple datasets.
-Note: datasets should already be subset based on channel_selection and sample_selection.
-
-# Keyword Arguments
-- `condition_mask::Vector{Bool}`: Mask to set visibility of each dataset. 
-  `condition_mask[i]` controls visibility of `datasets[i]`. Defaults to all `true`.
-- `line_refs::Union{Dict, Nothing}`: Dictionary to store line references for interactive updates.
-  If provided, stores lines as line_refs[dataset_idx][channel] = line.
-"""
 function _plot_erp!(
     ax::Axis,
     datasets::AbstractVector{<:ErpData},
-    channels::AbstractVector{Symbol};
+    channels::AbstractVector{Symbol},
+    plot_kwargs::Dict{Symbol,Any};
     condition_mask::AbstractVector{Bool} = Bool[],
     line_refs = nothing,
     user_provided_color::Bool = false,
     variances_dict::Dict{Int,Tuple{DataFrames.DataFrame,Int}} = Dict{Int,Tuple{DataFrames.DataFrame,Int}}(),
-    kwargs...,
 )
-
-    # Merge kwargs with defaults (kwargs are already partially merged from calling function)
-    plot_kwargs = _merge_plot_kwargs(PLOT_ERP_KWARGS, kwargs)
-
-    # Default condition_mask to all true if not provided
-    if isempty(condition_mask)
-        condition_mask = fill(true, length(datasets))
-    end
-
-    # Compute colors and linestyles for each dataset
-    color_cycle = haskey(Makie.current_default_theme(), :palette) ? Makie.current_default_theme()[:palette][:color][] : Makie.wong_colors()
+    def_theme = Makie.current_default_theme()
+    color_cycle = haskey(def_theme, :palette) ? def_theme[:palette][:color][] : Makie.wong_colors()
     resolved_colormap = _resolve_theme_colormap(ax, plot_kwargs[:colormap], nothing)
-    all_colors = _compute_dataset_colors(
-        plot_kwargs[:color],
-        length(datasets),
-        length(channels),
-        resolved_colormap,
-        user_provided_color,
-        color_cycle,
-    )
-    all_linestyles = _compute_dataset_linestyles(plot_kwargs[:linestyle], length(datasets))
+    n_datasets = length(datasets)
+    n_channels = length(channels)
+    all_colors = _compute_dataset_colors(plot_kwargs[:color], n_datasets, n_channels, resolved_colormap, user_provided_color, color_cycle)
+    all_linestyles = _compute_dataset_linestyles(plot_kwargs[:linestyle], n_datasets)
+    lw = _resolve_theme_linewidth(ax, plot_kwargs[:linewidth], 2)
+    legend_labels = plot_kwargs[:legend_labels]
+    error_type = plot_kwargs[:error_bars]
 
-    # Plot each dataset for ALL channels in this subplot
     for (dataset_idx, dat) in enumerate(datasets)
+        time_col = dat.data[!, :time]
+        condition_visible = isempty(condition_mask) || dataset_idx > length(condition_mask) ? true : condition_mask[dataset_idx]
+        base_label = isempty(legend_labels) ? dat.condition_name : legend_labels[dataset_idx]
+        has_var = error_type != :none && haskey(variances_dict, dataset_idx)
 
         for (channel_idx, channel) in enumerate(channels)
-
-            # axis label
-            label = isempty(plot_kwargs[:legend_labels]) ? dat.condition_name : plot_kwargs[:legend_labels][dataset_idx]
-            if length(channels) > 1 # More than one channel in this subplot
-                label *= " ($channel)"
-            end
-
-            color_idx = (dataset_idx - 1) * length(channels) + channel_idx
-
-            # Set visibility based on condition_mask
-            condition_visible = dataset_idx <= length(condition_mask) ? condition_mask[dataset_idx] : true
-
-            # Always use Observable for y-data (allows updates for baseline changes and linked legend interactions)
+            label = n_channels > 1 ? "$base_label ($channel)" : base_label
+            color_idx = (dataset_idx - 1) * n_channels + channel_idx
             y_obs = Observable(dat.data[!, channel])
 
-            error_type = plot_kwargs[:error_bars]
-            if error_type != :none && haskey(variances_dict, dataset_idx)
+            if has_var
                 var_df, n_stat = variances_dict[dataset_idx]
                 if hasproperty(var_df, channel)
                     var_col = var_df[!, channel]
-                    sem = sqrt.(var_col) ./ sqrt(n_stat)
-                    err_val = error_type == :ci95 ? sem .* 1.96 : sem
+                    inv_sqrt_n = (error_type == :ci95 ? 1.96 : 1.0) / sqrt(n_stat)
+                    err_val = [sqrt(v) * inv_sqrt_n for v in var_col]
 
-                    # Create bounds tied to the Observable mean so they shift correctly if baseline changes interactively
                     lower_bound = lift(y -> y .- err_val, y_obs)
                     upper_bound = lift(y -> y .+ err_val, y_obs)
-
                     band_color = to_color(all_colors[color_idx])
-                    band_color_alpha = RGBAf(band_color.r, band_color.g, band_color.b, 0.2)
-
-                    band!(ax, dat.data[!, :time], lower_bound, upper_bound, color = band_color_alpha, visible = condition_visible)
+                    band!(
+                        ax,
+                        time_col,
+                        lower_bound,
+                        upper_bound,
+                        color = RGBAf(band_color.r, band_color.g, band_color.b, 0.2),
+                        visible = condition_visible,
+                    )
                 end
             end
 
             line = lines!(
                 ax,
-                dat.data[!, :time],
+                time_col,
                 y_obs,
-                linewidth = _resolve_theme_linewidth(ax, plot_kwargs[:linewidth], 2),
+                linewidth = lw,
                 color = all_colors[color_idx],
                 linestyle = all_linestyles[dataset_idx],
                 label = label,
                 visible = condition_visible,
             )
 
-            # Store line and y Observable if references are requested
             if !isnothing(line_refs)
-                if !haskey(line_refs, dataset_idx)
-                    line_refs[dataset_idx] = Dict{Symbol,Tuple{Any,Observable}}()
+                ds_refs = get!(line_refs, dataset_idx) do
+                    Dict{Symbol,Tuple{Any,Observable}}()
                 end
-                line_refs[dataset_idx][channel] = (line, y_obs)
+                ds_refs[channel] = (line, y_obs)
             end
         end
     end
@@ -835,32 +628,15 @@ function _plot_erp!(
         xlabel = plot_kwargs[:xlabel],
         ylabel = plot_kwargs[:ylabel],
     )
-    leg = _add_legend!(ax, channels, datasets, plot_kwargs)
-
-    return leg
+    return _add_legend!(ax, channels, datasets, plot_kwargs)
 end
 
-
-"""
-    _prepare_plot_kwargs(kwargs)
-
-Prepare plot kwargs by merging with defaults and tracking whether user provided color.
-Returns (plot_kwargs, user_provided_color).
-"""
 function _prepare_plot_kwargs(kwargs)
     kwargs_norm = _normalize_plot_kwargs(kwargs)
     user_provided_color = haskey(kwargs_norm, :color)
-    plot_kwargs = _merge_plot_kwargs(PLOT_ERP_KWARGS, kwargs_norm)
-    return plot_kwargs, user_provided_color
+    return _merge_plot_kwargs(PLOT_ERP_KWARGS, kwargs_norm), user_provided_color
 end
 
-"""
-    _prepare_erp_data(datasets, plot_kwargs; condition_selection, channel_selection, sample_selection)
-
-Prepare ERP data for plotting: subset by condition and sample only (NOT channels).
-Channel selection is applied later at plot time to keep all channels available for topoplots.
-Returns (dat_subset_unfiltered_channels, all_channels, channel_selection_func, original_channels).
-"""
 function _prepare_erp_data(
     datasets::AbstractVector{<:ErpData},
     plot_kwargs;
@@ -870,18 +646,15 @@ function _prepare_erp_data(
     interval_selection::Interval = times(),
     baseline_interval::Interval = nothing,
 )
-    # Data subsetting - ONLY by condition and sample, NOT by channel
-    # This keeps all channels available for right-click topoplots
     dat_subset = subset(
         datasets;
         condition_selection = condition_selection,
-        channel_selection = channels(),  # Select ALL channels (no filtering)
+        channel_selection = channels(),
         sample_selection = sample_selection,
         interval_selection = interval_selection,
         include_extra = true,
     )
 
-    # Check if subsetting resulted in empty data
     if isempty(dat_subset)
         n_conditions = length(datasets)
         if n_conditions == 0
@@ -891,91 +664,92 @@ function _prepare_erp_data(
         end
     end
 
-    # Apply baseline correction if requested
     if !isnothing(baseline_interval)
         @info "Applying baseline correction to $(length(dat_subset)) datasets"
         baseline!.(dat_subset, Ref(baseline_interval))
     end
 
-    # Extract ALL channel labels (not filtered by channel_selection)
-    # We need this before averaging to know which channels to average
-    all_channels = channel_labels(dat_subset)
-    extra_channels = extra_labels(dat_subset)
-    all_channels = vcat(all_channels, extra_channels)
-
-    # Apply channel_selection to determine which channels to plot/average
+    all_channels = vcat(channel_labels(dat_subset), extra_labels(dat_subset))
     selected_channels = get_selected_channels(first(dat_subset), channel_selection; include_meta = false, include_extra = true)
     all_plot_channels = [ch for ch in selected_channels if ch in all_channels]
 
-    # Channel averaging if requested - average only the selected channels
     original_channels = nothing
     if plot_kwargs[:average_channels]
         @info "Averaging channels for $(length(dat_subset)) datasets"
         original_channels = all_plot_channels
-        # Average only the selected channels, similar to plot_epochs
+        ch_sel = [channels(all_plot_channels)]
         for dat in dat_subset
-            channel_average!(dat; channel_selections = [channels(all_plot_channels)], output_labels = [:avg], reduce = false)
+            channel_average!(dat; channel_selections = ch_sel, output_labels = [:avg], reduce = false)
         end
-        # After averaging, update all_channels to include the averaged channel
         all_channels = [:avg]
-        # Update channel_selection to select :avg instead of original channels
         channel_selection = channels(:avg)
     end
 
     return dat_subset, all_channels, channel_selection, original_channels
 end
 
+@inline function _accum_col!(buf::Vector{Float64}, col::AbstractVector)
+    @inbounds @simd for i in eachindex(buf)
+        buf[i] += col[i]
+    end
+end
+
+@inline function _accum_sqdiff!(var_buf::Vector{Float64}, col::AbstractVector, avg_buf::Vector{Float64})
+    @inbounds @simd for i in eachindex(var_buf)
+        diff = col[i] - avg_buf[i]
+        var_buf[i] += diff * diff
+    end
+end
+
+@inline function _accum_within_sqdiff!(
+    var_buf::Vector{Float64},
+    col::AbstractVector,
+    p_mean::Vector{Float64},
+    g_mean::Vector{Float64},
+    avg_buf::Vector{Float64},
+)
+    @inbounds @simd for i in eachindex(var_buf)
+        diff = (col[i] - p_mean[i] + g_mean[i]) - avg_buf[i]
+        var_buf[i] += diff * diff
+    end
+end
+
 function _compute_dynamic_grand_averages(datasets::Vector{ErpData}, error_bars::Symbol)
-    # Check if they are already grand averaged
     if all(dat -> dat.file == "grand_avg", datasets)
         @minimal_warning "Datasets are already grand averages. Skipping dynamic participant averaging."
         return datasets, Dict{Int,Tuple{DataFrames.DataFrame,Int}}()
     end
 
-    # Group by condition
     erps_by_condition = OrderedDict{Int,Vector{ErpData}}()
     for dat in datasets
-        cond = dat.condition
-        if !haskey(erps_by_condition, cond)
-            erps_by_condition[cond] = ErpData[]
-        end
-        push!(erps_by_condition[cond], dat)
+        push!(get!(erps_by_condition, dat.condition, ErpData[]), dat)
     end
 
     grand_averages = ErpData[]
     variances_dict = Dict{Int,Tuple{DataFrames.DataFrame,Int}}()
 
-    # Pre-compute participant global means if Cousineau-Morey is requested
     participant_global_means = Dict{String,DataFrames.DataFrame}()
     grand_global_mean = DataFrames.DataFrame()
     if error_bars == :within_sem
         participant_erps = Dict{String,Vector{ErpData}}()
         for erp in datasets
-            pid = erp.file
-            if !haskey(participant_erps, pid)
-                participant_erps[pid] = ErpData[]
-            end
-            push!(participant_erps[pid], erp)
+            push!(get!(participant_erps, erp.file, ErpData[]), erp)
         end
 
         first_erp = datasets[1]
         metadata_cols = meta_labels(first_erp)
-        all_channel_sets = [setdiff(propertynames(erp.data), metadata_cols) for erp in datasets]
-        eeg_channels = collect(intersect(all_channel_sets...))
+        eeg_channels = collect(intersect((setdiff(propertynames(erp.data), metadata_cols) for erp in datasets)...))
         n_points = n_samples(first_erp)
 
         for (pid, erplist) in participant_erps
             df_mean = DataFrames.DataFrame()
-            n_erps_p = length(erplist)
+            inv_n_p = 1.0 / length(erplist)
             for ch in eeg_channels
                 avg_buf = zeros(Float64, n_points)
                 for erp in erplist
-                    col_data = erp.data[!, ch]::Vector{Float64}
-                    @inbounds @simd for i = 1:n_points
-                        avg_buf[i] += col_data[i]
-                    end
+                    _accum_col!(avg_buf, erp.data[!, ch])
                 end
-                avg_buf ./= n_erps_p
+                avg_buf .*= inv_n_p
                 df_mean[!, ch] = avg_buf
             end
             participant_global_means[pid] = df_mean
@@ -983,15 +757,13 @@ function _compute_dynamic_grand_averages(datasets::Vector{ErpData}, error_bars::
 
         n_participants = length(participant_global_means)
         if n_participants > 0
+            inv_np = 1.0 / n_participants
             for ch in eeg_channels
                 avg_buf = zeros(Float64, n_points)
                 for df_mean in values(participant_global_means)
-                    col_data = df_mean[!, ch]::Vector{Float64}
-                    @inbounds @simd for i = 1:n_points
-                        avg_buf[i] += col_data[i]
-                    end
+                    _accum_col!(avg_buf, df_mean[!, ch]::Vector{Float64})
                 end
-                avg_buf ./= n_participants
+                avg_buf .*= inv_np
                 grand_global_mean[!, ch] = avg_buf
             end
         end
@@ -1000,96 +772,73 @@ function _compute_dynamic_grand_averages(datasets::Vector{ErpData}, error_bars::
     K_conditions = length(erps_by_condition)
     cm_correction = K_conditions > 1 ? (K_conditions / (K_conditions - 1)) : 1.0
 
-    dataset_idx = 1
-    for cond_num in sort(collect(keys(erps_by_condition)))
+    for (dataset_idx, cond_num) in enumerate(sort!(collect(keys(erps_by_condition))))
         erps = erps_by_condition[cond_num]
         first_erp = erps[1]
         metadata_cols = meta_labels(first_erp)
-        all_channel_sets = [setdiff(propertynames(erp.data), metadata_cols) for erp in erps]
-        eeg_channels = collect(intersect(all_channel_sets...))
+        eeg_channels = collect(intersect((setdiff(propertynames(erp.data), metadata_cols) for erp in erps)...))
 
         grand_avg_data = copy(first_erp.data)
-
         var_df = DataFrames.DataFrame()
         for col in metadata_cols
-            if hasproperty(grand_avg_data, col)
-                var_df[!, col] = grand_avg_data[!, col]
-            end
+            hasproperty(grand_avg_data, col) && (var_df[!, col] = grand_avg_data[!, col])
         end
 
         n_points = nrow(grand_avg_data)
         n_erps = length(erps)
-
+        inv_n = 1.0 / n_erps
         avg_buf = Vector{Float64}(undef, n_points)
+
         for ch in eeg_channels
             fill!(avg_buf, 0.0)
             for erp in erps
-                col_data = erp.data[!, ch]::Vector{Float64}
-                @inbounds @simd for i = 1:n_points
-                    avg_buf[i] += col_data[i]
-                end
+                _accum_col!(avg_buf, erp.data[!, ch])
             end
-            @inbounds @simd for i = 1:n_points
-                avg_buf[i] /= n_erps
-            end
+            avg_buf .*= inv_n
             grand_avg_data[!, ch] = copy(avg_buf)
 
             if n_erps > 1 && error_bars != :none
                 var_buf = zeros(Float64, n_points)
                 if error_bars == :within_sem
+                    g_mean = grand_global_mean[!, ch]::Vector{Float64}
                     for erp in erps
-                        pid = erp.file
-                        col_data = erp.data[!, ch]::Vector{Float64}
-                        p_mean = participant_global_means[pid][!, ch]::Vector{Float64}
-                        g_mean = grand_global_mean[!, ch]::Vector{Float64}
-
-                        @inbounds @simd for i = 1:n_points
-                            y_corr = col_data[i] - p_mean[i] + g_mean[i]
-                            diff = y_corr - avg_buf[i]
-                            var_buf[i] += diff * diff
-                        end
+                        _accum_within_sqdiff!(
+                            var_buf,
+                            erp.data[!, ch],
+                            participant_global_means[erp.file][!, ch]::Vector{Float64},
+                            g_mean,
+                            avg_buf,
+                        )
                     end
-                    @inbounds @simd for i = 1:n_points
-                        var_buf[i] = (var_buf[i] / (n_erps - 1)) * cm_correction
-                    end
+                    var_buf .*= (cm_correction / (n_erps - 1))
                 else
                     for erp in erps
-                        col_data = erp.data[!, ch]::Vector{Float64}
-                        @inbounds @simd for i = 1:n_points
-                            diff = col_data[i] - avg_buf[i]
-                            var_buf[i] += diff * diff
-                        end
+                        _accum_sqdiff!(var_buf, erp.data[!, ch], avg_buf)
                     end
-                    @inbounds @simd for i = 1:n_points
-                        var_buf[i] /= (n_erps - 1)
-                    end
+                    var_buf ./= (n_erps - 1)
                 end
                 var_df[!, ch] = var_buf
             end
         end
 
-        total_epochs = sum(erp.n_epochs for erp in erps)
-        grand_avg = ErpData(
-            "grand_avg",
-            cond_num,
-            "grand_avg_$(first_erp.condition_name)",
-            grand_avg_data,
-            copy(first_erp.layout),
-            first_erp.sample_rate,
-            copy(first_erp.analysis_info),
-            total_epochs,
+        push!(
+            grand_averages,
+            ErpData(
+                "grand_avg",
+                cond_num,
+                "grand_avg_$(first_erp.condition_name)",
+                grand_avg_data,
+                copy(first_erp.layout),
+                first_erp.sample_rate,
+                copy(first_erp.analysis_info),
+                sum(erp.n_epochs for erp in erps),
+            ),
         )
-
-        push!(grand_averages, grand_avg)
-        if error_bars != :none && n_erps > 1
-            variances_dict[dataset_idx] = (var_df, n_erps)
-        end
-        dataset_idx += 1
+        error_bars != :none && n_erps > 1 && (variances_dict[dataset_idx] = (var_df, n_erps))
     end
 
     return grand_averages, variances_dict
 end
-
 
 function _handle_erp_right_click!(selection_state, mouse_x, data, condition_checked_ref)
     if selection_state.visible[] && _is_within_selection(selection_state, mouse_x)
@@ -1098,38 +847,23 @@ function _handle_erp_right_click!(selection_state, mouse_x, data, condition_chec
 end
 
 function _show_erp_context_menu!(selection_state, data, condition_checked_ref)
-
     _set_window_title("ERP Context Menu")
     menu_fig = _eegfun_figure(size = (300, 300))
 
-    # Filter by visible conditions to determine if we have multiple visible conditions
     data_to_plot = _filter_visible_conditions(data, condition_checked_ref)
-    has_multiple_conditions = data_to_plot isa Vector{ErpData} && length(data_to_plot) > 1
+    plot_types = data_to_plot isa Vector{ErpData} && length(data_to_plot) > 1 ? ["Topoplot", "Topoplot (average)"] : ["Topoplot"]
 
-    plot_types = ["Topoplot"]
-
-    # Only add average options if multiple visible conditions
-    if has_multiple_conditions
-        push!(plot_types, "Topoplot (average)")
-    end
-
-    menu_buttons = [Button(menu_fig[idx, 1], label = plot_type) for (idx, plot_type) in enumerate(plot_types)]
-
-    for btn in menu_buttons
-        on(btn.clicks) do n
+    for (idx, plot_type) in enumerate(plot_types)
+        btn = Button(menu_fig[idx, 1], label = plot_type)
+        on(btn.clicks) do _
             original_data, x_min, x_max = _get_erp_selection_bounds(selection_state, data)
-
-            # Create time-based sample selection for the topo plot
-            time_sample_selection = x -> (x.time .>= x_min) .& (x.time .<= x_max)
-
-            # Filter by visible conditions if condition_checked is available (already done above, but do again for consistency)
-            data_to_plot = _filter_visible_conditions(original_data, condition_checked_ref)
+            time_sel = x -> (x.time .>= x_min) .& (x.time .<= x_max)
+            vis_data = _filter_visible_conditions(original_data, condition_checked_ref)
 
             if btn.label[] == "Topoplot"
-                plot_topography(data_to_plot, sample_selection = time_sample_selection)
+                plot_topography(vis_data, sample_selection = time_sel)
             elseif btn.label[] == "Topoplot (average)"
-                avg_data = _average_conditions(data_to_plot)
-                plot_topography(avg_data, sample_selection = time_sample_selection)
+                plot_topography(_average_conditions(vis_data), sample_selection = time_sel)
             end
         end
     end
@@ -1137,62 +871,17 @@ function _show_erp_context_menu!(selection_state, data, condition_checked_ref)
     _display_in_screen(menu_fig; size = (300, 300))
 end
 
-"""
-    _get_erp_selection_bounds(selection_state, data)
-
-Extract time bounds from selection state and return original data with bounds.
-Does not subset the data - preserves all electrodes for topo plots.
-Returns (data, x_min, x_max).
-"""
 function _get_erp_selection_bounds(selection_state, data)
     x_min, x_max = minmax(selection_state.bounds[]...)
     return (data, x_min, x_max)
 end
 
-"""
-    _filter_visible_conditions(data, condition_checked_ref)
-
-Filter data by visible conditions from the control panel.
-Returns filtered Vector{ErpData} or single ErpData if only one condition.
-"""
-function _filter_visible_conditions(data, condition_checked_ref)
-    # If no condition_checked available or data is not Vector, return as-is
-    if isnothing(condition_checked_ref[]) || !(data isa Vector{ErpData})
-        return data
-    end
-
-    condition_checked = condition_checked_ref[]
-    if length(condition_checked) != length(data)
-        return data  # Mismatch, return as-is
-    end
-
-    # Filter by visible conditions
-    visible_data = [data[i] for i in eachindex(data) if condition_checked[i][]]
-
-    # Return single ErpData if only one visible, otherwise Vector
-    return length(visible_data) == 1 ? visible_data[1] : visible_data
-end
-
-"""
-    _average_conditions(erps::Vector{ErpData}) -> ErpData
-
-Average multiple ErpData conditions together into a single ErpData.
-Reuses _create_grand_average which averages ErpData objects together.
-"""
 function _average_conditions(erps::Vector{ErpData})
-    if isempty(erps)
-        @minimal_error("Cannot average empty ERP list")
-    end
-    if length(erps) == 1
-        return erps[1]  # Nothing to average
-    end
+    isempty(erps) && @minimal_error("Cannot average empty ERP list")
+    length(erps) == 1 && return erps[1]
 
-    # Reuse _create_grand_average - it averages ErpData together (same logic for conditions or participants)
-    # Use first condition number as cond_num (doesn't matter for averaging)
     avg_erp = _create_grand_average(erps, first(erps).condition)
-
-    # Update condition name to reflect averaging across conditions
-    avg_cond_name = "avg_" * join([erp.condition_name for erp in erps], "_")
+    avg_cond_name = "avg_" * join((erp.condition_name for erp in erps), "_")
     return ErpData(
         avg_erp.file,
         avg_erp.condition,
@@ -1205,212 +894,79 @@ function _average_conditions(erps::Vector{ErpData})
     )
 end
 
-"""
-    _average_conditions(erp::ErpData) -> ErpData
-
-Single ErpData case - just return it.
-"""
 _average_conditions(erp::ErpData) = erp
 
-"""
-    _show_channel_average_menu!(selected_channels, data, condition_checked_ref)
-
-Show a popup context menu for channel selection right-click.
-Offers "Plot Average of Selected" which opens a new ERP plot averaging the selected channels.
-"""
 function _show_channel_average_menu!(selected_channels, data, condition_checked_ref)
     _set_window_title("Channel Selection Menu")
     menu_fig = _eegfun_figure(size = (300, 150))
-
     data_to_plot = _filter_visible_conditions(data, condition_checked_ref)
 
     btn = Button(menu_fig[1, 1], label = "Plot Average of Selected ($(length(selected_channels)) ch)")
     on(btn.clicks) do _
         plot_erp(data_to_plot; channel_selection = channels(selected_channels), average_channels = true)
     end
-
     _display_in_screen(menu_fig; size = (300, 150))
 end
 
-
-"""
-    _draw_highlight_regions!(ax::Axis, regions)
-
-Draw shaded rectangular highlight regions on an axis.
-Accepts a single NamedTuple or a Vector of NamedTuples.
-Each region supports: x1, x2 (required), y1 (default -Inf), y2 (default Inf),
-color (default :gray), alpha (default 0.3).
-"""
 function _draw_highlight_regions!(ax::Axis, regions)
-    # Normalize single region to vector
-    region_list = regions isa AbstractVector ? regions : [regions]
-
+    region_list = regions isa AbstractVector ? regions : (regions,)
     for region in region_list
-        x1 = region.x1
-        x2 = region.x2
+        x1, x2 = region.x1, region.x2
         color = get(region, :color, :gray)
         alpha = get(region, :alpha, 0.3)
-        has_y1 = haskey(region, :y1)
-        has_y2 = haskey(region, :y2)
-
-        if has_y1 || has_y2
-            # Explicit y bounds — use poly! for a bounded rectangle
+        if haskey(region, :y1) || haskey(region, :y2)
             y1 = get(region, :y1, -1e10)
             y2 = get(region, :y2, 1e10)
-            rect = [Point2f(x1, y1), Point2f(x2, y1), Point2f(x2, y2), Point2f(x1, y2)]
-            poly!(ax, rect, color = (color, alpha), strokewidth = 0)
+            poly!(ax, Point2f[(x1, y1), (x2, y1), (x2, y2), (x1, y2)], color = (color, alpha), strokewidth = 0)
         else
-            # No y bounds — use vspan! which spans full axis height without affecting ylim
             vspan!(ax, x1, x2, color = (color, alpha))
         end
     end
 end
 
-"""
-    _compute_dataset_colors(color_val, n_datasets, n_channels, colormap, color_explicitly_set)
-
-Compute colors for each dataset-channel combination.
-Returns a vector of colors with length n_datasets * n_channels.
-Colors cycle across all channel-dataset combinations.
-"""
 function _compute_dataset_colors(color_val, n_datasets::Int, n_channels::Int, colormap, user_provided_color::Bool, color_cycle)
     n_total = n_datasets * n_channels
-
-    # If user provided a vector of colors, use those (cycle if needed)
     if color_val isa Vector
-        return [color_val[(i-1)%length(color_val)+1] for i = 1:n_total]
-    end
-
-    # If user provided a single color, use it for all items
-    if user_provided_color && !isnothing(color_val)
-        return [color_val for _ = 1:n_total]
-    end
-
-    # User didn't provide color explicitly (or it's nothing/automatic):
-    if n_total > 1 && !isnothing(colormap) && colormap != Makie.automatic
-        # Makie.cgrad returns a gradient, convert to vector of colors
+        return [color_val[mod1(i, length(color_val))] for i = 1:n_total]
+    elseif user_provided_color && !isnothing(color_val)
+        return fill(color_val, n_total)
+    elseif n_total > 1 && !isnothing(colormap) && colormap != Makie.automatic
         gradient = Makie.cgrad(colormap, n_total, categorical = true)
         return [gradient[i] for i = 1:n_total]
     else
-        return [color_cycle[(i-1)%length(color_cycle)+1] for i = 1:n_total]
+        return [color_cycle[mod1(i, length(color_cycle))] for i = 1:n_total]
     end
 end
 
-"""
-    _compute_dataset_linestyles(linestyle_val, n_datasets)
-
-Compute linestyles for each dataset based on user input.
-Returns a vector of linestyles, one per dataset.
-"""
 function _compute_dataset_linestyles(linestyle_val, n_datasets::Int)
-    if linestyle_val isa Vector # User specified linestyles per dataset - wrap if needed
-        return [linestyle_val[(i-1)%length(linestyle_val)+1] for i = 1:n_datasets]
+    if linestyle_val isa Vector
+        return [linestyle_val[mod1(i, length(linestyle_val))] for i = 1:n_datasets]
     elseif isnothing(linestyle_val) || linestyle_val == Makie.automatic
-        return [nothing for _ = 1:n_datasets]
-    else # Single linestyle - use for all datasets
-        return [linestyle_val for _ = 1:n_datasets]
-    end
-end
-
-
-"""
-    _add_legend!(ax::Axis, channels::Vector{Symbol}, datasets::Vector{ErpData}, kwargs::Dict)
-
-Add legend to axis if conditions are met.
-Handles legend_channel filtering, position, and other legend attributes.
-"""
-function _add_legend!(ax::Axis, channels::Vector{Symbol}, datasets::Vector{ErpData}, kwargs::Dict)
-
-    # Check if legend should be shown
-    if !kwargs[:legend]
-        return nothing
-    end
-    if !isempty(kwargs[:legend_channel]) && isempty(intersect(kwargs[:legend_channel], channels))
-        return nothing
-    end
-
-    # Extract legend parameters
-    legend_label = kwargs[:legend_label]
-    legend_position = kwargs[:legend_position]
-    nbanks = something(get(kwargs, :legend_nbanks, nothing), length(channels) > 10 ? cld(length(channels), 10) : 1)
-    legend_kwargs = get(kwargs, :legend_kwargs, (;))
-    framevisible = get(kwargs, :legend_framevisible, true)
-
-    # Add legend with position and optional label
-    leg = if isempty(legend_label)
-        axislegend(ax; position = legend_position, nbanks = nbanks, framevisible = framevisible, legend_kwargs...)
+        return fill(nothing, n_datasets)
     else
-        axislegend(ax, legend_label; position = legend_position, nbanks = nbanks, framevisible = framevisible, legend_kwargs...)
+        return fill(linestyle_val, n_datasets)
     end
-
-    # For single channel + single dataset, hide by default, but keep object for 'l' toggle
-    if length(channels) == 1 && length(datasets) == 1
-        leg.blockscene.visible[] = false
-    end
-
-    return leg
 end
 
-"""
-    _setup_linked_legend_interactions!(line_refs::Vector{<:Dict})
-
-Set up linked legend interactions across multiple subplots so clicking a legend entry
-in one subplot toggles visibility of the corresponding condition in all subplots.
-Lines within the same subplot/axis are never linked, preserving independent channel selection.
-"""
 function _setup_linked_legend_interactions!(line_refs::Vector{<:Dict})
-    # Linked legend interactions are only relevant across multiple subplots (axes)
     length(line_refs) > 1 || return
 
-    # Map each dataset/condition to lines across distinct subplots
     dataset_lines = Dict{Any,Vector{Any}}()
-
-    # Collect lines across distinct axes
     for ax_line_refs in line_refs
         for (dataset_idx, channel_lines) in ax_line_refs
             if length(channel_lines) == 1
-                # Standard case for multi-axis plots (e.g. topo or grid layout where each axis is one channel)
-                lines = get!(dataset_lines, dataset_idx, Any[])
-                push!(lines, first(values(channel_lines))[1])
+                push!(get!(dataset_lines, dataset_idx, Any[]), first(values(channel_lines))[1])
             elseif length(channel_lines) > 1
-                # If an axis has multiple channels, only link the matching channel across different axes
                 for (ch, line_data) in channel_lines
-                    lines = get!(dataset_lines, (dataset_idx, ch), Any[])
-                    push!(lines, line_data[1])
+                    push!(get!(dataset_lines, (dataset_idx, ch), Any[]), line_data[1])
                 end
             end
         end
     end
 
-    # When any line's visibility changes, update all other lines in that linked group across subplots
-    for lines in values(dataset_lines)
-        length(lines) > 1 || continue
-
-        syncing = Ref(false)
-        for line in lines
-            other_lines = [l for l in lines if l !== line]
-            on(line.visible) do visible_val
-                syncing[] && return
-                syncing[] = true
-                for other_line in other_lines
-                    if other_line.visible[] != visible_val
-                        other_line.visible = visible_val
-                    end
-                end
-                syncing[] = false
-            end
-        end
-    end
+    foreach(_sync_lines!, values(dataset_lines))
 end
 
-"""
-    _setup_erp_control_panel!(fig::Figure, dat_subset::Vector{ErpData}, axes::Vector{Axis}, 
-                               baseline_interval::Interval,
-                               line_refs::Union{Vector{<:Dict},Nothing} = nothing)
-
-Set up a control panel that opens when 'c' key is pressed.
-Allows adjusting baseline and toggling conditions.
-"""
 function _setup_erp_control_panel!(
     fig::Figure,
     dat_subset::Vector{ErpData},
@@ -1420,138 +976,84 @@ function _setup_erp_control_panel!(
     condition_checked_ref::Ref{Union{Vector{Observable{Bool}},Nothing}} = Ref{Union{Vector{Observable{Bool}},Nothing}}(nothing),
     legend_refs = nothing,
 )
-
     control_fig = Ref{Union{Figure,Nothing}}(nothing)
+    !isnothing(line_refs) && _setup_linked_legend_interactions!(line_refs)
 
-    # Set up linked legend interactions
-    if !isnothing(line_refs)
-        _setup_linked_legend_interactions!(line_refs)
-    end
-
-    # State: baseline values and condition selections
     start_val, stop_val = _extract_baseline_values(baseline_interval)
     baseline_start_obs = Observable(isnothing(start_val) ? "" : string(start_val))
     baseline_stop_obs = Observable(isnothing(stop_val) ? "" : string(stop_val))
     condition_checked = [Observable(true) for _ in dat_subset]
-    condition_checked_ref[] = condition_checked  # Store for access by right-click handler
-
-    # Track previous baseline to avoid unnecessary updates
+    condition_checked_ref[] = condition_checked
     previous_baseline = Ref{Union{Tuple{Float64,Float64},Nothing}}(nothing)
 
     function update_plot!()
-        # Parse baseline values from observables
-        start_str, stop_str = baseline_start_obs[], baseline_stop_obs[]
-        start_val, stop_val = _parse_baseline_values(start_str, stop_str)
-
-        # Convert to tuple if valid (baseline! accepts tuples and converts internally)
-        baseline_interval_new = (!isnothing(start_val) && !isnothing(stop_val)) ? (start_val, stop_val) : nothing
-
-        # Check if baseline actually changed
+        s_val, e_val = _parse_baseline_values(baseline_start_obs[], baseline_stop_obs[])
+        baseline_interval_new = (!isnothing(s_val) && !isnothing(e_val)) ? (s_val, e_val) : nothing
         baseline_changed = baseline_interval_new != previous_baseline[]
 
-        # Apply baseline if it changed
         if baseline_changed && !isnothing(baseline_interval_new)
             baseline!.(dat_subset, Ref(baseline_interval_new))
             previous_baseline[] = baseline_interval_new
         end
 
-        # Build condition mask
         condition_mask = [checked[] for checked in condition_checked]
+        isnothing(line_refs) && return
 
-        # Update existing lines (y-data if baseline changed, visibility always)
         for (ax_idx, ax_line_refs) in enumerate(line_refs)
             ax_idx > length(axes) && continue
             for (dataset_idx, channel_lines) in ax_line_refs
                 dataset_idx > length(dat_subset) && continue
                 dat = dat_subset[dataset_idx]
+                new_vis = dataset_idx <= length(condition_mask) ? condition_mask[dataset_idx] : true
 
-                for (channel, line_data) in channel_lines
-                    line, y_obs = line_data
-
-                    # Update y-data if baseline changed
-                    if baseline_changed
-                        y_obs[] = dat.data[!, channel]
-                    end
-
-                    # Update visibility based on condition_mask
-                    new_vis = dataset_idx <= length(condition_mask) ? condition_mask[dataset_idx] : true
-                    if line.visible[] != new_vis
-                        line.visible = new_vis
-                    end
+                for (channel, (line, y_obs)) in channel_lines
+                    baseline_changed && (y_obs[] = dat.data[!, channel])
+                    line.visible[] != new_vis && (line.visible = new_vis)
                 end
             end
         end
     end
 
-    # Auto-update on condition changes (registered ONCE outside keyboard handler)
     for checked in condition_checked
-        on(checked) do _
-            update_plot!()
-        end
+        on(_ -> update_plot!(), checked)
     end
 
     control_open = Ref(false)
 
-    # Keyboard handler for 'c' key
     on(events(fig).keyboardbutton) do event
-        if event.action == Keyboard.press && event.key == Keyboard.c
+        event.action == Keyboard.press || return
+        if event.key == Keyboard.c
             if control_open[] && !isnothing(control_fig[])
                 _display_in_screen(control_fig[])
                 return
             end
 
-            # Create new control panel
             control_fig[] = _eegfun_figure(title = "ERP Control Panel", size = (320, 420))
             control_open[] = true
             layout = GridLayout(control_fig[][1, 1], tellwidth = false, rowgap = 10)
 
-            # Baseline section
             Label(layout[1, 1], "Baseline Interval", fontsize = 14, font = :bold)
             baseline_layout = GridLayout(layout[2, 1], tellwidth = false, colgap = 10)
-
             _create_baseline_textbox(baseline_layout, 1, "Start (s):", baseline_start_obs, " ", 100)
             _create_baseline_textbox(baseline_layout, 2, "End (s):", baseline_stop_obs, " ", 100)
 
-            # Apply button
             apply_btn = Button(layout[3, 1], label = "Apply Baseline", width = 200)
-            on(apply_btn.clicks) do _
-                update_plot!()
-            end
+            on(_ -> update_plot!(), apply_btn.clicks)
 
-            # Conditions section
             Label(layout[4, 1], "Conditions", fontsize = 14, font = :bold)
             conditions_layout = GridLayout(layout[5, 1], tellwidth = false, rowgap = 5)
-
             for (idx, dat) in enumerate(dat_subset)
                 cb = Checkbox(conditions_layout[idx, 1], checked = condition_checked[idx][])
                 Label(conditions_layout[idx, 2], dat.condition_name)
-                on(cb.checked) do val
-                    condition_checked[idx][] = val
-                end
+                on(val -> (condition_checked[idx][] = val), cb.checked)
             end
 
-            # Legend toggle button
             leg_btn = Button(layout[6, 1], label = "Toggle Legend (L)", width = 200)
-            on(leg_btn.clicks) do _
-                if !isnothing(legend_refs)
-                    for leg in legend_refs
-                        if !isnothing(leg) && isdefined(leg, :blockscene)
-                            leg.blockscene.visible[] = !leg.blockscene.visible[]
-                        end
-                    end
-                end
-            end
+            on(_ -> _toggle_legends!(legend_refs), leg_btn.clicks)
 
             _display_in_screen(control_fig[])
-
-        elseif event.action == Keyboard.press && event.key == Keyboard.l
-            if !isnothing(legend_refs)
-                for leg in legend_refs
-                    if !isnothing(leg) && isdefined(leg, :blockscene)
-                        leg.blockscene.visible[] = !leg.blockscene.visible[]
-                    end
-                end
-            end
+        elseif event.key == Keyboard.l
+            _toggle_legends!(legend_refs)
         end
     end
 end

@@ -1,60 +1,40 @@
 """
     plot_erp_measurements(erp_data, analysis_type;
-                          analysis_interval, baseline_interval,
-                          layout, channel_selection, condition_selection, kwargs...)
+                          analysis_interval = nothing,
+                          baseline_interval = nothing,
+                          layout = :single,
+                          channel_selection = channels(),
+                          condition_selection = conditions(),
+                          average_channels = false,
+                          kwargs...)
 
 Plot ERP data with measurement overlays computed inline.
 
 Computes a single measurement type across all selected channels and conditions,
-then overlays the results on the ERP waveforms. Combines measurement computation
-and visualization in one call.
+then overlays the results on the ERP waveforms.
 
 # Arguments
-- `erp_data::Union{String, ErpData, Vector{ErpData}}`: ERP data (filepath or data object)
-- `analysis_type::String`: Measurement type (e.g. "mean_amplitude", "max_peak_latency")
+- `erp_data::Union{String, ErpData, AbstractVector{<:ErpData}}`: ERP data (filepath, pattern, or data object)
+- `analysis_type::String`: Measurement type (e.g. `"mean_amplitude"`, `"max_peak_latency"`)
 
 # Keyword Arguments
-- `analysis_interval::Tuple{Real,Real}`: Time interval for measurement (default: full range)
-- `baseline_interval::Union{Tuple{Real,Real},Nothing}`: Baseline interval for correction (default: nothing)
-- `layout::Union{Symbol, PlotLayout}`: Plot layout — :single, :grid, or :topo (default: :single)
-- `channel_selection::Function`: Channel selection predicate (default: all channels)
-- `condition_selection::Function`: Condition selection predicate (default: all conditions)
-- `average_channels::Bool`: Evaluate measurement across a spatially pooled ROI waveform instead of discrete individual channels (default: false).
+- `analysis_interval::Interval`: Time interval for measurement (default: full range)
+- `baseline_interval::Interval`: Baseline interval for correction (default: `nothing`)
+- `layout::Union{Symbol, PlotLayout}`: Plot layout — `:single`, `:grid`, or `:topo` (default: `:single`)
+- `channel_selection`: Channel selection predicate (default: `channels()`)
+- `condition_selection`: Condition selection predicate (default: `conditions()`)
+- `average_channels::Bool`: Evaluate measurement across spatially pooled ROI waveform (default: `false`)
 - `kwargs...`: Additional arguments passed to `plot_erp` and `erp_measurements`
 
 $(_generate_kwargs_doc(ERP_MEASUREMENTS_KWARGS))
 
-# Overlay Types
-- Peak amplitude → vertical line at peak time, amplitude label
-- Peak latency → vertical line at latency, time label
-- Peak-to-peak → vertical lines at both peaks
-- Mean amplitude → shaded analysis interval + horizontal mean line
-- Area/integral → shaded analysis interval
-- Fractional latency → vertical line at fractional latency point
-
 # Examples
 ```julia
-dat = EegFun.read_data("erps_final.jld2")
-
-# Mean amplitude in 300-500ms interval
-plot_erp_measurements(dat, "mean_amplitude",
-    analysis_interval = (0.3, 0.5),
-    baseline_interval = (-0.2, 0.0))
-
-# Peak latency
-plot_erp_measurements(dat, "max_peak_latency",
-    analysis_interval = (0.0, 0.8),
-    baseline_interval = (-0.2, 0.0),
-    channel_selection = channels([:Cz, :Pz]))
-
-# Load from file path
-plot_erp_measurements("erps_final.jld2", "max_peak_amplitude",
-    analysis_interval = (0.1, 0.3))
+plot_erp_measurements(dat, "mean_amplitude", analysis_interval = (0.3, 0.5), baseline_interval = (-0.2, 0.0))
+plot_erp_measurements("erps_final.jld2", "max_peak_amplitude", analysis_interval = (0.1, 0.3))
 ```
 """
-function plot_erp_measurements(erp::ErpData, analysis_type::String; kwargs...)
-    return plot_erp_measurements([erp], analysis_type; kwargs...)
-end
+plot_erp_measurements(erp::ErpData, analysis_type::String; kwargs...) = plot_erp_measurements([erp], analysis_type; kwargs...)
 
 function plot_erp_measurements(
     filepath::String,
@@ -67,21 +47,17 @@ function plot_erp_measurements(
         data = read_data(filepath)
         isnothing(data) && @minimal_error "No data found in file: $filepath"
         return plot_erp_measurements(data, analysis_type; kwargs...)
-    else
-        files = _find_batch_files(filepath, input_dir, participant_selection)
-        isempty(files) && @minimal_error "No files matching pattern '$filepath' in $input_dir"
-
-        results = NamedTuple[]
-        for file in sort(files, by = _natural_sort_key)
-            file_path = joinpath(input_dir, file)
-            @info "Plotting: $file"
-            data = read_data(file_path)
-            isnothing(data) && continue
-            result = plot_erp_measurements(data, analysis_type; kwargs...)
-            push!(results, result)
-        end
-        return results
     end
+
+    files = _require_batch_files(filepath, input_dir, participant_selection)
+    results = NamedTuple[]
+    for file in files
+        @info "Plotting: $file"
+        data = read_data(joinpath(input_dir, file))
+        isnothing(data) && continue
+        push!(results, plot_erp_measurements(data, analysis_type; kwargs...))
+    end
+    return results
 end
 
 function plot_erp_measurements(
@@ -95,112 +71,80 @@ function plot_erp_measurements(
     average_channels::Bool = false,
     kwargs...,
 )
-
-    # Filter by condition
     selected_indices = get_selected_conditions(erp_datasets, condition_selection)
     erp_datasets = erp_datasets[selected_indices]
-
     isempty(erp_datasets) && @minimal_error "No conditions selected"
 
-    # Default analysis interval to full time range
-    if isnothing(analysis_interval)
-        time_data = time_vector(erp_datasets[1])
-        analysis_interval = (first(time_data), last(time_data))
+    analysis_interval = if isnothing(analysis_interval)
+        t0 = time_vector(erp_datasets[1])
+        (first(t0), last(t0))
     else
-        analysis_interval = _normalize_interval(analysis_interval)
+        _normalize_interval(analysis_interval)
     end
 
     kwargs_dict = _normalize_plot_kwargs(kwargs)
+    measurement_kwargs = Dict{Symbol,Any}(k => (haskey(kwargs_dict, k) ? pop!(kwargs_dict, k) : v[1]) for (k, v) in ERP_MEASUREMENTS_KWARGS)
 
-    # Extract measurement kwargs and remove them from Plot kwargs to prevent Makie keyword errors
-    measurement_kwargs = Dict{Symbol,Any}()
-    for (k, v) in ERP_MEASUREMENTS_KWARGS
-        if haskey(kwargs_dict, k)
-            measurement_kwargs[k] = pop!(kwargs_dict, k)
-        else
-            measurement_kwargs[k] = v[1]
-        end
-    end
-
-    # Create the base ERP plot (force interactive for marker linking)
     kwargs_dict[:interactive] = true
-    if !isnothing(baseline_interval)
-        kwargs_dict[:baseline_interval] = baseline_interval
-    end
-    if average_channels
-        kwargs_dict[:average_channels] = true
-    end
+    !isnothing(baseline_interval) && (kwargs_dict[:baseline_interval] = baseline_interval)
+    average_channels && (kwargs_dict[:average_channels] = true)
 
     result = plot_erp(
         erp_datasets;
         layout = layout,
         channel_selection = channel_selection,
-        condition_selection = conditions(),  # already filtered
+        condition_selection = conditions(),
         (; kwargs_dict...)...,
     )
 
     fig = result.fig
     axes = result.axes
-    line_refs = result.line_refs
+    plot_lines = _build_plot_line_lookup(result.line_refs, axes)
 
-    # Get selected channels
     first_data = erp_datasets[1]
-    metadata_cols = meta_labels(first_data)
-    all_channels = setdiff(propertynames(first_data.data), metadata_cols)
+    all_channels = setdiff(propertynames(first_data.data), meta_labels(first_data))
     chan_func = _to_channel_func(channel_selection)
     selected_channels = all_channels[chan_func(all_channels)]
     plot_channels = average_channels ? [:avg] : selected_channels
 
-    # Build plot_line lookup from line_refs
-    plot_lines = _build_plot_line_lookup(line_refs, axes)
-
-    # Compute measurements and overlay for each dataset/channel
-    # Pre-compute baseline-corrected data per dataset (avoid redundant copies per channel)
-    baseline_cache = Dict{Int,Tuple{ErpData,Vector{Float64}}}()
+    n_ds = length(erp_datasets)
+    cached_erps = Vector{ErpData}(undef, n_ds)
+    cached_times = Vector{Vector{Float64}}(undef, n_ds)
+    ch_sel_avg = average_channels ? [channels(selected_channels)] : nothing
     for (idx, dataset) in enumerate(erp_datasets)
         erp_data = isnothing(baseline_interval) ? (average_channels ? copy(dataset) : dataset) : baseline(dataset, baseline_interval)
-        if average_channels
-            channel_average!(erp_data; channel_selections = [channels(selected_channels)], output_labels = [:avg], reduce = false)
-        end
-        time_data = time_vector(erp_data)
-        baseline_cache[idx] = (erp_data, time_data)
+        average_channels && channel_average!(erp_data; channel_selections = ch_sel_avg, output_labels = [:avg], reduce = false)
+        cached_erps[idx] = erp_data
+        cached_times[idx] = time_vector(erp_data)
     end
 
     if layout == :single
-        for dataset_idx in eachindex(erp_datasets)
-            erp_data, time_data = baseline_cache[dataset_idx]
-            for channel in plot_channels
-                plot_line = get(plot_lines[1], (dataset_idx, channel), nothing)
+        for dataset_idx = 1:n_ds, channel in plot_channels
+            _compute_and_overlay!(
+                axes[1],
+                cached_erps[dataset_idx],
+                cached_times[dataset_idx],
+                channel,
+                analysis_type,
+                analysis_interval,
+                measurement_kwargs,
+                get(plot_lines[1], (dataset_idx, channel), nothing),
+            )
+        end
+    else
+        for (ax_idx, channel) in enumerate(plot_channels)
+            ax_idx > length(axes) && break
+            for dataset_idx = 1:n_ds
                 _compute_and_overlay!(
-                    axes[1],
-                    erp_data,
-                    time_data,
+                    axes[ax_idx],
+                    cached_erps[dataset_idx],
+                    cached_times[dataset_idx],
                     channel,
                     analysis_type,
                     analysis_interval,
                     measurement_kwargs,
-                    plot_line,
+                    get(plot_lines[ax_idx], (dataset_idx, channel), nothing),
                 )
-            end
-        end
-    else
-        # One channel per axis (grid or topo layout)
-        for (ax_idx, channel) in enumerate(plot_channels)
-            if ax_idx <= length(axes)
-                for dataset_idx in eachindex(erp_datasets)
-                    erp_data, time_data = baseline_cache[dataset_idx]
-                    plot_line = get(plot_lines[ax_idx], (dataset_idx, channel), nothing)
-                    _compute_and_overlay!(
-                        axes[ax_idx],
-                        erp_data,
-                        time_data,
-                        channel,
-                        analysis_type,
-                        analysis_interval,
-                        measurement_kwargs,
-                        plot_line,
-                    )
-                end
             end
         end
     end
@@ -208,34 +152,33 @@ function plot_erp_measurements(
     return (fig = fig, axes = axes)
 end
 
-
-"""Build plot_line lookup dictionary from line_refs structure."""
 function _build_plot_line_lookup(line_refs, axes)
     plot_lines = [Dict{Tuple{Int,Symbol},Any}() for _ in axes]
-    if isnothing(line_refs)
-        return plot_lines
-    end
+    isnothing(line_refs) && return plot_lines
     for (ax_idx, ax_line_refs) in enumerate(line_refs)
-        if ax_idx <= length(plot_lines) && !isnothing(ax_line_refs)
-            for (dataset_idx, channel_lines) in ax_line_refs
-                if !isnothing(channel_lines)
-                    for (channel, line_data) in channel_lines
-                        if line_data isa Tuple && length(line_data) >= 1
-                            plot_lines[ax_idx][(dataset_idx, channel)] = line_data[1]
-                        end
-                    end
-                end
+        (ax_idx > length(plot_lines) || isnothing(ax_line_refs)) && continue
+        for (dataset_idx, channel_lines) in ax_line_refs
+            isnothing(channel_lines) && continue
+            for (channel, line_data) in channel_lines
+                line_data isa Tuple && !isempty(line_data) && (plot_lines[ax_idx][(dataset_idx, channel)] = line_data[1])
             end
         end
     end
     return plot_lines
 end
 
+function _select_interval_slice(data_vec::AbstractVector, time_data::Vector{Float64}, t_lo::Real, t_hi::Real)
+    if issorted(time_data)
+        i1 = searchsortedfirst(time_data, t_lo)
+        i2 = searchsortedlast(time_data, t_hi)
+        i1 > i2 && return nothing
+        return @view(data_vec[i1:i2]), @view(time_data[i1:i2])
+    end
+    idxs = findall(t -> t_lo <= t <= t_hi, time_data)
+    isempty(idxs) && return nothing
+    return @view(data_vec[idxs]), @view(time_data[idxs])
+end
 
-"""
-Compute measurement for a single channel and draw overlay markers.
-Uses pre-computed baseline-corrected data to avoid redundant copies.
-"""
 function _compute_and_overlay!(
     ax::Axis,
     erp_data::ErpData,
@@ -247,23 +190,21 @@ function _compute_and_overlay!(
     plot_line,
 )
     channel_data = erp_data.data[!, channel]
-
-    # Get analysis interval mask
-    time_mask = (time_data .>= analysis_interval[1]) .& (time_data .<= analysis_interval[2])
-    !any(time_mask) && return
-
-    selected_data = channel_data[time_mask]
-    selected_times = time_data[time_mask]
+    sliced = _select_interval_slice(channel_data, time_data, analysis_interval[1], analysis_interval[2])
+    isnothing(sliced) && return
+    selected_data, selected_times = sliced
     time_min, time_max = extrema(selected_times)
 
-    # Compute measurement value
     value = _compute_measurement(selected_data, selected_times, analysis_type, measurement_kwargs, channel)
     (isnothing(value) || isnan(value)) && return
 
-    # Get marker visibility and color from plot line
-    marker_visible, marker_color = _get_marker_style(plot_line)
+    marker_visible, marker_color = if isnothing(plot_line)
+        Observable(true), Observable(:black)
+    else
+        col = plot_line.color
+        plot_line.visible, (col isa Observable ? col : Observable(col))
+    end
 
-    # Draw overlay based on analysis type
     _draw_measurement_overlay!(
         ax,
         analysis_type,
@@ -279,19 +220,6 @@ function _compute_and_overlay!(
     )
 end
 
-
-"""Extract visibility observable and color from a plot line."""
-function _get_marker_style(plot_line)
-    if isnothing(plot_line)
-        return Observable(true), Observable(:black)
-    end
-    color = plot_line.color
-    marker_color = color isa Observable ? color : Observable(color)
-    return plot_line.visible, marker_color
-end
-
-
-"""Draw measurement-specific overlay markers on an axis."""
 function _draw_measurement_overlay!(
     ax,
     analysis_type,
@@ -305,73 +233,68 @@ function _draw_measurement_overlay!(
     marker_visible,
     marker_color,
 )
-    if analysis_type in ["max_peak_amplitude", "min_peak_amplitude"]
-        # Value is amplitude; find peak position for vertical line
+    if analysis_type in ("max_peak_amplitude", "min_peak_amplitude")
         peak_idx = analysis_type == "max_peak_amplitude" ? argmax(selected_data) : argmin(selected_data)
         peak_time = selected_times[peak_idx]
-        peak_amp = selected_data[peak_idx]
-
         vlines!(ax, peak_time, color = marker_color, linewidth = 1, linestyle = :solid, visible = marker_visible)
         text!(
             ax,
             peak_time,
-            peak_amp,
+            selected_data[peak_idx],
             text = Printf.@sprintf("%.2f μV", value),
             align = (:center, :bottom),
             color = marker_color,
             fontsize = 14,
             visible = marker_visible,
         )
-
-    elseif analysis_type in ["max_peak_latency", "min_peak_latency"]
-        # Value is latency; draw vline there
-        latency = value
-        if time_min <= latency <= time_max
-            latency_idx = searchsortedfirst(time_data, latency)
-            latency_amp = channel_data[latency_idx]
-
-            vlines!(ax, latency, color = marker_color, linewidth = 2, linestyle = :solid, visible = marker_visible)
+    elseif analysis_type in ("max_peak_latency", "min_peak_latency", "fractional_area_latency", "fractional_peak_latency")
+        if time_min <= value <= time_max
+            vlines!(ax, value, color = marker_color, linewidth = 2, linestyle = :solid, visible = marker_visible)
+            latency_amp = channel_data[clamp(searchsortedfirst(time_data, value), 1, length(channel_data))]
+            lbl = if analysis_type == "fractional_area_latency"
+                Printf.@sprintf("Frac Area: %.3f s", value)
+            elseif analysis_type == "fractional_peak_latency"
+                Printf.@sprintf("Frac Peak: %.3f s", value)
+            else
+                Printf.@sprintf("%.3f s", value)
+            end
             text!(
                 ax,
-                latency,
+                value,
                 latency_amp,
-                text = Printf.@sprintf("%.3f s", latency),
+                text = lbl,
                 align = (:center, :bottom),
                 color = marker_color,
                 fontsize = 14,
                 visible = marker_visible,
             )
         end
-
-    elseif analysis_type in ["peak_to_peak_amplitude", "peak_to_peak_latency"]
-        # Show both peaks
-        max_idx = argmax(selected_data)
-        min_idx = argmin(selected_data)
+    elseif analysis_type in ("peak_to_peak_amplitude", "peak_to_peak_latency")
+        max_idx, min_idx = argmax(selected_data), argmin(selected_data)
         max_time, min_time = selected_times[max_idx], selected_times[min_idx]
-        max_amp, min_amp = selected_data[max_idx], selected_data[min_idx]
-
         vlines!(ax, max_time, color = marker_color, linewidth = 1, linestyle = :solid, visible = marker_visible)
         vlines!(ax, min_time, color = marker_color, linewidth = 1, linestyle = :solid, visible = marker_visible)
-
-        label =
-            analysis_type == "peak_to_peak_amplitude" ? Printf.@sprintf("P2P: %.2f μV", value) : Printf.@sprintf("P2P Lat: %.3f s", value)
+        lbl = analysis_type == "peak_to_peak_amplitude" ? Printf.@sprintf("P2P: %.2f μV", value) : Printf.@sprintf("P2P Lat: %.3f s", value)
         text!(
             ax,
             (max_time + min_time) / 2,
-            (max_amp + min_amp) / 2,
-            text = label,
+            (selected_data[max_idx] + selected_data[min_idx]) / 2,
+            text = lbl,
             align = (:center, :center),
             color = marker_color,
             fontsize = 14,
             visible = marker_visible,
         )
-
     elseif analysis_type == "mean_amplitude"
-        # Shade analysis interval + horizontal mean line
         y_min, y_max = extrema(selected_data)
         concrete_color = marker_color isa Observable ? marker_color[] : marker_color
-        rect = [Point2f(time_min, y_min), Point2f(time_max, y_min), Point2f(time_max, y_max), Point2f(time_min, y_max)]
-        poly!(ax, rect, color = (concrete_color, 0.3), strokewidth = 0, visible = marker_visible)
+        poly!(
+            ax,
+            Point2f[(time_min, y_min), (time_max, y_min), (time_max, y_max), (time_min, y_max)],
+            color = (concrete_color, 0.3),
+            strokewidth = 0,
+            visible = marker_visible,
+        )
         lines!(ax, [time_min, time_max], [value, value], color = concrete_color, linewidth = 2, linestyle = :dash, visible = marker_visible)
         text!(
             ax,
@@ -383,13 +306,16 @@ function _draw_measurement_overlay!(
             fontsize = 14,
             visible = marker_visible,
         )
-
-    elseif analysis_type in ["rectified_area", "integral", "positive_area", "negative_area"]
-        # Shade analysis interval
+    elseif analysis_type in ("rectified_area", "integral", "positive_area", "negative_area")
         y_min, y_max = extrema(selected_data)
         concrete_color = marker_color isa Observable ? marker_color[] : marker_color
-        rect = [Point2f(time_min, y_min), Point2f(time_max, y_min), Point2f(time_max, y_max), Point2f(time_min, y_max)]
-        poly!(ax, rect, color = (concrete_color, 0.15), strokewidth = 0, visible = marker_visible)
+        poly!(
+            ax,
+            Point2f[(time_min, y_min), (time_max, y_min), (time_max, y_max), (time_min, y_max)],
+            color = (concrete_color, 0.15),
+            strokewidth = 0,
+            visible = marker_visible,
+        )
         text!(
             ax,
             (time_min + time_max) / 2,
@@ -400,41 +326,5 @@ function _draw_measurement_overlay!(
             fontsize = 14,
             visible = marker_visible,
         )
-
-    elseif analysis_type == "fractional_area_latency"
-        latency = value
-        if time_min <= latency <= time_max
-            vlines!(ax, latency, color = marker_color, linewidth = 2, linestyle = :solid, visible = marker_visible)
-            latency_idx = searchsortedfirst(time_data, latency)
-            latency_amp = channel_data[latency_idx]
-            text!(
-                ax,
-                latency,
-                latency_amp,
-                text = Printf.@sprintf("Frac Area: %.3f s", latency),
-                align = (:center, :bottom),
-                color = marker_color,
-                fontsize = 14,
-                visible = marker_visible,
-            )
-        end
-
-    elseif analysis_type == "fractional_peak_latency"
-        latency = value
-        if time_min <= latency <= time_max
-            vlines!(ax, latency, color = marker_color, linewidth = 2, linestyle = :solid, visible = marker_visible)
-            latency_idx = searchsortedfirst(time_data, latency)
-            latency_amp = channel_data[latency_idx]
-            text!(
-                ax,
-                latency,
-                latency_amp,
-                text = Printf.@sprintf("Frac Peak: %.3f s", latency),
-                align = (:center, :bottom),
-                color = marker_color,
-                fontsize = 14,
-                visible = marker_visible,
-            )
-        end
     end
 end

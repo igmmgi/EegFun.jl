@@ -1,5 +1,3 @@
-
-# === DEFAULT KEYWORD ARGUMENTS ===
 const PLOT_ERP_IMAGE_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Display parameters
     :display_plot => (true, "Display the plot (true/false)"),
@@ -41,8 +39,6 @@ const PLOT_ERP_IMAGE_KWARGS = Dict{Symbol,Tuple{Any,String}}(
         NamedTuple(),
         "Additional kwargs passed directly to the Makie Colorbar block (see Makie's [Colorbar documentation](https://docs.makie.org/stable/reference/blocks/colorbar/) for available attributes).",
     ),
-
-    # Specific colorbar overrides for erp_image
     :colorbar_plot => (true, "Whether to show the colorbar"),
     :colorbar_position => (:right, "Position of the colorbar (:right, :left, :top, :bottom, or tuple)"),
     :colorbar_label => ("μV", "Label for the colorbar"),
@@ -62,81 +58,52 @@ const PLOT_ERP_IMAGE_KWARGS = Dict{Symbol,Tuple{Any,String}}(
         NamedTuple(),
         "Additional parameters to configure grid or topographical layouts (e.g., grid_dims, topo_plot_width, grid_rowgap)",
     ),
-
-    # General layout parameters
     :figure_padding => ((10, 30, 10, 10), "Padding around entire figure as (left, right, bottom, top) tuple (in pixels)"),
 )
 
 """
-    plot_erp_image(dat::EpochData; 
+    plot_erp_image(filepath::String; input_dir = pwd(), participant_selection = participants(), kwargs...)
+    plot_erp_image(dat::EpochData;
                    layout::Union{Symbol, PlotLayout} = :single,
-                   channel_selection::Function = channels(),
-                   channel_plot_order::Union{Nothing, Vector{Symbol}} = nothing,
-                   sample_selection::Function = samples(),
-    interval_selection::Interval = times(),
+                   channel_selection = channels(),
+                   channel_plot_order = nothing,
+                   sample_selection = samples(),
+                   interval_selection::Interval = times(),
                    kwargs...)
+    plot_erp_image(data::AbstractVector{<:EpochData}; kwargs...)
 
-Plot ERP image for specified channels and samples with flexible layout options.
+Plot single-trial ERP image heatmaps across epochs for specified channels and samples.
 
 # Arguments
-- `dat::EpochData`: Epoch data structure
-- `layout`: Layout specification:
-  - `:single` (default): Single ERP image plot
-  - `:grid`: Auto-calculated grid layout for multiple channels
-  - `:topo`: Topographic layout based on channel positions
-  - `PlotLayout`: Custom layout object
-  - `Vector{Int}`: Custom grid dimensions [rows, cols]
-- `channel_selection::Function`: Function that returns boolean vector for channel filtering (default: channels() - all channels)
-- `sample_selection::Function`: Function that returns boolean vector for sample filtering (default: samples() - all samples)
+- `dat::EpochData`: Epoch data structure (or `.jld2` filepath / filename pattern)
+- `layout`: `:single` (default), `:grid`, `:topo`, or `PlotLayout`
+- `channel_selection`: Channel selection predicate or symbol/vector (default: `channels()`)
+- `sample_selection`: Sample selection predicate (default: `samples()`)
+- `interval_selection`: Time interval filter (default: `times()`)
 
 $(_generate_kwargs_doc(PLOT_ERP_IMAGE_KWARGS))
 
 # Returns
-- `Figure`: The Makie Figure object
-- `Vector{Axis}`: Vector of axes for the ERP images
-
-# Examples
-```julia
-# Plot all channels and samples
-plot_erp_image(dat)
-
-# Plot specific channels
-plot_erp_image(dat, channel_selection = channels([:Fp1, :Fp2]))
-
-# Exclude reference channels
-plot_erp_image(dat, channel_selection = channels_not([:M1, :M2]))
-
-# Plot frontal channels only
-plot_erp_image(dat, channel_selection = channels(1:10))
-
-# Custom predicates
-plot_erp_image(dat, 
-    channel_selection = x -> startswith.(string.(x), "F"),
-    sample_selection = x -> x .> 0.0  # Only positive time points
-)
-```
+- `NamedTuple` `(fig = fig, axes = axes)` (or vector of `NamedTuple`s for multi-condition/pattern inputs)
 """
 function plot_erp_image(filepath::String; input_dir::String = pwd(), participant_selection = participants(), kwargs...)
     if endswith(filepath, ".jld2")
         data = read_data(filepath)
         isnothing(data) && @minimal_error "No data found in file: $filepath"
         return plot_erp_image(data; kwargs...)
-    else
-        files = _find_batch_files(filepath, input_dir, participant_selection)
-        isempty(files) && @minimal_error "No files matching pattern '$filepath' in $input_dir"
-
-        results = NamedTuple[]
-        for file in sort(files, by = _natural_sort_key)
-            file_path = joinpath(input_dir, file)
-            @info "Plotting: $file"
-            data = read_data(file_path)
-            isnothing(data) && continue
-            result = plot_erp_image(data; kwargs...)
-            push!(results, result)
-        end
-        return results
     end
+
+    files = _require_batch_files(filepath, input_dir, participant_selection)
+    results = NamedTuple[]
+    for file in files
+        @info "Plotting: $file"
+        data = read_data(joinpath(input_dir, file))
+        isnothing(data) && continue
+        push!(results, plot_erp_image(data; kwargs...))
+    end
+    return results
 end
+
 function plot_erp_image(
     dat::EpochData;
     layout::Union{Symbol,PlotLayout} = :single,
@@ -146,262 +113,146 @@ function plot_erp_image(
     interval_selection::Interval = times(),
     kwargs...,
 )
-    # Merge default kwargs with provided kwargs
     plot_kwargs = _merge_plot_kwargs(PLOT_ERP_IMAGE_KWARGS, _normalize_plot_kwargs(kwargs))
 
-    # Use subset to get the data we want to plot (same pattern as other functions)
-    dat_subset =
+    # Avoid deep-copying all EpochData DataFrames when no sample/interval subsetting is requested
+    dat_subset = if _combine_interval_sample(interval_selection, sample_selection) isa _AllSamples
+        dat
+    else
         subset(dat; channel_selection = channel_selection, sample_selection = sample_selection, interval_selection = interval_selection)
-
-    # Generate window title from dataset
-    title_str = _generate_window_title(dat_subset)
-    _set_window_title(title_str)
-
-    # Get all available channels
-    selected_channels = channel_labels(dat_subset)  # Gets EEG channels from layout
-    extra_channels = extra_labels(dat_subset)       # Gets extra channels (EOG, etc.)
-    all_plot_channels = unique(vcat(selected_channels, extra_channels))
-
-    # Apply user-specified plotting order if provided
-    if !isnothing(channel_plot_order)
-        ordered = Symbol[Symbol(ch) for ch in channel_plot_order if Symbol(ch) in all_plot_channels]
-        if !isempty(ordered)
-            all_plot_channels = ordered
-        end
     end
 
-    # Validate we have channels to plot
-    if isempty(all_plot_channels)
-        @minimal_error("No channels available for plotting after filtering")
-    end
+    _set_window_title(_generate_window_title(dat_subset))
 
-    # Set default plot title only for single layouts (same as plot_erp)
-    # For grid/topo layouts, we want individual channel names, not a global title
+    avail_channels = unique(vcat(channel_labels(dat_subset), extra_labels(dat_subset)))
+    selected_channels = get_selected_channels(dat_subset, channel_selection; include_meta = false, include_extra = true)
+    all_plot_channels = _order_plot_channels(selected_channels, avail_channels, channel_plot_order)
+    isempty(all_plot_channels) && @minimal_error("No channels available for plotting after filtering")
+
     if isnothing(plot_kwargs[:plot_title]) && layout == :single
         plot_kwargs[:plot_title] = length(all_plot_channels) == 1 ? string(all_plot_channels[1]) : "$(_print_vector(all_plot_channels))"
     end
 
-    # Handle colorbar positioning for grid layouts
     colorbar_enabled = plot_kwargs[:colorbar_plot]
-    user_colorbar_position = plot_kwargs[:colorbar_position]
     colorbar_plot_numbers = plot_kwargs[:colorbar_plot_numbers]
-
-    # Extract layout_* parameters, remove prefix, and pass to create_layout
     layout_kwargs = pop!(plot_kwargs, :layout_kwargs, (;))
-
-    # Extract colorbar kwargs
     colorbar_kwargs = pop!(plot_kwargs, :colorbar_kwargs, (;))
 
-    # Create figure and apply layout system
     fig = _eegfun_figure()
-
     plot_layout = create_layout(layout, all_plot_channels, dat_subset.layout; layout_kwargs...)
 
-    # For grid layouts with colorbars, we use Makie subgrids
     if layout == :grid && colorbar_enabled
         axes = Axis[]
-        channels = Symbol[]
-
-        rows, cols = plot_layout.dims
+        channels_vec = Symbol[]
+        _, cols = plot_layout.dims
         for (idx, channel) in enumerate(plot_layout.channels)
-            base_row = div(idx - 1, cols) + 1
-            base_col = mod1(idx, cols)
-
-            # Create a subgrid for this cell
-            sg = GridLayout(fig[base_row, base_col])
-            ax = Axis(sg[1, 1])
-            push!(axes, ax)
-            push!(channels, channel)
+            sg = GridLayout(fig[div(idx-1, cols)+1, mod1(idx, cols)])
+            push!(axes, Axis(sg[1, 1]))
+            push!(channels_vec, channel)
         end
     else
-        # For single or topo layouts (or grid without colorbars), use normal layout system
-        axes, channels = _apply_layout!(fig, plot_layout; plot_kwargs...)
+        axes, channels_vec = _apply_layout!(fig, plot_layout; plot_kwargs...)
     end
 
-    # Disable default interactions that conflict with our custom selection
     if plot_kwargs[:interactive]
         for ax in axes
             deregister_interaction!(ax, :rectanglezoom)
         end
     end
 
-    # Cache invariant values across channels
     first_df = first(dat_subset.data)
-    time_vec = first_df.time
+    time_vec = first_df[!, :time]
     t_limits = !isnothing(plot_kwargs[:xlim]) ? plot_kwargs[:xlim] : (first(time_vec), last(time_vec))
     n_eps = n_epochs(dat_subset)
     epoch_range = 1:n_eps
     cb_pos = _get_colorbar_position(plot_kwargs[:colorbar_position], 1:1, 1:1)
-
     single_col_indices = plot_layout.type == :single ? [DataFrames.columnindex(first_df, ch) for ch in all_plot_channels] : Int[]
 
-    # Plot ERP images for each channel
+    single_raw_img = nothing
     heatmaps = Heatmap[]
-    for (idx, (ax, channel)) in enumerate(zip(axes, channels))
-        if plot_layout.type == :single
-            # For single layout: average across all selected channels
-            data = _extract_erp_image_single(dat_subset.data, single_col_indices)
+    for (idx, (ax, channel)) in enumerate(zip(axes, channels_vec))
+        img = if plot_layout.type == :single
+            raw = _extract_erp_image_single(dat_subset.data, single_col_indices)
+            single_raw_img = raw
+            plot_kwargs[:boxcar_average] > 1 ? _apply_boxcar_average(raw, plot_kwargs[:boxcar_average]) : raw
         else
-            # For grid/topo layouts: show individual channel
-            col_idx = DataFrames.columnindex(first_df, channel)
-            data = _extract_erp_image_channel(dat_subset.data, col_idx)
+            raw = _extract_erp_image_channel(dat_subset.data, DataFrames.columnindex(first_df, channel))
+            plot_kwargs[:boxcar_average] > 1 ? _apply_boxcar_average!(raw, plot_kwargs[:boxcar_average]) : raw
         end
 
-        # Apply boxcar average if requested
-        if plot_kwargs[:boxcar_average] > 1
-            data = _apply_boxcar_average(data, plot_kwargs[:boxcar_average])
-        end
-
-        # Set color range if not provided (use local cr so multi-channel plots don't reuse ch 1's extrema,
-        # and auto-compute symmetric limits on diverging colormaps)
         resolved_cmap = _resolve_theme_colormap(ax, plot_kwargs[:colormap])
         cr = if !isnothing(plot_kwargs[:colorrange])
             plot_kwargs[:colorrange]
         elseif _is_diverging_colormap(resolved_cmap)
-            _symmetric_colorrange(extrema(data)...)
+            _symmetric_colorrange(extrema(img)...)
         else
-            dmin, dmax = extrema(data)
+            dmin, dmax = extrema(img)
             dmin == dmax ? (dmin - 1.0, dmax + 1.0) : (dmin, dmax)
         end
 
-        # Create heatmap
-        hm = heatmap!(
-            ax,
-            time_vec,
-            epoch_range,
-            transpose(data),
-            colormap = resolved_cmap,
-            colorrange = cr,
-            interpolate = plot_kwargs[:interpolate],
-        )
+        hm = heatmap!(ax, time_vec, epoch_range, img, colormap = resolved_cmap, colorrange = cr, interpolate = plot_kwargs[:interpolate])
         push!(heatmaps, hm)
 
-        # Set axis properties (only for single layout)
         if plot_layout.type == :single
-            # Don't show x-axis labels on heatmap if ERP trace will be shown below
             ax.xlabel = plot_kwargs[:plot_erp] ? "" : plot_kwargs[:xlabel]
             ax.ylabel = plot_kwargs[:ylabel]
-            # Hide x-axis tick labels on heatmap if ERP trace will be shown below
-            if plot_kwargs[:plot_erp]
-                ax.xticklabelsvisible = false
-            end
+            plot_kwargs[:plot_erp] && (ax.xticklabelsvisible = false)
         elseif plot_layout.type == :topo && plot_kwargs[:show_title]
-            # Set channel name as title for topo layout
             ax.title = string(channel)
         end
 
         ax.yreversed = plot_kwargs[:yreversed]
-
-        # Set x-axis limits if provided, otherwise use data limits
         xlims!(ax, t_limits)
-
-        # Set y-axis limits for ERP image (always 1 to number of epochs)
         ylims!(ax, (1, n_eps))
 
-        # Add colorbar if requested
-        if plot_kwargs[:colorbar_plot]
-            # Determine if this plot should have a colorbar
-            # For single layout, always show if colorbar_plot is true
-            # For grid layout, check colorbar_plot_numbers
-            should_show_colorbar = if plot_layout.type == :single
-                true
-            elseif plot_layout.type == :grid
-                isempty(colorbar_plot_numbers) || idx in colorbar_plot_numbers
-            else
-                false
-            end
-
-            if should_show_colorbar
-                if plot_layout.type == :single
-                    # Single layout
-                    Colorbar(fig[cb_pos...], hm; colorbar_kwargs...)
-                elseif plot_layout.type == :grid
-                    # Grid layout: fetch the subgrid we created
-                    sg = ax.layoutobservables.gridcontent[].parent
-
-                    Colorbar(sg[cb_pos...], hm; colorbar_kwargs...)
-                end
+        if colorbar_enabled
+            if plot_layout.type == :single
+                Colorbar(fig[cb_pos...], hm; colorbar_kwargs...)
+            elseif plot_layout.type == :grid && (isempty(colorbar_plot_numbers) || idx in colorbar_plot_numbers)
+                sg = ax.layoutobservables.gridcontent[].parent
+                Colorbar(sg[cb_pos...], hm; colorbar_kwargs...)
             end
         end
     end
 
-    # Apply axis properties to heatmap axes WITHOUT waveform ylim (ylim is for ax_erp, not epoch indices!)
+    # Apply axis properties to heatmap axes without waveform ylim (ylim applies only to ax_erp)
     heatmap_axis_kwargs = copy(plot_kwargs)
     heatmap_axis_kwargs[:ylim] = nothing
     _apply_axis_properties!.(axes; heatmap_axis_kwargs...)
-
-    # Then apply layout-specific properties (clears labels on inner axes for grid layouts)
     _apply_layout_axis_properties!(axes, plot_layout; heatmap_axis_kwargs...)
 
-    # Ensure epoch index y-limits remain (1, n_eps) on all heatmap axes
     for ax in axes
         ylims!(ax, (1, n_eps))
-    end
-
-    # For plot_erp_image, we want to show tick marks (but not labels) on all axes (including topo layouts)
-    # Override the decoration hiding that _apply_layout_axis_properties! does for topo layouts
-    if plot_layout.type == :topo
-        for ax in axes
-            # Show ticks but hide tick labels (keep spines hidden for topo aesthetic)
+        if plot_layout.type == :topo
             ax.xticksvisible = true
             ax.yticksvisible = true
             ax.xticklabelsvisible = false
             ax.yticklabelsvisible = false
         end
-    end
-
-    # Add origin lines to all axes
-    for ax in axes
         _set_origin_lines!(ax; add_xy_origin = plot_kwargs[:add_xy_origin])
     end
 
-    # Add scale plot for topo layout (similar to plot_epochs)
-    # For topo layouts, all plots are positioned in fig[1, 1] with halign/valign
-    # We add the scale axis the same way - positioned absolutely in fig[1, 1]
-    # This matches how plot_epochs does it and won't interfere with the topo plot layout
-    scale_pos = nothing
     if plot_layout.type == :topo
-        # Get scale position from kwargs or layout metadata fallback
         scale_pos = get(plot_kwargs, :layout_topo_scale_pos, get(plot_layout.metadata, :topo_scale_pos, (0.8, -0.8)))
-
-        # Use the same width/height as the channel plots (from layout metadata)
-        # This ensures consistency - channel plots use plot_layout.metadata[:topo_plot_width]
-        scale_width = plot_layout.metadata[:topo_plot_width]
-        scale_height = plot_layout.metadata[:topo_plot_height]
-
-        # Create scale axis positioned at the specified location (axis only, no data)
-        # This is positioned absolutely in fig[1, 1] using halign/valign, just like topo plots
-        scale_ax =
-            Axis(fig[1, 1], width = Relative(scale_width), height = Relative(scale_height), halign = scale_pos[1], valign = scale_pos[2])
+        scale_ax = Axis(
+            fig[1, 1],
+            width = Relative(plot_layout.metadata[:topo_plot_width]),
+            height = Relative(plot_layout.metadata[:topo_plot_height]),
+            halign = scale_pos[1],
+            valign = scale_pos[2],
+        )
         push!(axes, scale_ax)
-
-        # Make sure the scale axis is visible - don't hide decorations like other topo axes
-        # The scale axis should show all labels and decorations
-
-        # Set up scale axis properties (show time and epoch labels)
-        # Use the same approach as plot_epochs
         scale_ax.title = ""
-        tmin, tmax = first(time_vec), last(time_vec)
-
-        # Set axis limits first
-        if !isnothing(plot_kwargs[:xlim])
-            xlims!(scale_ax, plot_kwargs[:xlim])
-        else
-            xlims!(scale_ax, (tmin, tmax))
-        end
-        ylims!(scale_ax, (1, n_epochs(dat_subset)))
-
-        # Use _set_axis_properties! like plot_epochs does
+        xlims!(scale_ax, t_limits)
+        ylims!(scale_ax, (1, n_eps))
         _set_axis_properties!(
             scale_ax;
-            xlim = isnothing(plot_kwargs[:xlim]) ? (tmin, tmax) : plot_kwargs[:xlim],
-            ylim = (1, n_epochs(dat_subset)),
+            xlim = t_limits,
+            ylim = (1, n_eps),
             xlabel = plot_kwargs[:xlabel],
             ylabel = plot_kwargs[:ylabel],
             yreversed = plot_kwargs[:yreversed],
         )
-
-        # Use _set_axis_grid! like plot_epochs does
         _set_axis_grid!(
             scale_ax;
             xgrid = plot_kwargs[:xgrid],
@@ -409,313 +260,232 @@ function plot_erp_image(
             xminorgrid = plot_kwargs[:xminorgrid],
             yminorgrid = plot_kwargs[:yminorgrid],
         )
-
-        # Ensure scale axis spines are visible (unlike other topo axes which have spines hidden)
         scale_ax.bottomspinevisible = true
         scale_ax.topspinevisible = true
         scale_ax.leftspinevisible = true
         scale_ax.rightspinevisible = true
+        _set_origin_lines!(scale_ax; add_xy_origin = get(plot_kwargs, :add_xy_origin, true))
 
-        # Add origin lines like plot_epochs does (if the parameter exists)
-        add_xy_origin = get(plot_kwargs, :add_xy_origin, true)
-        _set_origin_lines!(scale_ax; add_xy_origin = add_xy_origin)
+        if colorbar_enabled && !isempty(heatmaps)
+            Colorbar(
+                fig[1, 1],
+                heatmaps[1];
+                label = plot_kwargs[:colorbar_label],
+                halign = scale_pos[1] + 0.015,
+                valign = scale_pos[2],
+                tellheight = false,
+                tellwidth = false,
+                colorbar_kwargs...,
+            )
+        end
     end
 
-    # Add colorbar for topo layout AFTER layout is finalized
-    # Create it in fig[1, 1] with halign/valign - this is the same approach as the scale axis
-    # The key is that all topo elements use absolute positioning within the same grid cell
-    # and don't participate in grid size calculations
-    if plot_layout.type == :topo && plot_kwargs[:colorbar_plot] && !isempty(heatmaps) && !isnothing(scale_pos)
-        # Topo layout colorbar
-        cb_pos = _get_colorbar_position(plot_kwargs[:colorbar_position], 1:1, 1:1)
-
-        # We add a small fixed offset (0.015) to position the colorbar next to it
-        colorbar_halign = scale_pos[1] + 0.015  # Position to the right of scale axis
-        colorbar_valign = scale_pos[2]
-
-        # Create colorbar in fig[1, 1] with halign/valign, positioned to the right of scale axis
-        Colorbar(
-            fig[1, 1],
-            heatmaps[1];
-            label = plot_kwargs[:colorbar_label],
-            halign = colorbar_halign,
-            valign = colorbar_valign,
-            tellheight = false,
-            tellwidth = false,
-            colorbar_kwargs...,
-        )
-    end
-
-    # Set up interactivity AFTER heatmaps to ensure rectangles are drawn on top
     if plot_kwargs[:interactive]
-        # Set up custom interactivity for ERP images (left/right keys only)
         _setup_erp_image_interactivity!(fig, axes, heatmaps; zoom_step = plot_kwargs[:zoom_step])
-
-        # Set up selection system (rectangles created AFTER heatmaps)
         selection_state =
             SharedSelectionState(axes; selection_color = plot_kwargs[:selection_color], selection_alpha = plot_kwargs[:selection_alpha])
         _setup_unified_selection!(fig, axes, selection_state, dat_subset)
-
-        # Set up channel selection events for topo and grid layouts
         if plot_layout.type in (:topo, :grid)
             _setup_channel_selection_events!(fig, selection_state, plot_layout, dat_subset, axes)
         end
     end
 
-    # Add ERP trace if requested (only for single layout)
-    if plot_kwargs[:plot_erp] && plot_layout.type == :single
-        # Convert epoch data to ERP data by averaging across epochs
-        erp_data = average_epochs(dat_subset)
-
-        # Create ERP axis in our main figure
+    if plot_kwargs[:plot_erp] && plot_layout.type == :single && !isnothing(single_raw_img)
         ax_erp = Axis(fig[2, 1])
-
-        # Add ERP axis to the axes list so it gets keyboard navigation
         push!(axes, ax_erp)
 
-        # For single layout, show averaged ERP trace across all selected channels
-        avg_data = _colmeans(erp_data.data, all_plot_channels)
-        lines!(ax_erp, erp_data.data.time, avg_data, color = :black, linewidth = 1)
+        avg_data = _row_means(single_raw_img)
+        lines!(ax_erp, time_vec, avg_data, color = :black, linewidth = 1)
 
-        # Set axis properties consistent with plot_erp
         ax_erp.xlabel = plot_kwargs[:xlabel]
         ax_erp.ylabel = "Amplitude (μV)"
         ax_erp.xgridvisible = false
         ax_erp.ygridvisible = false
-
-        # Set y-axis limits for ERP trace
-        if !isnothing(plot_kwargs[:ylim])
-            ylims!(ax_erp, plot_kwargs[:ylim])
-        else
-            # Auto-determine y-limits based on data
-            ylims!(ax_erp, extrema(avg_data))
-        end
         ax_erp.xminorgridvisible = false
         ax_erp.yminorgridvisible = false
+        ylims!(ax_erp, !isnothing(plot_kwargs[:ylim]) ? plot_kwargs[:ylim] : extrema(avg_data))
 
-        # Add origin lines like plot_erp does
         vlines!(ax_erp, [0], color = :gray, linewidth = 0.5)
         hlines!(ax_erp, [0], color = :gray, linewidth = 0.5)
+        xlims!(ax_erp, !isnothing(plot_kwargs[:xlim]) ? plot_kwargs[:xlim] : axes[1].xaxis.attributes.limits[])
 
-        # Set limits if provided, otherwise use the same limits as the heatmap
-        if !isnothing(plot_kwargs[:xlim])
-            xlims!(ax_erp, plot_kwargs[:xlim])
-        else
-            # Use the same x-limits as the heatmap axis
-            heatmap_xlims = axes[1].xaxis.attributes.limits[]
-            xlims!(ax_erp, heatmap_xlims)
-        end
-
-        # Resize rows: 2/3 for heatmap, 1/3 for ERP trace
         rowsize!(fig.layout, 1, Relative(2 / 3))
         rowsize!(fig.layout, 2, Relative(1 / 3))
     end
 
-    # Link only x-axes (time dimension) but not y-axes (epoch dimension)
-    # since each channel may have different numbers of epochs
-    if length(axes) > 1
-        linkxaxes!(axes...)
-    end
-
-    # Display plot if requested
-    if plot_kwargs[:display_plot]
-        _display_figure(fig)
-    end
+    length(axes) > 1 && linkxaxes!(axes...)
+    plot_kwargs[:display_plot] && _display_figure(fig)
 
     _set_window_title("Makie")
     return (fig = fig, axes = axes)
 end
 
-"""
-    _setup_erp_image_interactivity!(fig::Figure, axes::Vector{Axis}, heatmaps::Vector)
+function plot_erp_image(data::AbstractVector{<:EpochData}; kwargs...)
+    results = plot_erp_image.(data; kwargs...)
+    return length(results) == 1 ? only(results) : results
+end
 
-Set up custom interactivity for ERP images with context-aware key controls based on mouse position.
-"""
 function _setup_erp_image_interactivity!(fig::Figure, axes::Vector{Axis}, heatmaps::Vector; zoom_step::Float64 = 0.2)
     _setup_keyboard_tracking(fig)
+    active_axis = Ref(axes[1])
 
-    # Track mouse position to determine active axis
-    active_axis = Ref(axes[1])  # Default to first axis (ERP image)
-
-    # Update active axis based on mouse position
     on(events(fig).mouseposition) do mouse_pos
         for ax in axes
-            viewport = ax.scene.viewport[]
-            if mouse_pos[1] >= viewport.origin[1] &&
-               mouse_pos[1] <= viewport.origin[1] + viewport.widths[1] &&
-               mouse_pos[2] >= viewport.origin[2] &&
-               mouse_pos[2] <= viewport.origin[2] + viewport.widths[2]
+            vp = ax.scene.viewport[]
+            if vp.origin[1] <= mouse_pos[1] <= vp.origin[1] + vp.widths[1] && vp.origin[2] <= mouse_pos[2] <= vp.origin[2] + vp.widths[2]
                 active_axis[] = ax
                 break
             end
         end
     end
 
-    # Define keyboard actions for ERP images
-    keyboard_actions = Dict(Keyboard.up => :y_more, Keyboard.down => :y_less, Keyboard.left => :x_less, Keyboard.right => :x_more)
-
     on(events(fig).keyboardbutton) do event
         if event.action == Keyboard.press && event.key == Keyboard.i
-            # Show help for ERP image
             _show_plot_help(:erp_image)
-        elseif event.action in (Keyboard.press, Keyboard.repeat) && haskey(keyboard_actions, event.key)
-            action = keyboard_actions[event.key]
-            _handle_erp_image_navigation!(axes, heatmaps, action, active_axis[], zoom_step)
+        elseif event.action in (Keyboard.press, Keyboard.repeat)
+            action = if event.key == Keyboard.up
+                :y_more
+            elseif event.key == Keyboard.down
+                :y_less
+            elseif event.key == Keyboard.left
+                :x_less
+            elseif event.key == Keyboard.right
+                :x_more
+            else
+                :none
+            end
+            action != :none && _handle_erp_image_navigation!(axes, heatmaps, action, active_axis[], zoom_step)
         end
     end
 end
 
-"""
-    _handle_erp_image_navigation!(axes::Vector{Axis}, heatmaps::Vector, action::Symbol)
-
-Handle navigation actions for ERP images.
-"""
 function _handle_erp_image_navigation!(axes::Vector{Axis}, heatmaps::Vector, action::Symbol, active_axis::Axis, zoom_step::Float64)
-    if action in (:x_less, :x_more) # Adjust time axis
-        func = action == :x_less ? _xless! : _xmore!
-        func(active_axis, zoom_step)
-    elseif action in (:y_less, :y_more) # Adjust y-axis based on active plot
-        if active_axis == axes[1] # ERP image axis
-            # For ERP image, adjust color scale instead of y-axis
-            factor = action == :y_more ? (1.0 / (1.0 - zoom_step)) : (1.0 - zoom_step)
-            for hm in heatmaps
-                hm.colorrange[] = hm.colorrange[] .* factor
-            end
-        else # ERP waveform axis
-            # For ERP waveform, adjust y-axis limits
-            func = action == :y_more ? _ymore! : _yless!
-            func(active_axis, zoom_step)
+    if action in (:x_less, :x_more)
+        (action == :x_less ? _xless! : _xmore!)(active_axis, zoom_step)
+    elseif active_axis == axes[1]
+        factor = action == :y_more ? (1.0 / (1.0 - zoom_step)) : (1.0 - zoom_step)
+        for hm in heatmaps
+            hm.colorrange[] = hm.colorrange[] .* factor
         end
+    else
+        (action == :y_more ? _ymore! : _yless!)(active_axis, zoom_step)
     end
 end
 
+function _row_means(mat::Matrix{Float64})
+    n_samples, n_eps = size(mat)
+    out = zeros(Float64, n_samples)
+    inv_n = 1.0 / n_eps
+    @inbounds for ep = 1:n_eps
+        @simd for s = 1:n_samples
+            out[s] += mat[s, ep]
+        end
+    end
+    out .*= inv_n
+    return out
+end
 
-"""
-    _apply_boxcar_average(data::Matrix, window_size::Int)
+# Smooths an (n_samples × n_epochs) image matrix across epochs (columns) using a running column sum
+function _apply_boxcar_average(img::Matrix{Float64}, window_size::Int)
+    return _apply_boxcar_average!(Matrix{Float64}(undef, size(img)...), img, window_size)
+end
 
-Apply boxcar (moving average) smoothing to the ERP image data.
+function _apply_boxcar_average!(img::Matrix{Float64}, window_size::Int)
+    return _apply_boxcar_average!(Matrix{Float64}(undef, size(img)...), img, window_size)
+end
 
-# Arguments
-- `data::Matrix`: The ERP image data (epochs × time points)
-- `window_size::Int`: Size of the moving average window
-
-# Returns
-- `Matrix`: Smoothed data with the same dimensions
-
-# Examples
-```julia
-# Apply 5-epoch boxcar average
-smoothed_data = _apply_boxcar_average(data, 5)
-```
-"""
-function _apply_boxcar_average(data::Matrix{Float64}, window_size::Int)
-    n_epochs, n_timepoints = size(data)
-    smoothed_data = Matrix{Float64}(undef, n_epochs, n_timepoints)
+function _apply_boxcar_average!(out::Matrix{Float64}, img::Matrix{Float64}, window_size::Int)
+    n_samples, n_eps = size(img)
     half_window = window_size ÷ 2
+    acc = zeros(Float64, n_samples)
 
-    @inbounds for j = 1:n_timepoints
-        win_start = 1
-        win_end = min(n_epochs, 1 + half_window)
-        current_sum = 0.0
-        for i = win_start:win_end
-            current_sum += data[i, j]
-        end
-        smoothed_data[1, j] = current_sum / (win_end - win_start + 1)
-
-        for i = 2:n_epochs
-            new_win_start = max(1, i - half_window)
-            new_win_end = min(n_epochs, i + half_window)
-
-            if new_win_start > win_start
-                current_sum -= data[win_start, j]
-            end
-            if new_win_end > win_end
-                current_sum += data[new_win_end, j]
-            end
-            win_start = new_win_start
-            win_end = new_win_end
-            smoothed_data[i, j] = current_sum / (win_end - win_start + 1)
+    win_start = 1
+    win_end = min(n_eps, 1 + half_window)
+    @inbounds for ep = win_start:win_end
+        @simd for s = 1:n_samples
+            acc[s] += img[s, ep]
         end
     end
-    return smoothed_data
+    inv_w = 1.0 / (win_end - win_start + 1)
+    @inbounds @simd for s = 1:n_samples
+        out[s, 1] = acc[s] * inv_w
+    end
+
+    @inbounds for ep = 2:n_eps
+        new_start = max(1, ep - half_window)
+        new_end = min(n_eps, ep + half_window)
+        if new_start > win_start
+            @simd for s = 1:n_samples
+                acc[s] -= img[s, win_start]
+            end
+        end
+        if new_end > win_end
+            @simd for s = 1:n_samples
+                acc[s] += img[s, new_end]
+            end
+        end
+        win_start = new_start
+        win_end = new_end
+        inv_w = 1.0 / (win_end - win_start + 1)
+        @simd for s = 1:n_samples
+            out[s, ep] = acc[s] * inv_w
+        end
+    end
+    return out
 end
 
-"""
-    _extract_erp_image_single(epochs_data::Vector{DataFrame}, col_indices::Vector{Int}) -> Matrix{Float64}
+@inline function _copy_col_f64!(img::Matrix{Float64}, ep::Int, col::AbstractVector, n_samples::Int)
+    if col isa Vector{Float64}
+        @inbounds @simd for s = 1:n_samples
+            img[s, ep] = col[s]
+        end
+    else
+        @inbounds @simd for s = 1:n_samples
+            img[s, ep] = Float64(col[s])
+        end
+    end
+end
 
-Extract and average all requested channels across epochs directly into an (n_epochs × n_samples) matrix.
-"""
+@inline function _add_col_f64!(img::Matrix{Float64}, ep::Int, col::AbstractVector, n_samples::Int)
+    if col isa Vector{Float64}
+        @inbounds @simd for s = 1:n_samples
+            img[s, ep] += col[s]
+        end
+    else
+        @inbounds @simd for s = 1:n_samples
+            img[s, ep] += Float64(col[s])
+        end
+    end
+end
+
+# Returns (n_samples × n_epochs) directly for contiguous column-major extraction and zero-transpose heatmap!
 function _extract_erp_image_single(epochs_data::Vector{DataFrame}, col_indices::Vector{Int})
-    n_epochs = length(epochs_data)
-    first_df = first(epochs_data)
-    n_samples = nrow(first_df)
-    data = Matrix{Float64}(undef, n_epochs, n_samples)
+    n_eps = length(epochs_data)
+    n_samples = nrow(first(epochs_data))
+    img = Matrix{Float64}(undef, n_samples, n_eps)
     n_cols = length(col_indices)
     inv_cols = 1.0 / n_cols
 
     for (ep, df) in enumerate(epochs_data)
-        first_col = df[!, col_indices[1]]
-        if first_col isa Vector{Float64}
-            first_f64 = first_col::Vector{Float64}
-            @inbounds @simd for s = 1:n_samples
-                data[ep, s] = first_f64[s]
-            end
-        else
-            @inbounds @simd for s = 1:n_samples
-                data[ep, s] = Float64(first_col[s])
-            end
-        end
-
+        _copy_col_f64!(img, ep, df[!, col_indices[1]], n_samples)
         for c = 2:n_cols
-            col = df[!, col_indices[c]]
-            if col isa Vector{Float64}
-                col_f64 = col::Vector{Float64}
-                @inbounds @simd for s = 1:n_samples
-                    data[ep, s] += col_f64[s]
-                end
-            else
-                @inbounds @simd for s = 1:n_samples
-                    data[ep, s] += Float64(col[s])
-                end
+            _add_col_f64!(img, ep, df[!, col_indices[c]], n_samples)
+        end
+        if n_cols > 1
+            @inbounds @simd for s = 1:n_samples
+                img[s, ep] *= inv_cols
             end
         end
-
-        @inbounds @simd for s = 1:n_samples
-            data[ep, s] *= inv_cols
-        end
     end
-    return data
+    return img
 end
 
-"""
-    _extract_erp_image_channel(epochs_data::Vector{DataFrame}, col_idx::Int) -> Matrix{Float64}
-
-Extract a single channel across epochs directly into an (n_epochs × n_samples) matrix.
-"""
 function _extract_erp_image_channel(epochs_data::Vector{DataFrame}, col_idx::Int)
-    n_epochs = length(epochs_data)
-    first_df = first(epochs_data)
-    n_samples = nrow(first_df)
-    data = Matrix{Float64}(undef, n_epochs, n_samples)
-
+    n_eps = length(epochs_data)
+    n_samples = nrow(first(epochs_data))
+    img = Matrix{Float64}(undef, n_samples, n_eps)
     for (ep, df) in enumerate(epochs_data)
-        col = df[!, col_idx]
-        if col isa Vector{Float64}
-            col_f64 = col::Vector{Float64}
-            @inbounds @simd for s = 1:n_samples
-                data[ep, s] = col_f64[s]
-            end
-        else
-            @inbounds @simd for s = 1:n_samples
-                data[ep, s] = Float64(col[s])
-            end
-        end
+        _copy_col_f64!(img, ep, df[!, col_idx], n_samples)
     end
-    return data
-end
-
-# Vector dispatch: plot each condition separately
-function plot_erp_image(data::AbstractVector{<:EpochData}; kwargs...)
-    results = plot_erp_image.(data; kwargs...)
-    return length(results) == 1 ? only(results) : results
+    return img
 end

@@ -1,64 +1,57 @@
-"""
-Topographic visualization of statistical test results across time windows.
-Creates a grid of topographic maps showing t-statistics or difference amplitudes
-with significant channels highlighted — inspired by FieldTrip's ft_clusterplot.
-"""
+function _mean_col_diff(col_a::AbstractVector, col_b::AbstractVector, r::UnitRange{Int})
+    s = 0.0
+    @inbounds @simd for k in r
+        s += Float64(col_a[k]) - Float64(col_b[k])
+    end
+    return s / length(r)
+end
 
+function _partition_indices(indices::Vector{Int}, n::Int)
+    len = length(indices)
+    bins = Vector{UnitRange{Int}}(undef, n)
+    base_size = div(len, n)
+    remainder = mod(len, n)
+    start = 1
+    for i = 1:n
+        stop = start + base_size + (i <= remainder ? 1 : 0) - 1
+        bins[i] = indices[start]:indices[stop]
+        start = stop + 1
+    end
+    return bins
+end
 
 """
     plot_topography_stats(result::StatsResult;
-                     n_topos::Int = 10,
-                     interval_selection::Interval = times(),
-                     topo_data::Symbol = :tvalues,
-                     highlight_significant::Bool = true,
-                     highlight_color = :white,
-                     highlight_marker::Symbol = :circle,
-                     highlight_size::Real = 8,
-                     highlight_threshold::Real = 0.5,
-                     kwargs...)
+                          n_topos::Int = 10,
+                          interval_selection::Interval = times(),
+                          topo_data::Symbol = :tvalues,
+                          highlight_significant::Bool = true,
+                          highlight_color = :white,
+                          highlight_marker::Symbol = :circle,
+                          highlight_size::Real = 8,
+                          highlight_threshold::Real = 0.5,
+                          kwargs...)
 
 Plot a grid of topographic maps showing statistical results across time windows.
 
-Each panel shows the spatial distribution of t-statistics (or difference amplitudes)
-averaged within a time window, with significant channels highlighted as markers.
+Each panel displays t-statistics (`:tvalues`) or difference amplitudes (`:difference`)
+averaged within a time bin, with significant channels highlighted as markers.
 
 # Arguments
-- `result::StatsResult`: Results from `analytic_test` or `permutation_test`
-- `n_topos::Int`: Number of topographic panels (default: 10)
-- `interval_selection::Interval`: Time window to display (default: full range). Use `times(start, stop)` to specify
-- `topo_data::Symbol`: What to display on the topographic maps:
-  - `:tvalues` (default) — t-statistics from the statistical test
-  - `:difference` — difference wave amplitude (condition A − condition B)
-- `highlight_significant::Bool`: Whether to overlay markers on significant channels (default: true)
-- `highlight_color`: Color for significance markers (default: `:white`)
-- `highlight_marker::Symbol`: Marker symbol for significant channels (default: `:circle`).
-  Options: `:circle`, `:cross`, `:diamond`, `:star5`, `:xcross`, `:utriangle`, `:dtriangle`, etc.
-- `highlight_size::Real`: Size of significance markers (default: 8)
-- `highlight_threshold::Real`: Proportion of time points within a window that must be significant
-  to mark a channel (default: 0.5). `0.0` = any single time point (union), `0.5` = majority,
-  `1.0` = all time points (intersection)
+- `result::StatsResult`: Result from `analytic_test` or `permutation_test`.
+- `n_topos::Int`: Number of topographic panels (default: `10`).
+- `interval_selection::Interval`: Time window to display (default: `times()`).
+- `topo_data::Symbol`: `:tvalues` (default) or `:difference`.
+- `highlight_significant::Bool`: Overlay markers on significant channels (default: `true`).
+- `highlight_color`: Marker color for significant channels (default: `:white`).
+- `highlight_marker::Symbol`: Marker shape for significant channels (default: `:circle`).
+- `highlight_size::Real`: Marker size for significant channels (default: `8`).
+- `highlight_threshold::Real`: Minimum significant time-point fraction in a bin to highlight a channel (default: `0.5`).
 
-Additional keyword arguments from PLOT_TOPOGRAPHY_KWARGS are supported:
 $(_generate_kwargs_doc(PLOT_TOPOGRAPHY_KWARGS))
 
 # Returns
 - Named tuple `(fig, axes, colorbar)`
-
-# Examples
-```julia
-# Basic usage with analytic test
-result = analytic_test(prepared, correction_method=:no)
-plot_topography_stats(result)
-
-# Show difference wave amplitudes instead of t-values
-plot_topography_stats(result, topo_data=:difference)
-
-# Focus on a specific time window with more panels
-plot_topography_stats(result, interval_selection=times(0.1, 0.4), n_topos=15)
-
-# Custom marker style for significant channels
-plot_topography_stats(result, highlight_marker=:star5, highlight_color=:yellow, highlight_size=12)
-```
 """
 function plot_topography_stats(
     result::StatsResult;
@@ -72,17 +65,12 @@ function plot_topography_stats(
     highlight_threshold::Real = 0.5,
     kwargs...,
 )
-    # Validate topo_data
     topo_data in (:tvalues, :difference) || @minimal_error("topo_data must be :tvalues or :difference, got :$topo_data")
 
-    # Merge user kwargs with shared topography defaults
     kwargs_norm = _normalize_plot_kwargs(kwargs, _TOPO_KWARG_ALIASES)
-    if haskey(kwargs_norm, :n_topo)
-        n_topos = Int(pop!(kwargs_norm, :n_topo))
-    end
+    haskey(kwargs_norm, :n_topo) && (n_topos = Int(pop!(kwargs_norm, :n_topo)))
     plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs_norm)
 
-    # Extract topography-specific parameters
     method = pop!(plot_kwargs, :method)
     gridscale = pop!(plot_kwargs, :gridscale)
     colormap = pop!(plot_kwargs, :colormap)
@@ -92,136 +80,123 @@ function plot_topography_stats(
     num_levels = pop!(plot_kwargs, :num_levels)
     show_title = pop!(plot_kwargs, :show_title, true)
 
-    # Pop ICA-specific keys not used here
     pop!(plot_kwargs, :interactive, nothing)
     pop!(plot_kwargs, :use_global_scale, nothing)
     pop!(plot_kwargs, :component_selection, nothing)
 
-    # Override defaults: labels and points off by default for grid layout
-    # (respects explicit user override via kwargs)
     plot_kwargs[:label_plot] = get(kwargs_norm, :label_plot, false)
     plot_kwargs[:point_plot] = get(kwargs_norm, :point_plot, false)
 
-    # Get time points and determine range
     all_time_points = result.time_points
-    if isnothing(interval_selection) || interval_selection isa AllSelection
-        t_start, t_end = first(all_time_points), last(all_time_points)
+    t_start, t_end = if isnothing(interval_selection) || interval_selection isa AllSelection
+        first(all_time_points), last(all_time_points)
+    elseif interval_selection isa TimeSelection
+        interval_selection.start, interval_selection.stop
     else
-        t_start = interval_selection isa TimeSelection ? interval_selection.start : interval_selection[1]
-        t_end = interval_selection isa TimeSelection ? interval_selection.stop : interval_selection[2]
+        interval_selection[1], interval_selection[2]
     end
 
-    # Find indices within the time range
-    time_mask = t_start .<= all_time_points .<= t_end
-    time_indices = findall(time_mask)
-    if isempty(time_indices)
-        @minimal_error(
-            "No time points found in range ($t_start, $t_end). Data range: $(first(all_time_points)) to $(last(all_time_points))"
-        )
-    end
+    time_indices = findall(t -> t_start <= t <= t_end, all_time_points)
+    isempty(time_indices) && @minimal_error(
+        "No time points found in range ($t_start, $t_end). Data range: $(first(all_time_points)) to $(last(all_time_points))"
+    )
 
-    # Divide time indices into n_topos equal bins
     n_topos = min(n_topos, length(time_indices))
     bins = _partition_indices(time_indices, n_topos)
 
-    # Subset layout to analyzed electrodes (never fill unanalyzed layout electrodes with 0.0!)
     orig_layout = result.data[1].layout
     electrodes = result.electrodes
+    n_elec = length(electrodes)
     common_channels = intersect(orig_layout.data.label, electrodes)
-    if isempty(common_channels)
-        @minimal_error("None of the analyzed electrodes $(electrodes) were found in the layout.")
-    end
-    layout = subset_layout(orig_layout; channel_selection = channels(common_channels))
+    isempty(common_channels) && @minimal_error("None of the analyzed electrodes $(electrodes) were found in the layout.")
+    layout =
+        orig_layout.data.label == common_channels ? copy(orig_layout) :
+        subset_layout(orig_layout; channel_selection = channels(common_channels))
 
-    # Validate layout
-    if !has_valid_coordinates(layout)
-        @minimal_error("Cannot create topographic plot: layout has no spatial coordinates.")
-    end
-
-    # Ensure coordinates
+    has_valid_coordinates(layout) || @minimal_error("Cannot create topographic plot: layout has no spatial coordinates.")
     _ensure_coordinates_2d!(layout)
     _ensure_coordinates_3d!(layout)
 
-    # Cache layout labels and electrode index mapping
     layout_labels = layout.data.label
     layout_to_elec_idx = Int[findfirst(==(lbl), electrodes)::Int for lbl in layout_labels]
-    if topo_data == :difference
-        cond_A = result.data[1]
-        cond_B = result.data[2]
-        cond_A_props = Set(propertynames(cond_A.data))
-        cond_B_props = Set(propertynames(cond_B.data))
+    elec_to_layout_idx = Int[something(findfirst(==(ch), layout_labels), 0) for ch in electrodes]
+
+    t_mat = result.stat_matrix.t
+    pos_mask = result.masks.positive
+    neg_mask = result.masks.negative
+
+    cond_A_df = topo_data == :difference ? result.data[1].data : nothing
+    cond_B_df = topo_data == :difference ? result.data[2].data : nothing
+    has_diff_cols = if topo_data == :difference
+        Bool[hasproperty(cond_A_df, ch) && hasproperty(cond_B_df, ch) for ch in electrodes]
+    else
+        Bool[]
     end
 
-    # Compute data for each bin
     topo_values = Vector{Vector{Float64}}(undef, n_topos)
     sig_masks = Vector{BitVector}(undef, n_topos)
     bin_time_labels = Vector{String}(undef, n_topos)
+    max_abs = 0.0
 
     for (i, bin_indices) in enumerate(bins)
-        bin_time_start = all_time_points[first(bin_indices)]
-        bin_time_end = all_time_points[last(bin_indices)]
-        bin_time_labels[i] = @sprintf("%.0f – %.0f ms", bin_time_start * 1000, bin_time_end * 1000)
-
-        if topo_data == :tvalues
-            topo_values[i] = vec(mean(result.stat_matrix.t[:, bin_indices], dims = 2))
-        else  # :difference — pre-allocated vector, uses cached channel sets
-            diff_per_electrode = Vector{Float64}(undef, length(electrodes))
-            for (j, ch_sym) in enumerate(electrodes)
-                if ch_sym in cond_A_props && ch_sym in cond_B_props
-                    a_vals = cond_A.data[bin_indices, ch_sym]
-                    b_vals = cond_B.data[bin_indices, ch_sym]
-                    diff_per_electrode[j] = mean(a_vals .- b_vals)
-                else
-                    diff_per_electrode[j] = NaN
-                end
-            end
-            topo_values[i] = diff_per_electrode
-        end
-
-        # Significance: channel is significant if proportion of significant time points >= threshold
+        bin_time_labels[i] =
+            @sprintf("%.0f – %.0f ms", all_time_points[first(bin_indices)] * 1000, all_time_points[last(bin_indices)] * 1000)
         n_bin_points = length(bin_indices)
-        sig_combined = result.masks.positive[:, bin_indices] .| result.masks.negative[:, bin_indices]
-        sig_proportion = vec(sum(sig_combined, dims = 2)) ./ n_bin_points
-        sig_masks[i] = sig_proportion .>= highlight_threshold
-    end
-
-    # Compute symmetric color limits across all panels for consistent scaling
-    all_vals = filter(isfinite, vcat(topo_values...))
-    max_abs = isempty(all_vals) ? 1.0 : maximum(abs, all_vals)
-    if max_abs ≈ 0.0
-        max_abs = 1.0
-    end
-    # Use user-provided colorrange or compute symmetric limits
-    if isnothing(colorrange)
-        colorrange = (-max_abs, max_abs)
-    end
-
-    # Grid layout (dims comes from PLOT_TOPOGRAPHY_KWARGS)
-    dims = pop!(plot_kwargs, :dims, nothing)
-    if isnothing(dims)
-        n_rows, n_cols = _best_rect(n_topos)
-    else
-        n_rows, n_cols = dims
-        if n_rows * n_cols < n_topos
-            @minimal_error("Grid dimensions ($n_rows × $n_cols) provide $(n_rows * n_cols) cells but need $n_topos")
+        vals = Vector{Float64}(undef, n_elec)
+        if topo_data == :tvalues
+            inv_n = 1.0 / n_bin_points
+            @inbounds for j = 1:n_elec
+                s = 0.0
+                for k in bin_indices
+                    s += Float64(t_mat[j, k])
+                end
+                v = s * inv_n
+                vals[j] = v
+                isfinite(v) && abs(v) > max_abs && (max_abs = abs(v))
+            end
+        else
+            for (j, ch_sym) in enumerate(electrodes)
+                v = has_diff_cols[j] ? _mean_col_diff(cond_A_df[!, ch_sym], cond_B_df[!, ch_sym], bin_indices) : NaN
+                vals[j] = v
+                isfinite(v) && abs(v) > max_abs && (max_abs = abs(v))
+            end
         end
+        topo_values[i] = vals
+
+        sm = BitVector(undef, n_elec)
+        @inbounds for j = 1:n_elec
+            cnt = 0
+            for k in bin_indices
+                (pos_mask[j, k] || neg_mask[j, k]) && (cnt += 1)
+            end
+            sm[j] = (cnt / n_bin_points) >= highlight_threshold
+        end
+        sig_masks[i] = sm
     end
 
-    # Create figure
-    test_type = isa(result, AnalyticResult) ? "Analytic" : "Permutation"
+    max_abs ≈ 0.0 && (max_abs = 1.0)
+    isnothing(colorrange) && (colorrange = (-max_abs, max_abs))
+
+    dims = pop!(plot_kwargs, :dims, nothing)
+    n_rows, n_cols = if isnothing(dims)
+        _best_rect(n_topos)
+    else
+        r, c = dims
+        r * c < n_topos && @minimal_error("Grid dimensions ($r × $c) provide $(r * c) cells but need $n_topos")
+        r, c
+    end
+
+    test_type = result isa AnalyticResult ? "Analytic" : "Permutation"
     data_label = topo_data == :tvalues ? "t-statistic" : "Difference (μV)"
     fig_title = isempty(figure_title) ? "$test_type Test — $data_label" : figure_title
 
     fig = _eegfun_figure(size = (max(220 * n_cols + 140, 600), 220 * n_rows + 70))
     gl_topos = fig[1, 1] = GridLayout()
-    if show_title && !isempty(fig_title)
-        Label(gl_topos[0, 1:n_cols], fig_title, fontsize = 16, font = :bold)
-    end
+    show_title && !isempty(fig_title) && Label(gl_topos[0, 1:n_cols], fig_title, fontsize = 16, font = :bold)
     for c = 1:n_cols
         colsize!(gl_topos, c, Aspect(1, 1.0))
     end
 
-    # Extract colorbar kwargs before render loop (removes colorbar_* keys from plot_kwargs)
     colorbar_kwargs = Dict{Symbol,Any}(pairs(pop!(plot_kwargs, :colorbar_kwargs, (;))))
     pop!(colorbar_kwargs, :colorrange, nothing)
     pop!(colorbar_kwargs, :label, nothing)
@@ -230,8 +205,6 @@ function plot_topography_stats(
     pop!(plot_kwargs, :colorbar_plot_numbers, nothing)
 
     axes = Axis[]
-
-    # Pre-interpolate all panels when possible
     can_batch = n_topos > 1 && _topo_method_supported(method) && length(layout_labels) >= 3
     batched_interp = nothing
     xb_shared = nothing
@@ -239,7 +212,7 @@ function plot_topography_stats(
 
     if can_batch
         all_layout_mat = Matrix{Float64}(undef, length(layout_labels), n_topos)
-        for i = 1:n_topos
+        @inbounds for i = 1:n_topos
             channel_data = topo_values[i]
             for (k, ch_idx) in enumerate(layout_to_elec_idx)
                 all_layout_mat[k, i] = channel_data[ch_idx]
@@ -248,19 +221,23 @@ function plot_topography_stats(
         batched_interp, xb_shared, yb_shared = _topo_interpolate(all_layout_mat, layout, gridscale; method = method)
     end
 
+    x2_col = layout.data.x2
+    y2_col = layout.data.y2
+
     for i = 1:n_topos
         row = div(i - 1, n_cols) + 1
         col = mod1(i, n_cols)
-
-        panel_title = show_title ? bin_time_labels[i] : ""
-        ax = Axis(gl_topos[row, col], aspect = DataAspect(), title = panel_title, titlesize = plot_kwargs[:plot_title_fontsize])
+        ax = Axis(
+            gl_topos[row, col],
+            aspect = DataAspect(),
+            title = show_title ? bin_time_labels[i] : "",
+            titlesize = plot_kwargs[:plot_title_fontsize],
+        )
         push!(axes, ax)
 
-        # Map electrode values to subsetted layout order
         channel_data = topo_values[i]
         layout_values = Float64[channel_data[ch_idx] for ch_idx in layout_to_elec_idx]
 
-        # Render using shared helper (uses num_levels, not gridscale, for contour levels)
         _render_topo_surface!(
             fig,
             ax,
@@ -277,73 +254,37 @@ function plot_topography_stats(
             plot_kwargs...,
         )
 
-        # Highlight significant channels
         if highlight_significant && any(sig_masks[i])
-            sig_channel_indices = findall(sig_masks[i])
             sig_x = Float64[]
             sig_y = Float64[]
-            for ch_idx in sig_channel_indices
-                ch_sym = electrodes[ch_idx]
-                layout_idx = findfirst(==(ch_sym), layout_labels)
-                if !isnothing(layout_idx)
-                    push!(sig_x, layout.data.x2[layout_idx])
-                    push!(sig_y, layout.data.y2[layout_idx])
+            for ch_idx in findall(sig_masks[i])
+                l_idx = elec_to_layout_idx[ch_idx]
+                if l_idx > 0
+                    push!(sig_x, x2_col[l_idx])
+                    push!(sig_y, y2_col[l_idx])
                 end
             end
-            if !isempty(sig_x)
-                scatter!(
-                    ax,
-                    sig_x,
-                    sig_y,
-                    color = highlight_color,
-                    marker = highlight_marker,
-                    markersize = highlight_size,
-                    strokewidth = 1,
-                    strokecolor = :black,
-                )
-            end
+            !isempty(sig_x) && scatter!(
+                ax,
+                sig_x,
+                sig_y,
+                color = highlight_color,
+                marker = highlight_marker,
+                markersize = highlight_size,
+                strokewidth = 1,
+                strokecolor = :black,
+            )
         end
 
         hidedecorations!(ax)
     end
 
-    # Add shared colorbar if enabled and include in return value
-    cb = nothing
-    if colorbar_plot
-        cb_label = topo_data == :tvalues ? "t-statistic" : "Difference (μV)"
-        actual_colormap = _resolve_theme_colormap(fig, colormap)
-        cb = Colorbar(fig[1, 2]; colorbar_kwargs..., colormap = actual_colormap, colorrange = colorrange, label = cb_label)
+    cb = if colorbar_plot
+        Colorbar(fig[1, 2]; colorbar_kwargs..., colormap = _resolve_theme_colormap(fig, colormap), colorrange = colorrange, label = data_label)
+    else
+        nothing
     end
 
-    if display_plot
-        _display_figure(fig)
-    end
-
+    display_plot && _display_figure(fig)
     return (fig = fig, axes = axes, colorbar = cb)
-end
-
-"""
-    _partition_indices(indices::Vector{Int}, n::Int) -> Vector{UnitRange{Int}}
-
-Divide a vector of sorted, contiguous indices into `n` approximately equal bins.
-Returns vector of UnitRanges spanning from `indices[bin_start]` to `indices[bin_end]`.
-
-Note: assumes the input `indices` are sorted and contiguous (sequential integers).
-For non-contiguous indices, the returned ranges may span unintended values.
-"""
-function _partition_indices(indices::Vector{Int}, n::Int)
-    len = length(indices)
-    bins = Vector{UnitRange{Int}}(undef, n)
-    base_size = div(len, n)
-    remainder = mod(len, n)
-
-    start = 1
-    for i = 1:n
-        bin_size = base_size + (i <= remainder ? 1 : 0)
-        stop = start + bin_size - 1
-        bins[i] = indices[start]:indices[stop]
-        start = stop + 1
-    end
-
-    return bins
 end

@@ -1,74 +1,43 @@
 """
-Plotting functions for statistical test results (analytic and permutation tests).
-"""
-
-
-"""
     plot_erp_stats(result::StatsResult;
-                    layout::Union{Symbol, PlotLayout} = :single,
-                    channel_selection::Function = channels(),
-                    channel_plot_order::Union{Nothing, Vector{Symbol}} = nothing,
-                    plot_erp::Bool = true,
-                    plot_difference::Bool = false,
-                    plot_tvalues::Bool = false,
-                    plot_significance::Bool = false,
-                    plot_critical_t::Bool = false,
-                    plot_se::Bool = false,
-                    colors::Vector = [:blue, :red, :black, :purple],
-                    difference_offset::Real = 0.0,
-                    significance_position::Union{Symbol, Real} = :auto,
-                    significance_color = (:gray, 0.6),
-                    kwargs...)
+                   layout::Union{Symbol,PlotLayout} = :single,
+                   condition_selection = conditions(),
+                   channel_selection = channels(),
+                   channel_plot_order = nothing,
+                   plot_erp::Bool = true,
+                   plot_difference::Bool = false,
+                   plot_tvalues::Bool = false,
+                   plot_significance::Bool = false,
+                   plot_critical_t::Bool = false,
+                   plot_se::Bool = false,
+                   difference_offset::Real = 0.0,
+                   significance_position::Union{Symbol,Real} = :auto,
+                   significance_color = (:gray, 0.6),
+                   kwargs...)
 
-Plot ERP waveforms and statistical results for analytic or permutation tests with flexible layout support.
-
-Works with both `AnalyticResult` (from `analytic_test`) and `PermutationResult` (from `permutation_test`).
+Plot ERP waveforms and statistical results for `AnalyticResult` or `PermutationResult`
+across `:single`, `:grid`, `:topo`, or custom `PlotLayout` layouts.
 
 # Arguments
-- `result::StatsResult`: Results from `analytic_test` or `permutation_test`
-- `layout`: Layout specification:
-  - `:single` (default): Single plot with selected channels overlaid
-  - `:grid`: Grid layout with one subplot per selected channel
-  - `:topo`: Topographic layout based on channel positions
-  - `PlotLayout`: Custom layout object
-- `channel_selection::Function`: Predicate to select channels (default: `channels()` - all channels)
-- `channel_plot_order::Union{Nothing, Vector{Symbol}}`: Override the plotting order of selected channels (default: `nothing` — data order).
-  When provided, channels are plotted in the specified order. Only channels present in both `channel_plot_order` and the selection are plotted
-- `plot_erp::Bool`: Whether to plot ERP waveforms (condition averages) (default: true)
-- `plot_difference::Bool`: Whether to plot difference wave (A-B) (default: false)
-- `plot_tvalues::Bool`: Whether to plot t-statistics (default: false)
-- `plot_significance::Bool`: Whether to highlight significant time points (default: false)
-- `plot_critical_t::Bool`: Whether to plot critical t-values (default: false). Only relevant when `plot_tvalues=true`
-- `difference_offset::Real`: Vertical offset for difference wave (default: 0.0). Set to non-zero to shift for visibility
-- `plot_se::Bool`: Whether to plot ±1 SEM bands around waveforms (default: false). Bands are drawn around condition ERPs and difference wave
-- `significance_position::Union{Symbol, Real}`: Position for significance bars (default: `:auto`). Options:
-  - `:auto` - Automatically place at y=0 if visible, otherwise at bottom (default)
-  - `:zero` - Always place at y=0
-  - `:bottom` - Always place at bottom of plot/spine
-  - `Real` - Custom y-position (e.g., `-5.0` to place at -5 μV)
-- `significance_color`: Color for significance bars (default: `(:gray, 0.6)`). Can be any Makie color specification
+- `result::StatsResult`: Result from `analytic_test` or `permutation_test`.
+- `layout`: `:single` (default), `:grid`, `:topo`, or a `PlotLayout`.
+- `condition_selection`: Predicate to select conditions when `plot_erp = true`.
+- `channel_selection`: Predicate, symbol(s), or name(s) selecting channels (default: `channels()`).
+- `channel_plot_order`: Optional vector overriding channel plot order.
+- `plot_erp`: Plot condition average waveforms (default: `true`).
+- `plot_difference`: Plot difference wave `A - B` (default: `false`).
+- `plot_tvalues`: Plot t-statistics (default: `false`; auto-enabled when `plot_critical_t = true`).
+- `plot_significance`: Highlight significant time intervals (default: `false`).
+- `plot_critical_t`: Plot critical t thresholds (default: `false`).
+- `plot_se`: Plot ±1 SEM bands around condition and difference waveforms (default: `false`).
+- `difference_offset`: Vertical offset for the difference wave (default: `0.0`).
+- `significance_position`: `:auto` (default), `:zero`, `:bottom`, or custom `Real` y-coordinate.
+- `significance_color`: Color for significance bars (default: `(:gray, 0.6)`).
 
 $(_generate_kwargs_doc(PLOT_ERP_KWARGS))
 
 # Returns
-- Named tuple `(fig, axes)` 
-
-# Examples
-```julia
-# With analytic test results - single channel
-result = analytic_test(prepared, correction_method=:no)
-plot_erp_stats(result, channel_selection=channels(:PO7), 
-               plot_erp=true, plot_difference=true, plot_significance=true)
-
-# Grid layout with multiple channels
-plot_erp_stats(result, channel_selection=channels([:PO7, :PO8, :Oz, :Pz]),
-               layout=:grid, plot_significance=true)
-
-# With permutation test results
-result_perm = permutation_test(prepared, n_permutations=1000)
-plot_erp_stats(result_perm, channel_selection=channels(:PO7),
-               plot_erp=true, plot_significance=true, plot_critical_t=true)
-```
+- Named tuple `(fig, axes)`
 """
 function plot_erp_stats(
     result::StatsResult;
@@ -87,112 +56,78 @@ function plot_erp_stats(
     significance_color = (:gray, 0.6),
     kwargs...,
 )
-    # If plot_critical_t is requested, automatically enable t-value plotting
     plot_tvalues = plot_tvalues || plot_critical_t
-
-    # Validate that at least something is being plotted
-    if !plot_erp && !plot_difference && !plot_tvalues
+    (plot_erp || plot_difference || plot_tvalues) ||
         @minimal_error("At least one of plot_erp, plot_difference, or plot_tvalues must be true")
-    end
 
-    # Prepare kwargs (reuse PLOT_ERP_KWARGS, override stats-specific defaults)
     kwargs_norm = _normalize_plot_kwargs(kwargs)
-    if haskey(kwargs_norm, :show_significance)
-        plot_significance = Bool(pop!(kwargs_norm, :show_significance))
-    end
-    if haskey(kwargs_norm, :significance_position)
-        significance_position = pop!(kwargs_norm, :significance_position)
-    end
+    haskey(kwargs_norm, :show_significance) && (plot_significance = Bool(pop!(kwargs_norm, :show_significance)))
+    haskey(kwargs_norm, :significance_position) && (significance_position = pop!(kwargs_norm, :significance_position))
     plot_kwargs = _merge_plot_kwargs(PLOT_ERP_KWARGS, kwargs_norm)
     plot_kwargs[:window_title] = get(kwargs_norm, :window_title, "ERP Stats")
 
-    # Compute colors for stats plot elements: [cond1, cond2, difference, t-values]
-    default_stats_colors = [:blue, :red, :black, :purple]
+    default_stats_colors = Any[:blue, :red, :black, :purple]
     user_color = plot_kwargs[:color]
     stats_colors = if user_color isa Vector
-        # Pad with defaults if user provides fewer than 4
-        [i <= length(user_color) ? user_color[i] : default_stats_colors[i] for i = 1:4]
+        Any[i <= length(user_color) ? user_color[i] : default_stats_colors[i] for i = 1:4]
     elseif haskey(kwargs_norm, :color) && !isnothing(user_color)
-        # User provided a single color — use it for both conditions
-        [user_color, user_color, :black, :purple]
+        Any[user_color, user_color, :black, :purple]
     else
         default_stats_colors
     end
 
-    # Determine selected channels from result electrodes
     all_electrodes = result.electrodes
-    chan_func = _to_channel_func(channel_selection)
-    selected_mask = chan_func(all_electrodes)
-    selected_channels = all_electrodes[selected_mask]
+    selected_channels = all_electrodes[_to_channel_func(channel_selection)(all_electrodes)]
+    isempty(selected_channels) && @minimal_error("No channels matched the selection. Available channels: $(all_electrodes)")
 
-    if isempty(selected_channels)
-        @minimal_error("No channels matched the selection. Available channels: $(all_electrodes)")
-    end
-
-    # Apply user-specified plotting order if provided
     if !isnothing(channel_plot_order)
         ordered = Symbol[Symbol(ch) for ch in channel_plot_order if Symbol(ch) in selected_channels]
-        if isempty(ordered)
-            @minimal_error(
-                "No channels in channel_plot_order matched the selection. Selected: $(selected_channels), Requested order: $(channel_plot_order)",
-            )
-        end
+        isempty(ordered) && @minimal_error(
+            "No channels in channel_plot_order matched the selection. Selected: $(selected_channels), Requested order: $(channel_plot_order)",
+        )
         selected_channels = ordered
     end
 
-    # Set default title
-    title_suffix = if isa(result, AnalyticResult)
+    title_suffix = if result isa AnalyticResult
         "Analytic Test ($(result.test_info.correction_method))"
     else
         "Permutation Test ($(result.test_info.cluster_info.threshold_method))"
     end
 
-    # Determine y-axis label
-    if plot_tvalues && (plot_erp || plot_difference)
-        plot_kwargs[:ylabel] = "Amplitude (μV) / t-statistic"
+    plot_kwargs[:ylabel] = if plot_tvalues && (plot_erp || plot_difference)
+        "Amplitude (μV) / t-statistic"
     elseif plot_tvalues
-        plot_kwargs[:ylabel] = "t-statistic"
+        "t-statistic"
     else
-        plot_kwargs[:ylabel] = "Amplitude (μV)"
+        "Amplitude (μV)"
     end
 
-    # Set title for single layout
     if layout == :single && isnothing(plot_kwargs[:plot_title])
-        if length(selected_channels) == 1
-            plot_kwargs[:plot_title] = "$(selected_channels[1]) - $title_suffix"
-        else
-            plot_kwargs[:plot_title] = "$(_print_vector(selected_channels)) - $title_suffix"
-        end
+        ch_label = length(selected_channels) == 1 ? string(selected_channels[1]) : _print_vector(selected_channels)
+        plot_kwargs[:plot_title] = "$ch_label - $title_suffix"
     end
 
-    # Extract layout_* parameters for layout system
     layout_kwargs = pop!(plot_kwargs, :layout_kwargs, (;))
-
-    # Get the EEG layout from the result data (for topo positioning)
-    eeg_layout = result.data[1].layout
-
-    # Create figure and apply layout system
     fig = _eegfun_figure(size = (800, 600), title = plot_kwargs[:window_title], figure_padding = plot_kwargs[:figure_padding])
 
-
-
-    plot_layout = create_layout(layout, selected_channels, eeg_layout; layout_kwargs...)
+    plot_layout = create_layout(layout, selected_channels, result.data[1].layout; layout_kwargs...)
     axes, layout_channels = _apply_layout!(fig, plot_layout; plot_kwargs...)
 
-    # Render stats content on each axis
-    for (ax_idx, (ax, channel)) in enumerate(zip(axes, layout_channels))
-        channels_to_plot = plot_layout.type == :single ? selected_channels : [channel]
+    cond_indices = plot_erp ? get_selected_conditions(result.data, condition_selection) : Int[]
+    elec_index_map = Dict{Symbol,Int}(ch => i for (i, ch) in enumerate(all_electrodes))
 
+    for (ax, channel) in zip(axes, layout_channels)
+        channels_to_plot = plot_layout.type == :single ? selected_channels : Symbol[channel]
+        first_ch = first(channels_to_plot)
         for ch in channels_to_plot
-            channel_idx = findfirst(==(ch), all_electrodes)
-            isnothing(channel_idx) && continue
-
+            channel_idx = get(elec_index_map, ch, 0)
+            channel_idx == 0 && continue
             _plot_erp_stats_channel!(
                 ax,
                 result,
                 channel_idx,
-                ch;
-                condition_selection = condition_selection,
+                ch,
+                cond_indices;
                 plot_erp = plot_erp,
                 plot_difference = plot_difference,
                 plot_tvalues = plot_tvalues,
@@ -205,69 +140,55 @@ function plot_erp_stats(
                 significance_color = significance_color,
                 linewidth = plot_kwargs[:linewidth],
                 legend_labels = plot_kwargs[:legend_labels],
-                add_labels = (ch == first(channels_to_plot)),
+                add_labels = (ch === first_ch),
             )
         end
     end
 
-    # Apply axis properties and layout properties
-    _apply_axis_properties!.(axes; plot_kwargs...)
+    for ax in axes
+        _apply_axis_properties!(ax; plot_kwargs...)
+    end
     _apply_layout_axis_properties!(axes, plot_layout; plot_kwargs...)
 
-    # Override grid/topo titles to include stats info
     if plot_layout.type in (:grid, :topo) && plot_kwargs[:show_title]
-        for (ax_idx, (ax, channel)) in enumerate(zip(axes, layout_channels))
+        for (ax, channel) in zip(axes, layout_channels)
             ax.title = string(channel)
         end
     end
 
-    # Link axes for consistent navigation
     length(axes) > 1 && linkaxes!(axes...)
 
-    # Add origin lines (x=0, y=0)
     if plot_kwargs[:add_xy_origin]
         for ax in axes
             _set_origin_lines!(ax)
         end
     end
 
-    # Add a single legend (on the first axis)
     if !isempty(axes) && plot_kwargs[:legend]
         axislegend(axes[1], position = plot_kwargs[:legend_position], framevisible = plot_kwargs[:legend_framevisible])
     end
 
-    # Draw supertitle if user explicitly provided a figure_title
     if !isempty(plot_kwargs[:figure_title])
         Label(fig[0, :], plot_kwargs[:figure_title], fontsize = plot_kwargs[:figure_title_fontsize], font = :bold, tellwidth = false)
     end
 
-    if plot_kwargs[:display_plot]
-        _display_figure(fig)
-    end
-
+    plot_kwargs[:display_plot] && _display_figure(fig)
     return (fig = fig, axes = axes)
 end
 
-
-"""
-    _plot_erp_stats_channel!(ax, result, channel_idx, channel_sym; kwargs...)
-
-Internal helper to render ERPs, difference wave, t-values, significance bars, 
-and critical t-lines for a single channel on a single axis.
-"""
 function _plot_erp_stats_channel!(
     ax::Axis,
     result::StatsResult,
     channel_idx::Int,
-    channel_sym::Symbol;
-    condition_selection = conditions(),
+    channel_sym::Symbol,
+    cond_indices::Vector{Int};
     plot_erp::Bool = true,
     plot_difference::Bool = false,
     plot_tvalues::Bool = false,
     plot_significance::Bool = false,
     plot_critical_t::Bool = false,
     plot_se::Bool = false,
-    colors::Vector = [:blue, :red, :black, :purple],
+    colors::Vector = Any[:blue, :red, :black, :purple],
     difference_offset::Real = 0.0,
     significance_position::Union{Symbol,Real} = :auto,
     significance_color = (:gray, 0.6),
@@ -276,12 +197,9 @@ function _plot_erp_stats_channel!(
     add_labels::Bool = true,
 )
     time_points = result.time_points
-    t_values = result.stat_matrix.t[channel_idx, :]
-    linewidth = _resolve_theme_linewidth(ax, linewidth, 2)
+    t_values = @view result.stat_matrix.t[channel_idx, :]
+    lw = _resolve_theme_linewidth(ax, linewidth, 2)
 
-    plotted_erps = subset(collect(result.data); condition_selection = condition_selection)
-
-    # Get condition averages for this channel (index by Symbol, not integer position)
     cond_A_erp = result.data[1]
     cond_B_erp = result.data[2]
     channel_sym ∉ cond_A_erp && @minimal_error("Channel $channel_sym not found in result data")
@@ -289,63 +207,48 @@ function _plot_erp_stats_channel!(
     cond_B_avg = cond_B_erp.data[!, channel_sym]
     erp_time_points = cond_A_erp.data[!, :time]
 
-    # Pre-compute critical t-values if needed
     critical_t_pos = nothing
     critical_t_neg = nothing
-    if (plot_significance || plot_critical_t) && plot_tvalues
+    if plot_critical_t && plot_tvalues
         crit = result.critical_t
+        n_tp = length(time_points)
         if crit isa Real
-            critical_t_pos = fill(Float64(crit), length(time_points))
-            critical_t_neg = fill(-Float64(crit), length(time_points))
+            critical_t_pos = fill(Float64(crit), n_tp)
+            critical_t_neg = fill(-Float64(crit), n_tp)
         elseif crit isa Tuple{<:Real,<:Real}
-            # :nonparametric_common stores (thresh_pos, thresh_neg) where thresh_neg is already signed
-            critical_t_pos = fill(Float64(crit[1]), length(time_points))
-            critical_t_neg = fill(Float64(crit[2]), length(time_points))
+            critical_t_pos = fill(Float64(crit[1]), n_tp)
+            critical_t_neg = fill(Float64(crit[2]), n_tp)
         elseif crit isa Tuple{<:AbstractMatrix,<:AbstractMatrix}
-            # :nonparametric_individual stores (thresh_pos_mat, thresh_neg_mat) where thresh_neg_mat is already signed
-            critical_t_pos = Float64.(crit[1][channel_idx, :])
-            critical_t_neg = Float64.(crit[2][channel_idx, :])
+            critical_t_pos = Float64.(@view crit[1][channel_idx, :])
+            critical_t_neg = Float64.(@view crit[2][channel_idx, :])
         elseif crit isa AbstractMatrix
-            # :parametric stores unsigned positive critical t-matrix
-            critical_t_channel = Float64.(crit[channel_idx, :])
-            critical_t_pos = critical_t_channel
-            critical_t_neg = -critical_t_channel
+            critical_t_pos = Float64.(@view crit[channel_idx, :])
+            critical_t_neg = .-critical_t_pos
         end
     end
 
-    # Plot condition averages (ERP waveforms) with optional SE bands
     if plot_erp
-        for (i, erp) in enumerate(plotted_erps)
-            erp_name = isempty(legend_labels) ? erp.condition_name : (i <= length(legend_labels) ? legend_labels[i] : erp.condition_name)
+        for (i, orig_idx) in enumerate(cond_indices)
+            erp = result.data[orig_idx]
+            erp_name = (isempty(legend_labels) || i > length(legend_labels)) ? erp.condition_name : legend_labels[i]
             erp_avg = erp.data[!, channel_sym]
-            lines!(ax, erp_time_points, erp_avg, color = colors[i], linewidth = linewidth, label = add_labels ? erp_name : nothing)
-
-            # SE bands around individual condition ERPs (full display interval)
-            if plot_se
-                orig_idx = findfirst(x -> x.condition == erp.condition, result.data)
-                if !isnothing(orig_idx)
-                    se_data = orig_idx == 1 ? result.se_cond1[channel_idx, :] : result.se_cond2[channel_idx, :]
-                    band!(ax, erp_time_points, erp_avg .- se_data, erp_avg .+ se_data, color = (colors[i], 0.15))
-                end
+            lines!(ax, erp_time_points, erp_avg, color = colors[i], linewidth = lw, label = add_labels ? erp_name : nothing)
+            if plot_se && (orig_idx == 1 || orig_idx == 2)
+                se_mat = orig_idx == 1 ? result.se_cond1 : result.se_cond2
+                se_data = @view se_mat[channel_idx, :]
+                band!(ax, erp_time_points, erp_avg .- se_data, erp_avg .+ se_data, color = (colors[i], 0.15))
             end
         end
     end
 
-    # Compute difference wave only when needed
-    diff_wave = nothing
     diff_wave_plot = nothing
     if plot_difference || plot_significance
         diff_wave = cond_A_avg .- cond_B_avg
-        diff_wave_plot = diff_wave
+        diff_wave_plot = difference_offset != 0.0 && plot_difference ? (diff_wave .+ difference_offset) : diff_wave
     end
 
-    # Plot difference wave (if requested)
     if plot_difference
-        diff_label = length(legend_labels) >= 3 ? legend_labels[3] : "Difference"
-        if difference_offset != 0.0
-            diff_wave_plot = diff_wave .+ difference_offset
-            diff_label = "Difference (offset=$(difference_offset))"
-
+        diff_label = if difference_offset != 0.0
             hlines!(ax, [difference_offset], color = (:gray, 0.7), linewidth = 1)
             text!(
                 ax,
@@ -356,15 +259,13 @@ function _plot_erp_stats_channel!(
                 color = :gray,
                 fontsize = 18,
             )
+            "Difference (offset=$(difference_offset))"
         else
-            diff_label = "Difference"
+            length(legend_labels) >= 3 ? legend_labels[3] : "Difference"
         end
-
-        lines!(ax, erp_time_points, diff_wave_plot, color = colors[3], linewidth = linewidth, label = add_labels ? diff_label : nothing)
-
-        # SE band around difference wave (full display interval)
+        lines!(ax, erp_time_points, diff_wave_plot, color = colors[3], linewidth = lw, label = add_labels ? diff_label : nothing)
         if plot_se
-            se_diff_channel = result.se_diff[channel_idx, :]
+            se_diff_channel = @view result.se_diff[channel_idx, :]
             band!(
                 ax,
                 erp_time_points,
@@ -376,19 +277,13 @@ function _plot_erp_stats_channel!(
         end
     end
 
-    # Plot t-values (if requested)
-    if plot_tvalues
-        lines!(ax, time_points, t_values, color = colors[4], linewidth = linewidth, label = "t-statistic")
-    end
+    plot_tvalues && lines!(ax, time_points, t_values, color = colors[4], linewidth = lw, label = "t-statistic")
 
-    # Show significance regions as bars
     if plot_significance
-        sig_pos = result.masks.positive[channel_idx, :]
-        sig_neg = result.masks.negative[channel_idx, :]
-        sig_any = sig_pos .| sig_neg
-
-        if any(sig_any)
-            sig_regions = _find_continuous_regions(sig_any, time_points)
+        sig_pos = @view result.masks.positive[channel_idx, :]
+        sig_neg = @view result.masks.negative[channel_idx, :]
+        if any(sig_pos) || any(sig_neg)
+            sig_regions = _find_continuous_regions(sig_pos .| sig_neg, time_points)
             bar_y, bar_height = _compute_significance_position(
                 significance_position,
                 plot_erp,
@@ -399,123 +294,115 @@ function _plot_erp_stats_channel!(
                 diff_wave_plot,
                 t_values,
             )
-
             for (t_start, t_end) in sig_regions
-                rect_vertices = [
-                    Point2f(t_start, bar_y),
-                    Point2f(t_end, bar_y),
-                    Point2f(t_end, bar_y + bar_height),
-                    Point2f(t_start, bar_y + bar_height),
-                ]
-                poly!(ax, rect_vertices, color = significance_color, strokewidth = 0)
+                poly!(
+                    ax,
+                    Point2f[
+                        Point2f(t_start, bar_y),
+                        Point2f(t_end, bar_y),
+                        Point2f(t_end, bar_y + bar_height),
+                        Point2f(t_start, bar_y + bar_height),
+                    ],
+                    color = significance_color,
+                    strokewidth = 0,
+                )
             end
         end
     end
 
-    # Show critical t-values if requested
     if plot_critical_t && plot_tvalues && !isnothing(critical_t_pos)
-        if any(!isnan, critical_t_pos)
-            lines!(ax, time_points, critical_t_pos, color = :grey, linewidth = linewidth, linestyle = :dashdot, label = "Critical t+")
-        end
-        if !isnothing(critical_t_neg) && any(!isnan, critical_t_neg)
-            lines!(ax, time_points, critical_t_neg, color = :grey, linewidth = linewidth, linestyle = :dashdot, label = "Critical t-")
-        end
+        any(!isnan, critical_t_pos) &&
+            lines!(ax, time_points, critical_t_pos, color = :grey, linewidth = lw, linestyle = :dashdot, label = "Critical t+")
+        !isnothing(critical_t_neg) &&
+            any(!isnan, critical_t_neg) &&
+            lines!(ax, time_points, critical_t_neg, color = :grey, linewidth = lw, linestyle = :dashdot, label = "Critical t-")
     end
 
     return nothing
 end
 
-
-"""
-    _compute_significance_position(position, plot_erp, plot_difference, plot_tvalues,
-                               cond_A_avg, cond_B_avg, diff_wave_plot, t_values)
-
-Compute bar_y and bar_height for significance bar rendering. Uses 5% of data range for bar height.
-"""
-function _compute_significance_position(position, plot_erp, plot_difference, plot_tvalues, cond_A_avg, cond_B_avg, diff_wave_plot, t_values)
-    bar_height_frac = 0.05  # 5% of range
-
-    # Determine the relevant data range for bar sizing
-    data_range, data_min =
-        _get_significance_data_range(plot_erp, plot_difference, plot_tvalues, cond_A_avg, cond_B_avg, diff_wave_plot, t_values)
-    bar_height = data_range * bar_height_frac
-
-    # Fallback for zero range
-    if bar_height ≈ 0.0
-        bar_height = 0.05
-    end
-
-    # Determine bar_y based on position
-    if position isa Real
-        bar_y = Float64(position)
-    elseif position == :zero
-        bar_y = -bar_height / 2  # Center around zero
-    elseif position == :bottom
-        bar_y = data_min - data_range * 0.05
-    else  # :auto (default)
-        if plot_erp || plot_difference
-            amp_min = _get_amp_min(plot_erp, plot_difference, cond_A_avg, cond_B_avg, diff_wave_plot)
-            amp_max = _get_amp_max(plot_erp, plot_difference, cond_A_avg, cond_B_avg, diff_wave_plot)
-            if amp_min <= 0.0 <= amp_max
-                bar_y = -bar_height / 2  # Center around zero
-            else
-                bar_y = amp_min - data_range * 0.05
-            end
-        else
-            bar_y = data_min - data_range * 0.05
+function _nonnan_extrema(v::AbstractVector)
+    lo = Inf
+    hi = -Inf
+    @inbounds for x in v
+        val = Float64(x)
+        if !isnan(val)
+            val < lo && (lo = val)
+            val > hi && (hi = val)
         end
     end
+    return lo <= hi ? (lo, hi) : (0.0, 1.0)
+end
 
+function _amp_extrema(plot_erp::Bool, plot_difference::Bool, cond_A_avg, cond_B_avg, diff_wave_plot)
+    if plot_erp
+        a_min, a_max = extrema(cond_A_avg)
+        b_min, b_max = extrema(cond_B_avg)
+        return min(a_min, b_min), max(a_max, b_max)
+    elseif plot_difference && !isnothing(diff_wave_plot)
+        return extrema(diff_wave_plot)
+    end
+    return 0.0, 0.0
+end
+
+function _compute_significance_position(position, plot_erp, plot_difference, plot_tvalues, cond_A_avg, cond_B_avg, diff_wave_plot, t_values)
+    data_range, data_min = if plot_tvalues && !plot_difference && !plot_erp
+        t_min, t_max = _nonnan_extrema(t_values)
+        t_max - t_min, t_min
+    elseif plot_erp || plot_difference
+        amp_min, amp_max = _amp_extrema(plot_erp, plot_difference, cond_A_avg, cond_B_avg, diff_wave_plot)
+        amp_max - amp_min, amp_min
+    else
+        1.0, 0.0
+    end
+
+    bar_height = data_range * 0.05
+    bar_height ≈ 0.0 && (bar_height = 0.05)
+
+    bar_y = if position isa Real
+        Float64(position)
+    elseif position == :zero
+        -bar_height / 2
+    elseif position == :bottom
+        data_min - data_range * 0.05
+    elseif plot_erp || plot_difference
+        amp_min, amp_max = _amp_extrema(plot_erp, plot_difference, cond_A_avg, cond_B_avg, diff_wave_plot)
+        amp_min <= 0.0 <= amp_max ? (-bar_height / 2) : (amp_min - data_range * 0.05)
+    else
+        data_min - data_range * 0.05
+    end
     return bar_y, bar_height
 end
 
-
-"""
-    _get_significance_data_range(...)
-
-Returns `(range, min)` for the plotted data, used to size and position significance bars.
-"""
-function _get_significance_data_range(plot_erp, plot_difference, plot_tvalues, cond_A_avg, cond_B_avg, diff_wave_plot, t_values)
-    if plot_tvalues && !plot_difference && !plot_erp
-        valid = t_values[.!isnan.(t_values)]
-        t_min, t_max = extrema(valid)
-        return t_max - t_min, t_min
-    elseif plot_erp || plot_difference
-        amp_min = _get_amp_min(plot_erp, plot_difference, cond_A_avg, cond_B_avg, diff_wave_plot)
-        amp_max = _get_amp_max(plot_erp, plot_difference, cond_A_avg, cond_B_avg, diff_wave_plot)
-        return amp_max - amp_min, amp_min
-    else
-        return 1.0, 0.0
+function _max_abs_nonnan(A::AbstractArray)
+    m = 0.0
+    @inbounds for x in A
+        v = abs(Float64(x))
+        if !isnan(v) && v > m
+            m = v
+        end
     end
+    return m ≈ 0.0 ? 1.0 : m
 end
 
-function _get_amp_min(plot_erp, plot_difference, cond_A_avg, cond_B_avg, diff_wave_plot)
-    if plot_erp
-        min(minimum(cond_A_avg), minimum(cond_B_avg))
-    elseif plot_difference && !isnothing(diff_wave_plot)
-        minimum(diff_wave_plot)
-    else
-        0.0
+function _transpose_f32(t_values::AbstractMatrix{<:Real})
+    n_chans, n_times = size(t_values)
+    out = Matrix{Float32}(undef, n_times, n_chans)
+    @inbounds for c = 1:n_chans, t = 1:n_times
+        out[t, c] = Float32(t_values[c, t])
     end
+    return out
 end
 
-function _get_amp_max(plot_erp, plot_difference, cond_A_avg, cond_B_avg, diff_wave_plot)
-    if plot_erp
-        max(maximum(cond_A_avg), maximum(cond_B_avg))
-    elseif plot_difference && !isnothing(diff_wave_plot)
-        maximum(diff_wave_plot)
-    else
-        0.0
+function _transpose_masked_f32(t_values::AbstractMatrix{<:Real}, mask::AbstractMatrix{Bool})
+    n_chans, n_times = size(t_values)
+    out = Matrix{Float32}(undef, n_times, n_chans)
+    @inbounds for c = 1:n_chans, t = 1:n_times
+        out[t, c] = mask[c, t] ? Float32(t_values[c, t]) : NaN32
     end
+    return out
 end
 
-"""
-    _plot_stat_heatmap_core!(fig, ax, time_points, electrodes, t_values, mask; kwargs...)
-
-Internal rendering engine for 2D spatiotemporal statistical heatmaps (Channels x Time).
-Supports multiple mask styles (:alpha, :hide, :contour, :none), smart high-density channel decimation,
-and baseline window shading.
-"""
 function _plot_stat_heatmap_core!(
     fig::Union{Figure,Nothing},
     ax::Axis,
@@ -537,13 +424,11 @@ function _plot_stat_heatmap_core!(
     plot_kwargs[:xlabel] = get(kwargs_norm, :xlabel, time_unit == :ms ? "Time (ms)" : "Time (s)")
     pop!(plot_kwargs, :time_unit, nothing)
 
-    # Smart electrode ticks if not explicitly provided
     if isnothing(get(kwargs_norm, :yticks, nothing))
         if n_chans > 40
-            step = max(1, div(n_chans, 14)) # e.g. every 5 channels for 70
-            y_indices = [1, step:step:n_chans...]
-            y_labels = ["$(i): $(electrodes[i])" for i in y_indices]
-            plot_kwargs[:yticks] = (y_indices, y_labels)
+            step = max(1, div(n_chans, 14))
+            y_indices = [1; step:step:n_chans]
+            plot_kwargs[:yticks] = (y_indices, ["$(i): $(electrodes[i])" for i in y_indices])
             ax.yminorticks = IntervalsBetween(step)
             ax.yminorticksvisible = true
         else
@@ -551,90 +436,71 @@ function _plot_stat_heatmap_core!(
         end
     end
 
-    # Baseline window shading
     baseline_window = get(kwargs_norm, :baseline_window, nothing)
     if !isnothing(baseline_window)
-        bw_start = baseline_window[1] * t_scale
-        bw_end = baseline_window[2] * t_scale
-        vspan!(ax, bw_start, bw_end, color = (:gray85, 0.25))
+        vspan!(ax, baseline_window[1] * t_scale, baseline_window[2] * t_scale, color = (:gray85, 0.25))
         vlines!(ax, [0.0], color = (:black, 0.75), linestyle = :solid, linewidth = 1.2)
     end
 
-    # Colormap and symmetric limits
-    max_t = maximum(abs, filter(!isnan, t_values); init = 1.0)
-    if max_t ≈ 0.0
-        max_t = 1.0
-    end
+    max_t = _max_abs_nonnan(t_values)
     cmap = _resolve_theme_colormap(ax, get(kwargs_norm, :colormap, :coolwarm))
-    clims = get(kwargs_norm, :colorrange, (-max_t, max_t))
-    if isnothing(clims)
-        clims = (-max_t, max_t)
-    end
+    clims = something(get(kwargs_norm, :colorrange, nothing), (-max_t, max_t))
     alpha_subdued = get(kwargs_norm, :alpha_subdued, 0.20)
-
     mask_style = get(kwargs_norm, :mask_style, :alpha)
-    local hm
-    if mask_style == :alpha
-        # Base transparent layer
-        heatmap!(ax, x_times, 1:n_chans, transpose(t_values), colormap = cmap, colorrange = clims, alpha = alpha_subdued)
 
-        # Opaque layer over significant regions
-        highlight = copy(t_values)
-        highlight[.!mask] .= NaN
-        hm = heatmap!(ax, x_times, 1:n_chans, transpose(highlight), colormap = cmap, colorrange = clims, nan_color = :transparent)
+    hm = if mask_style == :alpha
+        heatmap!(ax, x_times, 1:n_chans, _transpose_f32(t_values), colormap = cmap, colorrange = clims, alpha = alpha_subdued)
+        heatmap!(
+            ax,
+            x_times,
+            1:n_chans,
+            _transpose_masked_f32(t_values, mask),
+            colormap = cmap,
+            colorrange = clims,
+            nan_color = :transparent,
+        )
     elseif mask_style == :hide
-        highlight = copy(t_values)
-        highlight[.!mask] .= NaN
-        hm = heatmap!(ax, x_times, 1:n_chans, transpose(highlight), colormap = cmap, colorrange = clims, nan_color = :transparent)
+        heatmap!(ax, x_times, 1:n_chans, _transpose_masked_f32(t_values, mask), colormap = cmap, colorrange = clims, nan_color = :transparent)
     elseif mask_style == :contour
-        hm = heatmap!(ax, x_times, 1:n_chans, transpose(t_values), colormap = cmap, colorrange = clims)
-        if any(mask)
-            contour!(ax, x_times, 1:n_chans, Float64.(transpose(mask)), levels = [0.5], color = :black, linewidth = 1.8)
-        end
-    else # :none
-        hm = heatmap!(ax, x_times, 1:n_chans, transpose(t_values), colormap = cmap, colorrange = clims)
+        h = heatmap!(ax, x_times, 1:n_chans, _transpose_f32(t_values), colormap = cmap, colorrange = clims)
+        any(mask) && contour!(ax, x_times, 1:n_chans, _transpose_f32(mask), levels = [0.5], color = :black, linewidth = 1.8)
+        h
+    else
+        heatmap!(ax, x_times, 1:n_chans, _transpose_f32(t_values), colormap = cmap, colorrange = clims)
     end
 
     xlims!(ax, extrema(x_times))
     ylims!(ax, 0.5, n_chans + 0.5)
 
-    # Colorbar
-    show_colorbar = get(kwargs_norm, :colorbar_plot, true)
-    if show_colorbar && !isnothing(fig)
-        cb_label = get(kwargs_norm, :colorbar_label, "t-value")
-        Colorbar(fig[1, 2], hm, label = cb_label)
+    if get(kwargs_norm, :colorbar_plot, true) && !isnothing(fig)
+        Colorbar(fig[1, 2], hm, label = get(kwargs_norm, :colorbar_label, "t-value"))
     end
 
     _apply_axis_properties!(ax; plot_kwargs...)
-
     return (hm = hm, ax = ax)
 end
 
 """
     plot_stat_heatmap!(fig, ax, result::StatsResult; kwargs...)
 
-Mutating variant of `plot_stat_heatmap` to draw a 2D statistical heatmap into an existing Axis.
+Mutating variant of `plot_stat_heatmap` to draw a 2D statistical heatmap into an existing `Axis`.
 """
 function plot_stat_heatmap!(fig::Union{Figure,Nothing}, ax::Axis, result::StatsResult; kwargs...)
-    time_points = result.time_points
-    electrodes = result.electrodes
     t_values = result.stat_matrix.t
     has_masks = hasproperty(result, :masks) && !isnothing(result.masks)
     mask = has_masks ? (result.masks.positive .| result.masks.negative) : trues(size(t_values))
-
-    return _plot_stat_heatmap_core!(fig, ax, time_points, electrodes, t_values, mask; kwargs...)
+    return _plot_stat_heatmap_core!(fig, ax, result.time_points, result.electrodes, t_values, mask; kwargs...)
 end
 
 """
     plot_stat_heatmap(result::StatsResult; kwargs...)
 
-Plots a 2D heatmap of the t-statistics (Channels x Time) from a classical permutation test.
+Plot a 2D heatmap of t-statistics (`Channels × Time`) from an analytic or permutation test.
 """
 function plot_stat_heatmap(result::StatsResult; kwargs...)
     plot_kwargs = _merge_plot_kwargs(PLOT_ERP_KWARGS, kwargs; validate = false)
     window_title = get(kwargs, :window_title, "T-Statistic Heatmap")
-    xlabel_def = get(kwargs, :time_unit, :s) == :ms ? "Time (ms)" : "Time (s)"
-    xlabel = get(kwargs, :xlabel, xlabel_def)
+    xlabel = get(kwargs, :xlabel, get(kwargs, :time_unit, :s) == :ms ? "Time (ms)" : "Time (s)")
     ylabel = get(kwargs, :ylabel, "Channels")
 
     fig = _eegfun_figure(size = (850, 600), title = window_title, figure_padding = plot_kwargs[:figure_padding])
@@ -645,10 +511,6 @@ function plot_stat_heatmap(result::StatsResult; kwargs...)
     if !isempty(plot_kwargs[:figure_title])
         Label(fig[0, :], plot_kwargs[:figure_title], fontsize = plot_kwargs[:figure_title_fontsize], font = :bold, tellwidth = false)
     end
-
-    if plot_kwargs[:display_plot]
-        _display_figure(fig)
-    end
-
+    plot_kwargs[:display_plot] && _display_figure(fig)
     return (fig = fig, axes = [ax])
 end
