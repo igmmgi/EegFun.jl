@@ -1,6 +1,6 @@
 # Time-frequency plotting functions for visualizing TimeFreqData.
 
-const _SIGNED_TF_BASELINE_METHODS = (:db, :percent, :relchange, :normchange, :vssum, :zscore, :absolute)
+const _SIGNED_TF_BASELINE_METHODS = (:db, :percent, :relchange, :normchange, :zscore, :absolute)
 
 const PLOT_TF_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Display
@@ -27,7 +27,7 @@ const PLOT_TF_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 
     # Axis
     :xscale => (:linear, "X-axis scale (:linear or :log10)"),
-    :yscale => (:linear, "Frequency (y) axis scale (:linear or :log10; legacy alias `ylogscale` also accepted)"),
+    :yscale => (:linear, "Frequency (y) axis scale (:linear or :log10)"),
     :xlim => (nothing, "X-axis time limits as (min, max) tuple in seconds. If nothing, shows all time points"),
     :interpolate => (false, "Whether to interpolate the heatmap for a smoother appearance"),
     :plot_title => (nothing, "Plot title. If nothing, automatically determined from condition name and channel"),
@@ -206,7 +206,7 @@ $(_generate_kwargs_doc(PLOT_TF_KWARGS))
 ```julia
 plot_tf("tf_morlet_result.jld2")
 plot_tf("tf_morlet_result.jld2"; layout=:grid, channel_selection=channels([:Cz, :Pz]))
-plot_tf(tf; colormap=:RdBu, ylogscale=true, baseline_interval=(-0.3, 0.0))
+plot_tf(tf; colormap=:RdBu, yscale=:log10, baseline_interval=(-0.3, 0.0))
 ```
 """
 function plot_tf(filepath::String; kwargs...)
@@ -218,7 +218,7 @@ end
 function plot_tf(tf_data::AbstractVector{<:TimeFreqData}; channel_selection = channels(), baseline_interval::Interval = nothing, kwargs...)
     isempty(tf_data) && @minimal_error("Empty TimeFreqData vector")
 
-    plot_kwargs = _merge_plot_kwargs(PLOT_TF_KWARGS, _normalize_plot_kwargs(kwargs))
+    plot_kwargs = _merge_plot_kwargs(PLOT_TF_KWARGS, kwargs)
     colorbar_kwargs = pop!(plot_kwargs, :colorbar_kwargs, (;))
     layout_kwargs = pop!(plot_kwargs, :layout_kwargs, (;))
 
@@ -321,7 +321,7 @@ function plot_tf(
     baseline_interval::Interval = nothing,
     kwargs...,
 )
-    plot_kwargs = _merge_plot_kwargs(PLOT_TF_KWARGS, _normalize_plot_kwargs(kwargs))
+    plot_kwargs = _merge_plot_kwargs(PLOT_TF_KWARGS, kwargs)
     colorbar_kwargs = pop!(plot_kwargs, :colorbar_kwargs, (;))
     layout_kw_in = pop!(plot_kwargs, :layout_kwargs, (;))
 

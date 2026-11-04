@@ -150,7 +150,7 @@ function plot_channel_summary!(
     channel_selection = channels(),
     kwargs...,
 )
-    plot_kwargs = _merge_plot_kwargs(PLOT_CHANNEL_SUMMARY_KWARGS, _normalize_plot_kwargs(kwargs))
+    plot_kwargs = _merge_plot_kwargs(PLOT_CHANNEL_SUMMARY_KWARGS, kwargs)
     return _plot_channel_summary_impl!(ax, dat, Symbol(col), channel_selection, plot_kwargs)
 end
 
@@ -160,7 +160,7 @@ end
 Create a figure and plot per-channel summary bar charts (single or multi-column). See [`plot_channel_summary!`](@ref) for keyword options.
 """
 function plot_channel_summary(dat::DataFrame, col::Union{Symbol,AbstractString}; channel_selection = channels(), kwargs...)
-    plot_kwargs = _merge_plot_kwargs(PLOT_CHANNEL_SUMMARY_KWARGS, _normalize_plot_kwargs(kwargs))
+    plot_kwargs = _merge_plot_kwargs(PLOT_CHANNEL_SUMMARY_KWARGS, kwargs)
     fig = _eegfun_figure()
     ax = Axis(fig[1, 1])
     _plot_channel_summary_impl!(ax, dat, Symbol(col), channel_selection, plot_kwargs)
@@ -180,7 +180,7 @@ function plot_channel_summary(
     channel_selection = channels(),
     kwargs...,
 )
-    plot_kwargs = _merge_plot_kwargs(PLOT_CHANNEL_SUMMARY_KWARGS, _normalize_plot_kwargs(kwargs))
+    plot_kwargs = _merge_plot_kwargs(PLOT_CHANNEL_SUMMARY_KWARGS, kwargs)
     fig = _eegfun_figure()
     axes = _plot_multiple_columns!(fig, dat, Symbol.(col), plot_kwargs; channel_selection = channel_selection)
     if plot_kwargs[:display_plot]

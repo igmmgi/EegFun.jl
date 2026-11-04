@@ -18,15 +18,14 @@ using EegFun
             xscale = :linear,
             yscale = :linear,
             unit = :dB,
-            show_legend = true,
+            legend = true,
             display_plot = false,
         )
         @test result.fig isa Figure
         @test result.axes isa Vector{Axis}
 
-        # Backwards-compatible x_scale / y_scale aliases
-        result_alias = EegFun.plot_channel_spectrum(dat; max_freq = 50.0, x_scale = :log10, y_scale = :linear, display_plot = false)
-        @test result_alias.fig isa Figure
+        result_log = EegFun.plot_channel_spectrum(dat; max_freq = 50.0, xscale = :log10, yscale = :linear, display_plot = false)
+        @test result_log.fig isa Figure
     end
 
     @testset "OrderedDict freq_bands and ICA spectrum centering + labels" begin

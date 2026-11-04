@@ -67,9 +67,7 @@ function plot_topography_stats(
 )
     topo_data in (:tvalues, :difference) || @minimal_error("topo_data must be :tvalues or :difference, got :$topo_data")
 
-    kwargs_norm = _normalize_plot_kwargs(kwargs, _TOPO_KWARG_ALIASES)
-    haskey(kwargs_norm, :n_topo) && (n_topos = Int(pop!(kwargs_norm, :n_topo)))
-    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs_norm)
+    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs)
 
     method = pop!(plot_kwargs, :method)
     gridscale = pop!(plot_kwargs, :gridscale)
@@ -84,8 +82,8 @@ function plot_topography_stats(
     pop!(plot_kwargs, :use_global_scale, nothing)
     pop!(plot_kwargs, :component_selection, nothing)
 
-    plot_kwargs[:label_plot] = get(kwargs_norm, :label_plot, false)
-    plot_kwargs[:point_plot] = get(kwargs_norm, :point_plot, false)
+    plot_kwargs[:label_plot] = get(kwargs, :label_plot, false)
+    plot_kwargs[:point_plot] = get(kwargs, :point_plot, false)
 
     all_time_points = result.time_points
     t_start, t_end = if isnothing(interval_selection) || interval_selection isa AllSelection

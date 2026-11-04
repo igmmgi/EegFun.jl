@@ -232,7 +232,7 @@ using EegFun
             tf_res_sub.time_points,
             tf_res_sub.critical_t,
         )
-        out_sub = EegFun.plot_topography_stats(tf_res_sub; freq_range = (13.0, 8.0), n_topo = 2, point_plot = true, display_plot = false)
+        out_sub = EegFun.plot_topography_stats(tf_res_sub; freq_range = (13.0, 8.0), n_topos = 2, point_plot = true, display_plot = false)
         @test out_sub.fig isa Figure
         @test length(out_sub.axes) == 2
         lbls = filter(b -> b isa Label, out_sub.fig.content)

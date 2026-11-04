@@ -149,10 +149,10 @@ EegFun.highpass_filter!(dat, 1)
 
 # Correlation Matrix
 cm = EegFun.correlation_matrix(dat)
-EegFun.plot_correlation_heatmap(cm, title = "Full Correlation Matrix")
+EegFun.plot_correlation_heatmap(cm, plot_title = "Full Correlation Matrix")
 
 cm = EegFun.correlation_matrix(dat, channel_selection = EegFun.channels([:Fp1, :Fp2, :C3, :C4]))
-EegFun.plot_correlation_heatmap(cm, title = "Selected Correlations")
+EegFun.plot_correlation_heatmap(cm, plot_title = "Selected Correlations")
 
 # Calculate EOG signals
 EegFun.channel_difference!(
@@ -177,7 +177,7 @@ cm_eog = EegFun.correlation_matrix_dual_selection(
 )
 
 # Visualize which EEG channels are correlated with EOG
-EegFun.plot_correlation_heatmap(cm_eog, title = "EEG-EOG Correlations", xlabel = "EOG Channels", ylabel = "EEG Channels")
+EegFun.plot_correlation_heatmap(cm_eog, plot_title = "EEG-EOG Correlations", xlabel = "EOG Channels", ylabel = "EEG Channels")
 
 # Display channel correlations in layout
 cm = EegFun.correlation_matrix(dat)

@@ -113,7 +113,7 @@ function plot_erp_image(
     interval_selection::Interval = times(),
     kwargs...,
 )
-    plot_kwargs = _merge_plot_kwargs(PLOT_ERP_IMAGE_KWARGS, _normalize_plot_kwargs(kwargs))
+    plot_kwargs = _merge_plot_kwargs(PLOT_ERP_IMAGE_KWARGS, kwargs)
 
     # Avoid deep-copying all EpochData DataFrames when no sample/interval subsetting is requested
     dat_subset = if _combine_interval_sample(interval_selection, sample_selection) isa _AllSamples

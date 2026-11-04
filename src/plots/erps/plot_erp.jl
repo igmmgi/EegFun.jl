@@ -632,9 +632,7 @@ function _plot_erp!(
 end
 
 function _prepare_plot_kwargs(kwargs)
-    kwargs_norm = _normalize_plot_kwargs(kwargs)
-    user_provided_color = haskey(kwargs_norm, :color)
-    return _merge_plot_kwargs(PLOT_ERP_KWARGS, kwargs_norm), user_provided_color
+    return _merge_plot_kwargs(PLOT_ERP_KWARGS, kwargs), haskey(kwargs, :color)
 end
 
 function _prepare_erp_data(

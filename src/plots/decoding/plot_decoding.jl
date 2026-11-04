@@ -179,7 +179,7 @@ plot_decoding(decoded)
 plot_decoding(decoded, color=:red, linewidth=3, show_error=false)
 
 # With custom title
-plot_decoding(decoded, title="Face vs. Object Decoding")
+plot_decoding(decoded, plot_title="Face vs. Object Decoding")
 ```
 
     plot_decoding(filepath::String; input_dir=pwd(), participant_selection=participants(), kwargs...)
@@ -214,7 +214,7 @@ function plot_decoding(filepath::String; input_dir::String = pwd(), participant_
 end
 
 function plot_decoding(decoded::DecodedData; kwargs...)
-    plot_kwargs = _merge_plot_kwargs(PLOT_DECODING_KWARGS, _normalize_plot_kwargs(kwargs))
+    plot_kwargs = _merge_plot_kwargs(PLOT_DECODING_KWARGS, kwargs)
     title_text = plot_kwargs[:plot_title]
 
     fig = _eegfun_figure(size = (800, 600))
@@ -242,7 +242,7 @@ end
 function plot_decoding(decoded_list::AbstractVector{<:DecodedData}; kwargs...)
     isempty(decoded_list) && @minimal_error("Cannot plot empty decoded data list")
 
-    plot_kwargs = _merge_plot_kwargs(PLOT_DECODING_KWARGS, _normalize_plot_kwargs(kwargs))
+    plot_kwargs = _merge_plot_kwargs(PLOT_DECODING_KWARGS, kwargs)
     title_text = plot_kwargs[:plot_title]
     show_title = plot_kwargs[:show_title]
     show_err = Bool(plot_kwargs[:show_error])
@@ -308,10 +308,9 @@ end
 function plot_decoding(decoded::DecodedData, stats::DecodingStatisticsResult; kwargs...)
     decoded.times == stats.times || @minimal_error("DecodedData and DecodingStatisticsResult must have matching time vectors")
 
-    norm_kwargs = _normalize_plot_kwargs(kwargs)
-    plot_kwargs = _merge_plot_kwargs(PLOT_DECODING_KWARGS, norm_kwargs)
+    plot_kwargs = _merge_plot_kwargs(PLOT_DECODING_KWARGS, kwargs)
 
-    result = plot_decoding(decoded; norm_kwargs..., display_plot = false)
+    result = plot_decoding(decoded; kwargs..., display_plot = false)
     fig = result.fig
     ax = result.axes[1]
 
@@ -387,7 +386,7 @@ plot_confusion_matrix(decoded)
 function plot_confusion_matrix(decoded::DecodedData; time_point::Union{Float64,Int,Nothing} = nothing, kwargs...)
     isnothing(decoded.confusion_matrix) && @minimal_error("No confusion matrix data available in DecodedData")
 
-    plot_kwargs = _merge_plot_kwargs(PLOT_DECODING_KWARGS, _normalize_plot_kwargs(kwargs))
+    plot_kwargs = _merge_plot_kwargs(PLOT_DECODING_KWARGS, kwargs)
     cm = decoded.confusion_matrix
 
     if isnothing(time_point)

@@ -2,14 +2,17 @@
 
 """
     plot_tf_stats(result::TFStatsResult;
-                  channel_selection::Function = channels(),
-                  channel_plot_order::Union{Nothing, Vector{Symbol}} = nothing,
+                  channel_selection = channels(),
+                  channel_plot_order::Union{Nothing, AbstractVector} = nothing,
                   content::Symbol = :tvalues,
                   mask_style::Symbol = :alpha,
                   colormap = nothing,
                   colorrange = nothing,
-                  ylogscale::Bool = false,
-                  colorbar::Bool = true,
+                  xscale::Symbol = :linear,
+                  yscale::Symbol = :linear,
+                  colorbar_plot::Bool = true,
+                  plot_title::Union{Nothing, AbstractString} = nothing,
+                  show_title::Bool = true,
                   significance_color = :black,
                   significance_linewidth::Real = 2.0,
                   figure_size = nothing,
@@ -22,7 +25,7 @@ Works with both `TFClusterPermutationResult` (from `permutation_test`) and
 
 # Arguments
 - `result::TFStatsResult`: Statistical result to plot
-- `channel_selection::Function`: Channel selection predicate (default: all channels)
+- `channel_selection`: Channel selection predicate (default: all channels)
 - `content::Symbol`: What to plot as the heatmap:
   - `:tvalues` (default) - t-statistic values
   - `:difference` - power difference (condition A - B)
@@ -35,8 +38,11 @@ Works with both `TFClusterPermutationResult` (from `permutation_test`) and
   - `:none` - no significance overlay
 - `colormap`: Colormap (default: `:RdBu`)
 - `colorrange`: Color range tuple or `nothing` for auto (auto-symmetric for t-values)
-- `ylogscale::Bool`: Log scale for frequencies (default: false)
-- `colorbar::Bool`: Show colorbar (default: true)
+- `xscale::Symbol`: Time (x) axis scale (`:linear` or `:log10`, default: `:linear`)
+- `yscale::Symbol`: Frequency (y) axis scale (`:linear` or `:log10`, default: `:linear`)
+- `colorbar_plot::Bool`: Show colorbar (default: `true`)
+- `plot_title`: Optional header title override (default: `nothing`)
+- `show_title::Bool`: Show header and channel titles (default: `true`)
 - `significance_color`: Color for contour lines (default: `:black`)
 - `significance_linewidth::Real`: Width of contour lines (default: 2.0)
 - `figure_size`: Figure size tuple or `nothing` for auto
@@ -72,9 +78,7 @@ function plot_tf_stats(
     colorrange::Union{Nothing,Tuple{Real,Real}} = nothing,
     xscale::Symbol = :linear,
     yscale::Symbol = :linear,
-    ylogscale::Union{Nothing,Bool} = nothing,
     colorbar_plot::Bool = true,
-    colorbar::Union{Nothing,Bool} = nothing,
     plot_title::Union{Nothing,AbstractString} = nothing,
     show_title::Bool = true,
     significance_color = :black,
@@ -88,14 +92,11 @@ function plot_tf_stats(
     mask_style in (:alpha, :contour, :hide, :none) ||
         @minimal_error("mask_style must be :alpha, :contour, :hide, or :none, got :$mask_style")
 
-    kwargs_norm = _normalize_plot_kwargs(kwargs)
-    eff_xscale = get(kwargs_norm, :xscale, xscale)
-    eff_yscale = get(kwargs_norm, :yscale, yscale)
-    use_xlog = eff_xscale in (:log10, :log, log10)
-    use_ylog = !isnothing(ylogscale) ? ylogscale : (eff_yscale in (:log10, :log, log10))
-    show_cb = !isnothing(colorbar) ? colorbar : Bool(get(kwargs_norm, :colorbar_plot, colorbar_plot))
-    eff_plot_title = get(kwargs_norm, :plot_title, plot_title)
-    eff_show_title = Bool(get(kwargs_norm, :show_title, show_title))
+    use_xlog = xscale in (:log10, :log, log10)
+    use_ylog = yscale in (:log10, :log, log10)
+    show_cb = colorbar_plot
+    eff_plot_title = plot_title
+    eff_show_title = show_title
 
     all_electrodes = result.electrodes
     selected_channels = _select_tf_channels(all_electrodes, channel_selection, channel_plot_order)

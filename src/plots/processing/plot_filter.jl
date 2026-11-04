@@ -82,7 +82,7 @@ Plot the frequency response (dB) and impulse response of a digital `FilterInfo`.
 $(_generate_kwargs_doc(PLOT_FILTER_KWARGS))
 """
 function plot_filter_response(filter_info::FilterInfo; filter_func::Function = filtfilt, kwargs...)
-    plot_kwargs = _merge_plot_kwargs(PLOT_FILTER_KWARGS, _normalize_plot_kwargs(kwargs))
+    plot_kwargs = _merge_plot_kwargs(PLOT_FILTER_KWARGS, kwargs)
 
     xlim = plot_kwargs[:xlim]
     if isnothing(xlim)

@@ -65,9 +65,9 @@ all_rsa_results =
 grand_avg_rsa = EegFun.grand_average(all_rsa_results)
 
 # RSA Plots
-EegFun.plot_rdm_heatmap(grand_avg_rsa, time_point = 0.0, title = "Grand Average RDM")
-EegFun.plot_rdm_heatmap(grand_avg_rsa, title = "Grand Average RDM (time-averaged)")
-EegFun.plot_rdm_timecourse(grand_avg_rsa, title = "Dissimilarity Over Time")
+EegFun.plot_rdm_heatmap(grand_avg_rsa, time_point = 0.0, plot_title = "Grand Average RDM")
+EegFun.plot_rdm_heatmap(grand_avg_rsa, plot_title = "Grand Average RDM (time-averaged)")
+EegFun.plot_rdm_timecourse(grand_avg_rsa, plot_title = "Dissimilarity Over Time")
 ```
 
 :::

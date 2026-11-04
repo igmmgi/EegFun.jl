@@ -42,7 +42,7 @@ Plot vEOG and hEOG correlation z-scores across ICA components and highlight iden
 $(_generate_kwargs_doc(PLOT_ICA_QUALITY_KWARGS))
 """
 function plot_eog_component_features(identified_comps::Dict, metrics_df::DataFrame; kwargs...)
-    plot_kwargs = _merge_plot_kwargs(PLOT_ICA_QUALITY_KWARGS, _normalize_plot_kwargs(kwargs))
+    plot_kwargs = _merge_plot_kwargs(PLOT_ICA_QUALITY_KWARGS, kwargs)
     z_threshold = plot_kwargs[:z_threshold]
     show_title = plot_kwargs[:show_title]
     thresh_color = plot_kwargs[:zscore_threshold_color]
@@ -88,7 +88,7 @@ Plot spatial kurtosis z-scores across ICA components and highlight focal channel
 $(_generate_kwargs_doc(PLOT_ICA_QUALITY_KWARGS))
 """
 function plot_spatial_kurtosis_components(kurtosis_comps::AbstractVector{<:Integer}, metrics_df::DataFrame; kwargs...)
-    plot_kwargs = _merge_plot_kwargs(PLOT_ICA_QUALITY_KWARGS, _normalize_plot_kwargs(kwargs))
+    plot_kwargs = _merge_plot_kwargs(PLOT_ICA_QUALITY_KWARGS, kwargs)
     title_str = !plot_kwargs[:show_title] ? "" : something(plot_kwargs[:plot_title], "Component Spatial Kurtosis Z-Scores")
 
     fig = _eegfun_figure()
@@ -116,7 +116,7 @@ Plot line-frequency power ratio z-scores and harmonic power ratios across ICA co
 $(_generate_kwargs_doc(PLOT_ICA_QUALITY_KWARGS))
 """
 function plot_line_noise_components(line_noise_comps::AbstractVector{<:Integer}, metrics_df::DataFrame; kwargs...)
-    plot_kwargs = _merge_plot_kwargs(PLOT_ICA_QUALITY_KWARGS, _normalize_plot_kwargs(kwargs))
+    plot_kwargs = _merge_plot_kwargs(PLOT_ICA_QUALITY_KWARGS, kwargs)
     show_title = plot_kwargs[:show_title]
     show_legend = plot_kwargs[:legend]
 
@@ -195,7 +195,7 @@ Plot heart-rate vs peak-ratio and inter-beat-interval regularity metrics for ECG
 $(_generate_kwargs_doc(PLOT_ICA_QUALITY_KWARGS))
 """
 function plot_ecg_component_features(identified_comps::AbstractVector{<:Integer}, metrics_df::DataFrame; kwargs...)
-    plot_kwargs = _merge_plot_kwargs(PLOT_ICA_QUALITY_KWARGS, _normalize_plot_kwargs(kwargs))
+    plot_kwargs = _merge_plot_kwargs(PLOT_ICA_QUALITY_KWARGS, kwargs)
     show_title = plot_kwargs[:show_title]
     show_legend = plot_kwargs[:legend]
     thresh_color = plot_kwargs[:zscore_threshold_color]
@@ -290,8 +290,7 @@ Plot scalp topographies for all identified ICA artifact components grouped by ca
 $(_generate_kwargs_doc(PLOT_TOPOGRAPHY_KWARGS))
 """
 function plot_artifact_components(ica::InfoIca, artifacts::ArtifactComponents; kwargs...)
-    norm_kw = _normalize_plot_kwargs(kwargs, _TOPO_KWARG_ALIASES)
-    merged_kwargs = Dict{Symbol,Any}(:colorbar_label => "a.u.", pairs(norm_kw)...)
+    merged_kwargs = Dict{Symbol,Any}(:colorbar_label => "a.u.", pairs(kwargs)...)
     plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, merged_kwargs)
 
     _ensure_coordinates_2d!(ica.layout)

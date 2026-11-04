@@ -63,8 +63,7 @@ function _plot_power_spectrum!(
 )
     isempty(signals) && return
 
-    kwargs_norm = _normalize_plot_kwargs(kwargs)
-    plot_kwargs = _merge_plot_kwargs(PLOT_POWER_SPECTRUM_KWARGS, kwargs_norm)
+    plot_kwargs = _merge_plot_kwargs(PLOT_POWER_SPECTRUM_KWARGS, kwargs)
 
     n_samples = length(first(signals))
     effective_window_size = max(4, min(plot_kwargs[:window_size], n_samples))
@@ -94,7 +93,7 @@ function _plot_power_spectrum!(
         power_raw_data[i] = DSP.power(DSP.welch_pgram(sig_list[i], cfg))
     end
 
-    _plot_power_spectrum_data!(fig, ax, freq_data, power_raw_data, channels_to_plot; line_labels = line_labels, kwargs_norm...)
+    _plot_power_spectrum_data!(fig, ax, freq_data, power_raw_data, channels_to_plot; line_labels = line_labels, kwargs...)
 end
 
 function _plot_power_spectrum!(fig, ax, df::DataFrame, channels_to_plot::Vector{Symbol}, fs::Real; kwargs...)
@@ -137,7 +136,7 @@ function _plot_power_spectrum_data!(
     line_labels::Union{Nothing,AbstractVector{<:AbstractString}} = nothing,
     kwargs...,
 )
-    plot_kwargs = _merge_plot_kwargs(PLOT_POWER_SPECTRUM_KWARGS, _normalize_plot_kwargs(kwargs))
+    plot_kwargs = _merge_plot_kwargs(PLOT_POWER_SPECTRUM_KWARGS, kwargs)
 
     max_freq = plot_kwargs[:max_freq]
     x_scale = plot_kwargs[:xscale]
@@ -276,12 +275,12 @@ Plot power spectrum for specified channels from EEG data with interactive contro
 - `window_size::Int`: Size of the FFT window for spectral estimation (default: 1024)
 - `overlap::Real`: Overlap between windows for Welch's method (default: 0.5)
 - `max_freq::Real`: Maximum frequency to display in Hz (default: 200.0)
-- `x_scale::Symbol`: Initial scale for x-axis, one of :linear or :log10 (default: :linear)
-- `y_scale::Symbol`: Initial scale for y-axis, one of :linear or :log10 (default: :linear)
+- `xscale::Symbol`: Initial scale for x-axis, one of :linear or :log10 (default: :linear)
+- `yscale::Symbol`: Initial scale for y-axis, one of :linear or :log10 (default: :linear)
 - `unit::Symbol`: Power unit, one of :linear (μV²/Hz) or :dB (decibels) (default: :linear)
 - `window_function::Function`: Window function to use for spectral estimation (default: DSP.hanning)
 - `show_freq_bands::Bool`: Whether to show frequency band indicators (default: true)
-- `show_legend::Bool`: Whether to show the legend (default: true)
+- `legend::Bool`: Whether to show the legend (default: true)
 - `display_plot::Bool`: Whether to display the plot (default: true)
 
 # Features
@@ -305,8 +304,8 @@ fig, ax = plot_channel_spectrum(dat,
 
 # With log scales
 fig, ax = plot_channel_spectrum(dat, 
-    x_scale = :log10, 
-    y_scale = :log10)
+    xscale = :log10, 
+    yscale = :log10)
 
 # With dB units (EEGLAB-style)
 fig, ax = plot_channel_spectrum(dat, unit = :dB)
@@ -321,8 +320,7 @@ function plot_channel_spectrum(
 )
     _set_window_title(_generate_window_title(dat))
 
-    kwargs_norm = _normalize_plot_kwargs(kwargs)
-    plot_kwargs = _merge_plot_kwargs(PLOT_POWER_SPECTRUM_KWARGS, kwargs_norm)
+    plot_kwargs = _merge_plot_kwargs(PLOT_POWER_SPECTRUM_KWARGS, kwargs)
 
     chan_fn = _to_channel_func(channel_selection)
     channels_to_plot = get_selected_channels(dat.layout, chan_fn)
@@ -341,7 +339,7 @@ function plot_channel_spectrum(
     fig = _eegfun_figure()
     ax = Axis(fig[1, 1])
 
-    _plot_power_spectrum!(fig, ax, signals, channels_to_plot, sample_rate(dat); kwargs_norm...)
+    _plot_power_spectrum!(fig, ax, signals, channels_to_plot, sample_rate(dat); kwargs...)
 
     if plot_kwargs[:legend] && !isempty(channels_to_plot)
         n_channels = length(channels_to_plot)
@@ -382,12 +380,12 @@ Plot power spectrum of ICA component(s) with interactive controls for axis scali
 - `window_size::Int`: Size of the FFT window for spectral estimation (default: 1024).
 - `overlap::Real`: Overlap between windows for Welch's method (default: 0.5).
 - `max_freq::Real`: Maximum frequency to display in Hz (default: 100.0).
-- `x_scale::Symbol`: Initial scale for x-axis, one of :linear or :log10 (default: :linear).
-- `y_scale::Symbol`: Initial scale for y-axis, one of :linear or :log10 (default: :linear).
+- `xscale::Symbol`: Initial scale for x-axis, one of :linear or :log10 (default: :linear).
+- `yscale::Symbol`: Initial scale for y-axis, one of :linear or :log10 (default: :linear).
 - `unit::Symbol`: Power unit, one of :linear (μV²/Hz) or :dB (decibels) (default: :linear).
 - `window_function::Function`: Window function to use for spectral estimation (default: DSP.hanning).
 - `show_freq_bands::Bool`: Whether to show frequency band indicators (default: true).
-- `show_legend::Bool`: Whether to show the legend with component variance percentages (default: true).
+- `legend::Bool`: Whether to show the legend with component variance percentages (default: true).
 - `display_plot::Bool`: Whether to display the plot (default: true).
 
 # Returns
@@ -408,8 +406,7 @@ function plot_ica_component_spectrum(
     component_selection = components(),
     kwargs...,
 )
-    kwargs_norm = _normalize_plot_kwargs(kwargs)
-    plot_kwargs = _merge_plot_kwargs(PLOT_POWER_SPECTRUM_KWARGS, kwargs_norm)
+    plot_kwargs = _merge_plot_kwargs(PLOT_POWER_SPECTRUM_KWARGS, kwargs)
 
     selected_components = get_selected_components(ica_result, component_selection)
     if isempty(selected_components)
@@ -444,7 +441,7 @@ function plot_ica_component_spectrum(
     fig = _eegfun_figure()
     ax = Axis(fig[1, 1])
 
-    _plot_power_spectrum!(fig, ax, component_signals, components_to_plot, sample_rate(dat); line_labels = component_labels, kwargs_norm...)
+    _plot_power_spectrum!(fig, ax, component_signals, components_to_plot, sample_rate(dat); line_labels = component_labels, kwargs...)
 
     if plot_kwargs[:legend]
         ncols = n_sel > 10 ? cld(n_sel, 10) : 1
@@ -472,13 +469,12 @@ function plot_channel_spectrum(dat::SpectrumData; channel_selection = channels()
     freq_data = fill(shared_freq, length(valid_channels))
     power_raw_data = Vector{Float64}[Float64.(dat.data[!, ch]) for ch in valid_channels]
 
-    kwargs_norm = _normalize_plot_kwargs(kwargs)
-    plot_kwargs = _merge_plot_kwargs(PLOT_POWER_SPECTRUM_KWARGS, kwargs_norm)
+    plot_kwargs = _merge_plot_kwargs(PLOT_POWER_SPECTRUM_KWARGS, kwargs)
 
     fig = _eegfun_figure()
     ax = Axis(fig[1, 1])
 
-    _plot_power_spectrum_data!(fig, ax, freq_data, power_raw_data, valid_channels; kwargs_norm...)
+    _plot_power_spectrum_data!(fig, ax, freq_data, power_raw_data, valid_channels; kwargs...)
 
     if plot_kwargs[:legend]
         n_channels = length(valid_channels)

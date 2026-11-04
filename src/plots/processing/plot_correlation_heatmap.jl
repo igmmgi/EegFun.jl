@@ -120,7 +120,7 @@ Plot a correlation matrix `DataFrame` (first column row labels, remaining column
 $(_generate_kwargs_doc(PLOT_CORRELATION_HEATMAP_KWARGS))
 """
 function plot_correlation_heatmap!(fig::Figure, ax::Axis, corr_df::DataFrame; kwargs...)
-    plot_kwargs = _merge_plot_kwargs(PLOT_CORRELATION_HEATMAP_KWARGS, _normalize_plot_kwargs(kwargs))
+    plot_kwargs = _merge_plot_kwargs(PLOT_CORRELATION_HEATMAP_KWARGS, kwargs)
     return _plot_correlation_heatmap_impl!(ax, corr_df, plot_kwargs)
 end
 
@@ -130,7 +130,7 @@ end
 Create a figure and plot a correlation matrix `DataFrame` as a heatmap. See [`plot_correlation_heatmap!`](@ref) for keyword options.
 """
 function plot_correlation_heatmap(corr_df::DataFrame; kwargs...)
-    plot_kwargs = _merge_plot_kwargs(PLOT_CORRELATION_HEATMAP_KWARGS, _normalize_plot_kwargs(kwargs))
+    plot_kwargs = _merge_plot_kwargs(PLOT_CORRELATION_HEATMAP_KWARGS, kwargs)
     fig = _eegfun_figure()
     ax = Axis(fig[1, 1])
     _plot_correlation_heatmap_impl!(ax, corr_df, plot_kwargs)

@@ -120,16 +120,16 @@ spectrum = EegFun.freq_spectrum(epochs_synthetic, max_freq = 80.0)
 
 # tf_morlet
 @time tf_data = EegFun.tf_morlet(epochs_synthetic, frequencies = 1:1:40, cycles = 3, pad = :both, use_gpu = true)
-EegFun.plot_tf(tf_data, ylogscale = false)
+EegFun.plot_tf(tf_data, yscale = :linear)
 
 tf_data = EegFun.tf_morlet(epochs_synthetic, frequencies = 1:0.5:40, cycles = 10)
-EegFun.plot_tf(tf_data, ylogscale = false)
+EegFun.plot_tf(tf_data, yscale = :linear)
 
 tf_data = EegFun.tf_morlet(epochs_synthetic, frequencies = logrange(1, 40, length = 30), cycles = 3)
-EegFun.plot_tf(tf_data, ylogscale = true)
+EegFun.plot_tf(tf_data, yscale = :log10)
 
 tf_data = EegFun.tf_morlet(epochs_synthetic, frequencies = logrange(1, 40, length = 30), cycles = 10)
-EegFun.plot_tf(tf_data, ylogscale = true)
+EegFun.plot_tf(tf_data, yscale = :log10)
 
 
 #######################################################################
@@ -142,13 +142,13 @@ data_cohen = EegFun.read_data(EegFun.example_path("data/julia/tf/tf_test_epochs.
 tf_data = EegFun.tf_morlet(data_cohen, frequencies = logrange(2, 80, length = 80), cycles = 3, filter_edges = false)
 EegFun.plot_tf(
     tf_data;
-    title = "3-cycle wavelets",
+    plot_title = "3-cycle wavelets",
     colorbar_kwargs = (; label = "dB change from baseline"),
     baseline_interval = (-0.5, -0.2),
     baseline_method = :db,
     xlim = (-0.2, 1.0),
     colorrange = (-3, 3),
-    ylogscale = true,
+    yscale = :log10,
     colormap = :jet,
     interpolate = true,
     yticks = [2, 4, 10, 20, 40, 80],
@@ -164,7 +164,7 @@ EegFun.plot_tf(
     baseline_method = :db,
     xlim = (-0.2, 1.0),
     colorrange = (-3, 3),
-    ylogscale = false,
+    yscale = :linear,
     colormap = :jet,
 )
 
@@ -176,7 +176,7 @@ EegFun.plot_tf(
     baseline_method = :db,
     xlim = (-0.2, 1.0),
     colorrange = (-3, 3),
-    ylogscale = true,
+    yscale = :log10,
     colormap = :jet,
 )
 
@@ -188,7 +188,7 @@ EegFun.plot_tf(
     baseline_method = :db,
     xlim = (-0.2, 1.0),
     colorrange = (-3, 3),
-    ylogscale = true,
+    yscale = :log10,
     colormap = :jet,
 )
 
@@ -200,7 +200,7 @@ EegFun.plot_tf(
     baseline_method = :db,
     xlim = (-0.2, 1.0),
     colorrange = (-3, 3),
-    ylogscale = true,
+    yscale = :log10,
     colormap = :jet,
     interpolate = true,
 )

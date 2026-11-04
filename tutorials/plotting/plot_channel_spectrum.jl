@@ -30,10 +30,14 @@ EegFun.highpass_filter!(dat, 0.5)
 EegFun.plot_channel_spectrum(dat)
 
 # Plot a single channel with a specific title
-EegFun.plot_channel_spectrum(dat, channel_selection = EegFun.channels([:Fp1]), title = "Fp1 Power Spectrum")
+EegFun.plot_channel_spectrum(dat, channel_selection = EegFun.channels([:Fp1]), plot_title = "Fp1 Power Spectrum")
 
 # Plot multiple frontal channels
-EegFun.plot_channel_spectrum(dat, channel_selection = EegFun.channels([:Fp1, :Fp2, :F3, :F4]), title = "Frontal Channels Power Spectrum")
+EegFun.plot_channel_spectrum(
+    dat,
+    channel_selection = EegFun.channels([:Fp1, :Fp2, :F3, :F4]),
+    plot_title = "Frontal Channels Power Spectrum",
+)
 
 
 #######################################################################
@@ -57,7 +61,7 @@ EegFun.plot_channel_spectrum(spectrum, channel_selection = EegFun.channels(:Cz))
 # set them as starting defaults via keyword arguments.
 
 # Start with log-scale axes
-EegFun.plot_channel_spectrum(spectrum, channel_selection = EegFun.channels(:Cz), x_scale = :log10, y_scale = :log10)
+EegFun.plot_channel_spectrum(spectrum, channel_selection = EegFun.channels(:Cz), xscale = :log10, yscale = :log10)
 
 # Start with Decibel (dB) units instead of linear power
 EegFun.plot_channel_spectrum(spectrum, channel_selection = EegFun.channels([:Cz, :Pz]), unit = :dB, max_freq = 100.0)
@@ -68,5 +72,5 @@ EegFun.plot_channel_spectrum(
     channel_selection = EegFun.channels([:Cz, :Oz]),
     linewidth = 3,
     line_alpha = 0.6,
-    title = "Custom Styled Power Spectrum",
+    plot_title = "Custom Styled Power Spectrum",
 )

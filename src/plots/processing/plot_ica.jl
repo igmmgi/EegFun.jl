@@ -54,7 +54,6 @@ const PLOT_TOPOGRAPHY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :component_selection => (components(), "Function that returns boolean vector for component filtering"),
 )
 
-const _TOPO_KWARG_ALIASES = Dict{Symbol,Symbol}(:ylim => :colorrange)
 const _CHANNEL_OVERLAY_COLORS = [:grey, :dodgerblue, :darkorange, :mediumpurple, :forestgreen, :crimson, :goldenrod, :deeppink]
 
 function _finite_matrix_extrema(data::AbstractMatrix{<:Real})
@@ -257,7 +256,7 @@ function _plot_ica_topography_impl!(
 end
 
 function _plot_topography!(fig::Figure, ax::Axis, ica::InfoIca, component::Int; precomputed_topo = nothing, kwargs...)
-    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, _normalize_plot_kwargs(kwargs, _TOPO_KWARG_ALIASES))
+    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs)
     _ensure_coordinates_2d!(ica.layout)
     _ensure_coordinates_3d!(ica.layout)
     return _plot_ica_topography_impl!(
@@ -279,8 +278,7 @@ Plot ICA component scalp topographies in a grid layout.
 $(_generate_kwargs_doc(PLOT_TOPOGRAPHY_KWARGS))
 """
 function plot_topography(ica::InfoIca; component_selection = components(), kwargs...)
-    norm_kw = _normalize_plot_kwargs(kwargs, _TOPO_KWARG_ALIASES)
-    merged_kwargs = Dict{Symbol,Any}(:colorbar_label => "a.u.", pairs(norm_kw)...)
+    merged_kwargs = Dict{Symbol,Any}(:colorbar_label => "a.u.", pairs(kwargs)...)
     plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, merged_kwargs)
 
     dims = plot_kwargs[:dims]
@@ -457,8 +455,7 @@ $(_generate_kwargs_doc(PLOT_TOPOGRAPHY_KWARGS))
 function plot_ica_component_activation(dat::ContinuousData, ica::InfoIca; artifacts::Union{Nothing,ArtifactComponents} = nothing, kwargs...)
     _set_window_title(_generate_window_title(dat))
 
-    norm_kw = _normalize_plot_kwargs(kwargs, _TOPO_KWARG_ALIASES)
-    merged_kwargs = Dict{Symbol,Any}(:colorbar_label => "a.u.", pairs(norm_kw)...)
+    merged_kwargs = Dict{Symbol,Any}(:colorbar_label => "a.u.", pairs(kwargs)...)
     plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, merged_kwargs)
 
     _ensure_coordinates_2d!(ica.layout)

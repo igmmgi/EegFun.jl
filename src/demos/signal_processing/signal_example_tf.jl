@@ -117,7 +117,7 @@ function signal_example_tf()
         m === :absolute && return "Power (absolute change)"
         m === :relative && return "Power (relative power)"
         m === :relchange && return "Power (relative change)"
-        (m === :normchange || m === :vssum) && return "Power (norm. change)"
+        m === :normchange && return "Power (norm. change)"
         return "Power (a.u.)"
     end
 

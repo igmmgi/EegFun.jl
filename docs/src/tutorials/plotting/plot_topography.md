@@ -163,12 +163,12 @@ EegFun.plot_topography(dat, interval_selection = EegFun.times(6), colorrange = (
 EegFun.plot_topography(dat, sample_selection = x -> x.time .>= 5.973 .&& x.time .<= 6.02, colorrange = (-200, 200))
 
 # blink like artifact across multiple time points
-EegFun.plot_topography(dat, sample_selection = x -> x.time .>= 5.5 .&& x.time .<= 6.5, colorrange = (-75, 75), n_topos = 5, dims = (1, 5))
+EegFun.plot_topography(dat, sample_selection = x -> x.time .>= 5.5 .&& x.time .<= 6.5, colorrange = (-75, 75), n_topo = 5, dims = (1, 5))
 EegFun.plot_topography(
     dat,
     sample_selection = x -> x.time .>= 5.5 .&& x.time .<= 6.5,
     colorrange = (-75, 75),
-    n_topos = 5,
+    n_topo = 5,
     dims = (1, 5),
     colorbar_plot_numbers = 5,
 )

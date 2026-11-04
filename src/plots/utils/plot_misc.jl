@@ -362,45 +362,7 @@ function _symmetric_colorrange(min_val::Real, max_val::Real; fallback::Float64 =
     return (-max_abs, max_abs)
 end
 
-const _STANDARD_KWARG_ALIASES = Dict{Symbol,Symbol}(
-    :title => :plot_title,
-    :add_plot_title => :show_title,
-    :colorbar => :colorbar_plot,
-    :show_colorbar => :colorbar_plot,
-    :show_legend => :legend,
-    :colormap_name => :colormap,
-    :x_scale => :xscale,
-    :y_scale => :yscale,
-    :ylogscale => :yscale,
-    :sig_bar_position => :significance_position,
-    :n_topos => :n_topo,
-)
-
-@inline _has_kwarg_key(kw::Union{AbstractDict{Symbol},Base.Pairs{Symbol},NamedTuple}, k::Symbol) = haskey(kw, k)
-@inline _has_kwarg_key(kw, k::Symbol) = any(p -> Symbol(first(p)) === k, pairs(kw))
-
-function _normalize_plot_kwargs(kwargs, extra_aliases::Union{Nothing,AbstractDict{Symbol,Symbol}} = nothing)::Dict{Symbol,Any}
-    out = Dict{Symbol,Any}()
-    sizehint!(out, length(kwargs))
-    for (raw_k, v) in pairs(kwargs)
-        k = Symbol(raw_k)
-        target = if !isnothing(extra_aliases) && haskey(extra_aliases, k)
-            extra_aliases[k]
-        elseif haskey(_STANDARD_KWARG_ALIASES, k)
-            _STANDARD_KWARG_ALIASES[k]
-        else
-            k
-        end
-
-        if target !== k
-            _has_kwarg_key(kwargs, target) && continue
-            out[target] = (k === :ylogscale && target === :yscale && v isa Bool) ? (v ? :log10 : :linear) : v
-        else
-            out[k] = v
-        end
-    end
-    return out
-end
+@inline _kwargs_dict(kwargs)::Dict{Symbol,Any} = Dict{Symbol,Any}(Symbol(k) => v for (k, v) in pairs(kwargs))
 
 function _get_colorbar_position(pos, row_span, col_span)
     pos isa Tuple && return pos

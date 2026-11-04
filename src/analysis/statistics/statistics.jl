@@ -115,7 +115,6 @@ time-frequency (`TFStatisticalData`) data.
 - `n_permutations::Int = 1000`: Number of Monte Carlo permutations
 - `alpha::Real = 0.05`: Cluster-level family-wise error rate significance threshold
 - `cluster_alpha::Real = 0.05`: Point-wise cluster-forming p-value threshold
-- `threshold::Union{Nothing,Real} = nothing`: Deprecated alias setting both `alpha` and `cluster_alpha`
 - `threshold_method::Symbol = :parametric`: `:parametric`, `:nonparametric_common`, or `:nonparametric_individual`
 - `cluster_type::Symbol`: `:spatial`, `:temporal`, or `:spatiotemporal` for ERP (default `:spatiotemporal`); additionally `:spectral`, `:spectrotemporal`, or `:full` for TF (default `:full`)
 - `min_num_neighbors::Int = 2`: Minimum neighboring significant channels required to retain a point
@@ -129,7 +128,6 @@ function permutation_test(
     n_permutations::Int = 1000,
     alpha::Real = 0.05,
     cluster_alpha::Real = 0.05,
-    threshold::Union{Nothing,Real} = nothing,
     threshold_method::Symbol = :parametric,
     cluster_type::Symbol = :spatiotemporal,
     min_num_neighbors::Int = 2,
@@ -138,10 +136,6 @@ function permutation_test(
     use_gpu::Bool = false,
     rng::AbstractRNG = Random.default_rng(),
 )
-    if !isnothing(threshold)
-        alpha = threshold
-        cluster_alpha = threshold
-    end
     alpha_f = Float64(alpha)
     cluster_alpha_f = Float64(cluster_alpha)
 
@@ -279,7 +273,6 @@ function permutation_test(
     n_permutations::Int = 1000,
     alpha::Real = 0.05,
     cluster_alpha::Real = 0.05,
-    threshold::Union{Nothing,Real} = nothing,
     threshold_method::Symbol = :parametric,
     cluster_type::Symbol = :full,
     min_num_neighbors::Int = 2,
@@ -287,10 +280,6 @@ function permutation_test(
     show_progress::Bool = true,
     rng::AbstractRNG = Random.default_rng(),
 )
-    if !isnothing(threshold)
-        alpha = threshold
-        cluster_alpha = threshold
-    end
     alpha_f = Float64(alpha)
     cluster_alpha_f = Float64(cluster_alpha)
 

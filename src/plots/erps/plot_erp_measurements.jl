@@ -82,7 +82,7 @@ function plot_erp_measurements(
         _normalize_interval(analysis_interval)
     end
 
-    kwargs_dict = _normalize_plot_kwargs(kwargs)
+    kwargs_dict = _kwargs_dict(kwargs)
     measurement_kwargs = Dict{Symbol,Any}(k => (haskey(kwargs_dict, k) ? pop!(kwargs_dict, k) : v[1]) for (k, v) in ERP_MEASUREMENTS_KWARGS)
 
     kwargs_dict[:interactive] = true

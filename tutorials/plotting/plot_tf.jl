@@ -56,7 +56,7 @@ EegFun.plot_tf(tf_data, channel_selection = EegFun.channels(:Cz), baseline_inter
 # LOG-SCALED FREQUENCY AXIS
 #######################################################################
 
-EegFun.plot_tf(tf_data, channel_selection = EegFun.channels(:Cz), baseline_interval = (-0.3, 0.0), ylogscale = true)
+EegFun.plot_tf(tf_data, channel_selection = EegFun.channels(:Cz), baseline_interval = (-0.3, 0.0), yscale = :log10)
 
 #######################################################################
 # CUSTOM COLOUR MAP AND RANGE

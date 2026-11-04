@@ -39,7 +39,6 @@ function _render_topo_surface!(
     gridscale::Int = 75,
     colormap = nothing,
     colorrange = nothing,
-    ylim = nothing,
     num_levels::Int = 20,
     kwargs...,
 )
@@ -48,7 +47,7 @@ function _render_topo_surface!(
         data_interp, x_bounds, y_bounds = _topo_interpolate(ch_f64, layout, gridscale; method = method)
     end
 
-    cr = !isnothing(colorrange) ? colorrange : (!isnothing(ylim) ? ylim : _symmetric_colorrange(data_interp))
+    cr = !isnothing(colorrange) ? colorrange : _symmetric_colorrange(data_interp)
 
     co = contourf!(
         ax,
@@ -85,7 +84,7 @@ function _plot_topography!(
     end
     _ensure_coordinates_2d!(layout)
 
-    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, _normalize_plot_kwargs(kwargs, _TOPO_KWARG_ALIASES))
+    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs)
 
     method = pop!(plot_kwargs, :method)
     gridscale = pop!(plot_kwargs, :gridscale)
@@ -249,15 +248,13 @@ function plot_topography(
     interactive = true,
     kwargs...,
 )
-    kwargs_norm = _normalize_plot_kwargs(kwargs, _TOPO_KWARG_ALIASES)
-    isnothing(n_topo) && haskey(kwargs_norm, :n_topo) && (n_topo = pop!(kwargs_norm, :n_topo))
     !isnothing(baseline_interval) && (dat = baseline(dat, baseline_interval))
 
     if scrubber
         dat_subset =
             subset(dat, channel_selection = channel_selection, sample_selection = sample_selection, interval_selection = interval_selection)
         if nrow(dat_subset.data) > 1
-            return _plot_topography_scrubber(dat_subset; display_plot = display_plot, interactive = interactive, kwargs_norm...)
+            return _plot_topography_scrubber(dat_subset; display_plot = display_plot, interactive = interactive, kwargs...)
         end
     end
 
@@ -268,7 +265,7 @@ function plot_topography(
             channel_selection,
             sample_selection,
             interval_selection,
-            get(kwargs_norm, :time_unit, :s);
+            get(kwargs, :time_unit, :s);
             include_cond_prefix = false,
         )
         return plot_topography(
@@ -278,12 +275,12 @@ function plot_topography(
             interval_selection = times(),
             display_plot = display_plot,
             interactive = interactive,
-            kwargs_norm...,
+            kwargs...,
         )
     end
 
     _set_window_title(_generate_window_title(dat))
-    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs_norm)
+    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs)
     fontsize_kw = isnothing(plot_kwargs[:theme_fontsize]) ? (;) : (; fontsize = plot_kwargs[:theme_fontsize])
     fig = _eegfun_figure(; figure_padding = plot_kwargs[:figure_padding], fontsize_kw...)
     ax = Axis(fig[1, 1], aspect = DataAspect())
@@ -295,7 +292,7 @@ function plot_topography(
         channel_selection = channel_selection,
         sample_selection = sample_selection,
         interval_selection = interval_selection,
-        kwargs_norm...,
+        kwargs...,
     )
 
     if interactive
@@ -327,7 +324,7 @@ function plot_topography!(
     y_bounds = nothing,
     kwargs...,
 )
-    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, _normalize_plot_kwargs(kwargs, _TOPO_KWARG_ALIASES))
+    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs)
     dat_subset =
         subset(dat, channel_selection = channel_selection, sample_selection = sample_selection, interval_selection = interval_selection)
     return _plot_topography!(
@@ -356,7 +353,7 @@ function plot_topography(
     n_datasets = length(dat)
     n_datasets == 0 && @minimal_error "Cannot plot empty vector of datasets"
 
-    kwargs_dict = _normalize_plot_kwargs(kwargs, _TOPO_KWARG_ALIASES)
+    kwargs_dict = _kwargs_dict(kwargs)
     colorbar_enabled = get(kwargs_dict, :colorbar_plot, true)
     user_colorbar_position = get(kwargs_dict, :colorbar_position, nothing)
     colorbar_plot_numbers = get(kwargs_dict, :colorbar_plot_numbers, [])
@@ -560,7 +557,6 @@ function plot_topography(
     display_plot = true,
     kwargs...,
 )
-    kwargs_norm = _normalize_plot_kwargs(kwargs, _TOPO_KWARG_ALIASES)
     cont_dat = epoch_to_continuous(dat, epoch)
     if scrubber
         return plot_topography(
@@ -570,12 +566,12 @@ function plot_topography(
             interval_selection = interval_selection,
             scrubber = true,
             display_plot = display_plot,
-            kwargs_norm...,
+            kwargs...,
         )
     end
 
     _set_window_title(_generate_window_title(dat) * " - Epoch $epoch")
-    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs_norm)
+    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs)
     fontsize_kw = isnothing(plot_kwargs[:theme_fontsize]) ? (;) : (; fontsize = plot_kwargs[:theme_fontsize])
     fig = _eegfun_figure(; figure_padding = plot_kwargs[:figure_padding], fontsize_kw...)
     ax = Axis(fig[1, 1], aspect = DataAspect())
@@ -587,7 +583,7 @@ function plot_topography(
         channel_selection = channel_selection,
         sample_selection = sample_selection,
         interval_selection = interval_selection,
-        kwargs_norm...,
+        kwargs...,
     )
 
     display_plot && _display_figure(fig)
@@ -1414,7 +1410,7 @@ function _plot_topography_scrubber(dat::SingleDataFrameEeg; display_plot = true,
     n_samples = length(time_vec)
     t_min, t_max = extrema(time_vec)
 
-    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, _normalize_plot_kwargs(kwargs, _TOPO_KWARG_ALIASES))
+    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs)
     fontsize_kw = isnothing(plot_kwargs[:theme_fontsize]) ? (;) : (; fontsize = plot_kwargs[:theme_fontsize])
     gridscale = get(plot_kwargs, :gridscale, 65)
     method = get(plot_kwargs, :method, :thin_plate)

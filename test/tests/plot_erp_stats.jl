@@ -35,13 +35,8 @@ using EegFun
     @testset "PermutationResult critical_t shapes and significance_position" begin
         for thresh_method in (:parametric, :nonparametric_common, :nonparametric_individual)
             perm_res = EegFun.permutation_test(stat_data; n_permutations = 10, threshold_method = thresh_method)
-            out_perm = EegFun.plot_erp_stats(
-                perm_res;
-                plot_critical_t = true,
-                significance_position = :top,
-                show_legend = false,
-                display_plot = false,
-            )
+            out_perm =
+                EegFun.plot_erp_stats(perm_res; plot_critical_t = true, significance_position = :top, legend = false, display_plot = false)
             @test out_perm.fig isa Figure
             @test out_perm.axes isa Vector{Axis}
             @test length(out_perm.axes) > 0

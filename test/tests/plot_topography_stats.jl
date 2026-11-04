@@ -29,15 +29,11 @@ using EegFun
             end
         end
 
-        # colorrange and ylim alias
+        # colorrange
         out_cr = EegFun.plot_topography_stats(analytic_res; colorrange = (-3.0, 3.0), n_topos = 2, display_plot = false)
         @test out_cr.fig isa Figure
         cf = only(filter(p -> p isa Makie.Contourf, out_cr.axes[1].scene.plots))
         @test cf.colorrange[] == (-3.0, 3.0)
-
-        out_yl = EegFun.plot_topography_stats(analytic_res; ylim = (-2.5, 2.5), n_topos = 2, display_plot = false)
-        cf_yl = only(filter(p -> p isa Makie.Contourf, out_yl.axes[1].scene.plots))
-        @test cf_yl.colorrange[] == (-2.5, 2.5)
     end
 
     @testset "Subsets layout to result.electrodes instead of zero-filling unanalyzed channels" begin

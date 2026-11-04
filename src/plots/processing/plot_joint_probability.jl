@@ -78,7 +78,7 @@ Plot per-channel joint probability (`:jp`) bar charts from `dat`.
 $(_generate_kwargs_doc(PLOT_JOINT_PROBABILITY_KWARGS))
 """
 function plot_joint_probability!(fig::Figure, ax::Axis, dat::DataFrame; kwargs...)
-    plot_kwargs = _merge_plot_kwargs(PLOT_JOINT_PROBABILITY_KWARGS, _normalize_plot_kwargs(kwargs))
+    plot_kwargs = _merge_plot_kwargs(PLOT_JOINT_PROBABILITY_KWARGS, kwargs)
     return _plot_joint_probability_impl!(ax, dat, plot_kwargs)
 end
 
@@ -88,7 +88,7 @@ end
 Create a figure and plot per-channel joint probability (`:jp`) bar charts. See [`plot_joint_probability!`](@ref) for keyword options.
 """
 function plot_joint_probability(dat::DataFrame; kwargs...)
-    plot_kwargs = _merge_plot_kwargs(PLOT_JOINT_PROBABILITY_KWARGS, _normalize_plot_kwargs(kwargs))
+    plot_kwargs = _merge_plot_kwargs(PLOT_JOINT_PROBABILITY_KWARGS, kwargs)
     fig = _eegfun_figure()
     ax = Axis(fig[1, 1])
     _plot_joint_probability_impl!(ax, dat, plot_kwargs)

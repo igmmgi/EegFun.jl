@@ -1,13 +1,11 @@
-const _VALID_TF_BASELINE_METHODS = (:absolute, :relative, :relchange, :normchange, :vssum, :db, :zscore, :percent)
+const _VALID_TF_BASELINE_METHODS = (:absolute, :relative, :relchange, :normchange, :db, :zscore, :percent)
 const _TFDataObject = Union{TimeFreqData,TimeFreqEpochData}
 const _TFDataOrVec = Union{TimeFreqData,TimeFreqEpochData,AbstractVector{<:TimeFreqData},AbstractVector{<:TimeFreqEpochData}}
 const _TFAltInterval = Union{AbstractVector{<:Real},TimeSelection}
 
 function _validate_tf_baseline_method(method::Symbol)
     if method ∉ _VALID_TF_BASELINE_METHODS
-        @minimal_error(
-            "Unknown baseline method: $method. Use :absolute, :relative, :relchange, :normchange, :db, :vssum (alias for :normchange), :zscore, or :percent",
-        )
+        @minimal_error("Unknown baseline method: $method. Use :absolute, :relative, :relchange, :normchange, :db, :zscore, or :percent")
     end
     return nothing
 end
@@ -154,7 +152,7 @@ function _tf_baseline_grid!(mat::AbstractMatrix{Float64}, base_range::UnitRange{
                     mat[fi, ti] = (mat[fi, ti] - bm) * scale
                 end
             end
-        elseif method === :normchange || method === :vssum
+        elseif method === :normchange
             for ti = 1:n_times
                 p = mat[fi, ti]
                 denom = p + bm
@@ -205,7 +203,7 @@ Apply baseline correction to `TimeFreqData` or single-trial `TimeFreqEpochData` 
 
 Supported `method` values: `:db` (`10 * log10(P / B)`), `:absolute` (`P - B`),
 `:relative` (`P / B`), `:relchange` (`(P - B) / B`), `:percent` (`100 * (P - B) / B`),
-`:normchange` / `:vssum` (`(P - B) / (P + B)`), and `:zscore` (`(P - B) / SD_B`).
+`:normchange` (`(P - B) / (P + B)`), and `:zscore` (`(P - B) / SD_B`).
 
 # Example
 ```julia

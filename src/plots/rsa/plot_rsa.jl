@@ -91,7 +91,7 @@ plot_rdm_heatmap(rsa_result, time_point=50)
 ```
 """
 function plot_rdm_heatmap(rsa_data::RsaData; time_point::Union{Float64,Int,Nothing} = nothing, kwargs...)
-    plot_kwargs = _merge_plot_kwargs(PLOT_RSA_KWARGS, _normalize_plot_kwargs(kwargs))
+    plot_kwargs = _merge_plot_kwargs(PLOT_RSA_KWARGS, kwargs)
     n_conditions = length(rsa_data.condition_names)
     n_times = length(rsa_data.times)
 
@@ -167,7 +167,7 @@ plot_rdm_timecourse(rsa_result, plot_title="Dissimilarity Over Time")
 ```
 """
 function plot_rdm_timecourse(rsa_data::RsaData; condition_pairs::Union{Vector{Tuple{Int,Int}},Symbol,Nothing} = :all, kwargs...)
-    plot_kwargs = _merge_plot_kwargs(PLOT_RSA_KWARGS, _normalize_plot_kwargs(kwargs))
+    plot_kwargs = _merge_plot_kwargs(PLOT_RSA_KWARGS, kwargs)
     n_conditions = length(rsa_data.condition_names)
     times = rsa_data.times
 
@@ -239,7 +239,7 @@ function plot_model_correlations(rsa_data::RsaData; kwargs...)
     (isnothing(rsa_data.model_correlations) || isnothing(rsa_data.model_names)) &&
         @minimal_error("RSA data does not contain model correlations. Run compare_models() first.")
 
-    plot_kwargs = _merge_plot_kwargs(PLOT_RSA_KWARGS, _normalize_plot_kwargs(kwargs))
+    plot_kwargs = _merge_plot_kwargs(PLOT_RSA_KWARGS, kwargs)
     times = rsa_data.times
     correlations = rsa_data.model_correlations
     model_names = rsa_data.model_names

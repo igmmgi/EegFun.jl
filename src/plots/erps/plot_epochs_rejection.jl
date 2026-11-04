@@ -103,7 +103,7 @@ function detect_bad_epochs_interactive(
     @info "Starting interactive epoch rejection interface"
     _set_window_title(_generate_window_title(dat))
 
-    plot_kwargs = _merge_plot_kwargs(PLOT_EPOCHS_REJECTION_KWARGS, _normalize_plot_kwargs(kwargs))
+    plot_kwargs = _merge_plot_kwargs(PLOT_EPOCHS_REJECTION_KWARGS, kwargs)
     isempty(dat.data) && @minimal_error("Cannot create rejection interface for empty EpochData")
     dims = plot_kwargs[:dims]
     dims[1] * dims[2] <= 1 && @minimal_error("dims must be positive, got $dims")

@@ -121,8 +121,7 @@ function plot_topography(
     layout_labels = layout.data[!, :label]
     layout_values = _tf_extract_channel_means(df_power, layout_labels, row_indices)
 
-    kwargs_norm = _normalize_plot_kwargs(kwargs, _TOPO_KWARG_ALIASES)
-    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs_norm)
+    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs)
 
     method = pop!(plot_kwargs, :method)
     gridscale = pop!(plot_kwargs, :gridscale)
@@ -215,8 +214,7 @@ function plot_topography(
     orig_layout = tf_plots[1].layout
     has_valid_coordinates(orig_layout) || @minimal_error("Cannot create topographic plot: layout has no spatial coordinates.")
 
-    kwargs_norm = _normalize_plot_kwargs(kwargs, _TOPO_KWARG_ALIASES)
-    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs_norm)
+    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs)
     method = pop!(plot_kwargs, :method)
     gridscale = pop!(plot_kwargs, :gridscale)
     colormap = pop!(plot_kwargs, :colormap)
@@ -230,8 +228,8 @@ function plot_topography(
     highlight_channels = pop!(plot_kwargs, :highlight_channels, nothing)
 
     _pop_unused_tf_topo_kwargs!(plot_kwargs)
-    plot_kwargs[:label_plot] = get(kwargs_norm, :label_plot, false)
-    plot_kwargs[:point_plot] = get(kwargs_norm, :point_plot, false)
+    plot_kwargs[:label_plot] = get(kwargs, :label_plot, false)
+    plot_kwargs[:point_plot] = get(kwargs, :point_plot, false)
 
     first_df = tf_plots[1].data_power
     all_freqs = _sorted_unique_f64(first_df[!, :freq])
@@ -446,9 +444,7 @@ function plot_topography_stats(
 )
     topo_data in (:tvalues, :difference) || @minimal_error("topo_data must be :tvalues or :difference, got :$topo_data")
 
-    kwargs_norm = _normalize_plot_kwargs(kwargs, _TOPO_KWARG_ALIASES)
-    haskey(kwargs_norm, :n_topo) && (n_topos = Int(pop!(kwargs_norm, :n_topo)))
-    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs_norm)
+    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs)
 
     method = pop!(plot_kwargs, :method)
     gridscale = pop!(plot_kwargs, :gridscale)
@@ -462,8 +458,8 @@ function plot_topography_stats(
     highlight_channels = pop!(plot_kwargs, :highlight_channels, nothing)
 
     _pop_unused_tf_topo_kwargs!(plot_kwargs)
-    plot_kwargs[:label_plot] = get(kwargs_norm, :label_plot, false)
-    plot_kwargs[:point_plot] = get(kwargs_norm, :point_plot, false)
+    plot_kwargs[:label_plot] = get(kwargs, :label_plot, false)
+    plot_kwargs[:point_plot] = get(kwargs, :point_plot, false)
 
     electrodes = result.electrodes
     all_time_points = result.time_points

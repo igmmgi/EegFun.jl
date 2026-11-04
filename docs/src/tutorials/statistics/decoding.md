@@ -198,13 +198,13 @@ EegFun.plot_decoding(grand_avg_synthetic)  # grand average
 
 # Test and plot with different methods
 stats_none = EegFun.test_against_chance(decoded_synthetic, alpha = 0.05, correction_method = :none)
-EegFun.plot_decoding(grand_avg_synthetic, stats_none, title = "Synthetic Data: No Correction")
+EegFun.plot_decoding(grand_avg_synthetic, stats_none, plot_title = "Synthetic Data: No Correction")
 
 stats_bonf = EegFun.test_against_chance(decoded_synthetic, alpha = 0.05, correction_method = :bonferroni)
-EegFun.plot_decoding(grand_avg_synthetic, stats_bonf, title = "Synthetic Data: Bonferroni")
+EegFun.plot_decoding(grand_avg_synthetic, stats_bonf, plot_title = "Synthetic Data: Bonferroni")
 
 stats_cluster = EegFun.test_against_chance_cluster(decoded_synthetic, alpha = 0.05)
-EegFun.plot_decoding(grand_avg_synthetic, stats_cluster, title = "Synthetic Data: Cluster-based")
+EegFun.plot_decoding(grand_avg_synthetic, stats_cluster, plot_title = "Synthetic Data: Cluster-based")
 ```
 
 :::

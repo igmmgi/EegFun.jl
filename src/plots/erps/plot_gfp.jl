@@ -217,7 +217,7 @@ function plot_gfp(
 )
     datasets_filtered = datasets[get_selected_conditions(datasets, condition_selection)]
     _set_window_title(_generate_window_title(datasets_filtered))
-    plot_kwargs = _merge_plot_kwargs(PLOT_GFP_KWARGS, _normalize_plot_kwargs(kwargs))
+    plot_kwargs = _merge_plot_kwargs(PLOT_GFP_KWARGS, kwargs)
 
     show_dissimilarity = plot_kwargs[:show_dissimilarity]
     show_erp_traces = plot_kwargs[:show_erp_traces]
@@ -266,7 +266,7 @@ function plot_gfp(
 end
 
 function plot_gfp(gfp_data::DataFrame; normalize::Union{Nothing,Bool} = nothing, kwargs...)
-    plot_kwargs = _merge_plot_kwargs(PLOT_GFP_KWARGS, _normalize_plot_kwargs(kwargs))
+    plot_kwargs = _merge_plot_kwargs(PLOT_GFP_KWARGS, kwargs)
     hasproperty(gfp_data, :time) || @minimal_error("DataFrame must have :time column")
     hasproperty(gfp_data, :gfp) || @minimal_error("DataFrame must have :gfp column")
 
@@ -291,7 +291,7 @@ function plot_gfp(gfp_data::DataFrame; normalize::Union{Nothing,Bool} = nothing,
 end
 
 function plot_gfp(gfp_data::AbstractVector{<:DataFrame}; normalize::Union{Nothing,Bool} = nothing, kwargs...)
-    plot_kwargs = _merge_plot_kwargs(PLOT_GFP_KWARGS, _normalize_plot_kwargs(kwargs))
+    plot_kwargs = _merge_plot_kwargs(PLOT_GFP_KWARGS, kwargs)
     for (i, df) in enumerate(gfp_data)
         hasproperty(df, :time) || @minimal_error("DataFrame $i must have :time column")
         hasproperty(df, :gfp) || @minimal_error("DataFrame $i must have :gfp column")

@@ -22,8 +22,9 @@ using EegFun
         @test result.axes isa Vector{Axis}
         @test length(result.axes) == 1
 
-        # Alias :sig_bar_position and show_significance = false
-        result_no_sig = EegFun.plot_decoding(res, stats_res; show_significance = false, sig_bar_position = :bottom, display_plot = false)
+        # show_significance = false with :bottom significance_position
+        result_no_sig =
+            EegFun.plot_decoding(res, stats_res; show_significance = false, significance_position = :bottom, display_plot = false)
         @test result_no_sig.fig isa Figure
     end
 

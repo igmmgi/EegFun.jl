@@ -73,9 +73,6 @@ struct ClusterInfo
     cluster_alpha::Float64
 end
 
-ClusterInfo(threshold_method::Symbol, cluster_type::Symbol, n_permutations::Int) =
-    ClusterInfo(threshold_method, cluster_type, n_permutations, 0.05)
-
 struct TestInfo
     type::Symbol
     df::Float64

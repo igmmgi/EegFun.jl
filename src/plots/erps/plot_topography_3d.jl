@@ -212,7 +212,7 @@ function plot_topography_3d(
     (!hasproperty(layout_df, :inc) || !hasproperty(layout_df, :azi)) &&
         @minimal_error "Cannot create 3D topographic plot: layout missing spherical coordinates (:inc, :azi)."
 
-    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_3D_KWARGS, _normalize_plot_kwargs(kwargs, _TOPO_KWARG_ALIASES))
+    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_3D_KWARGS, kwargs)
     channel_data = Float64[mean(dat_subset.data[!, lbl]) for lbl in layout_df.label]
 
     _set_window_title(_generate_window_title(dat))
@@ -306,7 +306,7 @@ function _plot_topography_3d_scrubber(dat::SingleDataFrameEeg; display_plot = tr
     n_samples = length(time_vec)
     t_min, t_max = extrema(time_vec)
 
-    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_3D_KWARGS, _normalize_plot_kwargs(kwargs, _TOPO_KWARG_ALIASES))
+    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_3D_KWARGS, kwargs)
     fontsize_kw = isnothing(plot_kwargs[:theme_fontsize]) ? (;) : (; fontsize = plot_kwargs[:theme_fontsize])
     colormap = get(plot_kwargs, :colormap, nothing)
     colorbar_plot = get(plot_kwargs, :colorbar_plot, true)

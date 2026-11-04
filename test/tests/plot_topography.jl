@@ -19,10 +19,9 @@ using EegFun
         @test res1.axes isa Vector{Axis}
         @test length(res1.axes) == 1
 
-        # Backwards-compatible ylim alias mapped to colorrange, and n_topos alias mapped to n_topo
-        res_alias = EegFun.plot_topography(erp1; ylim = (-4.0, 4.0), n_topos = 3, display_plot = false)
-        @test res_alias.fig isa Figure
-        @test length(res_alias.axes) == 3
+        res_bins = EegFun.plot_topography(erp1; colorrange = (-4.0, 4.0), n_topo = 3, display_plot = false)
+        @test res_bins.fig isa Figure
+        @test length(res_bins.axes) == 3
 
         res_vec = EegFun.plot_topography([erp1, erp2]; n_topo = 2, colorbar_plot = true, display_plot = false)
         @test res_vec.fig isa Figure

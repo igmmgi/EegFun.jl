@@ -98,7 +98,7 @@ function _run_artifact_viewer(
     kwargs...,
 )
     _set_window_title(_generate_window_title(epochs_raw))
-    plot_kwargs = _merge_plot_kwargs(PLOT_ARTIFACT_KWARGS, _normalize_plot_kwargs(kwargs))
+    plot_kwargs = _merge_plot_kwargs(PLOT_ARTIFACT_KWARGS, kwargs)
     selected_channels = get_selected_channels(epochs_raw, channel_selection, include_meta = false, include_extra = false)
 
     fig = _eegfun_figure()

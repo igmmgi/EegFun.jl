@@ -15,8 +15,8 @@ Use `plot_tf` to visualise the output of `tf_morlet`, `tf_multitaper`, or `tf_st
 | `baseline_method` | `:db` | `:db`, `:percent`, `:relchange`, `:absolute`, `:relative`, or `:zscore` |
 | `colormap` | `:viridis` | Colour map for the heatmap |
 | `colorrange` | auto | Explicit `(min, max)` colour range |
-| `ylogscale` | `false` | Log-scale the frequency axis |
-| `colorbar` | `true` | Show colour bar |
+| `yscale` | `:linear` | Frequency axis scale (`:linear` or `:log10`) |
+| `colorbar_plot` | `true` | Show colour bar |
 
 ## What You'll Learn
 
@@ -89,7 +89,7 @@ EegFun.plot_tf(tf_data, channel_selection = EegFun.channels(:Cz), baseline_inter
 # LOG-SCALED FREQUENCY AXIS
 #######################################################################
 
-EegFun.plot_tf(tf_data, channel_selection = EegFun.channels(:Cz), baseline_interval = (-0.3, 0.0), ylogscale = true)
+EegFun.plot_tf(tf_data, channel_selection = EegFun.channels(:Cz), baseline_interval = (-0.3, 0.0), yscale = :log10)
 
 #######################################################################
 # CUSTOM COLOUR MAP AND RANGE

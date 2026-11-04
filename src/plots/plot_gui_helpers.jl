@@ -209,7 +209,7 @@ function _plot_time_frequency(gui_state)
     baseline_val = _gui_lim((gui_state.baseline_start[], gui_state.baseline_end[]))
 
     bt = gui_state.baseline_type[]
-    baseline_method_sym = bt ∈ ("db", "absolute", "relative", "relchange", "percent", "zscore", "normchange", "vssum") ? Symbol(bt) : :db
+    baseline_method_sym = bt ∈ ("db", "absolute", "relative", "relchange", "percent", "zscore", "normchange") ? Symbol(bt) : :db
     lt = gui_state.layout_type[]
     layout_sym = lt ∈ ("single", "grid", "topo") ? Symbol(lt) : :single
 

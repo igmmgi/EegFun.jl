@@ -175,9 +175,8 @@ function plot_epochs(
     layout = :single,
     kwargs...,
 )
-    kwargs_norm = _normalize_plot_kwargs(kwargs)
-    user_provided_color = haskey(kwargs_norm, :color)
-    plot_kwargs = _merge_plot_kwargs(PLOT_EPOCHS_KWARGS, kwargs_norm)
+    user_provided_color = haskey(kwargs, :color)
+    plot_kwargs = _merge_plot_kwargs(PLOT_EPOCHS_KWARGS, kwargs)
 
     # Subset by condition, sample, and epoch (keep all channels available for interactive topoplots)
     dat_subset = subset(

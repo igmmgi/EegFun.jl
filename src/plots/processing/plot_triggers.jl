@@ -245,14 +245,14 @@ Plot trigger onset occurrences across time grouped by trigger value with a summa
 $(_generate_kwargs_doc(PLOT_TRIGGERS_KWARGS))
 """
 function plot_trigger_overview(trigger_times, trigger_values, trigger_count; kwargs...)
-    plot_kwargs = _merge_plot_kwargs(PLOT_TRIGGERS_KWARGS, _normalize_plot_kwargs(kwargs))
+    plot_kwargs = _merge_plot_kwargs(PLOT_TRIGGERS_KWARGS, kwargs)
     return _render_trigger_overview(trigger_times, trigger_values, trigger_count, nothing, plot_kwargs)
 end
 
 function plot_trigger_overview(dat::ContinuousData; kwargs...)
     @info "Plotting trigger (cleaned) overview for ContinuousData"
     _set_window_title(_generate_window_title(dat))
-    plot_kwargs = _merge_plot_kwargs(PLOT_TRIGGERS_KWARGS, _normalize_plot_kwargs(kwargs))
+    plot_kwargs = _merge_plot_kwargs(PLOT_TRIGGERS_KWARGS, kwargs)
     trigger_codes, trigger_times, trigger_info = _extract_trigger_data(dat, plot_kwargs[:ignore_triggers])
 
     result = if any(!isempty, trigger_info)
@@ -475,7 +475,7 @@ function _create_interactive_trigger_plot_impl(
 end
 
 function _create_interactive_trigger_plot(trigger_codes::Vector{Int16}, trigger_times::Vector{Float64}; kwargs...)
-    plot_kwargs = _merge_plot_kwargs(PLOT_TRIGGERS_KWARGS, _normalize_plot_kwargs(kwargs))
+    plot_kwargs = _merge_plot_kwargs(PLOT_TRIGGERS_KWARGS, kwargs)
     return _create_interactive_trigger_plot_impl(trigger_codes, trigger_times, nothing, plot_kwargs)
 end
 
@@ -485,7 +485,7 @@ function _create_interactive_trigger_plot(
     trigger_info::Vector{String};
     kwargs...,
 )
-    plot_kwargs = _merge_plot_kwargs(PLOT_TRIGGERS_KWARGS, _normalize_plot_kwargs(kwargs))
+    plot_kwargs = _merge_plot_kwargs(PLOT_TRIGGERS_KWARGS, kwargs)
     return _create_interactive_trigger_plot_impl(trigger_codes, trigger_times, trigger_info, plot_kwargs)
 end
 
@@ -498,7 +498,7 @@ $(_generate_kwargs_doc(PLOT_TRIGGERS_KWARGS))
 """
 function plot_trigger_timing(dat::ContinuousData; kwargs...)
     _set_window_title(_generate_window_title(dat))
-    plot_kwargs = _merge_plot_kwargs(PLOT_TRIGGERS_KWARGS, _normalize_plot_kwargs(kwargs))
+    plot_kwargs = _merge_plot_kwargs(PLOT_TRIGGERS_KWARGS, kwargs)
     trigger_codes, trigger_times, trigger_info = _extract_trigger_data(dat, plot_kwargs[:ignore_triggers])
     result = _create_interactive_trigger_plot_impl(trigger_codes, trigger_times, trigger_info, plot_kwargs)
     _set_window_title("Makie")

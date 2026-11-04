@@ -31,10 +31,10 @@ EegFun.plot_channel_spectrum(spectrum, channel_selection = EegFun.channels([:Cha
 
 # tf_multitaper
 @time tf_data = EegFun.tf_multitaper(epochs_synthetic, frequencies = 1:1:40, cycles = 5, pad = :both, use_gpu = true)
-EegFun.plot_tf(tf_data, ylogscale = false)
+EegFun.plot_tf(tf_data, yscale = :linear)
 
 tf_data = EegFun.tf_multitaper(epochs_synthetic, frequencies = logrange(1, 40, length = 30), cycles = 5)
-EegFun.plot_tf(tf_data, ylogscale = true)
+EegFun.plot_tf(tf_data, yscale = :log10)
 
 #######################################################################
 @info EegFun.section("TEST 2: Cohen Data Chapter 13")
@@ -44,4 +44,4 @@ data_cohen = EegFun.read_data(EegFun.example_path("data/julia/tf/tf_test_epochs.
 
 # Figure 13.11 A)
 tf_data = EegFun.tf_multitaper(data_cohen, frequencies = logrange(2, 80, length = 30), cycles = 5, time_steps = 0.05, filter_edges = true)
-EegFun.plot_tf(tf_data; baseline_interval = (-0.5, -0.2), baseline_method = :db, colorrange = (-3, 3), ylogscale = true, colormap = :jet)
+EegFun.plot_tf(tf_data; baseline_interval = (-0.5, -0.2), baseline_method = :db, colorrange = (-3, 3), yscale = :log10, colormap = :jet)

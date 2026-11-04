@@ -60,17 +60,14 @@ function plot_erp_stats(
     (plot_erp || plot_difference || plot_tvalues) ||
         @minimal_error("At least one of plot_erp, plot_difference, or plot_tvalues must be true")
 
-    kwargs_norm = _normalize_plot_kwargs(kwargs)
-    haskey(kwargs_norm, :show_significance) && (plot_significance = Bool(pop!(kwargs_norm, :show_significance)))
-    haskey(kwargs_norm, :significance_position) && (significance_position = pop!(kwargs_norm, :significance_position))
-    plot_kwargs = _merge_plot_kwargs(PLOT_ERP_KWARGS, kwargs_norm)
-    plot_kwargs[:window_title] = get(kwargs_norm, :window_title, "ERP Stats")
+    plot_kwargs = _merge_plot_kwargs(PLOT_ERP_KWARGS, kwargs)
+    plot_kwargs[:window_title] = get(kwargs, :window_title, "ERP Stats")
 
     default_stats_colors = Any[:blue, :red, :black, :purple]
     user_color = plot_kwargs[:color]
     stats_colors = if user_color isa Vector
         Any[i <= length(user_color) ? user_color[i] : default_stats_colors[i] for i = 1:4]
-    elseif haskey(kwargs_norm, :color) && !isnothing(user_color)
+    elseif haskey(kwargs, :color) && !isnothing(user_color)
         Any[user_color, user_color, :black, :purple]
     else
         default_stats_colors
@@ -412,19 +409,18 @@ function _plot_stat_heatmap_core!(
     mask::AbstractMatrix{Bool};
     kwargs...,
 )
-    kwargs_norm = _normalize_plot_kwargs(kwargs)
-    plot_kwargs = _merge_plot_kwargs(PLOT_ERP_KWARGS, kwargs_norm; validate = false)
+    plot_kwargs = _merge_plot_kwargs(PLOT_ERP_KWARGS, kwargs; validate = false)
 
-    time_unit = get(kwargs_norm, :time_unit, :s)
+    time_unit = get(kwargs, :time_unit, :s)
     t_scale = time_unit == :ms ? 1000.0 : 1.0
     x_times = time_points .* t_scale
 
     n_chans = length(electrodes)
-    plot_kwargs[:ylabel] = get(kwargs_norm, :ylabel, "Electrode (1 to $(n_chans))")
-    plot_kwargs[:xlabel] = get(kwargs_norm, :xlabel, time_unit == :ms ? "Time (ms)" : "Time (s)")
+    plot_kwargs[:ylabel] = get(kwargs, :ylabel, "Electrode (1 to $(n_chans))")
+    plot_kwargs[:xlabel] = get(kwargs, :xlabel, time_unit == :ms ? "Time (ms)" : "Time (s)")
     pop!(plot_kwargs, :time_unit, nothing)
 
-    if isnothing(get(kwargs_norm, :yticks, nothing))
+    if isnothing(get(kwargs, :yticks, nothing))
         if n_chans > 40
             step = max(1, div(n_chans, 14))
             y_indices = [1; step:step:n_chans]
@@ -436,17 +432,17 @@ function _plot_stat_heatmap_core!(
         end
     end
 
-    baseline_window = get(kwargs_norm, :baseline_window, nothing)
+    baseline_window = get(kwargs, :baseline_window, nothing)
     if !isnothing(baseline_window)
         vspan!(ax, baseline_window[1] * t_scale, baseline_window[2] * t_scale, color = (:gray85, 0.25))
         vlines!(ax, [0.0], color = (:black, 0.75), linestyle = :solid, linewidth = 1.2)
     end
 
     max_t = _max_abs_nonnan(t_values)
-    cmap = _resolve_theme_colormap(ax, get(kwargs_norm, :colormap, :coolwarm))
-    clims = something(get(kwargs_norm, :colorrange, nothing), (-max_t, max_t))
-    alpha_subdued = get(kwargs_norm, :alpha_subdued, 0.20)
-    mask_style = get(kwargs_norm, :mask_style, :alpha)
+    cmap = _resolve_theme_colormap(ax, get(kwargs, :colormap, :coolwarm))
+    clims = something(get(kwargs, :colorrange, nothing), (-max_t, max_t))
+    alpha_subdued = get(kwargs, :alpha_subdued, 0.20)
+    mask_style = get(kwargs, :mask_style, :alpha)
 
     hm = if mask_style == :alpha
         heatmap!(ax, x_times, 1:n_chans, _transpose_f32(t_values), colormap = cmap, colorrange = clims, alpha = alpha_subdued)
@@ -472,8 +468,8 @@ function _plot_stat_heatmap_core!(
     xlims!(ax, extrema(x_times))
     ylims!(ax, 0.5, n_chans + 0.5)
 
-    if get(kwargs_norm, :colorbar_plot, true) && !isnothing(fig)
-        Colorbar(fig[1, 2], hm, label = get(kwargs_norm, :colorbar_label, "t-value"))
+    if get(kwargs, :colorbar_plot, true) && !isnothing(fig)
+        Colorbar(fig[1, 2], hm, label = get(kwargs, :colorbar_label, "t-value"))
     end
 
     _apply_axis_properties!(ax; plot_kwargs...)
