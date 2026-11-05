@@ -233,6 +233,7 @@ end
 
 function _validate_config(config::Dict; path::String = "")
     for (key, value) in config
+        isempty(path) && key == "metadata" && value isa Dict && continue
         new_path = isempty(path) ? key : "$path.$key"
         if value isa Dict
             result = _validate_config(value; path = new_path)

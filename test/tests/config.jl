@@ -1162,6 +1162,13 @@ neighbour_criterion = 0.44
         @test def_from_toml.preprocess.filter.highpass.order == def_struct.preprocess.filter.highpass.order
         @test def_from_toml.preprocess.filter.lowpass.freq == def_struct.preprocess.filter.lowpass.freq
         @test def_from_toml.files.output.save_ica_data == def_struct.files.output.save_ica_data
+
+        # 7. print_config -> read_config round-trip accepts [metadata] section
+        rt_toml = joinpath(test_dir, "roundtrip_meta.toml")
+        EegFun.print_config(EegFun._generate_default_config(), rt_toml)
+        rt_loaded = EegFun.read_config(rt_toml)
+        @test haskey(rt_loaded, "metadata")
+        @test EegFun.PipelineConfig(rt_loaded) isa EegFun.PipelineConfig
     end
 
     # Cleanup
