@@ -162,13 +162,12 @@ function plot_tf_stats(
         use_ylog && (ax.ytickformat = values -> [string(round(Int, v)) for v in values])
 
         sig_mask = mask_style != :none ? _extract_tf_significance_mask(result, ch_idx) : nothing
-        has_mask = !isnothing(sig_mask) && any(sig_mask)
 
-        if !has_mask || mask_style == :none
+        if isnothing(sig_mask) || mask_style == :none
             last_hm =
                 heatmap!(ax, time_points, frequencies, transpose(data_mat), colormap = cmap, colorrange = cr, nan_color = :transparent)
         elseif mask_style == :alpha
-            heatmap!(
+            last_hm = heatmap!(
                 ax,
                 time_points,
                 frequencies,
@@ -178,9 +177,11 @@ function plot_tf_stats(
                 alpha = 0.15,
                 nan_color = :transparent,
             )
-            highlight = _tf_masked_copy(data_mat, sig_mask)
-            last_hm =
-                heatmap!(ax, time_points, frequencies, transpose(highlight), colormap = cmap, colorrange = cr, nan_color = :transparent)
+            if any(sig_mask)
+                highlight = _tf_masked_copy(data_mat, sig_mask)
+                last_hm =
+                    heatmap!(ax, time_points, frequencies, transpose(highlight), colormap = cmap, colorrange = cr, nan_color = :transparent)
+            end
         elseif mask_style == :hide
             highlight = _tf_masked_copy(data_mat, sig_mask)
             last_hm =
@@ -188,7 +189,7 @@ function plot_tf_stats(
         elseif mask_style == :contour
             last_hm =
                 heatmap!(ax, time_points, frequencies, transpose(data_mat), colormap = cmap, colorrange = cr, nan_color = :transparent)
-            _render_significance_contour!(
+            any(sig_mask) && _render_significance_contour!(
                 ax,
                 time_points,
                 frequencies,
