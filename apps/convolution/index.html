@@ -47,7 +47,8 @@
   </div>
   <script>
     (function() {
-      var targetBase = "https://hon-anderson-became-bradley.trycloudflare.com";
+      var fallbackBase = "https://hon-anderson-became-bradley.trycloudflare.com";
+      var rawUrl = "https://raw.githubusercontent.com/igmmgi/EegFun.jl/gh-pages/apps/tunnel_url.txt?t=" + Date.now();
       var prefix = "/EegFun.jl/apps";
       var path = window.location.pathname || "/";
       if (path === prefix || path === prefix + "/") {
@@ -60,22 +61,43 @@
       } else {
         path = "/convolution";
       }
-      var params = new URLSearchParams(window.location.search || "");
-      if (params.has("to")) {
-        var toRoute = params.get("to") || "/";
-        if (toRoute.charAt(0) !== "/") toRoute = "/" + toRoute;
-        params.delete("to");
-        var rem = params.toString();
-        var destTo = targetBase + toRoute + (rem ? "?" + rem : "") + (window.location.hash || "");
-        var linkTo = document.getElementById("fallback-link");
-        if (linkTo) linkTo.href = destTo;
-        window.location.replace(destTo);
-        return;
+
+      function go(targetBase) {
+        var params = new URLSearchParams(window.location.search || "");
+        if (params.has("to")) {
+          var toRoute = params.get("to") || "/";
+          if (toRoute.charAt(0) !== "/") toRoute = "/" + toRoute;
+          params.delete("to");
+          var rem = params.toString();
+          var destTo = targetBase + toRoute + (rem ? "?" + rem : "") + (window.location.hash || "");
+          var linkTo = document.getElementById("fallback-link");
+          if (linkTo) linkTo.href = destTo;
+          window.location.replace(destTo);
+          return;
+        }
+        var dest = targetBase + path + (window.location.search || "") + (window.location.hash || "");
+        var link = document.getElementById("fallback-link");
+        if (link) link.href = dest;
+        window.location.replace(dest);
       }
-      var dest = targetBase + path + (window.location.search || "") + (window.location.hash || "");
-      var link = document.getElementById("fallback-link");
-      if (link) link.href = dest;
-      window.location.replace(dest);
+
+      try {
+        var ctrl = new AbortController();
+        var timer = setTimeout(function() { ctrl.abort(); }, 2000);
+        fetch(rawUrl, { cache: "no-store", signal: ctrl.signal })
+          .then(function(r) { return r.ok ? r.text() : ""; })
+          .then(function(txt) {
+            clearTimeout(timer);
+            var m = txt && txt.match(/https:\/\/[a-zA-Z0-9-]+\.trycloudflare\.com/);
+            go(m ? m[0] : fallbackBase);
+          })
+          .catch(function() {
+            clearTimeout(timer);
+            go(fallbackBase);
+          });
+      } catch (e) {
+        go(fallbackBase);
+      }
     })();
   </script>
 </body>
