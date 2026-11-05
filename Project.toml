@@ -82,7 +82,7 @@ FunctionalImageFormat = "0.1"
 GLMakie = "0.13"
 GeometryBasics = "0.5"
 JLD2 = "0.5, 0.6"
-KernelAbstractions = "0.9"
+KernelAbstractions = "0.9, 0.10"
 LIBSVM = "0.8"
 LinearAlgebra = "1"
 Logging = "1"
@@ -122,4 +122,3 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 dev = ["Revise"]
 docs = ["Documenter", "DocumenterTools"]
 test = ["Test", "Coverage", "CoverageTools", "BenchmarkTools", "Aqua", "CairoMakie"]
-
