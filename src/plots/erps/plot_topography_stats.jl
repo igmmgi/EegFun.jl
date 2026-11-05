@@ -1,4 +1,4 @@
-function _mean_col_diff(col_a::AbstractVector, col_b::AbstractVector, r::UnitRange{Int})
+function _mean_col_diff(col_a::AbstractVector, col_b::AbstractVector, r::AbstractVector{Int})
     s = 0.0
     @inbounds @simd for k in r
         s += Float64(col_a[k]) - Float64(col_b[k])
@@ -125,6 +125,12 @@ function plot_topography_stats(
 
     cond_A_df = topo_data == :difference ? result.data[1].data : nothing
     cond_B_df = topo_data == :difference ? result.data[2].data : nothing
+    df_row_map = if topo_data == :difference
+        df_times = cond_A_df[!, :time]
+        Int[argmin(abs.(df_times .- t)) for t in all_time_points]
+    else
+        Int[]
+    end
     has_diff_cols = if topo_data == :difference
         Bool[hasproperty(cond_A_df, ch) && hasproperty(cond_B_df, ch) for ch in electrodes]
     else
@@ -153,8 +159,9 @@ function plot_topography_stats(
                 isfinite(v) && abs(v) > max_abs && (max_abs = abs(v))
             end
         else
+            df_rows = view(df_row_map, bin_indices)
             for (j, ch_sym) in enumerate(electrodes)
-                v = has_diff_cols[j] ? _mean_col_diff(cond_A_df[!, ch_sym], cond_B_df[!, ch_sym], bin_indices) : NaN
+                v = has_diff_cols[j] ? _mean_col_diff(cond_A_df[!, ch_sym], cond_B_df[!, ch_sym], df_rows) : NaN
                 vals[j] = v
                 isfinite(v) && abs(v) > max_abs && (max_abs = abs(v))
             end

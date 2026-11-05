@@ -34,6 +34,17 @@ using EegFun
         @test out_cr.fig isa Figure
         cf = only(filter(p -> p isa Makie.Contourf, out_cr.axes[1].scene.plots))
         @test cf.colorrange[] == (-3.0, 3.0)
+
+        # Narrow analysis_interval aligns :difference rows to result.time_points (not row 1 = -0.5s)
+        dats_win = deepcopy(dats)
+        for erp in dats_win, ch in EegFun.channel_labels(erp)
+            erp.data[!, ch] .= ifelse.(erp.data.time .>= 0.2, erp.condition == 1 ? 10.0 : 0.0, 0.0)
+        end
+        prep_win = EegFun.prepare_stats(dats_win; design = :paired, analysis_interval = (0.3, 0.5))
+        res_win = EegFun.analytic_test(prep_win)
+        out_diff = EegFun.plot_topography_stats(res_win; topo_data = :difference, n_topos = 1, display_plot = false)
+        cf_diff = only(filter(p -> p isa Makie.Contourf, out_diff.axes[1].scene.plots))
+        @test cf_diff.colorrange[][2] ≈ 10.0 atol = 1e-6
     end
 
     @testset "Subsets layout to result.electrodes instead of zero-filling unanalyzed channels" begin
