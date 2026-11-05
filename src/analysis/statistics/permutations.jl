@@ -407,7 +407,7 @@ function _run_permutations(
 
             _apply_perm_threshold!(mask_pos, mask_neg, t_perm, critical_t_values, tail)
 
-            if min_num_neighbors > 0
+            if min_num_neighbors > 0 && cluster_type ∈ (:spatial, :spatiotemporal, :full)
                 _prefilter_mask_by_neighbors!(mask_pos, spatial_conn_sym, min_num_neighbors)
                 _prefilter_mask_by_neighbors!(mask_neg, spatial_conn_sym, min_num_neighbors)
             end
@@ -565,7 +565,7 @@ function _run_permutations_tf(
 
             _apply_perm_threshold!(mask_pos, mask_neg, t_perm, critical_t_values, tail)
 
-            if min_num_neighbors > 0
+            if min_num_neighbors > 0 && cluster_type ∈ (:spatial, :spatiotemporal, :full)
                 _prefilter_mask_by_neighbors_tf!(mask_pos, spatial_conn_sym, min_num_neighbors)
                 _prefilter_mask_by_neighbors_tf!(mask_neg, spatial_conn_sym, min_num_neighbors)
             end

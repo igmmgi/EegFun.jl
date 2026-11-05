@@ -182,7 +182,7 @@ function permutation_test(
     @info "Building connectivity matrix..."
     spatial_connectivity = _build_connectivity_matrix(electrodes, layout, cluster_type)
 
-    if min_num_neighbors > 0
+    if min_num_neighbors > 0 && cluster_type ∈ (:spatial, :spatiotemporal, :full)
         @info "Pre-filtering masks (min_num_neighbors=$min_num_neighbors)..."
         _prefilter_mask_by_neighbors!(mask_positive, spatial_connectivity, min_num_neighbors)
         _prefilter_mask_by_neighbors!(mask_negative, spatial_connectivity, min_num_neighbors)
@@ -314,7 +314,7 @@ function permutation_test(
     @info "Building connectivity matrix..."
     spatial_connectivity = _build_connectivity_matrix(electrodes, layout, cluster_type)
 
-    if min_num_neighbors > 0
+    if min_num_neighbors > 0 && cluster_type ∈ (:spatial, :spatiotemporal, :full)
         @info "Pre-filtering masks (min_num_neighbors=$min_num_neighbors)..."
         _prefilter_mask_by_neighbors_tf!(mask_positive, spatial_connectivity, min_num_neighbors)
         _prefilter_mask_by_neighbors_tf!(mask_negative, spatial_connectivity, min_num_neighbors)

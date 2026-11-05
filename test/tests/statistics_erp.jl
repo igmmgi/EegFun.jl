@@ -947,6 +947,7 @@ end
         )
         @test res.test_info.alpha == 0.01
         @test res.test_info.cluster_info.cluster_alpha == 0.05
+        @test !isempty(vcat(res.clusters.positive, res.clusters.negative))
         for c in vcat(res.clusters.positive, res.clusters.negative)
             @test c.is_significant == (c.p_value <= res.test_info.alpha)
         end
