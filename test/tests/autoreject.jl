@@ -390,11 +390,14 @@ save_continuous_data_corrected = false
 epoch_start = -0.1
 epoch_end = 0.5
 
+[preprocess.ica]
+apply = false
+
 [preprocess.autoreject]
 apply = true
 mode = "local"
-n_folds = 3
-n_candidates = 15
+n_folds = 2
+n_candidates = 5
 consensus_perc = 0.3
 max_repair_perc = 0.1
 """,

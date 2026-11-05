@@ -241,6 +241,9 @@ save_continuous_data_corrected = false
 [preprocess]
 epoch_start = -0.1
 epoch_end = 0.5
+
+[preprocess.ica]
+percentage_of_data = 20.0
 """,
             )
 
@@ -296,6 +299,9 @@ directory = "output"
 [preprocess]
 epoch_start = -0.1
 epoch_end = 0.5
+
+[preprocess.ica]
+percentage_of_data = 20.0
 """,
             )
 
@@ -349,6 +355,9 @@ save_continuous_data_corrected = false
 [preprocess]
 epoch_start = -0.1
 epoch_end = 0.5
+
+[preprocess.ica]
+apply = false
 """,
             )
 
@@ -423,6 +432,9 @@ epoch_condition_file = "epochs.toml"
 
 [files.output]
 directory = "out_tpl"
+
+[preprocess.ica]
+apply = false
 """,
             )
             cd(temp_dir) do

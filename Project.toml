@@ -109,10 +109,8 @@ julia = "1.13"
 
 [extras]
 Aqua = "4c88cf16-eb10-579e-8560-4a9242c79595"
-BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
-Coverage = "a2441757-f6aa-5fb2-8edb-039e3f45d037"
-CoverageTools = "c36e975a-824b-4404-a568-ef97ca766997"
+DimensionalData = "0703355e-b756-11e9-17c0-8b28908087d0"
 Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
 DocumenterTools = "35a29f4d-8980-5a13-9543-d66fff28ecb8"
 Revise = "295af30f-e4ad-537b-8983-00126c2a3abe"
@@ -121,5 +119,5 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 [targets]
 dev = ["Revise"]
 docs = ["Documenter", "DocumenterTools"]
-test = ["Test", "Coverage", "CoverageTools", "BenchmarkTools", "Aqua", "CairoMakie"]
+test = ["Test", "Aqua", "CairoMakie", "DimensionalData"]
 

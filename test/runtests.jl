@@ -98,6 +98,8 @@ end
     include("tests/plot_epochs_rejection.jl")
     include("tests/plot_topography.jl")
     include("tests/plot_topography_stats.jl")
+    include("tests/gpu_kernels_cpu.jl")
+    include("tests/coverage_gaps.jl")
 
 
 end
