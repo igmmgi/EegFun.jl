@@ -83,12 +83,11 @@ function plot_erp_measurement_gui(
     time_data = time_vector(first_erp)
     time_min, time_max = extrema(time_data)
     isnothing(analysis_interval) && (analysis_interval = (time_min, time_max))
-    isnothing(baseline_interval) && (baseline_interval = (time_min, time_max))
 
     selected_channels = Observable{Vector{Symbol}}(initial_channels)
     selected_type = Observable(analysis_type)
     analysis_interval_obs = Observable(analysis_interval)
-    baseline_interval_obs = Observable(baseline_interval)
+    baseline_interval_obs = Observable{Interval}(baseline_interval)
     show_markers_obs = Observable(false)
 
     fig = _eegfun_figure(size = (1280, 960))
@@ -119,8 +118,10 @@ function plot_erp_measurement_gui(
     meas_window_label = Label(controls_grid[8, 1], @sprintf("%.3f s - %.3f s", analysis_interval...), halign = :left)
 
     Label(controls_grid[9, 1], "Baseline Interval:", halign = :left)
-    baseline_interval_slider = IntervalSlider(controls_grid[10, 1], range = time_min:0.005:time_max, startvalues = baseline_interval)
-    baseline_interval_label = Label(controls_grid[11, 1], @sprintf("%.3f s - %.3f s", baseline_interval...), halign = :left)
+    slider_bl = isnothing(baseline_interval) ? (time_min, time_max) : baseline_interval
+    baseline_interval_slider = IntervalSlider(controls_grid[10, 1], range = time_min:0.005:time_max, startvalues = slider_bl)
+    baseline_interval_label =
+        Label(controls_grid[11, 1], isnothing(baseline_interval) ? "None" : @sprintf("%.3f s - %.3f s", baseline_interval...), halign = :left)
 
     peak_lbl1 = Label(controls_grid[12, 1], "Peak Local Window:", halign = :left)
     local_interval_slider = Slider(controls_grid[13, 1], range = 1:15, startvalue = 3)
@@ -294,6 +295,7 @@ function plot_erp_measurement_gui(
             delete!(ax, p)
         end
         empty!(plots_list)
+        isnothing(interval) && return
         bh = 0.01 * ax.finallimits[].widths[2]
         p_band = poly!(ax, Point2f[(interval[1], -bh), (interval[2], -bh), (interval[2], bh), (interval[1], bh)], color = (band_color, 0.3))
         p_left = vlines!(ax, interval[1], color = (edge_color, 0.2), linewidth = 1, linestyle = :dash)
@@ -405,10 +407,12 @@ function plot_erp_measurement_gui(
 
         abs(mouse_x - ai[1]) < tolerance && return :analysis_left
         abs(mouse_x - ai[2]) < tolerance && return :analysis_right
-        abs(mouse_x - bi[1]) < tolerance && return :baseline_left
-        abs(mouse_x - bi[2]) < tolerance && return :baseline_right
+        if !isnothing(bi)
+            abs(mouse_x - bi[1]) < tolerance && return :baseline_left
+            abs(mouse_x - bi[2]) < tolerance && return :baseline_right
+        end
         ai[1] < mouse_x < ai[2] && return :analysis_middle
-        bi[1] < mouse_x < bi[2] && return :baseline_middle
+        !isnothing(bi) && bi[1] < mouse_x < bi[2] && return :baseline_middle
         return :none
     end
 

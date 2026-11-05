@@ -158,6 +158,19 @@ end
         prepared = EegFun.prepare_stats(erps; design = :paired, channel_selection = EegFun.channels([:Ch1, :Ch2]))
 
         @test size(prepared.analysis.data[1], 2) == 2  # only 2 channels
+
+        # baseline_interval = nothing preserves constant offset (no full-epoch subtraction)
+        erps_dc = deepcopy(erps)
+        for erp in erps_dc
+            erp.data.Ch1 .= erp.condition == 1 ? 5.0 : 0.0
+        end
+        prep_nobl = EegFun.prepare_stats(erps_dc; design = :paired, baseline_interval = nothing)
+        @test all(≈(5.0), prep_nobl.data[1].data.Ch1)
+        @test all(≈(0.0), prep_nobl.data[2].data.Ch1)
+
+        # baseline_interval outside cropped interval_selection validates against pre-cropped ERP
+        prep_bl = EegFun.prepare_stats(erps; design = :paired, interval_selection = (0.3, 0.5), baseline_interval = (-0.2, 0.0))
+        @test first(prep_bl.data[1].data.time) >= 0.3 - 1e-6
     end
 
 

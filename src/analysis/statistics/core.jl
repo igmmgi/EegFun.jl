@@ -36,14 +36,17 @@ end
     e::Int,
     col::Vector{Float64},
     rows::Vector{Int},
-    bl_start::Int,
-    bl_stop::Int,
+    bl_range::Union{Tuple{Int,Int},Nothing},
 )
-    bl_sum = 0.0
-    @inbounds @simd for idx = bl_start:bl_stop
-        bl_sum += col[rows[idx]]
+    bl_mean = 0.0
+    if !isnothing(bl_range)
+        bl_start, bl_stop = bl_range
+        bl_sum = 0.0
+        @inbounds @simd for idx = bl_start:bl_stop
+            bl_sum += col[idx]
+        end
+        bl_mean = bl_sum / (bl_stop - bl_start + 1)
     end
-    bl_mean = bl_sum / (bl_stop - bl_start + 1)
     @inbounds @simd for t in eachindex(rows)
         data[p, e, t] = col[rows[t]] - bl_mean
     end
@@ -55,14 +58,17 @@ end
     e::Int,
     col::AbstractVector,
     rows::Vector{Int},
-    bl_start::Int,
-    bl_stop::Int,
+    bl_range::Union{Tuple{Int,Int},Nothing},
 )
-    bl_sum = 0.0
-    @inbounds for idx = bl_start:bl_stop
-        bl_sum += Float64(col[rows[idx]])
+    bl_mean = 0.0
+    if !isnothing(bl_range)
+        bl_start, bl_stop = bl_range
+        bl_sum = 0.0
+        @inbounds for idx = bl_start:bl_stop
+            bl_sum += Float64(col[idx])
+        end
+        bl_mean = bl_sum / (bl_stop - bl_start + 1)
     end
-    bl_mean = bl_sum / (bl_stop - bl_start + 1)
     @inbounds for t in eachindex(rows)
         data[p, e, t] = Float64(col[rows[t]]) - bl_mean
     end
@@ -72,14 +78,13 @@ function _extract_baselined_erp_array(
     erps::AbstractVector{<:ErpData},
     electrodes::Vector{Symbol},
     rows::Vector{Int},
-    bl_range::Tuple{Int,Int},
+    bl_range::Union{Tuple{Int,Int},Nothing},
 )
     data = Array{Float64,3}(undef, length(erps), length(electrodes), length(rows))
-    bl_start, bl_stop = bl_range
     for (p, erp) in enumerate(erps)
         df = erp.data
         for (e, el) in enumerate(electrodes)
-            _fill_baselined_slice!(data, p, e, df[!, el], rows, bl_start, bl_stop)
+            _fill_baselined_slice!(data, p, e, df[!, el], rows, bl_range)
         end
     end
     return data
@@ -193,7 +198,7 @@ function prepare_stats(
     display_rows = findall(_to_sample_func(sample_sel)(condition1[1].data))
     (isempty(display_electrodes) || isempty(display_rows)) && @minimal_error "No data matched the selection criteria!"
 
-    bl_range = _validate_baseline_interval(ref1, isnothing(baseline_interval) ? times() : baseline_interval)
+    bl_range = isnothing(baseline_interval) ? nothing : _validate_baseline_interval(condition1[1], baseline_interval)
 
     cond1_stacked = _extract_baselined_erp_array(condition1, display_electrodes, display_rows, bl_range)
     cond2_stacked = _extract_baselined_erp_array(condition2, display_electrodes, display_rows, bl_range)
