@@ -52,7 +52,7 @@ def python_mne_benchmark(raw_files, data_dir, run_ica):
             clean_raw_ica = mne.io.RawArray(data_ica_full[:, good_mask], raw_ica.info)
             
             n_eeg = len(mne.pick_types(raw.info, eeg=True, exclude=[]))
-            ica = ICA(n_components=n_eeg - 1, method='infomax', fit_params=dict(extended=True, verbose=True))
+            ica = ICA(n_components=n_eeg - 1, method='infomax', fit_params=dict(extended=True, w_change=1e-6, verbose=True))
             ica.fit(clean_raw_ica)
                  
             # Sanity check: Plot the first 30 ICA components for the first subject

@@ -9,31 +9,58 @@ function _ica_preprocess(dat_ica::Matrix{Float64}, n_components::Int, params::Ic
         @minimal_warning "Sample size ($n_samples) is small for $n_components components (< 20 * n_components^2 = $min_samples). ICA decomposition may be unreliable."
     end
 
-    dat = copy(dat_ica)
     prms = deepcopy(params)
-
-    original_mean = vec(mean(dat, dims = 2))
-    dat .-= original_mean
+    original_mean = vec(mean(dat_ica, dims = 2))
+    dat = dat_ica .- original_mean
     cov_mat = Matrix{Float64}(undef, n_channels, n_channels)
     mul!(cov_mat, dat, transpose(dat), 1.0 / n_samples, 0.0)
     scale = sqrt(norm(cov_mat))
-    dat ./= scale
 
-    F = svd!(dat)
-    s_max = F.S[1]
-    s_target = F.S[n_components]
-    if s_max > 0 && (s_target / s_max < 1e-7 || s_target < 1e-10)
-        eff_rank = count(s -> (s / s_max) > 1e-7, F.S)
-        @minimal_error "Data is rank-deficient for requested $n_components components (singular value ratio = $(round(s_target / s_max, sigdigits=3))). Estimated rank is $eff_rank. Please set n_components <= $eff_rank (e.g. n_channels - 1 for average-referenced data)."
+    local pca_components::Matrix{Float64}
+    local sphere::Matrix{Float64}
+    local dat_sphered::Matrix{Float64}
+
+    used_eigen = false
+    if n_samples > 2 * n_channels && scale > 0.0
+        cov_scaled = (n_samples / (scale * scale)) .* cov_mat
+        ef = eigen!(Symmetric(cov_scaled))
+        l_max = ef.values[end]
+        l_target = ef.values[end-n_components+1]
+        if l_max > 0.0 && l_target > 1e-8 * l_max && l_target > 1e-20
+            idx = n_channels:-1:(n_channels-n_components+1)
+            pca_components = ef.vectors[:, idx]
+            @inbounds for j = 1:n_components
+                col = @view pca_components[:, j]
+                argmax(abs, col) < 0.0 && (col .*= -1.0)
+            end
+            eigenvalues = ef.values[idx] ./ (n_samples - 1)
+            inv_sqrt_ev = 1.0 ./ sqrt.(eigenvalues)
+            sphere = diagm(inv_sqrt_ev)
+            whiten_mat = inv_sqrt_ev .* transpose(pca_components)
+            dat_sphered = Matrix{Float64}(undef, n_components, n_samples)
+            mul!(dat_sphered, whiten_mat, dat, 1.0 / scale, 0.0)
+            used_eigen = true
+        end
     end
 
-    pca_components = F.U[:, 1:n_components]
-    eigenvalues = (@view(F.S[1:n_components]) .^ 2) ./ (n_samples - 1)
-    sphere = diagm(1.0 ./ sqrt.(eigenvalues))
+    if !used_eigen
+        dat ./= scale
+        F = svd!(dat)
+        s_max = F.S[1]
+        s_target = F.S[n_components]
+        if s_max > 0 && (s_target / s_max < 1e-7 || s_target < 1e-10)
+            eff_rank = count(s -> (s / s_max) > 1e-7, F.S)
+            @minimal_error "Data is rank-deficient for requested $n_components components (singular value ratio = $(round(s_target / s_max, sigdigits=3))). Estimated rank is $eff_rank. Please set n_components <= $eff_rank (e.g. n_channels - 1 for average-referenced data)."
+        end
 
-    dat_sphered = Matrix{Float64}(undef, n_components, n_samples)
-    whiten_scale = sqrt(n_samples - 1)
-    @views @. dat_sphered = whiten_scale * F.Vt[1:n_components, :]
+        pca_components = F.U[:, 1:n_components]
+        eigenvalues = (@view(F.S[1:n_components]) .^ 2) ./ (n_samples - 1)
+        sphere = diagm(1.0 ./ sqrt.(eigenvalues))
+
+        dat_sphered = Matrix{Float64}(undef, n_components, n_samples)
+        whiten_scale = sqrt(n_samples - 1)
+        @views @. dat_sphered = whiten_scale * F.Vt[1:n_components, :]
+    end
 
     cpu_block = min(nextpow(2, max(Int(floor(sqrt(n_samples / 3.0))), 1)), 512)
     gpu_active = false
@@ -214,6 +241,20 @@ end
     return signs_changed
 end
 
+# SIMD-vectorizable Float64 tanh via range reduction (|z| <= 1.25), [7/6] Padé, and 4 angle-doublings (< 4.5e-16 max error)
+@inline function _simd_tanh(x::Float64)
+    x_c = ifelse(x > 20.0, 20.0, ifelse(x < -20.0, -20.0, x))
+    z = x_c * 0.0625
+    z2 = z * z
+    num = z * evalpoly(z2, (135135.0, 17325.0, 378.0, 1.0))
+    den = evalpoly(z2, (135135.0, 62370.0, 3150.0, 28.0))
+    t = num / den
+    t = (t + t) / (1.0 + t * t)
+    t = (t + t) / (1.0 + t * t)
+    t = (t + t) / (1.0 + t * t)
+    return (t + t) / (1.0 + t * t)
+end
+
 @inline function _infomax_cpu_block_step!(
     work::WorkArrays,
     u_blk::M1,
@@ -221,25 +262,25 @@ end
     d_blk::M3,
     block_size::Int,
     l_rate::Float64,
-    is_sub_gaussian::S,
+    signs::S,
 ) where {M1<:AbstractMatrix{Float64},M2<:AbstractMatrix{Float64},M3<:AbstractMatrix{Float64},S}
     n_channels = size(work.weights, 1)
-    len = n_channels * block_size
     mul!(u_blk, work.weights, d_blk)
-    if !isnothing(is_sub_gaussian)
-        @fastmath @inbounds @simd for k = 1:len
-            work.y[k] = tanh(work.u[k])
+    if !isnothing(signs)
+        @inbounds for j = 1:block_size
+            @simd ivdep for i = 1:n_channels
+                u_ij = u_blk[i, j]
+                y_blk[i, j] = u_ij + signs[i] * _simd_tanh(u_ij)
+            end
         end
         mul!(work.wu_term, y_blk, transpose(u_blk))
-        @inbounds for j = 1:n_channels, i = 1:n_channels
-            is_sub_gaussian[i] && (work.wu_term[i, j] = -work.wu_term[i, j])
-        end
-        mul!(work.wu_term, u_blk, transpose(u_blk), 1.0, 1.0)
         mul!(work.weights_temp, work.wu_term, work.weights)
         @inbounds @. work.weights += l_rate * (block_size * work.weights - work.weights_temp)
     else
-        @fastmath @inbounds @simd for k = 1:len
-            work.y[k] = -tanh(0.5 * work.u[k])
+        @inbounds for j = 1:block_size
+            @simd ivdep for i = 1:n_channels
+                y_blk[i, j] = -_simd_tanh(0.5 * u_blk[i, j])
+            end
         end
         mul!(work.wu_term, y_blk, transpose(u_blk))
         mul!(work.weights_temp, work.wu_term, work.weights)
@@ -269,8 +310,9 @@ function _infomax_optimize_cpu!(
 
     permute_indices = Vector{Int}(undef, n_samples)
 
-    kurtsize = extended ? min(2000, n_samples) : 0
+    kurtsize = extended ? min(6000, n_samples) : 0
     old_kurtosis = extended ? zeros(Float64, n_channels) : Float64[]
+    signs = extended ? Float64[(is_sub_gaussian::BitVector)[i] ? -1.0 : 1.0 for i = 1:n_channels] : nothing
     kurt_data = (extended && kurtsize < n_samples) ? Matrix{Float64}(undef, n_channels, kurtsize) : Matrix{Float64}(undef, 0, 0)
     activations = extended ? Matrix{Float64}(undef, n_channels, kurtsize) : Matrix{Float64}(undef, 0, 0)
     n_super = n_channels
@@ -298,10 +340,10 @@ function _infomax_optimize_cpu!(
                     view(work.data_block, :, 1:block_size),
                     block_size,
                     params.l_rate,
-                    is_sub_gaussian,
+                    signs,
                 )
             else
-                _infomax_cpu_block_step!(work, work.u, work.y, work.data_block, block_size, params.l_rate, is_sub_gaussian)
+                _infomax_cpu_block_step!(work, work.u, work.y, work.data_block, block_size, params.l_rate, signs)
             end
 
             if maximum(abs, work.weights) > params.max_weight
@@ -328,6 +370,13 @@ function _infomax_optimize_cpu!(
             end
             work.weights .= work.startweights
             work.oldweights .= work.startweights
+            if extended
+                fill!(is_sub_gaussian::BitVector, false)
+                fill!(old_kurtosis, 0.0)
+                fill!(signs::Vector{Float64}, 1.0)
+                n_super = n_channels
+                n_sub = 0
+            end
             continue
         end
 
@@ -346,7 +395,7 @@ function _infomax_optimize_cpu!(
             end
 
             inv_k = 1.0 / kurtsize
-            _update_extended_kurtosis_signs!(
+            signs_changed = _update_extended_kurtosis_signs!(
                 sub_flags,
                 old_kurtosis,
                 i -> begin
@@ -367,6 +416,12 @@ function _infomax_optimize_cpu!(
                 end,
                 n_channels,
             )
+            if signs_changed
+                signs_vec = signs::Vector{Float64}
+                for i = 1:n_channels
+                    signs_vec[i] = sub_flags[i] ? -1.0 : 1.0
+                end
+            end
             n_sub = count(sub_flags)
             n_super = n_channels - n_sub
         end
@@ -455,7 +510,7 @@ function _infomax_optimize_gpu!(
     old_kurtosis = extended ? zeros(Float64, n_channels) : Float64[]
     signs_cpu = extended ? Float32[(is_sub_gaussian::BitVector)[i] ? -1.0f0 : 1.0f0 for i = 1:n_channels] : Float32[]
     signs_gpu = extended ? gpu_array(reshape(signs_cpu, n_channels, 1)) : nothing
-    kurtsize = extended ? min(2000, n_samples) : 0
+    kurtsize = extended ? min(6000, n_samples) : 0
     activations_gpu = extended ? gpu_array(zeros(Float32, n_channels, kurtsize)) : nothing
     act_sq = extended ? gpu_array(zeros(Float32, n_channels, kurtsize)) : nothing
     u2_sum = extended ? gpu_array(zeros(Float32, n_channels, 1)) : nothing
@@ -498,10 +553,8 @@ function _infomax_optimize_gpu!(
 
             mul!(u_v, weights_gpu, data_block_gpu)
             if extended
-                @. y_v = tanh(u_v)
+                @. y_v = u_v + signs_gpu * tanh(u_v)
                 mul!(wu_gpu, y_v, u_vt)
-                @. wu_gpu *= signs_gpu
-                mul!(wu_gpu, u_v, u_vt, 1.0f0, 1.0f0)
                 mul!(wtemp_gpu, wu_gpu, weights_gpu)
                 @. weights_gpu += l_rate_f32 * (bs_f32 * weights_gpu - wtemp_gpu)
             else
@@ -537,6 +590,14 @@ function _infomax_optimize_gpu!(
             work.weights .= work.startweights
             work.oldweights .= work.startweights
             copyto!(weights_gpu, startweights_f32)
+            if extended
+                fill!(is_sub_gaussian::BitVector, false)
+                fill!(old_kurtosis, 0.0)
+                fill!(signs_cpu, 1.0f0)
+                copyto!(signs_gpu, reshape(signs_cpu, n_channels, 1))
+                n_super = n_channels
+                n_sub = 0
+            end
             continue
         end
 

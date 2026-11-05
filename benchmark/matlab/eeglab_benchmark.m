@@ -83,7 +83,7 @@ function eeglab_benchmark(data_dir, n_files_to_process, run_ica_flag)
             end
             
             % Run extended ICA on the cleaned 1Hz filtered data
-            EEG_ica = pop_runica(EEG_ica, 'extended', 1, 'interupt', 'off', 'pca', EEG_ica.nbchan - 1, 'stop', 1e-5);
+            EEG_ica = pop_runica(EEG_ica, 'extended', 1, 'interupt', 'off', 'pca', EEG_ica.nbchan - 1, 'stop', 1e-6);
             
             % Copy ICA weights back to the 0.1Hz filtered dataset
             EEG.icaweights = EEG_ica.icaweights;
@@ -126,7 +126,6 @@ function eeglab_benchmark(data_dir, n_files_to_process, run_ica_flag)
         end
 
         % 6. Epoch and Baseline
-        EEG = pop_eegfiltnew(EEG, 'hicutoff', 30.0);
         events = {'valid_target', 'invalid_target'};
         EEG = pop_epoch(EEG, events, [-0.5 1.0], 'newname', 'epochs', 'epochinfo', 'yes');
         EEG = pop_rmbase(EEG, [-200 0]);
@@ -135,10 +134,23 @@ function eeglab_benchmark(data_dir, n_files_to_process, run_ica_flag)
         EEG_valid = pop_selectevent(EEG, 'type', 'valid_target');
         EEG_invalid = pop_selectevent(EEG, 'type', 'invalid_target');
 
-        % Averaging into ERPs is usually handled by ERPLAB plugin or custom
-        % code. We compute simple average matrices for benchmarking.
-        all_erps_valid(:, :, i) = mean(EEG_valid.data, 3);
-        all_erps_invalid(:, :, i) = mean(EEG_invalid.data, 3);
+        % Average trials into subject ERPs and apply 30Hz low-pass filter (matches Julia & MNE pipeline order)
+        EEG_erp_valid = EEG_valid;
+        EEG_erp_valid.data = mean(EEG_valid.data, 3);
+        EEG_erp_valid.trials = 1;
+        EEG_erp_valid.epoch = [];
+        EEG_erp_valid.event = [];
+        EEG_erp_valid = pop_eegfiltnew(EEG_erp_valid, 'hicutoff', 30.0);
+
+        EEG_erp_invalid = EEG_invalid;
+        EEG_erp_invalid.data = mean(EEG_invalid.data, 3);
+        EEG_erp_invalid.trials = 1;
+        EEG_erp_invalid.epoch = [];
+        EEG_erp_invalid.event = [];
+        EEG_erp_invalid = pop_eegfiltnew(EEG_erp_invalid, 'hicutoff', 30.0);
+
+        all_erps_valid(:, :, i) = EEG_erp_valid.data;
+        all_erps_invalid(:, :, i) = EEG_erp_invalid.data;
         
         t_file_elapsed = toc(t_file_start);
         individual_times(i) = t_file_elapsed;

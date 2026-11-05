@@ -148,12 +148,28 @@ end
 function _estimate_ica_rank(dat_ica::Matrix{Float64})
     n_channels, n_samples = size(dat_ica)
     (n_channels == 0 || n_samples <= 1) && return 0
-    dat = copy(dat_ica)
-    dat .-= mean(dat, dims = 2)
+    dat = dat_ica .- mean(dat_ica, dims = 2)
     cov_mat = Matrix{Float64}(undef, n_channels, n_channels)
     mul!(cov_mat, dat, transpose(dat), 1.0 / n_samples, 0.0)
     scale = sqrt(norm(cov_mat))
     scale <= 0 && return 0
+
+    if n_samples > 2 * n_channels
+        cov_mat .*= (n_samples / (scale * scale))
+        evals = eigvals!(Symmetric(cov_mat))
+        isempty(evals) && return 0
+        l_max = evals[end]
+        l_max <= 0 && return 0
+        # Use fast covariance eigenvalues unless an eigenvalue sits in the near-singular roundoff band
+        ambiguous_lo = 1e-16 * l_max
+        ambiguous_hi = 1e-10 * l_max
+        if !any(ev -> ambiguous_lo < ev < ambiguous_hi, evals)
+            s_max = sqrt(l_max)
+            tol = max(1e-7 * s_max, max(n_channels, n_samples) * eps(Float64) * s_max, 1e-10)
+            return count(ev -> ev > 0.0 && sqrt(ev) >= tol, evals)
+        end
+    end
+
     dat ./= scale
     S = svdvals!(dat)
     isempty(S) && return 0

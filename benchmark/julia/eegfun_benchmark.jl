@@ -29,13 +29,13 @@ function process_eeg_to_grandaverage(raw_files::Vector{String}, data_dir::String
 
             # 2. Initial preprocessing options: rereference, high-pass filter, and mark bad data sections
             EegFun.rereference!(dat, :avg)
-            EegFun.highpass_filter!(dat, 0.1)
+            EegFun.highpass_filter!(dat, 0.1; order = 2)
             EegFun.is_extreme_value!(dat, 250.0, channel_out = :bad_segments)
 
             if run_ica
                 # 3. Apply Infomax Extended ICA (additional high-pass filter at 1 Hz)
                 dat_ica = deepcopy(dat)
-                EegFun.highpass_filter!(dat_ica, 1.0)
+                EegFun.highpass_filter!(dat_ica, 1.0; order = 2)
                 ica_result = EegFun.run_ica(
                     dat_ica;
                     algorithm = :infomax_extended,
