@@ -79,6 +79,11 @@ using Logging
         mkpath(empty_dir)
         files_empty = EegFun._find_batch_files("pattern", empty_dir)
         @test isempty(files_empty)
+
+        # BIDS / multi-run filenames extract subject ID rather than trailing run number
+        @test EegFun._extract_participant_id("sub-07_task-oddball_run-01_erps.jld2") == 7
+        @test EegFun._extract_participant_id("/tmp/run2/participant_12_cond1.jld2") == 12
+        @test EegFun._extract_participant_id("3_erps_unrejected.jld2") == 3
     end
 
     @testset "_condition_select" begin

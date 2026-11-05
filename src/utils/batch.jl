@@ -10,7 +10,9 @@ struct BatchResult
 end
 
 function _extract_participant_id(filename::String)
-    name_without_ext, _ = splitext(filename)
+    name_without_ext, _ = splitext(basename(filename))
+    m = match(r"(?:^|[^a-zA-Z])(?:sub|subj|subject|participant|part)[_-]?(\d+)"i, name_without_ext)
+    !isnothing(m) && return parse(Int, m.captures[1])
     cu = codeunits(name_without_ext)
     i = length(cu)
     while i >= 1 && !(0x30 <= cu[i] <= 0x39)
