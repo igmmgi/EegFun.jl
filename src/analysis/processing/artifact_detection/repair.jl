@@ -46,6 +46,7 @@ Determine which rejected channels per epoch can be repaired from `layout` neighb
 populating `artifacts.repaired` and `artifacts.skipped` in-place.
 """
 function channel_repairable!(artifacts::EpochRejectionInfo, layout::Layout)
+    isnothing(layout.neighbors) && get_neighbors_xyz!(layout, 0.5)
     artifacts.repaired = OrderedDict{Int,Vector{Symbol}}()
     artifacts.skipped = OrderedDict{Int,Vector{Symbol}}()
 

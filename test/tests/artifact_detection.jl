@@ -620,6 +620,25 @@ using EegFun
         EegFun.repair_artifacts!(epochs4, rejection_info4, method = :neighbor_interpolation)
         @test !isnothing(rejection_info4.repaired)  # Should be populated now
 
+        # Fresh layout with neighbors === nothing lazily computes neighbors and repairs bad channel
+        fresh_lay = EegFun.Layout(
+            DataFrame(
+                label = [:Ch1, :Ch2, :Ch3, :Ch4, :Ch5],
+                inc = [0.0, 15.0, 15.0, 90.0, 90.0],
+                azi = [0.0, 0.0, 90.0, 0.0, 180.0],
+            ),
+            nothing,
+            nothing,
+            nothing,
+        )
+        ep_fresh = EegFun.create_test_epoch_data(n_epochs = 2, n_channels = 5)
+        ep_fresh.layout = fresh_lay
+        ep_fresh.data[1][!, :Ch1] .= 200.0
+        rej_fresh = EegFun.detect_bad_epochs_automatic(ep_fresh, abs_criterion = 150.0, z_criterion = 0)
+        EegFun.repair_artifacts!(ep_fresh, rej_fresh; method = :neighbor_interpolation)
+        @test haskey(rej_fresh.repaired, 1) && :Ch1 in rej_fresh.repaired[1]
+        @test maximum(abs.(ep_fresh.data[1][!, :Ch1])) < 50.0
+
         # Test error handling - unknown method
         epochs5 = EegFun.create_test_epoch_data(n_epochs = 3, n_channels = 3)
         epochs5.layout = layout
