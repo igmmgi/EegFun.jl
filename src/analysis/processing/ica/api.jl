@@ -117,13 +117,13 @@ end
 run_ica(epoched_data::EpochData; kwargs...) = run_ica([epoched_data]; kwargs...)
 
 function _check_epoched_data_uniqueness!(concatenated_df::DataFrame; remove_duplicates::Bool = false)
-    if !hasproperty(concatenated_df, :samples)
-        @debug "No samples column found - cannot check for duplicate samples"
+    if !hasproperty(concatenated_df, :sample)
+        @debug "No sample column found - cannot check for duplicate samples"
         return nothing
     end
 
     n_original = nrow(concatenated_df)
-    unique_samples = length(unique(concatenated_df.samples))
+    unique_samples = length(unique(concatenated_df.sample))
     n_duplicates = n_original - unique_samples
 
     if n_duplicates > 0
@@ -138,7 +138,7 @@ function _check_epoched_data_uniqueness!(concatenated_df::DataFrame; remove_dupl
         Duplicates: $n_duplicates ($duplicate_percentage%)
         """
         if remove_duplicates
-            unique!(concatenated_df, :samples)
+            unique!(concatenated_df, :sample)
             @info "Automatically removed $n_duplicates duplicate samples (using $unique_samples unique samples)."
         end
     end

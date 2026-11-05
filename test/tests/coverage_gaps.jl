@@ -287,9 +287,6 @@ using Random
         @test size(ica_ep.unmixing, 1) == 3
         @test nrow(EegFun.all_data(ica_ep)) == 3
 
-        for ed in ep_vec, df in ed.data
-            df[!, :samples] = collect(1:nrow(df))
-        end
         ica_vec = EegFun.run_ica(ep_vec; remove_duplicates = true, percentage_of_data = 80.0, params = prms, rng = MersenneTwister(4))
         @test ica_vec isa EegFun.InfoIca
 

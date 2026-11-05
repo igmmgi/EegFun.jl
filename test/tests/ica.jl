@@ -659,6 +659,11 @@ using LinearAlgebra
         # ArtifactComponents manual field included in get_all_ica_components
         art_with_manual = EegFun.ArtifactComponents(Dict(:vEOG => [1], :hEOG => Int[]), Int[], [2], Int[], [5])
         @test sort(EegFun.get_all_ica_components(art_with_manual)) == [1, 2, 5]
+
+        # Overlapping epoch :sample duplicate detection and removal
+        df_ov = DataFrame(sample = [1, 2, 3, 2, 3, 4], Ch1 = randn(MersenneTwister(1), 6))
+        @test_logs (:warn, r"duplicate samples") match_mode = :any EegFun._check_epoched_data_uniqueness!(df_ov; remove_duplicates = true)
+        @test df_ov.sample == [1, 2, 3, 4]
     end
 
 end
