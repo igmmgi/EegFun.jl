@@ -95,13 +95,19 @@ using LinearAlgebra
     @test erp_mut.analysis_info.reference == :csd
 
     # 5. Zero-norm coordinate guard in _spherical_coords (warns and defaults to (0, 0, 1) without NaN)
-    zero_layout_df = copy(peak_layout_df)
+    zero_layout_df = select(peak_layout_df, Not([:inc, :azi]))
     zero_layout_df.x3[1] = 0.0
     zero_layout_df.y3[1] = 0.0
     zero_layout_df.z3[1] = 0.0
     zero_layout = EegFun.Layout(zero_layout_df, nothing, nothing, nothing)
     coords_zero = @test_logs (:warn, r"zero-norm") match_mode = :any EegFun._spherical_coords(zero_layout)
     @test all(isfinite, coords_zero[1]) && all(isfinite, coords_zero[2])
+
+    # Polar layout preserves true unit-sphere angles even after bounding-box-centered polar_to_cartesian_xyz!
+    cap_layout = EegFun.Layout(DataFrame(label = [:Cz, :T7], inc = [0.0, 90.0], azi = [0.0, 180.0]), nothing, nothing, nothing)
+    EegFun.polar_to_cartesian_xyz!(cap_layout)
+    cap_coords = EegFun._spherical_coords(cap_layout)
+    @test dot(cap_coords[1, :], cap_coords[2, :]) ≈ 0.0 atol = 1e-12
 
     # 6. Restrict compute_csd! to Union{ContinuousData,ErpData,EpochData}
     tf_dat = EegFun.create_test_tf_data()

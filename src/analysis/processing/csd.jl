@@ -44,7 +44,8 @@ function compute_csd!(dat::AbstractVector{<:_CsdData}, args...; kwargs...)
 end
 
 function _spherical_coords(layout::Layout, channels::AbstractVector{Symbol} = Symbol.(layout.data.label); warn_zero::Bool = true)
-    _ensure_coordinates_3d!(layout)
+    use_polar = hasproperty(layout.data, :inc) && hasproperty(layout.data, :azi)
+    !use_polar && _ensure_coordinates_3d!(layout)
     df = layout.data
     label_to_idx = Dict{Symbol,Int}(Symbol(df.label[i]) => i for i = 1:nrow(df))
     coords = zeros(Float64, length(channels), 3)
@@ -56,16 +57,24 @@ function _spherical_coords(layout::Layout, channels::AbstractVector{Symbol} = Sy
             coords[i, 3] = 1.0
             continue
         end
-        x, y, z = Float64(df.x3[row_idx]), Float64(df.y3[row_idx]), Float64(df.z3[row_idx])
-        norm_v = hypot(x, y, z)
-        if norm_v > 1e-12
-            inv_norm = 1.0 / norm_v
-            coords[i, 1] = x * inv_norm
-            coords[i, 2] = y * inv_norm
-            coords[i, 3] = z * inv_norm
+        if use_polar
+            si, ci = sincos(deg2rad(Float64(df.inc[row_idx])))
+            sa, ca = sincos(deg2rad(Float64(df.azi[row_idx])))
+            coords[i, 1] = si * ca
+            coords[i, 2] = si * sa
+            coords[i, 3] = ci
         else
-            warn_zero && @minimal_warning "Channel $ch has zero-norm 3D coordinates (0, 0, 0); defaulting to (0, 0, 1)"
-            coords[i, 3] = 1.0
+            x, y, z = Float64(df.x3[row_idx]), Float64(df.y3[row_idx]), Float64(df.z3[row_idx])
+            norm_v = hypot(x, y, z)
+            if norm_v > 1e-12
+                inv_norm = 1.0 / norm_v
+                coords[i, 1] = x * inv_norm
+                coords[i, 2] = y * inv_norm
+                coords[i, 3] = z * inv_norm
+            else
+                warn_zero && @minimal_warning "Channel $ch has zero-norm 3D coordinates (0, 0, 0); defaulting to (0, 0, 1)"
+                coords[i, 3] = 1.0
+            end
         end
     end
     return coords
