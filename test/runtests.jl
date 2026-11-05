@@ -1,5 +1,6 @@
 using Test
 using CairoMakie
+using DimensionalData
 using EegFun
 
 println("Running EegFun.jl Test Suite")
@@ -7,8 +8,12 @@ println("="^40)
 
 @testset "Code quality (Aqua.jl)" begin
     using Aqua
+    @testset "Method ambiguity" begin
+        @test isempty(Test.detect_ambiguities(EegFun; recursive = true))
+    end
     Aqua.test_all(
         EegFun;
+        ambiguities = false,
         deps_compat = (check_extras = false, ignore = [:Dates, :LinearAlgebra, :Logging, :Printf, :Random, :SparseArrays, :TOML, :Test]),
     )
 end

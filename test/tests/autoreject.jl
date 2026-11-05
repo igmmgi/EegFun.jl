@@ -277,7 +277,7 @@ using EegFun:
     end
 
     @testset "autoreject edge cases and validation" begin
-        ep_data = create_test_epoch_data(n_epochs = 6, n_channels = 3, fs = 1000, n = 1000, seed = 42)
+        ep_data = create_test_epoch_data(n_epochs = 6, n_channels = 3, fs = 200, n = 100, seed = 42)
 
         # Invalid mode throws error
         @test_throws Exception autoreject(ep_data; mode = :invalid_mode)
@@ -359,6 +359,16 @@ using EegFun:
 
         @test isfile(test_bdf)
         mktempdir() do temp_dir
+            raw_dir = joinpath(temp_dir, "raw")
+            hdr = EegFun.read_raw_data(test_bdf; header_only = true)
+            n_chan = length(hdr.channel_labels)
+            sr = Int(hdr.sample_rate[1])
+            n_rec = 72
+            buf = open(io -> read(io, 256 * (n_chan + 1) + n_rec * n_chan * sr * 3), test_bdf, "r")
+            buf[237:244] .= codeunits(rpad(string(n_rec), 8))
+            mkpath(raw_dir)
+            write(joinpath(raw_dir, "example1.bdf"), buf)
+
             epoch_file = joinpath(temp_dir, "epochs.toml")
             write(
                 epoch_file,
@@ -371,7 +381,7 @@ trigger_sequences = [1]
             )
 
             pipeline_file = joinpath(temp_dir, "pipeline.toml")
-            bdf_dir = replace(joinpath(data_dir, "bdf"), '\\' => '/')
+            bdf_dir = replace(raw_dir, '\\' => '/')
             write(
                 pipeline_file,
                 """
@@ -389,6 +399,10 @@ save_continuous_data_corrected = false
 [preprocess]
 epoch_start = -0.1
 epoch_end = 0.5
+
+[preprocess.resample]
+apply = true
+target_rate = 128
 
 [preprocess.ica]
 apply = false

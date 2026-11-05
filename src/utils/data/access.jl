@@ -42,7 +42,7 @@ function all_data(ica::InfoIca)::DataFrame
 end
 
 all_data(dat::Union{MultiDataFrameEeg,Vector{<:MultiDataFrameEeg}}; epoch_selection::Function = epochs()) =
-    to_data_frame(subset(dat; epoch_selection = epoch_selection))
+    to_data_frame(subset(dat; epoch_selection = epoch_selection, include_extra = true))
 
 function meta_data(dat::Union{MultiDataFrameEeg,Vector{<:MultiDataFrameEeg}}; epoch_selection::Function = epochs())
     cols = _get_cols_by_group(dat, :metadata)

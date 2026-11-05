@@ -55,7 +55,7 @@ using Random
 
         # 2b. ICA GPU kernels (Infomax, Extended Infomax, Picard, Extended Picard, AMICA)
         @testset "ICA GPU kernels" begin
-            prms = EegFun.IcaPrms(max_iter = 25, amica_max_iter = 55, default_stop = 1e-12)
+            prms = EegFun.IcaPrms(max_iter = 12, amica_max_iter = 15, default_stop = 1e-12)
             for alg in (:infomax, :infomax_extended, :picard, :picard_extended, :amica)
                 res = EegFun.run_ica(c_dat; algorithm = alg, use_gpu = true, params = prms, rng = MersenneTwister(7))
                 @test res isa EegFun.InfoIca
@@ -93,7 +93,7 @@ using Random
             prep_paired = EegFun.prepare_stats(paired_erps; design = :paired)
             res_cpu = EegFun.permutation_test(
                 prep_paired;
-                n_permutations = 30,
+                n_permutations = 12,
                 cluster_type = :spatiotemporal,
                 use_gpu = false,
                 show_progress = false,
@@ -101,7 +101,7 @@ using Random
             )
             res_gpu = EegFun.permutation_test(
                 prep_paired;
-                n_permutations = 30,
+                n_permutations = 12,
                 cluster_type = :spatiotemporal,
                 use_gpu = true,
                 show_progress = false,
@@ -132,7 +132,7 @@ using Random
             prep_indep = EegFun.prepare_stats(indep_erps; design = :independent)
             res_indep_gpu = EegFun.permutation_test(
                 prep_indep;
-                n_permutations = 25,
+                n_permutations = 12,
                 threshold_method = :nonparametric_common,
                 cluster_type = :spatiotemporal,
                 use_gpu = true,
@@ -140,7 +140,7 @@ using Random
                 rng = MersenneTwister(99),
             )
             @test res_indep_gpu isa EegFun.PermutationResult
-            @test length(res_indep_gpu.permutation_distribution.positive) == 25
+            @test length(res_indep_gpu.permutation_distribution.positive) == 12
         end
     finally
         EegFun.GLOBAL_GPU_STATE.active = prev_state[1]

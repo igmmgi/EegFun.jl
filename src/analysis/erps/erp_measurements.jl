@@ -626,18 +626,33 @@ end
 function erp_measurements!(
     data::AbstractVector{<:Union{ErpData,EpochData}},
     analysis_type::Union{AbstractString,Symbol};
+    analysis_interval::Interval = times(),
+    baseline_interval::Interval = nothing,
+    channel_selection = channels(),
+    participant::Int = 0,
     average_channels::Bool = false,
+    include_extra::Bool = false,
     kwargs...,
 )
     if isempty(data)
         measurement_kwargs = _merge_plot_kwargs(ERP_MEASUREMENTS_KWARGS, kwargs)
-        _validate_measurement_params(analysis_type, get(kwargs, :analysis_interval, times()), measurement_kwargs)
+        _validate_measurement_params(string(analysis_type), analysis_interval, measurement_kwargs)
         return nothing
     end
 
     all_results = NamedTuple[]
     for dat in data
-        result = erp_measurements!(dat, analysis_type; average_channels = average_channels, kwargs...)
+        result = erp_measurements!(
+            dat,
+            analysis_type;
+            analysis_interval = analysis_interval,
+            baseline_interval = baseline_interval,
+            channel_selection = channel_selection,
+            participant = participant,
+            average_channels = average_channels,
+            include_extra = include_extra,
+            kwargs...,
+        )
         isnothing(result) && continue
         if result isa AbstractVector
             append!(all_results, result)

@@ -163,10 +163,10 @@ function create_epoch_repair_info(
     repaired::Union{OrderedDict{Int,Vector{Symbol}},Dict{Int,Vector{Symbol}}},
     skipped::Union{OrderedDict{Int,Vector{Symbol}},Dict{Int,Vector{Symbol}}},
     method::Symbol,
-    neighbors_dict::Union{OrderedDict,Nothing} = nothing,
+    neighbors_dict::Union{AbstractDict,Nothing} = nothing,
 )
-    repairs_ordered = repaired isa OrderedDict ? repaired : OrderedDict(sort(pairs(repaired)))
-    skipped_ordered = skipped isa OrderedDict ? skipped : OrderedDict(sort(pairs(skipped)))
+    repairs_ordered = repaired isa OrderedDict ? repaired : OrderedDict(sort!(collect(repaired); by = first))
+    skipped_ordered = skipped isa OrderedDict ? skipped : OrderedDict(sort!(collect(skipped); by = first))
 
     neighbors_info = nothing
     if method == :neighbor_interpolation && !isnothing(neighbors_dict)

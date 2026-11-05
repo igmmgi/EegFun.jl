@@ -91,4 +91,19 @@ using DataFrames
     )
     da_empty_tf_ep = dim_array(empty_tf_ep)
     @test size(da_empty_tf_ep.data) == (0, 0, 0, 2)
+
+    # 6. Non-standard / shuffled TF row order & incomplete grid fallback (_map_tf_rows / mapped fill)
+    tf_shuf = copy(tf)
+    tf_shuf.data_power = tf_shuf.data_power[reverse(1:nrow(tf_shuf.data_power))[1:(end-1)], :]
+    da_tf_shuf = dim_array(tf_shuf)
+    @test size(da_tf_shuf.data) == (3, 4, 2)
+    @test any(isnan, da_tf_shuf.data)
+    @test isapprox(da_tf_shuf.data[2:3, 1, 1], tf.data_power.Ch1[2:3])
+
+    tf_ep_shuf = copy(tf_ep)
+    tf_ep_shuf.data_power[2] = tf_ep_shuf.data_power[2][reverse(1:nrow(tf_ep_shuf.data_power[2]))[1:(end-1)], :]
+    da_tf_ep_shuf = dim_array(tf_ep_shuf)
+    @test size(da_tf_ep_shuf.data) == (3, 3, 4, 2)
+    @test any(isnan, da_tf_ep_shuf.data[2, :, :, :])
+    @test da_tf_ep_shuf.data[1, :, :, :] == da_tf_ep.data[1, :, :, :]
 end

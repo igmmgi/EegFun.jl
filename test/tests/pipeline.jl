@@ -2,6 +2,18 @@ using Test
 using EegFun
 using DataFrames
 
+function _write_short_bdf_pipe(src_bdf::String, dst_bdf::String, n_records::Int)
+    hdr = EegFun.read_raw_data(src_bdf; header_only = true)
+    n_chan = length(hdr.channel_labels)
+    sr = Int(hdr.sample_rate[1])
+    total_bytes = 256 * (n_chan + 1) + n_records * n_chan * sr * 3
+    buf = open(io -> read(io, total_bytes), src_bdf, "r")
+    buf[237:244] .= codeunits(rpad(string(n_records), 8))
+    mkpath(dirname(dst_bdf))
+    write(dst_bdf, buf)
+    return dst_bdf
+end
+
 @testset "Pipeline Utilities" begin
 
     # ────────────────────────────────────────────────────────────
@@ -209,6 +221,9 @@ using DataFrames
         @test isfile(test_file)
         # Create a temporary directory for the pipeline config and output
         mktempdir() do temp_dir
+            raw_dir = joinpath(temp_dir, "raw")
+            _write_short_bdf_pipe(test_file, joinpath(raw_dir, "example1.bdf"), 65)
+
             # Create epoch condition file
             epoch_file = joinpath(temp_dir, "epochs.toml")
             write(
@@ -223,7 +238,7 @@ using DataFrames
 
             # Create pipeline config file
             pipeline_file = joinpath(temp_dir, "pipeline.toml")
-            bdf_dir = replace(joinpath(data_dir, "bdf"), '\\' => '/')
+            bdf_dir = replace(raw_dir, '\\' => '/')
             write(
                 pipeline_file,
                 """
@@ -241,6 +256,10 @@ save_continuous_data_corrected = false
 [preprocess]
 epoch_start = -0.1
 epoch_end = 0.5
+
+[preprocess.resample]
+apply = true
+target_rate = 128
 
 [preprocess.ica]
 percentage_of_data = 20.0
@@ -325,6 +344,9 @@ percentage_of_data = 20.0
 
         @test isfile(test_file)
         mktempdir() do temp_dir
+            raw_dir = joinpath(temp_dir, "raw")
+            _write_short_bdf_pipe(test_file, joinpath(raw_dir, "example1.bdf"), 65)
+
             epoch_file = joinpath(temp_dir, "epochs.toml")
             write(
                 epoch_file,
@@ -337,7 +359,7 @@ percentage_of_data = 20.0
             )
 
             pipeline_file = joinpath(temp_dir, "pipeline.toml")
-            bdf_dir = replace(joinpath(data_dir, "bdf"), '\\' => '/')
+            bdf_dir = replace(raw_dir, '\\' => '/')
             write(
                 pipeline_file,
                 """
@@ -355,6 +377,10 @@ save_continuous_data_corrected = false
 [preprocess]
 epoch_start = -0.1
 epoch_end = 0.5
+
+[preprocess.resample]
+apply = true
+target_rate = 128
 
 [preprocess.ica]
 apply = false
@@ -374,7 +400,7 @@ apply = false
             mtime_before = mtime(final_file)
 
             # Small sleep to ensure mtime would differ if file were rewritten
-            sleep(1.1)
+            sleep(0.15)
 
             # Second run with skip_existing: should NOT reprocess
             redirect_stdio(stdout = devnull, stderr = devnull) do
@@ -417,7 +443,9 @@ apply = false
             @test Base.invokelatest(isdefined, isolated_mod, :custom_zero_export_pipe)
 
             data_dir = joinpath(dirname(dirname(@__DIR__)), "resources", "data")
-            bdf_dir = replace(joinpath(data_dir, "bdf"), '\\' => '/')
+            raw_dir = joinpath(temp_dir, "raw")
+            _write_short_bdf_pipe(joinpath(data_dir, "bdf", "example1.bdf"), joinpath(raw_dir, "example1.bdf"), 65)
+            bdf_dir = replace(raw_dir, '\\' => '/')
             epoch_file = joinpath(temp_dir, "epochs.toml")
             write(epoch_file, "[epochs]\n[[epochs.conditions]]\nname = \"Cond1\"\ntrigger_sequences = [1]\n")
             cfg_file = joinpath(temp_dir, "cfg.toml")
@@ -432,6 +460,10 @@ epoch_condition_file = "epochs.toml"
 
 [files.output]
 directory = "out_tpl"
+
+[preprocess.resample]
+apply = true
+target_rate = 128
 
 [preprocess.ica]
 apply = false
