@@ -149,8 +149,8 @@ function plot_erp_filter_gui(
                 filtered_erp = copy(erp_vec[idx])
                 mirror_enabled[] && mirror!(filtered_erp, :both)
 
-                filt_method = filter_method_obs[] == "butterworth" ? "iir" : "fir"
-                filt_func = filter_func_obs[]
+                filt_method = filter_method_obs[] == "butterworth" ? :iir : :fir
+                filt_func = Symbol(filter_func_obs[])
 
                 try
                     if lowpass_enabled[]

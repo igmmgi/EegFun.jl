@@ -19,10 +19,15 @@ using EegFun
         @test res0.fig isa Figure
         @test haskey(res0, :screen)
 
-        # Single ErpData
+        # Single ErpData (including toggling LP and HP filters on)
         erp_data = EegFun.read_data(EegFun.example_path("data/julia/erps/example1_erps.jld2"))
         res1 = EegFun.plot_erp_filter_gui(erp_data[1]; channel = :Cz, display_plot = false)
         @test res1.fig isa Figure
+        toggles = filter(x -> x isa Makie.Toggle, res1.fig.content)
+        @test length(toggles) >= 3
+        toggles[2].active[] = true
+        toggles[3].active[] = true
+        @test length(filter(p -> p isa Makie.Lines, res1.axes[1].scene.plots)) == 2
 
         # Vector of ErpData
         res2 = EegFun.plot_erp_filter_gui(erp_data; channel = :Cz, display_plot = false)
