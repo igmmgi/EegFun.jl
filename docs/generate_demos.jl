@@ -78,14 +78,15 @@ demos = [
     ("plotting", "plot_layout", "Plot Layout"),
     ("plotting", "plot_rsa", "Plot RSA"),
     ("plotting", "plot_statistics", "Plot Statistics"),
+    ("plotting", "plot_styling", "Plot Styling"),
     ("plotting", "plot_tf", "Plot Time-Frequency"),
     ("plotting", "plot_topography", "Plot Topography"),
+    ("plotting", "plot_topography_3d", "Plot Topography 3D"),
     ("plotting", "plot_triggers", "Plot Triggers"),
     ("plotting", "save_figures", "Saving Figures"),
 
     # Workflows
     ("workflows", "preprocessing_workflow", "Preprocessing Workflow"),
-    ("workflows", "batch_processing", "Batch Processing"),
     ("workflows", "pipeline_templates", "Pipeline Templates"),
 ]
 

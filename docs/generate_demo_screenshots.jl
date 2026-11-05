@@ -14,7 +14,7 @@ using CairoMakie
 CairoMakie.activate!()
 
 # Output directory for demo screenshots
-const IMAGES_DIR = joinpath(@__DIR__, "..", "images", "demos")
+const IMAGES_DIR = joinpath(@__DIR__, "..", "images", "readme")
 mkpath(IMAGES_DIR)
 
 """
