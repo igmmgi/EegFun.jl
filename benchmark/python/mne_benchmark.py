@@ -36,9 +36,8 @@ def python_mne_benchmark(raw_files, data_dir, run_ica):
         ch_types = {ch: 'eeg' for ch in raw.ch_names if ch != 'Status'}
         raw.set_channel_types(ch_types)
         
-        # 2. Initial preprocessing options: rereference, high-pass filter, and mark bad data sections
+        # 2. Rereference, high-pass filter, and mark bad data sections
         raw.set_eeg_reference('average')
-        # 2. High-pass filter
         raw.filter(l_freq=0.1, h_freq=None, phase='zero')
 
         data_raw = raw.get_data(picks='eeg')
@@ -86,10 +85,9 @@ def python_mne_benchmark(raw_files, data_dir, run_ica):
             preload=True
         )
         
-        # Average trials and apply 30Hz lowpass filter (matches EegFun.jl)
+        # Average trials and apply 30 Hz low-pass filter
         for cond in event_dict.keys():
             evoked = epochs[cond].average()
-            # 7. Low-pass filter on the ERP (Moved to Evoked level to match Julia pipeline order)
             evoked.filter(l_freq=None, h_freq=30.0, phase='zero')
             all_subject_evokeds[cond].append(evoked)
         

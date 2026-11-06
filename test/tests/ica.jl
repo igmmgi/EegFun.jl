@@ -542,7 +542,7 @@ using LinearAlgebra
         ln_comps, ln_df = EegFun.identify_line_noise_components(cont_128, ica_128; line_freq = 50.0, z_threshold = 0.5)
         @test 1 in ln_comps # Found even though 2nd harmonic (100 Hz) is above Nyquist (64 Hz)
 
-        # 6. Phase 2 regressions: Vector{EpochData} ICA subtract/add, AMICA step-halving & warning, ECG refractory distance, 0-comp guard
+        # 6. Vector{EpochData} ICA subtract/add, AMICA step-halving, ECG refractory distance, and 0-component guard
         ep1 = EegFun.EpochData(
             "ep_c1",
             1,
@@ -596,7 +596,7 @@ using LinearAlgebra
         A_dummy = Matrix{Float64}(I, 2, 2)
         dA_dummy = zeros(2, 2)
         EegFun.update_amica_mixing!(A_dummy, dA_dummy, zeros(2), ones(2), ones(2), 2, false, false, 10, lrate_halved)
-        # Because step_halved was true, lrate must NOT be immediately ramped back up toward lrate0 = 0.1!
+        # When step_halved is true, lrate stays at 0.05 on that step
         @test lrate_halved.lrate ≈ 0.05
         @test lrate_halved.step_halved == false
 

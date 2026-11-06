@@ -407,7 +407,7 @@ end
         end
     end
 
-    @testset "Phase 2 regressions: 1-based trigger mapping, pad alignment, extra/Bool cols, Vector batch" begin
+    @testset "1-based trigger mapping, pad alignment, extra/Bool columns, and Vector batch" begin
         # 1. Exact 1-based trigger & metadata index mapping + non-integer ratio (500 -> 200 Hz, rate = 2//5)
         fs_orig = 500
         n_orig = 1000

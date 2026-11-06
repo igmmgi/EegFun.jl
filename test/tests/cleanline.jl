@@ -100,7 +100,7 @@ using Statistics
     @test isapprox(vec_mut[1].data[!, ch1], cl_dat.data[!, ch1], atol = 1e-10)
     @test isapprox(vec_mut[2].data[!, ch1], cl_dat.data[!, ch1], atol = 1e-10)
 
-    # 7. Phase 2 regressions: tail samples cleaned, Nyquist harmonics skipped, k_tapers <= 1 guard, Float32/view inputs
+    # 7. Tail samples, Nyquist harmonics, k_tapers guard, and Float32/view inputs
     @testset "Tail window cleaning, Nyquist skip, k_tapers guard, and Real views" begin
         # Non-multiple length: 5.5s with win_length=2.0, win_step=1.0 leaves 0.5s tail after last regular step
         n_tail = Int(round(5.5 * fs))

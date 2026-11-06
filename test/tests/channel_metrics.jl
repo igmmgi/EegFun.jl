@@ -537,7 +537,7 @@ using OrderedCollections
         @test isempty(repairable)  # Ch3 not in neighbors dict
     end
 
-    @testset "Phase 2 regressions: discret forwarding, Real threshold, and std == 0 guard" begin
+    @testset "discret forwarding, Real threshold, and zero-std guard" begin
         dat = EegFun.create_test_continuous_data(n = 500, n_channels = 4, seed = 123)
         # 1. discret forwarding in channel_joint_probability: histogram (discret = 20) vs Gaussian (discret = 0)
         jp_hist = EegFun.channel_joint_probability(dat; discret = 20, normalize = 0)

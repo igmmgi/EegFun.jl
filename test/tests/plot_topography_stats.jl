@@ -71,7 +71,7 @@ using EegFun
         out_sub = EegFun.plot_topography_stats(res_subset; n_topos = 2, point_plot = true, display_plot = false)
         @test out_sub.fig isa Figure
         scatters = filter(p -> p isa Makie.Scatter, out_sub.axes[1].scene.plots)
-        # Only the 6 analyzed electrodes are plotted, NOT 7!
+        # Only the 6 analyzed electrodes are plotted
         @test any(sc -> length(sc[1][]) == 6, scatters)
         @test !any(sc -> length(sc[1][]) == 7, scatters)
     end

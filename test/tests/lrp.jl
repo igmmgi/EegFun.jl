@@ -379,7 +379,7 @@ using DataFrames
         end
     end
 
-    @testset "Phase 2 regressions: _create_lrp_layout cleans deleted midline channels from neighbors & matches .condition" begin
+    @testset "LRP layout midline neighbor cleanup and condition matching" begin
         # 1. Midline channel Cz removed from layout.neighbors (and weights re-normalized)
         df_lr = DataFrame(
             time = [0.0, 0.01],

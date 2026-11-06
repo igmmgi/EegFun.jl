@@ -458,7 +458,7 @@ end
     end
 end
 
-# Returns (n_samples × n_epochs) directly for contiguous column-major extraction and zero-transpose heatmap!
+# Returns (n_samples × n_epochs) matrix for heatmap!
 function _extract_erp_image_single(epochs_data::Vector{DataFrame}, col_indices::Vector{Int})
     n_eps = length(epochs_data)
     n_samples = nrow(first(epochs_data))

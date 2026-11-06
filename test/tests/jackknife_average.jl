@@ -405,7 +405,7 @@ using DataFrames
             @test isdir(expected_dir)
         end
 
-        @testset "Phase 2 regressions: excluded_erp.file stamp, missing-condition participant alignment, Smulders (2010) pseudovalues" begin
+        @testset "Excluded file metadata, missing-condition participant alignment, and pseudovalues" begin
             # 1. excluded_erp.file stamped onto each leave-one-out ErpData & pseudovalues = true in-memory
             e1 = EegFun.create_test_erp_data(participant = 1, condition = 1, n_channels = 2)
             e2 = EegFun.create_test_erp_data(participant = 2, condition = 1, n_channels = 2)
@@ -435,7 +435,7 @@ using DataFrames
             out_align_pv = joinpath(align_dir, "out_pv")
             p1_c1 = EegFun.create_test_erp_data(participant = 1, condition = 1, n_channels = 2)
             p1_c2 = EegFun.create_test_erp_data(participant = 1, condition = 2, n_channels = 2)
-            p2_c2 = EegFun.create_test_erp_data(participant = 2, condition = 2, n_channels = 2) # missing cond 1!
+            p2_c2 = EegFun.create_test_erp_data(participant = 2, condition = 2, n_channels = 2) # missing condition 1
             p3_c1 = EegFun.create_test_erp_data(participant = 3, condition = 1, n_channels = 2)
             p3_c2 = EegFun.create_test_erp_data(participant = 3, condition = 2, n_channels = 2)
             p1_c1.data.Ch1 .= 100.0
@@ -453,7 +453,7 @@ using DataFrames
             out2 = load(joinpath(out_align, "2_align.jld2"), "data")
             out3 = load(joinpath(out_align, "3_align.jld2"), "data")
 
-            # Participant 2 only had condition 2 -> must NOT receive a mis-indexed condition 1 leave-one-out!
+            # Participant 2 only has condition 2
             @test out2 isa EegFun.ErpData && out2.condition == 2
             # Participant 3's condition 1 leave-one-out must exclude p3 (leaving p1 = 100.0)
             @test out1 isa Vector{EegFun.ErpData} && length(out1) == 2

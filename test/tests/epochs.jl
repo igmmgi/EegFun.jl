@@ -1420,7 +1420,7 @@ using Random
         @test res4[1] == [[101, 103], 200]
     end
 
-    @testset "Phase 2 regressions: signed offsets, non-zero start time, meta col order, reject_epochs!" begin
+    @testset "Signed offsets, non-zero start time, metadata column order, and reject_epochs!" begin
         # 1. Windows not crossing 0.0: post-only (0.2, 0.8) and pre-only (-0.8, -0.2), plus time[1] != 0.0
         fs = 100
         n_samp = 500

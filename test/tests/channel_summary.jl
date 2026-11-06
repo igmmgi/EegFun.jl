@@ -215,7 +215,7 @@ using CSV
             @test result_half isa DataFrame
             @test nrow(result_half) == 4  # Same number of channels
 
-            # Phase 2 regression: MultiDataFrameEeg preserves actual :epoch column IDs (e.g. after rejection: [2, 5])
+            # MultiDataFrameEeg preserves :epoch column IDs (e.g. [2, 5] after rejection)
             ep_nonseq = EegFun.create_test_epoch_data(n = 30, n_epochs = 2, n_channels = 2)
             ep_nonseq.data[1].epoch .= 2
             ep_nonseq.data[2].epoch .= 5
@@ -705,7 +705,7 @@ end # EegFun testset
                 end
             end
 
-            # Phase 2 regression: batch channel_summary preserves actual data.condition IDs (e.g. [2, 5] instead of 1:2)
+            # Batch channel_summary preserves data.condition IDs (e.g. [2, 5])
             cond_dir = joinpath(test_dir, "nonseq_cond")
             mkpath(cond_dir)
             e_c2 = EegFun.create_test_erp_data(participant = 1, condition = 2, n_channels = 2)

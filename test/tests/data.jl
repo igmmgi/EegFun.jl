@@ -411,9 +411,7 @@ using OrderedCollections
         @test single_data.sample_rate == 250
         @test single_data.analysis_info == analysis_info
 
-        # Test error handling - the function uses @minimal_error which doesn't throw ErrorException
-        # Instead, it returns nothing and logs an error, but the return type annotation causes issues
-        # Let's just test that the function works for valid inputs
+        # Test valid input
         @test EegFun.epoch_to_continuous(epoch_data, 2) isa EegFun.ContinuousData
     end
 
@@ -496,8 +494,7 @@ using OrderedCollections
         @test EegFun.epochs_not([1, 3, 5])(epochs) == [false, true, false, true, false]
         @test EegFun.epochs_not(2)(epochs) == [true, false, true, true, true]
 
-        # Test condition predicates by name (BUG-1 regression test)
-        # These require actual EegFun data objects with a condition_name field
+        # Test condition predicates by name
         @testset "conditions by name" begin
             erp1 = EegFun.create_test_erp_data(condition = 1)  # condition_name = "condition_1"
             erp2 = EegFun.create_test_erp_data(condition = 2)  # condition_name = "condition_2"
@@ -706,7 +703,7 @@ using OrderedCollections
         @test isequal(cont_nan, copy(cont_nan))
         @test hash(cont_nan) == hash(copy(cont_nan))
 
-        # Neighbors compare by value (previously by identity)
+        # Neighbors equality by value
         nb1 = EegFun.Neighbors([:Cz], [1.0], [1.0])
         nb2 = EegFun.Neighbors([:Cz], [1.0], [1.0])
         @test nb1 == nb2

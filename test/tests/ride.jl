@@ -135,8 +135,8 @@ using Random
         @test_throws EegFun.EegFunError EegFun.extract_ride(empty_epochs, comps)
     end
 
-    # 5. Phase 2 regressions: time_window, C-component Woody init, R-component median centering, rng, n_trials == 1, copy metadata
-    @testset "Phase 2 RIDE regressions" begin
+    # 5. Time window, C-component Woody init, R-component median centering, rng, single trial, and metadata copy
+    @testset "RIDE options and edge cases" begin
         n_samples = 100
         n_channels = 2
         n_trials = 12
@@ -191,11 +191,11 @@ using Random
         expected_r_offset = round(Int, median(rt_raw))
         @test res1.latency_offsets[3] == expected_r_offset
         @test res1.latencies[:, 3] == rt_raw .- expected_r_offset
-        # C-component latencies initialized via woody_filter track the true jitter (not stuck at all zeros!)
+        # C-component latencies initialized via woody_filter track the simulated jitter
         @test any(!=(0), res1.latencies[:, 2])
         @test cor(Float64.(res1.latencies[:, 2]), Float64.(c_shifts)) > 0.7
 
-        # Single-trial guard (n_trials == 1): woody_filter and ride_decompose must not crash with NaN std
+        # Single-trial guard (n_trials == 1)
         data_1trial = data[:, :, 1:1]
         lats_1 = EegFun.woody_filter(data_1trial, 5; rng = MersenneTwister(1))
         @test lats_1 == [0]
@@ -208,7 +208,7 @@ using Random
         )
         @test all(isfinite, res_1.templates)
 
-        # extract_ride copies layout & analysis_info (mutating output ErpData does not mutate source EpochData!)
+        # extract_ride copies layout and analysis_info independently
         epochs_meta = EegFun.create_test_epoch_data(n = 40, fs = 100, n_epochs = 4, n_channels = 2, seed = 3)
         epochs_meta.analysis_info.reference = :avg
         ride_erps = EegFun.extract_ride(

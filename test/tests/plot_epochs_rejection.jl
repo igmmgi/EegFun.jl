@@ -17,13 +17,13 @@ using EegFun
         @test state.fig isa Figure
         @test state.axes isa Vector{Axis}
         @test length(state.axes) == 6
-        # Legacy .epoch_axes property alias and tuple destructuring
+        # .epoch_axes property alias and tuple destructuring
         @test state.epoch_axes === state.axes
         fig_d, axes_d = state
         @test fig_d === state.fig
         @test axes_d === state.axes
 
-        # Unvisited page 3 epoch (15) is ALREADY in rejected_epochs before visiting page 3!
+        # Unvisited page 3 epoch (15) is included in rejected_epochs before visiting page 3
         @test 2 in EegFun.get_rejected_epochs(state)
         @test 15 in EegFun.get_rejected_epochs(state)
 
@@ -37,7 +37,7 @@ using EegFun
         @test 15 in EegFun.get_rejected_epochs(state)
         state.current_page[] = 1
 
-        # Manual uncheck on epoch 2 MUST NOT be overwritten on page revisit!
+        # Manual uncheck on epoch 2 persists across page navigation
         @test !(2 in EegFun.get_rejected_epochs(state))
         @test 15 in EegFun.get_rejected_epochs(state)
 

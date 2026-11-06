@@ -268,8 +268,8 @@ using EegFun
         @test isapprox(dats[3].data.Ch2, orig_Ch2, rtol = 1e-10)
     end
 
-    @testset "Phase 2 regressions: order-independent neighbor repair, bad-neighbor exclusion, ErpData, analysis_info" begin
-        # 1. Exclude co-bad channels from neighbor weights & guarantee 100% order independence
+    @testset "Order-independent neighbor repair, bad-neighbor exclusion, ErpData, and analysis_info" begin
+        # 1. Exclude co-bad channels from neighbor weights independent of channel order
         df_rep = DataFrame(
             time = [0.0, 0.01, 0.02],
             sample = [1, 2, 3],

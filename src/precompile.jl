@@ -157,7 +157,7 @@ PrecompileTools.@compile_workload begin
             EegFun.subset(erp[1]; channel_selection = EegFun.channels(:Cz), interval_selection = EegFun.times(-0.2, 0.5))
             EegFun.subset(erp; condition_selection = EegFun.conditions(1))
 
-            # 9. Optimized Statistical & Channel Operations
+            # 9. Channel and condition operations
             EegFun.channel_average!(dat, channel_selections = [EegFun.channels([:Fp1, :Fp2])], output_labels = [:Frontal_Avg])
             EegFun.channel_difference!(
                 dat,

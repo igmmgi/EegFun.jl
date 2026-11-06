@@ -413,9 +413,9 @@ apply = false
     end
 
     # ────────────────────────────────────────────────────────────
-    # 11. Phase 2 regressions: summarize_ica_components unique total, zero-export template, interactive helpers
+    # 11. ICA component summary, pipeline template, and interactive helpers
     # ────────────────────────────────────────────────────────────
-    @testset "Phase 2 pipeline regressions" begin
+    @testset "ICA summary, pipeline template, and interactive helpers" begin
         # 1. summarize_ica_components counts unique ICA components across categories + manual
         art_overlap = EegFun.ArtifactComponents(
             Dict(:vEOG => [1, 2], :hEOG => [2, 3]),
@@ -426,7 +426,7 @@ apply = false
         )
         per_file_df, avg_df = EegFun.summarize_ica_components([art_overlap])
         @test nrow(per_file_df) == 1
-        @test per_file_df.total_components[1] == 5 # unique([1, 2, 3, 4, 5]) == 5 (NOT 1+2+2+2+1+1+2 = 10!)
+        @test per_file_df.total_components[1] == 5 # unique([1, 2, 3, 4, 5]) == 5
         @test avg_df[avg_df.component_type .== "total", :avg_per_participant][1] == 5.0
 
         # 2. generate_pipeline_template compiles & executes dry_run inside a fresh zero-export Module

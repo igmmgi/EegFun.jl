@@ -971,9 +971,8 @@ end
         @test :vec_avg ∈ propertynames(dats[2].data)
     end
 
-    @testset "Phase 2 regressions: default excludes extra channels, keeps '_' EEG channels, circular TF phase mean" begin
-        # 1. Default selection uses channel_labels(dat) (include_extra = false):
-        #    keeps layout channel :Fp1_bip containing "_" while excluding extra :vEOG and :interval
+    @testset "Default extra-channel exclusion and circular TF phase mean" begin
+        # 1. Default selection excludes extra channels while keeping layout channels containing "_"
         df_ext = DataFrame(
             time = [0.0, 0.01, 0.02],
             sample = [1, 2, 3],
@@ -985,7 +984,7 @@ end
         lay_ext = EegFun.Layout(DataFrame(label = [:Ch1, :Fp1_bip], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing, nothing)
         cont_ext = EegFun.ContinuousData("ext_test", df_ext, lay_ext, 100, EegFun.AnalysisInfo())
         avg_ext = EegFun.channel_average(cont_ext)
-        @test avg_ext.data.avg ≈ [3.0, 3.0, 3.0] # mean of Ch1 (2) and Fp1_bip (4), NOT contaminated by vEOG (1000)!
+        @test avg_ext.data.avg ≈ [3.0, 3.0, 3.0] # mean of Ch1 (2) and Fp1_bip (4), excluding vEOG
 
         # 2. Circular mean on TimeFreqData.data_phase and TimeFreqEpochData.data_phase across ±π branch cut
         tf_circ = EegFun.create_test_tf_data(n_channels = 2, power_offset = 4.0, noise = 0.0)

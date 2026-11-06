@@ -66,7 +66,7 @@ using OrderedCollections
         end
 
         @testset "decreasing value transitions" begin
-            # Trigger value drops to a different non-zero value (was previously dropped)
+            # Trigger value drops directly to a different non-zero value
             input = [0, 5, 5, 3, 3, 0]
             expected = [0, 5, 0, 3, 0, 0]
             @test EegFun._clean_triggers(input) == expected

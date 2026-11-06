@@ -104,7 +104,7 @@ end
     include("tests/plot_topography.jl")
     include("tests/plot_topography_stats.jl")
     include("tests/gpu_kernels_cpu.jl")
-    include("tests/coverage_gaps.jl")
+    include("tests/integration_and_plotting.jl")
 
 
 end

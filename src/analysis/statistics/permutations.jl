@@ -1,4 +1,4 @@
-# Monte Carlo permutation planning, zero-copy permutation t-statistic kernels, and block permutation matrices.
+# Monte Carlo permutation planning, permutation t-statistic kernels, and block permutation matrices.
 #
 # All permutations are drawn up front on the calling task via `_draw_permutation_plan(rng, ...)`,
 # so threaded execution is deterministic for a given `rng` regardless of thread count.
@@ -95,7 +95,7 @@ end
 _tick!(::Nothing) = nothing
 _tick!(completed::Threads.Atomic{Int}) = (Threads.atomic_add!(completed, 1); nothing)
 
-# === ZERO-SHUFFLE-COPY CPU PERMUTATION T-STATISTIC KERNELS ===
+# === CPU PERMUTATION T-STATISTIC KERNELS ===
 
 function _perm_ttest_paired!(t_flat::AbstractVector{Float64}, D::Matrix{Float64}, signs::Vector{Float64}, swaps::AbstractVector)
     n_p, n_voxels = size(D)

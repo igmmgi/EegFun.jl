@@ -638,7 +638,7 @@ function plot_topography_stats(
     return (fig = fig, axes = axes, colorbar = cb)
 end
 
-# === HIGH-PERFORMANCE TF TOPOGRAPHY EXTRACTION HELPERS ===
+# === TF TOPOGRAPHY EXTRACTION HELPERS ===
 
 function _tf_filter_rows_typed(
     times::AbstractVector,

@@ -965,7 +965,7 @@ end
             @test c.is_significant == (c.p_value <= res.test_info.alpha)
         end
 
-        # ClusterInfo 4-arg constructor (legacy 3-arg removed)
+        # ClusterInfo 4-arg constructor
         @test_throws MethodError EegFun.ClusterInfo(:parametric, :temporal, 100)
         ci4 = EegFun.ClusterInfo(:parametric, :temporal, 100, 0.01)
         @test ci4.cluster_alpha == 0.01

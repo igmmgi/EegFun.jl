@@ -14,7 +14,7 @@ using GLMakie
 # - Number of trials (1-500) & single-trial noise amplitude sliders (watch 1/sqrt(N) SNR gain)
 # - "Regenerate" button & confidence interval toggle
 # - Up to 3 ERP peak components: Toggle active, frequency, amplitude, peak latency,
-#   amplitude jitter, and latency jitter (watch latency jitter smear & attenuate peaks!)
+#   amplitude jitter, and latency jitter (watch latency jitter smear & attenuate peaks)
 EegFun.simulate_erp()
 
 #######################################################################

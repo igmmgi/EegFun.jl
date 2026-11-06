@@ -5,7 +5,7 @@ using DataFrames
 using JLD2
 using Random
 
-@testset "Targeted Core & Headless Plotting Coverage" begin
+@testset "Core utilities and headless plotting" begin
     # 1. Pipeline raw data inspection (src/pipelines/utils/utils.jl: check_raw_data)
     @testset "check_raw_data" begin
         bdf_file = EegFun.example_path("data/bdf/example1.bdf")
@@ -506,8 +506,8 @@ using Random
         end
     end
 
-    # 13. Tables interface, repair_info, rich show methods, & non-contiguous/Float32 channel_metrics
-    @testset "Tables, repair_info, show methods, and channel_metrics edge branches" begin
+    # 9. Tables interface, repair_info, show methods, and channel_metrics edge cases
+    @testset "Tables, repair_info, show methods, and channel_metrics" begin
         erp_s = EegFun.create_test_erp_data(participant = 1, condition = 1, n_channels = 12)
         EegFun.polar_to_cartesian_xyz!(erp_s.layout)
         EegFun.get_neighbors_xyz!(erp_s.layout, 1.2)

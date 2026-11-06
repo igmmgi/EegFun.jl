@@ -47,7 +47,7 @@ erps_lp = EegFun.lowpass_filter(erps, 30.0)
 
 # Controls to test:
 # - Time slider, "<" / "Play" ("Pause") / ">" buttons, and "Mean" button
-# - In 3D mode: click-drag to rotate the 3D scalp mesh while scrubbing/playing!
+# - In 3D mode: click-drag to rotate the 3D scalp mesh while scrubbing/playing
 EegFun.plot_topography(erps_lp[1])
 EegFun.plot_topography_3d(erps_lp[1]; scrubber = true)
 
@@ -77,7 +77,7 @@ EegFun.plot_trigger_timing(dat; ignore_triggers = [3])
 # - Press "l": Toggle legend visibility
 # - Press "s": Open the Save Figure Settings dialog (PNG/PDF/SVG/JPG, DPI, cm dimensions)
 # - Press "i": Show shortcut help popup
-# - Drag-select a time interval + right-click inside it: Launch 2D/3D topography popup!
+# - Drag-select a time interval + right-click inside it: Launch 2D/3D topography popup
 EegFun.plot_erp(erps_lp, channel_selection = EegFun.channels(:Cz))
 
 epoch_cfg =

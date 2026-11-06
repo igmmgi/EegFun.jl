@@ -171,15 +171,14 @@ using JLD2
         @test length(axes2) == 2
     end
 
-    @testset "Phase 2 regressions: FIR Hz transition width, no nextpow(2) overflow, zero-phase filtfilt dB" begin
-        # 1. FIR highpass at 0.5 Hz (fs = 250 Hz): default transition width is 0.5 Hz (<= 1.0 Hz!)
-        # Must NOT be misinterpreted as 0.5 * Nyquist, and must NOT nextpow(2)-double taps beyond min_length / 3
+    @testset "FIR transition width in Hz, odd tap count, and zero-phase filtfilt dB" begin
+        # 1. FIR highpass at 0.5 Hz (fs = 250 Hz): default transition width is 0.5 Hz
         fs = 250
         fi_hp = EegFun.create_highpass_filter(0.5, fs; filter_method = :fir)
         @test fi_hp.transition_band == 0.5
-        @test fi_hp.n_taps == 2001 # exact odd tap count (ceil(4*250/0.5)+1 = 2001) without nextpow(2)=4097 inflation!
+        @test fi_hp.n_taps == 2001 # odd tap count ceil(4 * 250 / 0.5) + 1 = 2001
 
-        # 6100 samples: (6100 - 1) ÷ 3 = 2033 >= 2001 fits without widening, whereas nextpow(2)=4097 would overflow!
+        # 6100 samples: (6100 - 1) ÷ 3 = 2033 >= 2001 fits without widening transition band
         dat_fir_fit = EegFun.create_test_continuous_data(; n = 6100, fs = fs)
         filtered_fir = EegFun.highpass_filter(dat_fir_fit, 0.5; filter_method = :fir)
         @test filtered_fir.analysis_info.hp_filter == 0.5
@@ -300,7 +299,7 @@ end
             @test hasproperty(filtered_data[1].data, :Ch1)
             @test hasproperty(filtered_data[1].data, :Ch2)
 
-            # Verify high frequencies are attenuated (not a rigorous test, just sanity check)
+            # Verify high frequencies are attenuated
             @test std(filtered_data[1].data.Ch1) < 2.0  # Should be reduced
         end
 

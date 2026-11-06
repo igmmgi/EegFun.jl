@@ -10,7 +10,7 @@
 The benchmark uses the same raw Visual Attention (Posner Cueing) dataset featured in our other tutorials. 
 
 **For Interactive Tutorials:**
-You do not need to download the dataset manually. You can seamlessly load any tutorial dataset directly within Julia:
+You do not need to download the dataset manually. You can load any tutorial dataset directly within Julia:
 ```julia
 using EegFun
 data_dir = EegFun.download_eegfun_datasets() # Returns the local path to the downloaded directory
@@ -30,10 +30,10 @@ Once downloaded, you can extract the files into any folder on your computer (e.g
 To run the full suite, you need to ensure the respective toolboxes are set up on your machine.
 
 **Julia (EegFun.jl)**
-All dependencies (Makie, BenchmarkTools, DelimitedFiles) are automatically resolved when you run the scripts using the `--project=.` flag from the repository root.
+`EegFun` is resolved via `--project=.` from the repository root; also ensure `CairoMakie` and `DelimitedFiles` are installed in your global Julia environment for figure export and CSV I/O.
 
 **Python (MNE-Python)**
-We recommend using the lightning-fast [`uv`](https://github.com/astral-sh/uv) package manager to create an isolated Python virtual environment for the benchmark:
+You can use [`uv`](https://github.com/astral-sh/uv) to create an isolated Python virtual environment for the benchmark:
 
 ```bash
 # 1. Create a virtual environment
@@ -54,7 +54,7 @@ Ensure you have downloaded EEGLAB and added it to your MATLAB path. The benchmar
 
 The official benchmark scripts are located in the repository under the `benchmark/` folder.
 
-This script demonstrates a completely realistic, full-scale pipeline from raw data to a Grand Average plot:
+This script runs a basic pipeline from raw data to a Grand Average plot:
 
 1. Loads raw BDF data and custom electrode layouts.
 2. Re-references to the average and applies high-pass filtering (automatically distributed across CPU threads).
@@ -93,7 +93,7 @@ python benchmark/python/mne_benchmark.py /path/to/downloaded/AttentionExp 3 fals
 ```
 
 **MATLAB (EEGLAB) Execution:**
-Because MATLAB handles command-line arguments poorly, you must run the benchmark function directly from your MATLAB command window. Make sure you first add EEGLAB and the benchmark script folder to your MATLAB path!
+Because MATLAB handles command-line arguments poorly, run the benchmark function directly from the MATLAB command window after adding EEGLAB and the benchmark script folder to your MATLAB path.
 
 ```matlab
 % 1. Add EEGLAB to path and initialize it
@@ -111,7 +111,7 @@ eeglab_benchmark('/path/to/downloaded/AttentionExp', 3, false)
 
 Once you have run the benchmarks for the different toolboxes, they will automatically save their execution times (`.txt`) and exported ERP arrays (`.csv`) directly into your dataset directory.
 
-You can then run the Julia comparison script to generate a single, unified plot that overlays the resulting ERP waveforms and automatically embeds the total execution times directly into the legend!
+You can then run the Julia comparison script to generate a plot overlaying the ERP waveforms and execution times:
 
 ```bash
 # Generate the cross-pipeline comparison plot

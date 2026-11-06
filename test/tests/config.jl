@@ -1100,7 +1100,7 @@ using Dates
         @test p_cfg.preprocess.channel_repair_method == :spherical_spline
     end
 
-    @testset "Phase 2 regressions: ConfigParameter.allowed typing, rereference, nullable from_dict, defaults" begin
+    @testset "ConfigParameter typing, rereference, nullable fields, and defaults" begin
         # 1. ConfigParameter.allowed field type is Union{Nothing,Vector{Any}} (not untyped Any)
         @test fieldtype(EegFun.ConfigParameter{String}, :allowed) == Union{Nothing,Vector{Any}}
 

@@ -1193,16 +1193,15 @@ using EegFun
         @test EegFun.repair_artifacts_neighbor!(epochs, info) === epochs
     end
 
-    @testset "Phase 2 regressions: spherical_spline metadata, copy(artifacts), subset_bad_data, MultiDataFrameEeg overloads" begin
-        # 1. repair_artifacts! (:spherical_spline) populates repaired & skipped, guards all-bad epochs,
-        #    and non-mutating repair_artifacts does NOT mutate caller's EpochRejectionInfo
+    @testset "Spherical spline repair, copy(artifacts), subset_bad_data, and MultiDataFrameEeg overloads" begin
+        # 1. repair_artifacts! (:spherical_spline) populates repaired and skipped without mutating input in repair_artifacts
         dat_sp = EegFun.create_test_epoch_data(n = 80, n_epochs = 3, n_channels = 4)
         dat_sp.layout.data.x3 = [0.0, 0.1, 0.0, -0.1]
         dat_sp.layout.data.y3 = [0.1, 0.0, -0.1, 0.0]
         dat_sp.layout.data.z3 = [0.0, 0.0, 0.0, 0.0]
         # Epoch 2: single bad channel Ch2 (repairable)
         dat_sp.data[2][!, :Ch2] .= 300.0
-        # Epoch 3: ALL channels bad (must be skipped cleanly!)
+        # Epoch 3: all channels bad (skipped)
         for ch in [:Ch1, :Ch2, :Ch3, :Ch4]
             dat_sp.data[3][!, ch] .= 300.0
         end
@@ -1220,7 +1219,7 @@ using EegFun
         @test haskey(rej_sp.skipped, 3) && length(rej_sp.skipped[3]) == 4
         @test !haskey(rej_sp.repaired, 3)
 
-        # 2. subset_bad_data exact participant boundary matching (1 must NOT match 10 or 21!)
+        # 2. subset_bad_data exact participant ID matching (1 does not match 10 or 21)
         mktempdir() do tmpdir
             ep_a = EegFun.create_test_epoch_data_vector(conditions = 1:1, n_epochs = 2)
             JLD2.jldsave(joinpath(tmpdir, "1_epochs.jld2"); data = ep_a)
@@ -1273,7 +1272,7 @@ using EegFun
         @test length(EegFun.is_extreme_value([ep_det, ep_det], 200.0)) == 2
         @test length(EegFun.n_extreme_value([ep_det, ep_det], 200.0)) == 2
 
-        # Partial epoch_selection schema uniformity -> all_data(ep_schema) must NOT fail!
+        # Partial epoch_selection keeps column schema uniform across all epochs
         ep_schema = copy(ep_det)
         EegFun.is_extreme_value!(ep_schema, 200.0; epoch_selection = EegFun.epochs([1]))
         EegFun.is_step_value!(ep_schema, 200.0; epoch_selection = EegFun.epochs([1]))

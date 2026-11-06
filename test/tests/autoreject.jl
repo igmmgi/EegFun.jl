@@ -197,7 +197,7 @@ using EegFun:
     @testset "autoreject middle band (consensus vs repair threshold)" begin
         # 6 channels: consensus_perc = 0.5 (k_max = 3), max_repair_perc = 0.17 (r_max = 1)
         # Epoch with 2 bad channels (r_max < 2 <= k_max):
-        # Epoch should be RETAINED (not rejected).
+        # Epoch should be retained (not rejected)
         # The worst 1 channel should be repaired; the 2nd should be tracked in skipped_channels.
         layout = create_test_layout(layout_type = :topo)
         channels = layout.data.label
@@ -259,8 +259,7 @@ using EegFun:
 
         cleaned, res = autoreject(ep_data; n_folds = 3, consensus_perc = 0.5, max_repair_perc = 0.3, seed = 42, verbose = false)
 
-        # Because layout has no coordinates and no neighbors, repair fails
-        # Epoch 2 must be moved to rejected, NOT kept as clean/repaired!
+        # When layout has no coordinates or neighbors, repair fails and epoch 2 is rejected
         @test 2 in res.epochs_rejected
         @test 2 ∉ res.epochs_repaired
     end
@@ -429,7 +428,7 @@ max_repair_perc = 0.1
         end
     end
 
-    @testset "Phase 2 regressions: sub-window interval_selection without DimensionMismatch & neighbor fallback" begin
+    @testset "Sub-window interval_selection and neighbor fallback" begin
         # 1. Sub-window interval_selection on epochs with repairable bad channel
         ep_sub = EegFun.create_test_epoch_data(n = 100, fs = 100, n_epochs = 10, n_channels = 4, seed = 99)
         ep_sub.layout.data.x3 = [0.0, 0.1, 0.0, -0.1]
@@ -454,7 +453,7 @@ max_repair_perc = 0.1
         )
         @test cleaned_sub isa EegFun.EpochData
         @test nrow(cleaned_sub.data[1]) == 100
-        # If epoch 2 was repaired, ALL 100 samples of Ch1 must be interpolated (not just the sub-window!)
+        # Repaired epoch interpolates all samples of Ch1, not only the sub-window
         if 2 in res_sub.epochs_repaired
             @test all(abs.(cleaned_sub.data[2].Ch1) .< 100.0)
         end
@@ -476,7 +475,7 @@ max_repair_perc = 0.1
             EegFun.autoreject(ep_nb; mode = :local, n_folds = 2, consensus_perc = 0.5, max_repair_perc = 0.6, seed = 7, verbose = false)
         @test cleaned_nb isa EegFun.EpochData
         if 2 in res_nb.epochs_repaired
-            # Repaired Ch1 and Ch2 must come from clean Ch3/Ch4, NOT from ±600 co-bad neighbor
+            # Repaired Ch1 and Ch2 use clean Ch3/Ch4 rather than co-bad neighbors
             @test maximum(abs.(cleaned_nb.data[2].Ch1)) < 100.0
             @test maximum(abs.(cleaned_nb.data[2].Ch2)) < 100.0
         end

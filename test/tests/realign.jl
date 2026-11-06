@@ -318,8 +318,8 @@ const RESP_TRIGGERS = [201]
         @test :rt_sym ∉ propertynames(ep_data2.data[1])
         @test :rt_sym ∈ propertynames(result.data[1])
 
-        # Phase 2 regressions:
-        # 1. calculate_trigger_interval! searches end_triggers ONLY at indices >= start_idx
+        # Post-stimulus trigger search and sample spacing:
+        # 1. calculate_trigger_interval! searches end_triggers at indices >= start_idx
         epoch_early_end =
             _make_epoch_with_response(rt_seconds = 0.4, response_trigger = 201, epoch_start = -0.5, epoch_end = 1.0, sample_rate = 250)
         # Put an earlier spurious end_trigger (201) BEFORE start_trigger (101 at t = 0.0)

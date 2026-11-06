@@ -1,5 +1,4 @@
 using EegFun
-using BenchmarkTools
 using CairoMakie
 using DelimitedFiles
 using Statistics
@@ -9,7 +8,7 @@ function process_eeg_to_grandaverage(raw_files::Vector{String}, data_dir::String
 
     all_subject_erps = EegFun.ErpData[]
 
-    # Define the 4 epoch conditions as specified in the Visual Attention tutorial
+    # Define Valid and Invalid epoch conditions
     epoch_conditions = [
         EegFun.EpochCondition(name = "Valid", trigger_sequences = [[1, 5], [3, 5]], reference_index = 2),
         EegFun.EpochCondition(name = "Invalid", trigger_sequences = [[2, 5], [4, 5]], reference_index = 2),
@@ -124,7 +123,6 @@ run_ica_flag = length(ARGS) >= 3 ? parse(Bool, lowercase(ARGS[3])) : true
 results_dir = joinpath(data_dir, "benchmarks")
 mkpath(results_dir)
 
-# println("Compiling Julia pipeline (first run)...")
 warmup_files = min(length(test_files), 2)
 Base.invokelatest(process_eeg_to_grandaverage, test_files[1:warmup_files], data_dir, results_dir, run_ica_flag) # Warm-up to trigger JIT compilation
 

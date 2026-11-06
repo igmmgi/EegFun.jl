@@ -393,7 +393,7 @@ end
 _compute_cluster_statistics_tf(clusters::Vector{TFCluster}, t_matrix::AbstractArray{<:AbstractFloat,3}, ::Vector{Symbol}) =
     _compute_cluster_statistics_tf(clusters, t_matrix, true)
 
-# === ZERO-ALLOCATION PERMUTATION EXTREME CLUSTER STATISTIC ===
+# === PERMUTATION CLUSTER STATISTIC ===
 
 @inline function _enqueue_2d!(
     ne::Int,

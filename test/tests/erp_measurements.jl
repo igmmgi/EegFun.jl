@@ -1211,9 +1211,7 @@ using EegFun
             # Solve: -(t - 0.5)^2 + 1 = 0.5
             # (t - 0.5)^2 = 0.5
             # t = 0.5 ± sqrt(0.5) ≈ 0.5 ± 0.707
-            # For onset (before peak): t ≈ 0.5 - 0.707 = -0.207 (clamped to start)
-            # For offset (after peak): t ≈ 0.5 + 0.707 = 1.207 (clamped to end)
-            # Actually, let's use a simpler approach with a linear ramp to peak
+            # Linear ramp to peak
             peak_time = 0.5
             peak_value = 1.0
             fraction = 0.5
@@ -1311,10 +1309,7 @@ using EegFun
             @test (plot_res isa Figure) || (plot_res isa NamedTuple && hasproperty(plot_res, :fig) && plot_res.fig isa Figure)
         end
 
-        @testset "Phase 2 regressions: in-memory non-mutating erp_measurements, trapezoidal area_boundary, peak_polarity, '_' channels" begin
-            # Create bipolar / underscore layout channel + signed biphasic waveform:
-            # t in [-0.2, 1.0], baseline = +2.0 on [-0.2, 0.0], then after baseline subtraction:
-            # +4.0 on [0.0, 0.5] and -2.0 on (0.5, 1.0] -> exact step/linear test
+        @testset "In-memory erp_measurements, area_boundary, peak_polarity, and underscore channels" begin
             t_pts = collect(range(-0.2, 1.0, step = 0.01)) # 121 samples, fs = 100 Hz
             # Linear wave from -4.0 at t=0.0 to +4.0 at t=1.0 (plus +3.0 DC offset in baseline [-0.2, 0.0))
             raw_sig = [t < 0.0 ? 3.0 : 3.0 + (-4.0 + 8.0 * t) for t in t_pts]
@@ -1327,9 +1322,9 @@ using EegFun
             res_rect =
                 EegFun.erp_measurements(erp_inmem, "rectified_area"; analysis_interval = (0.0, 1.0), baseline_interval = (-0.2, -0.01))
             @test res_rect isa EegFun.ErpMeasurementsResult
-            @test erp_inmem.data.Ch1_bip == orig_col # caller's ErpData was NOT mutated by baseline_interval!
-            @test :Ch1_bip in propertynames(res_rect.data) # EEG channel with "_" is kept!
-            @test :vEOG ∉ propertynames(res_rect.data)     # extra channel excluded by default!
+            @test erp_inmem.data.Ch1_bip == orig_col # input ErpData is not mutated
+            @test :Ch1_bip in propertynames(res_rect.data) # layout channel with "_" is kept
+            @test :vEOG ∉ propertynames(res_rect.data)     # extra channel excluded by default
             # After subtracting exact 3.0 baseline: y(t) = -4 + 8t on [0, 1].
             # Rectified area = integral_0^0.5 (4 - 8t) dt + integral_0.5^1 (8t - 4) dt = 1.0 + 1.0 = 2.0
             @test isapprox(res_rect.data[1, :Ch1_bip], 2.0; atol = 0.05)

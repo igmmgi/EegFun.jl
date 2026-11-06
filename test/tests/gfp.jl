@@ -338,15 +338,15 @@ end
         @test all(gfp_result.gfp .> 5.0)
     end
 
-    @testset "Phase 2 regressions: Lehmann & Skrandies (1980) spatial mean subtraction, zero-GFP & n_timepoints == 1 guards" begin
+    @testset "Spatial mean subtraction, zero-GFP, and single-timepoint guards" begin
         lay3 = EegFun.Layout(DataFrame(label = [:Ch1, :Ch2, :Ch3], inc = zeros(3), azi = zeros(3)), nothing, nothing, nothing)
-        # Same topography at t=0.0 and t=0.1 up to a huge reference/DC shift (+100 μV across all channels at t=0.1)
+        # Same topography at t=0.0 and t=0.1 up to a +100 μV DC shift across channels at t=0.1
         df_dc1 = DataFrame(time = [0.0, 0.1], Ch1 = [1.0, 1.0], Ch2 = [0.0, 0.0], Ch3 = [-1.0, -1.0])
         df_dc2 = DataFrame(time = [0.0, 0.1], Ch1 = [1.0, 101.0], Ch2 = [0.0, 100.0], Ch3 = [-1.0, 99.0])
         erp_dc1 = EegFun.ErpData("dc1", 1, "c1", df_dc1, lay3, 100, EegFun.AnalysisInfo(), 10)
         erp_dc2 = EegFun.ErpData("dc2", 1, "c1", df_dc2, lay3, 100, EegFun.AnalysisInfo(), 10)
 
-        # With spatial mean subtraction before dividing by GFP, dissimilarity is reference-independent and equals 0!
+        # Dissimilarity is reference-independent after spatial mean subtraction
         gd1 = EegFun.global_dissimilarity(erp_dc1)
         gd2 = EegFun.global_dissimilarity(erp_dc2)
         comb2 = EegFun.gfp_and_dissimilarity(erp_dc2)

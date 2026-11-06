@@ -288,8 +288,8 @@ using DataFrames
             EegFun._bids_write_events_json(tmpdir, prefix)
             content = read(joinpath(tmpdir, "$(prefix)_events.json"), String)
             @test contains(content, "value")
-            @test !contains(content, "\"onset\"")      # must NOT redefine onset
-            @test !contains(content, "\"duration\"")    # must NOT redefine duration
+            @test !contains(content, "\"onset\"")      # should not redefine onset
+            @test !contains(content, "\"duration\"")   # should not redefine duration
         end
     end
 

@@ -5,15 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to (well, attempts to :-)) [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.8.0] - 2026-11-04
+## [0.8.0] - 2026-11-06
 
 ### Added
 
 - Implemented `Base` array/`copy`, `StatsBase.mean`, `Tables.jl`, and `DimensionalData.DimArray` interfaces across EEG, time-frequency, and spectrum data types.
 - Added BIDS layout import (`electrodes.tsv` / `coordsystem.json`) and `list_bids_runs`, plus versioned `.jld2` archive metadata (`EEGFUN_FORMAT_VERSION`).
+- Added 1-pass zero-phase FIR filtering (`filter_func = :filt_zerophase`, MNE/EEGLAB `reflect_limited` style) alongside `:filtfilt` and `:filt`, with live FIR tap/delay readout in `plot_erp_filter_gui`.
 - Added `tf_baseline` / `baseline!` support for `TimeFreqEpochData`, Smulders (2010) jackknife `pseudovalues`, `erp_measurements` `area_boundary` / `peak_polarity` options, and `RideComponent` `time_window` / latency centering.
 - Added decoupled `alpha` / `cluster_alpha` keywords in `permutation_test` and explicit `rng` support across statistical, decoding, and RSA routines.
-- Added standardized plot title controls (`window_title`, `figure_title`, `plot_title`, `plot_title_position`) for compact multi-channel grids.
+- Added standardized plot title controls (`window_title`, `figure_title`, `plot_title`, `plot_title_position`) for compact multi-channel grids, plus a dedicated interactive GUI tutorial suite (`tutorials/gui/`).
 
 ### Changed
 
@@ -23,7 +24,7 @@ and this project adheres to (well, attempts to :-)) [Semantic Versioning](https:
 - Standardized `plot_*` return values to `(; fig, axes, ...)`, per-figure `theme_eegfun()` application, and `plot_tf_stats` `mask_style` keyword.
 - Aligned `tf_morlet`, `tf_stft`, and `tf_multitaper` with MNE discrete L2 wavelet normalization and zero-padded linear FFT convolution, and adopted EEGLAB `pop_eegfiltnew` default FIR transition-width heuristics.
 - Defaulted `analytic_test` `correction_method` to `:none`.
-- Simplified and optimized all 13 codebase modules (`-27%` source lines), cutting intermediate allocations across artifact detection, spherical-spline repair/CSD, statistics, TF, ICA, RSA/decoding, and Makie plotting.
+- Simplified internal implementations and reduced allocations across artifact detection, spherical-spline repair/CSD, statistics, time-frequency, Extended Infomax ICA, RSA/decoding, and Makie plotting.
 
 ### Fixed
 
