@@ -622,11 +622,7 @@ using EegFun
 
         # Fresh layout with neighbors === nothing lazily computes neighbors and repairs bad channel
         fresh_lay = EegFun.Layout(
-            DataFrame(
-                label = [:Ch1, :Ch2, :Ch3, :Ch4, :Ch5],
-                inc = [0.0, 15.0, 15.0, 90.0, 90.0],
-                azi = [0.0, 0.0, 90.0, 0.0, 180.0],
-            ),
+            DataFrame(label = [:Ch1, :Ch2, :Ch3, :Ch4, :Ch5], inc = [0.0, 15.0, 15.0, 90.0, 90.0], azi = [0.0, 0.0, 90.0, 0.0, 180.0]),
             nothing,
             nothing,
             nothing,

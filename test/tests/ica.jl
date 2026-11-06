@@ -666,4 +666,69 @@ using LinearAlgebra
         @test df_ov.sample == [1, 2, 3, 4]
     end
 
+    @testset "infomax fallbacks, blowup resets, and gpu kernel path" begin
+        # 1. SVD rank & whitening fallbacks when n_samples <= 2 * n_channels
+        X_short = randn(MersenneTwister(11), 3, 6)
+        lay3 = EegFun.Layout(DataFrame(label = [:C1, :C2, :C3], inc = zeros(3), azi = zeros(3)), nothing, nothing, nothing)
+        @test EegFun._estimate_ica_rank(X_short) == 3
+        @test EegFun._estimate_ica_rank(zeros(3, 10)) == 0
+        prep_short = EegFun._ica_preprocess(X_short, 3, EegFun.IcaPrms())
+        @test isapprox((prep_short.dat_sphered * transpose(prep_short.dat_sphered)) ./ 5, I; atol = 1e-10)
+        res_short =
+            EegFun.infomax_ica(X_short, lay3, "short"; n_components = 3, params = EegFun.IcaPrms(max_iter = 5), rng = MersenneTwister(1))
+        @test size(res_short.unmixing) == (3, 3)
+
+        # 2. Ambiguous near-singular eigenvalue triggers SVD rank fallback
+        X_amb = randn(MersenneTwister(12), 3, 100)
+        X_amb[3, :] .= X_amb[1, :] .+ 3e-7 .* X_amb[3, :]
+        @test EegFun._estimate_ica_rank(X_amb) in (2, 3)
+
+        # 3. Extended Infomax with n_samples > 6000 (kurtsize subsampling) & CPU blowup restart
+        N_big = 6200
+        s_sub1 = rand(MersenneTwister(21), N_big) .- 0.5
+        s_sub2 = rand(MersenneTwister(22), N_big) .- 0.5
+        X_big = [0.8 0.5; -0.4 0.9] * Matrix(transpose(hcat(s_sub1, s_sub2)))
+        lay2 = EegFun.Layout(DataFrame(label = [:C1, :C2], inc = zeros(2), azi = zeros(2)), nothing, nothing, nothing)
+        prms_blowup = EegFun.IcaPrms(l_rate = 0.2, max_weight = 1.8, restart_factor = 0.1, max_iter = 25)
+        res_big = EegFun.infomax_extended_ica(X_big, lay2, "big"; n_components = 2, params = prms_blowup, rng = MersenneTwister(7))
+        @test all(isfinite, res_big.unmixing)
+        @test_throws EegFun.EegFunError EegFun.infomax_extended_ica(
+            X_big,
+            lay2,
+            "fail";
+            n_components = 2,
+            params = EegFun.IcaPrms(l_rate = 1.5e-6, max_weight = 0.1, restart_factor = 0.5),
+            rng = MersenneTwister(7),
+        )
+
+        # 4. run_ica dispatch (:infomax_extended, percentage_of_data, use_gpu fallback warning)
+        dat_small = create_synthetic_continuous(; n = 300, fs = 100, nch = 3)
+        ica_ext_sub = @test_logs (:warn, r"Falling back to CPU") match_mode = :any EegFun.run_ica(
+            dat_small;
+            algorithm = :infomax_extended,
+            percentage_of_data = 80.0,
+            use_gpu = true,
+            params = EegFun.IcaPrms(max_iter = 12),
+            rng = MersenneTwister(3),
+        )
+        @test ica_ext_sub isa EegFun.InfoIca
+
+        # 5. _infomax_optimize_gpu! path (exercised on CPU via gpu_array identity fallback)
+        prep_gpu = EegFun._ica_preprocess(X_big[:, 1:400], 2, EegFun.IcaPrms())
+        sub_gpu = falses(2)
+        prms_gpu = EegFun.IcaPrms(l_rate = 0.2, max_weight = 1.8, restart_factor = 0.1, max_iter = 22)
+        EegFun._infomax_optimize_gpu!(prep_gpu.work, prep_gpu.dat_sphered, prms_gpu, 64, sub_gpu, MersenneTwister(5))
+        @test all(isfinite, prep_gpu.work.weights)
+        prep_gpu_std = EegFun._ica_preprocess(X_big[:, 1:400], 2, EegFun.IcaPrms())
+        EegFun._infomax_optimize_gpu!(
+            prep_gpu_std.work,
+            prep_gpu_std.dat_sphered,
+            EegFun.IcaPrms(max_iter = 5),
+            64,
+            nothing,
+            MersenneTwister(5),
+        )
+        @test all(isfinite, prep_gpu_std.work.weights)
+    end
+
 end

@@ -120,8 +120,11 @@ function plot_erp_measurement_gui(
     Label(controls_grid[9, 1], "Baseline Interval:", halign = :left)
     slider_bl = isnothing(baseline_interval) ? (time_min, time_max) : baseline_interval
     baseline_interval_slider = IntervalSlider(controls_grid[10, 1], range = time_min:0.005:time_max, startvalues = slider_bl)
-    baseline_interval_label =
-        Label(controls_grid[11, 1], isnothing(baseline_interval) ? "None" : @sprintf("%.3f s - %.3f s", baseline_interval...), halign = :left)
+    baseline_interval_label = Label(
+        controls_grid[11, 1],
+        isnothing(baseline_interval) ? "None" : @sprintf("%.3f s - %.3f s", baseline_interval...),
+        halign = :left,
+    )
 
     peak_lbl1 = Label(controls_grid[12, 1], "Peak Local Window:", halign = :left)
     local_interval_slider = Slider(controls_grid[13, 1], range = 1:15, startvalue = 3)

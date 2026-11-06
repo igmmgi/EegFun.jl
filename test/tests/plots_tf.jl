@@ -217,12 +217,7 @@ using EegFun
         tf_res_nosig = deepcopy(tf_analytic_result)
         fill!(tf_res_nosig.masks.positive, false)
         fill!(tf_res_nosig.masks.negative, false)
-        out_nosig = EegFun.plot_tf_stats(
-            tf_res_nosig;
-            channel_selection = EegFun.channels(:Oz),
-            mask_style = :alpha,
-            display_plot = false,
-        )
+        out_nosig = EegFun.plot_tf_stats(tf_res_nosig; channel_selection = EegFun.channels(:Oz), mask_style = :alpha, display_plot = false)
         hm_nosig = only(filter(p -> p isa Makie.Heatmap, out_nosig.axes[1].scene.plots))
         @test hm_nosig.alpha[] ≈ 0.15
     end
