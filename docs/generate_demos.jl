@@ -63,14 +63,11 @@ demos = [
     ("plotting", "plot_channel_spectrum", "Plot Channel Spectrum"),
     ("plotting", "plot_channel_summary", "Plot Channel Summary"),
     ("plotting", "plot_correlation_heatmap", "Plot Correlation Heatmap"),
-    ("plotting", "plot_databrowser", "Plot Databrowser"),
     ("plotting", "plot_decoding", "Plot Decoding"),
     ("plotting", "plot_epochs", "Plot Epochs"),
     ("plotting", "plot_erp", "Plot ERP"),
-    ("plotting", "plot_erp_filter_gui", "Plot ERP Filter GUI"),
     ("plotting", "plot_erp_image", "Plot ERP Image"),
     ("plotting", "plot_erp_measurements", "Plot ERP Measurements"),
-    ("plotting", "plot_erp_measurement_gui", "Plot ERP Measurement GUI"),
     ("plotting", "plot_filter", "Plot Filter"),
     ("plotting", "plot_gfp", "Plot GFP"),
     ("plotting", "plot_ica", "Plot ICA"),
@@ -84,6 +81,14 @@ demos = [
     ("plotting", "plot_topography_3d", "Plot Topography 3D"),
     ("plotting", "plot_triggers", "Plot Triggers"),
     ("plotting", "save_figures", "Saving Figures"),
+
+    # Interactive / GUI
+    ("gui", "plot_databrowser", "Plot Databrowser"),
+    ("gui", "plot_erp_filter_gui", "Plot ERP Filter GUI"),
+    ("gui", "plot_erp_measurement_gui", "Plot ERP Measurement GUI"),
+    ("gui", "artifact_guis", "Artifact & Rejection GUIs"),
+    ("gui", "ica_guis", "ICA Inspection GUIs"),
+    ("gui", "interactive_viewers", "Interactive Viewers & Scrubbers"),
 
     # Workflows
     ("workflows", "preprocessing_workflow", "Preprocessing Workflow"),

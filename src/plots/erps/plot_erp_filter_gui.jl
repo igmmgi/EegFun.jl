@@ -88,8 +88,10 @@ function plot_erp_filter_gui(
     method_menu = Menu(controls_grid[5, 1], options = zip([p.first for p in filter_methods], filter_methods), default = "Butterworth (IIR)")
 
     Label(controls_grid[6, 1], "Filter Function:", halign = :left)
-    filter_funcs = ["filtfilt" => "filtfilt", "filt" => "filt"]
-    func_menu = Menu(controls_grid[7, 1], options = zip([p.first for p in filter_funcs], filter_funcs), default = "filtfilt")
+    filter_funcs =
+        ["filtfilt (2-pass zero-phase)" => "filtfilt", "filt_zerophase (1-pass FIR)" => "filt_zerophase", "filt (1-pass causal)" => "filt"]
+    func_menu =
+        Menu(controls_grid[7, 1], options = zip([p.first for p in filter_funcs], filter_funcs), default = "filtfilt (2-pass zero-phase)")
 
     Label(controls_grid[8, 1], "Mirror (for edge artifacts):", halign = :left)
     mirror_toggle = _add_labeled_toggle!(controls_grid, 9)
@@ -99,7 +101,7 @@ function plot_erp_filter_gui(
     Label(controls_grid[12, 1], "Cutoff Frequency:", halign = :left)
     lowpass_cutoff_slider = Slider(controls_grid[13, 1], range = 1.0:1.0:(nyquist*0.9), startvalue = 30.0)
     lowpass_cutoff_label = Label(controls_grid[14, 1], "30.0 Hz", halign = :left)
-    Label(controls_grid[15, 1], "Order:", halign = :left)
+    lp_order_title = Label(controls_grid[15, 1], "Order:", halign = :left)
     lowpass_order_slider = Slider(controls_grid[16, 1], range = 1:10, startvalue = 2)
     lowpass_order_label = Label(controls_grid[17, 1], "2", halign = :left)
 
@@ -108,7 +110,7 @@ function plot_erp_filter_gui(
     Label(controls_grid[20, 1], "Cutoff Frequency:", halign = :left)
     highpass_cutoff_slider = Slider(controls_grid[21, 1], range = 0.01:0.01:10.0, startvalue = 0.1)
     highpass_cutoff_label = Label(controls_grid[22, 1], "0.10 Hz", halign = :left)
-    Label(controls_grid[23, 1], "Order:", halign = :left)
+    hp_order_title = Label(controls_grid[23, 1], "Order:", halign = :left)
     highpass_order_slider = Slider(controls_grid[24, 1], range = 1:10, startvalue = 1)
     highpass_order_label = Label(controls_grid[25, 1], "1", halign = :left)
 
@@ -129,6 +131,40 @@ function plot_erp_filter_gui(
     end
     length(axes) > 1 && linkxaxes!(axes...)
 
+    function _fir_info_str(cutoff_hz::Float64, ftype::Symbol, filt_func_sym::Symbol, eff_len::Int, fs::Real)::String
+        n_taps = _effective_fir_taps(eff_len, fs, cutoff_hz, ftype, nothing, filt_func_sym)
+        if filt_func_sym == :filt
+            delay_ms = (n_taps - 1) / (2.0 * fs) * 1000.0
+            return @sprintf("FIR: %d taps (+%.1f ms shift)", n_taps, delay_ms)
+        elseif filt_func_sym == :filt_zerophase
+            return @sprintf("FIR: %d taps (1-pass, 0 ms)", n_taps)
+        else
+            return @sprintf("FIR: %d taps (2-pass, 0 ms)", n_taps)
+        end
+    end
+
+    function refresh_param_labels!()
+        base_len = nrow(first_erp.data)
+        eff_len = (mirror_enabled[] && base_len > 1) ? (3 * base_len - 2) : base_len
+        if filter_method_obs[] == "butterworth"
+            lp_order_title.text = "Order:"
+            lp_order_title.color = :black
+            hp_order_title.text = "Order:"
+            hp_order_title.color = :black
+            suffix = filter_func_obs[] == "filt_zerophase" ? " (2-pass IIR)" : ""
+            lowpass_order_label.text = "$(lowpass_order[])$suffix"
+            highpass_order_label.text = "$(highpass_order[])$suffix"
+        else
+            lp_order_title.text = "Order (IIR only):"
+            lp_order_title.color = :gray
+            hp_order_title.text = "Order (IIR only):"
+            hp_order_title.color = :gray
+            f_sym = Symbol(filter_func_obs[])
+            lowpass_order_label.text = _fir_info_str(lowpass_cutoff[], :lp, f_sym, eff_len, first_erp.sample_rate)
+            highpass_order_label.text = _fir_info_str(highpass_cutoff[], :hp, f_sym, eff_len, first_erp.sample_rate)
+        end
+    end
+
     function _draw_trace!(ax, dat, ch_sym, color)
         if dat isa ErpData
             kw = color === :black ? (;) : (; color = color)
@@ -140,6 +176,7 @@ function plot_erp_filter_gui(
     end
 
     function update_plot!()
+        refresh_param_labels!()
         ch_sym = selected_channel[]
         for (idx, ax) in enumerate(axes)
             empty!(ax)
@@ -151,6 +188,7 @@ function plot_erp_filter_gui(
 
                 filt_method = filter_method_obs[] == "butterworth" ? :iir : :fir
                 filt_func = Symbol(filter_func_obs[])
+                filt_func_eff = (filt_method == :iir && filt_func == :filt_zerophase) ? :filtfilt : filt_func
 
                 try
                     if lowpass_enabled[]
@@ -159,7 +197,7 @@ function plot_erp_filter_gui(
                             lowpass_cutoff[];
                             order = lowpass_order[],
                             filter_method = filt_method,
-                            filter_func = filt_func,
+                            filter_func = filt_func_eff,
                         )
                     end
                     if highpass_enabled[]
@@ -168,7 +206,7 @@ function plot_erp_filter_gui(
                             highpass_cutoff[];
                             order = highpass_order[],
                             filter_method = filt_method,
-                            filter_func = filt_func,
+                            filter_func = filt_func_eff,
                         )
                     end
                     mirror_enabled[] && unmirror!(filtered_erp, :both)
@@ -205,13 +243,13 @@ function plot_erp_filter_gui(
     on(val -> (mirror_enabled[] = val; update_plot!()), mirror_toggle.active)
     on(val -> (lowpass_enabled[] = val; update_plot!()), lowpass_toggle.active)
     on(val -> (lowpass_cutoff[] = val; lowpass_cutoff_label.text = @sprintf("%.1f Hz", val); update_plot!()), lowpass_cutoff_slider.value)
-    on(val -> (lowpass_order[] = val; lowpass_order_label.text = "$(val)"; update_plot!()), lowpass_order_slider.value)
+    on(val -> (lowpass_order[] = val; update_plot!()), lowpass_order_slider.value)
     on(val -> (highpass_enabled[] = val; update_plot!()), highpass_toggle.active)
     on(
         val -> (highpass_cutoff[] = val; highpass_cutoff_label.text = @sprintf("%.2f Hz", val); update_plot!()),
         highpass_cutoff_slider.value,
     )
-    on(val -> (highpass_order[] = val; highpass_order_label.text = "$(val)"; update_plot!()), highpass_order_slider.value)
+    on(val -> (highpass_order[] = val; update_plot!()), highpass_order_slider.value)
 
     screen = display_plot ? _display_figure(fig) : nothing
     _set_window_title("ERP Filter Tool")

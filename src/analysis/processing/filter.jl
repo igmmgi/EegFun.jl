@@ -132,11 +132,12 @@ function _ensure_fir_transition_width(
     dat::EegData,
     transition_width::Union{Nothing,Real},
     cutoff_freq::Real,
-    filter_type::Symbol = :hp,
+    filter_type::Symbol = :hp;
+    filter_func::Symbol = :filtfilt,
 )::Float64
     min_length = dat.data isa Vector ? minimum(nrow, dat.data) : n_samples(dat)
-    min_length < 10 && @minimal_error("Data length ($min_length) is too short for zero-phase FIR filtering (minimum 10 samples required)")
-    max_taps_raw = (min_length - 1) ÷ 3
+    min_length < 10 && @minimal_error("Data length ($min_length) is too short for FIR filtering (minimum 10 samples required)")
+    max_taps_raw = filter_func == :filtfilt ? ((min_length - 1) ÷ 3) : min_length
     max_odd_taps = max(3, iseven(max_taps_raw) ? max_taps_raw - 1 : max_taps_raw)
     min_req_tb = (4.0 * dat.sample_rate / max_odd_taps) * (1.0 + 1e-12)
     actual_tb = _resolve_transition_band_hz(cutoff_freq, dat.sample_rate, filter_type, transition_width)
@@ -147,32 +148,113 @@ function _ensure_fir_transition_width(
     return actual_tb
 end
 
+function _effective_fir_taps(
+    min_length::Int,
+    sample_rate::Real,
+    cutoff_freq::Real,
+    filter_type::Symbol,
+    transition_width::Union{Nothing,Real},
+    filter_func::Symbol,
+)::Int
+    max_taps_raw = filter_func == :filtfilt ? ((min_length - 1) ÷ 3) : min_length
+    max_odd_taps = max(3, iseven(max_taps_raw) ? max_taps_raw - 1 : max_taps_raw)
+    min_req_tb = (4.0 * sample_rate / max_odd_taps) * (1.0 + 1e-12)
+    actual_tb = _resolve_transition_band_hz(cutoff_freq, sample_rate, filter_type, transition_width)
+    tb = max(actual_tb, min_req_tb)
+    min_needed = filter_func == :filtfilt ? 304 : 101
+    min_taps = min_length >= min_needed ? 101 : 3
+    n_taps = max(ceil(Int, 4.0 * sample_rate / tb), max(3, min_taps))
+    iseven(n_taps) && (n_taps += 1)
+    return n_taps
+end
+
 @inline _prepared_filter_object(fobj::ZeroPoleGain) = convert(SecondOrderSections, fobj)
 @inline _prepared_filter_object(fobj::Vector{Float64}) = fobj
 
-@inline function _filter_column!(df::DataFrame, col_idx::Int, fobj, use_filtfilt::Bool)
-    col = df[!, col_idx]
-    if col isa Vector{Float64}
-        col_f = col::Vector{Float64}
-        col_f .= use_filtfilt ? filtfilt(fobj, col_f) : filt(fobj, col_f)
-    else
-        col .= use_filtfilt ? filtfilt(fobj, col) : filt(fobj, col)
+function _filt_fir_zerophase!(dst::AbstractVector, b::Vector{Float64}, src::AbstractVector)::Nothing
+    n = length(src)
+    n == 0 && return nothing
+    d = (length(b) - 1) ÷ 2
+    if d == 0
+        b1 = b[1]
+        @inbounds for i = 1:n
+            dst[i] = b1 * src[i]
+        end
+        return nothing
     end
+
+    pad = Vector{Float64}(undef, n + 2 * d)
+    x1 = Float64(src[1])
+    xn = Float64(src[n])
+    two_x1 = 2.0 * x1
+    two_xn = 2.0 * xn
+
+    # MNE/EEGLAB-style odd-reflection padding (reflect_limited) + group-delay shift
+    @inbounds for k = 1:d
+        offset = d + 1 - k
+        ref_val = offset <= n - 1 ? Float64(src[1+offset]) : xn
+        pad[k] = two_x1 - ref_val
+    end
+    @inbounds for i = 1:n
+        pad[d+i] = Float64(src[i])
+    end
+    @inbounds for k = 1:d
+        ref_val = k <= n - 1 ? Float64(src[n-k]) : x1
+        pad[d+n+k] = two_xn - ref_val
+    end
+
+    filtered = filt(b, pad)
+    shift = 2 * d
+    @inbounds for i = 1:n
+        dst[i] = filtered[shift+i]
+    end
+    return nothing
+end
+
+@inline function _filter_column!(df::DataFrame, col_idx::Int, fobj, filter_func::Symbol)
+    col = df[!, col_idx]
+    if filter_func == :filtfilt
+        if col isa Vector{Float64}
+            col_f = col::Vector{Float64}
+            col_f .= filtfilt(fobj, col_f)
+        else
+            col .= filtfilt(fobj, col)
+        end
+    elseif filter_func == :filt_zerophase
+        if fobj isa Vector{Float64}
+            _filt_fir_zerophase!(col, fobj, col)
+        else
+            col .= filtfilt(fobj, col)
+        end
+    else
+        if col isa Vector{Float64}
+            col_f = col::Vector{Float64}
+            col_f .= filt(fobj, col_f)
+        else
+            col .= filt(fobj, col)
+        end
+    end
+    return nothing
+end
+
+function _validate_filter_func(filter_func::Symbol)::Nothing
+    filter_func in (:filtfilt, :filt_zerophase, :filt) ||
+        @minimal_error("filter_func '$filter_func' must be one of: (:filtfilt, :filt_zerophase, :filt)")
     return nothing
 end
 
 function _apply_filter!(dat::DataFrame, channels::AbstractVector{Symbol}, filter::FilterInfo; filter_func::Symbol = :filtfilt)::Nothing
     isempty(channels) && return nothing
+    _validate_filter_func(filter_func)
     fobj = _prepared_filter_object(filter.filter_object)
-    use_filtfilt = filter_func == :filtfilt
     col_indices = Int[columnindex(dat, ch) for ch in channels]
     if length(col_indices) > 1 && length(col_indices) * nrow(dat) >= 8_192
         Threads.@threads :static for idx in eachindex(col_indices)
-            _filter_column!(dat, col_indices[idx], fobj, use_filtfilt)
+            _filter_column!(dat, col_indices[idx], fobj, filter_func)
         end
     else
         for col_idx in col_indices
-            _filter_column!(dat, col_idx, fobj, use_filtfilt)
+            _filter_column!(dat, col_idx, fobj, filter_func)
         end
     end
     return nothing
@@ -185,19 +267,19 @@ function _apply_filter!(
     filter_func::Symbol = :filtfilt,
 )::Nothing
     (isempty(dat) || isempty(channels)) && return nothing
+    _validate_filter_func(filter_func)
     fobj = _prepared_filter_object(filter.filter_object)
-    use_filtfilt = filter_func == :filtfilt
     col_indices = Int[columnindex(dat[1], ch) for ch in channels]
     if length(dat) > 1 && length(dat) * length(col_indices) * nrow(dat[1]) >= 8_192
         Threads.@threads :static for ep_idx in eachindex(dat)
             epoch = dat[ep_idx]
             for col_idx in col_indices
-                _filter_column!(epoch, col_idx, fobj, use_filtfilt)
+                _filter_column!(epoch, col_idx, fobj, filter_func)
             end
         end
     else
         for epoch in dat, col_idx in col_indices
-            _filter_column!(epoch, col_idx, fobj, use_filtfilt)
+            _filter_column!(epoch, col_idx, fobj, filter_func)
         end
     end
     return nothing
@@ -222,18 +304,25 @@ function _filter_eeg!(
     channel_selection = channels(),
     filter_func::Symbol = :filtfilt,
 )
+    _validate_filter_func(filter_func)
     selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
     if isempty(selected_channels)
         @minimal_warning "No channels selected for $(filter_type == :lp ? "lowpass" : "highpass") filtering"
         return dat
     end
 
+    if filter_method == :iir && filter_func == :filt_zerophase
+        @minimal_warning "filter_func = :filt_zerophase requires filter_method = :fir; using :filtfilt for IIR filter"
+        filter_func = :filtfilt
+    end
+
     transition_band_hz = nothing
     min_taps = 101
-    if filter_method == :fir && filter_func == :filtfilt
-        transition_band_hz = _ensure_fir_transition_width(dat, transition_width, cutoff_freq, filter_type)
+    if filter_method == :fir
+        transition_band_hz = _ensure_fir_transition_width(dat, transition_width, cutoff_freq, filter_type; filter_func = filter_func)
         min_length = dat.data isa Vector ? minimum(nrow, dat.data) : n_samples(dat)
-        min_taps = min_length >= 304 ? 101 : 3
+        min_needed = filter_func == :filtfilt ? 304 : 101
+        min_taps = min_length >= min_needed ? 101 : 3
     end
 
     filter_info = _create_filter(
@@ -257,6 +346,8 @@ end
     lowpass_filter!(dat::EegData, filter_cfg::FilterConfig; section::Symbol = :lowpass)
 
 Apply a digital lowpass filter to `dat` (or a `Vector` of `EegData`) in-place.
+`filter_func` supports `:filtfilt` (two-pass zero-phase, default), `:filt_zerophase`
+(one-pass delay-compensated zero-phase FIR, MNE/EEGLAB style), and `:filt` (one-pass causal).
 """
 lowpass_filter!(
     dat::EegData,
@@ -283,6 +374,8 @@ lowpass_filter!(
     highpass_filter!(dat::EegData, filter_cfg::FilterConfig; section::Symbol = :highpass)
 
 Apply a digital highpass filter to `dat` (or a `Vector` of `EegData`) in-place.
+`filter_func` supports `:filtfilt` (two-pass zero-phase, default), `:filt_zerophase`
+(one-pass delay-compensated zero-phase FIR, MNE/EEGLAB style), and `:filt` (one-pass causal).
 """
 highpass_filter!(
     dat::EegData,
@@ -499,7 +592,11 @@ function print_filter_characteristics(filter_info::FilterInfo; npoints::Int = 10
     @info "Cutoff: -3 dB = $(round.(chars.cutoff_freq_3db, digits=2)) Hz, -6 dB = $(round.(chars.cutoff_freq_6db, digits=2)) Hz"
     @info "Transition band: $(round(chars.transition_band, digits=1)) Hz"
     @info "Stopband attenuation: $(round(chars.stopband_atten, digits=1)) dB"
-    @info "Single-pass characteristics: Group delay = $(round(chars.group_delay * 1000/filter_info.sample_rate, digits=1)) ms, Phase delay = $(round(chars.phase_delay * 1000/filter_info.sample_rate, digits=1)) ms "
+    if filter_func == :filt_zerophase && filter_info.filter_method == :fir
+        @info "One-pass zero-phase FIR: Effective group delay = 0.0 ms (compensated $(round(chars.group_delay * 1000/filter_info.sample_rate, digits=1)) ms causal delay)"
+    else
+        @info "Single-pass characteristics: Group delay = $(round(chars.group_delay * 1000/filter_info.sample_rate, digits=1)) ms, Phase delay = $(round(chars.phase_delay * 1000/filter_info.sample_rate, digits=1)) ms "
+    end
     return nothing
 end
 

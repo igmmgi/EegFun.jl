@@ -103,9 +103,12 @@ pages = [
             "Saving Figures" => "tutorials/plotting/save_figures.md",
         ],
         "Interactive / GUI" => [
-            "Plot Databrowser" => "tutorials/plotting/plot_databrowser.md",
-            "Plot ERP Filter GUI" => "tutorials/plotting/plot_erp_filter_gui.md",
-            "Plot ERP Measurement GUI" => "tutorials/plotting/plot_erp_measurement_gui.md",
+            "Plot Databrowser" => "tutorials/gui/plot_databrowser.md",
+            "Plot ERP Filter GUI" => "tutorials/gui/plot_erp_filter_gui.md",
+            "Plot ERP Measurement GUI" => "tutorials/gui/plot_erp_measurement_gui.md",
+            "Artifact & Rejection GUIs" => "tutorials/gui/artifact_guis.md",
+            "ICA Inspection GUIs" => "tutorials/gui/ica_guis.md",
+            "Interactive Viewers & Scrubbers" => "tutorials/gui/interactive_viewers.md",
         ],
         "Specialized Plotting" => [
             "Plot Decoding" => "tutorials/plotting/plot_decoding.md",

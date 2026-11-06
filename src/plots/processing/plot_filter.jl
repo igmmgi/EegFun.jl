@@ -75,13 +75,15 @@ function _complex_to_db(resp::AbstractVector, is_filtfilt::Bool)::Vector{Float64
 end
 
 """
-    plot_filter_response(filter_info::FilterInfo; filter_func::Function = filtfilt, kwargs...) -> NamedTuple
+    plot_filter_response(filter_info::FilterInfo; filter_func::Union{Symbol,Function} = filtfilt, kwargs...) -> NamedTuple
 
 Plot the frequency response (dB) and impulse response of a digital `FilterInfo`.
+Supports `filter_func` values `:filtfilt` / `filtfilt` (two-pass zero-phase),
+`:filt_zerophase` (one-pass zero-phase FIR), and `:filt` / `filt` (one-pass causal).
 
 $(_generate_kwargs_doc(PLOT_FILTER_KWARGS))
 """
-function plot_filter_response(filter_info::FilterInfo; filter_func::Function = filtfilt, kwargs...)
+function plot_filter_response(filter_info::FilterInfo; filter_func::Union{Symbol,Function} = filtfilt, kwargs...)
     plot_kwargs = _merge_plot_kwargs(PLOT_FILTER_KWARGS, kwargs)
 
     xlim = plot_kwargs[:xlim]
@@ -132,7 +134,8 @@ function plot_filter_response(filter_info::FilterInfo; filter_func::Function = f
 
     freqs, w = _build_freq_grid(Int(plot_kwargs[:n_points]), Float64(filter_info.sample_rate))
 
-    is_filtfilt = filter_func === filtfilt
+    is_filtfilt = filter_func === filtfilt || filter_func == :filtfilt
+    is_causal_filt = filter_func === filt || filter_func == :filt
     fobj = filter_info.filter_object
     if fobj isa Vector{Float64}
         mag_db = _fir_mag_db(fobj, w, is_filtfilt)
@@ -153,12 +156,14 @@ function plot_filter_response(filter_info::FilterInfo; filter_func::Function = f
     is_fir = filter_info.filter_method === :fir || fobj isa Vector
     if is_fir && !is_filtfilt
         impulse_response = fobj
-        time_samples = (-(length(impulse_response)÷2)):((length(impulse_response)-1)÷2)
+        time_samples =
+            is_causal_filt ? (0:(length(impulse_response)-1)) : ((-(length(impulse_response)÷2)):((length(impulse_response)-1)÷2))
     else
         n_half = is_fir ? max(200, length(fobj) * 2) : 200
         impulse = zeros(Float64, 2 * n_half + 1)
         impulse[n_half+1] = 1.0
-        impulse_response = is_fir ? filtfilt(fobj, impulse) : filter_func(fobj, impulse)
+        fn = is_filtfilt ? filtfilt : filt
+        impulse_response = fn(fobj, impulse)
         time_samples = (-n_half):n_half
     end
 

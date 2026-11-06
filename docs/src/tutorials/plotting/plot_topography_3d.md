@@ -16,6 +16,7 @@ Unlike 2D `plot_topography` (which projects electrodes onto planar `x2, y2` coor
 - **Supported data types**: Works directly with `ContinuousData`, `EpochData` (specifying epoch index), and `ErpData`.
 
 
+
 ## Code Examples
 
 ::: details Show Code

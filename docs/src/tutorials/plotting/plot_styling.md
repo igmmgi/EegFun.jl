@@ -17,6 +17,7 @@ EegFun applies `EegFun.theme_eegfun()` per figure rather than mutating your glob
 - **Publication figures**: Combine a clean `Theme(fontsize = ..., palette = ..., linewidth = ...)` block with layout options (`layout = :grid`, `yreversed = true`, `legend_channel`).
 
 
+
 ## Code Examples
 
 ::: details Show Code

@@ -202,6 +202,61 @@ using JLD2
         fi_near_nyq = EegFun.create_lowpass_filter(480.0, 1000.0; order = 2, transition_width = 0.2)
         ch_near_nyq = EegFun.get_filter_characteristics(fi_near_nyq; npoints = 128)
         @test isnan(ch_near_nyq.stopband_atten)
+
+        # 4. One-pass zero-phase FIR (:filt_zerophase, MNE/EEGLAB style) preserves exact peak latency & linear ramps
+        fs_zp = 256
+        n_zp = 385
+        dat_zp = EegFun.create_test_continuous_data(; n = n_zp, fs = fs_zp)
+        t_zp = (0:(n_zp-1)) ./ fs_zp
+        # Synthetic Gaussian ERP peak centered at sample 180 + high-frequency 60 Hz ripple
+        peak_idx = 180
+        clean_peak = 10.0 .* exp.(-0.5 .* ((t_zp .- t_zp[peak_idx]) ./ 0.04) .^ 2)
+        dat_zp.data.Ch1 .= clean_peak .+ 2.0 .* sin.(2π .* 60.0 .* t_zp)
+        # Linear ramp on Ch2 to verify C1 odd-reflection boundary preservation
+        dat_zp.data.Ch2 .= 3.0 .+ 5.0 .* t_zp
+
+        dat_fir_zp = EegFun.lowpass_filter(dat_zp, 30.0; filter_method = :fir, filter_func = :filt_zerophase)
+        dat_fir_causal = EegFun.lowpass_filter(dat_zp, 30.0; filter_method = :fir, filter_func = :filt)
+
+        # Zero-phase 1-pass FIR keeps the peak at exact sample 180 (0 samples shift), whereas causal filt shifts right by ~68 samples
+        @test argmax(dat_fir_zp.data.Ch1) == peak_idx
+        @test argmax(dat_fir_causal.data.Ch1) > peak_idx + 50
+        # Odd-reflection preserves exact linear ramp across the entire signal including endpoints
+        @test isapprox(dat_fir_zp.data.Ch2, dat_zp.data.Ch2; atol = 1e-10)
+
+        # Short-ERP highpass FIR tap clamping works for both :filt_zerophase and :filt (no 10,241-tap wipeout)
+        dat_hp_zp = @test_logs (:warn, r"Widening") match_mode = :any EegFun.highpass_filter(
+            dat_zp,
+            0.1;
+            filter_method = :fir,
+            filter_func = :filt_zerophase,
+        )
+        dat_hp_causal =
+            @test_logs (:warn, r"Widening") match_mode = :any EegFun.highpass_filter(dat_zp, 0.1; filter_method = :fir, filter_func = :filt)
+        @test std(dat_hp_zp.data.Ch1) > 1.0
+        @test std(dat_hp_causal.data.Ch1) > 0.5
+
+        # IIR + :filt_zerophase logs warning and falls back to zero-phase :filtfilt
+        dat_iir_zp = @test_logs (:warn, r"requires filter_method = :fir") match_mode = :any EegFun.lowpass_filter(
+            dat_zp,
+            30.0;
+            filter_method = :iir,
+            order = 2,
+            filter_func = :filt_zerophase,
+        )
+        dat_iir_ff = EegFun.lowpass_filter(dat_zp, 30.0; filter_method = :iir, order = 2, filter_func = :filtfilt)
+        @test dat_iir_zp.data.Ch1 == dat_iir_ff.data.Ch1
+
+        # Edge cases in _filt_fir_zerophase! (1-tap trivial kernel & reflect_limited when d >= n) and invalid filter_func
+        dst_1tap = zeros(5)
+        EegFun._filt_fir_zerophase!(dst_1tap, [2.0], [1.0, 2.0, 3.0, 4.0, 5.0])
+        @test dst_1tap == [2.0, 4.0, 6.0, 8.0, 10.0]
+        dst_short = zeros(3)
+        EegFun._filt_fir_zerophase!(dst_short, [0.25, 0.5, 0.25, 0.0, 0.0][1:5], [4.0, 4.0, 4.0])
+        @test length(dst_short) == 3
+        fi_fir_char = EegFun.create_lowpass_filter(30.0, 256.0; filter_method = :fir)
+        EegFun.print_filter_characteristics(fi_fir_char; filter_func = :filt_zerophase)
+        @test_throws Exception EegFun.lowpass_filter(dat_zp, 30.0; filter_func = :invalid_func)
     end
 
 end

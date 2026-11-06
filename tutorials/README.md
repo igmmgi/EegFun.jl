@@ -16,8 +16,9 @@ These scripts serve two purposes:
 | `artifacts/` | Artifact detection tutorials |
 | `data/` | Data access and selection helpers |
 | `erp/` | ERP measurements, GFP, grand average, LRP, etc. |
+| `gui/` | Interactive GUIs, viewers, scrubbers, and teaching simulators (`GLMakie`) |
 | `import/` | Importing data from various formats (BioSemi, BrainVision, EDF, etc.) |
-| `plotting/` | All plotting tutorials and figure saving |
+| `plotting/` | Static and general plotting tutorials and figure saving |
 | `preprocessing/` | Filtering, rereferencing, epoching, ICA, etc. |
 | `statistics/` | Statistical analysis, decoding, RSA |
 | `time_frequency/` | Time-frequency analysis (Morlet, multitaper, STFT) |

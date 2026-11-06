@@ -447,12 +447,10 @@ function _show_single_filter_menu(state, dat, filter_type::Symbol)
 
     Label(grid[4, 1], "Function:", halign = :left)
     current_func = getfield(fs, func_field)[]
-    menu_func = Menu(
-        grid[4, 2],
-        options = zip(["filtfilt (zero-phase)", "filt (one-pass)"], ["filtfilt", "filt"]),
-        default = current_func == "filtfilt" ? "filtfilt (zero-phase)" : "filt (one-pass)",
-        width = 220,
-    )
+    func_labels = ["filtfilt (2-pass zero-phase)", "filt_zerophase (1-pass FIR)", "filt (1-pass causal)"]
+    func_vals = ["filtfilt", "filt_zerophase", "filt"]
+    default_func_label = current_func == "filt_zerophase" ? func_labels[2] : (current_func == "filt" ? func_labels[3] : func_labels[1])
+    menu_func = Menu(grid[4, 2], options = zip(func_labels, func_vals), default = default_func_label, width = 220)
     on(val -> (getfield(fs, func_field)[] = val), menu_func.selection)
 
     rowgap!(grid, 10)
