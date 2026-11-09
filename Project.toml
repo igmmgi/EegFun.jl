@@ -87,7 +87,7 @@ LIBSVM = "0.8"
 LinearAlgebra = "1"
 Logging = "1"
 LoggingExtras = "1"
-MAT = "0.11, 0.12"
+MAT = "0.11, 0.12, 0.13"
 Makie = "0.24"
 Metal = "1"
 NativeFileDialog = "0.2"
@@ -120,4 +120,3 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 dev = ["Revise"]
 docs = ["Documenter", "DocumenterTools"]
 test = ["Test", "Aqua", "CairoMakie", "DimensionalData"]
-
