@@ -251,4 +251,12 @@ using EegFun
         @test !any(sc -> length(sc[1][]) == n_orig_layout, scatters)
     end
 
+    @testset "plot_tf with ylim" begin
+        tf = EegFun.create_test_tf_data(frequencies = collect(4.0:2.0:30.0))
+        res_single = EegFun.plot_tf(tf; xlim = (-0.1, 0.3), ylim = (8.0, 20.0), display_plot = false)
+        @test res_single.fig isa Figure
+        res_vec = EegFun.plot_tf([tf, tf]; xlim = (-0.1, 0.3), ylim = (8.0, 20.0), display_plot = false)
+        @test res_vec.fig isa Figure
+    end
+
 end # @testset "TF Plots"

@@ -29,6 +29,7 @@ const PLOT_TF_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :xscale => (:linear, "X-axis scale (:linear or :log10)"),
     :yscale => (:linear, "Frequency (y) axis scale (:linear or :log10)"),
     :xlim => (nothing, "X-axis time limits as (min, max) tuple in seconds. If nothing, shows all time points"),
+    :ylim => (nothing, "Y-axis frequency limits as (min, max) tuple in Hz. If nothing, shows all frequencies"),
     :interpolate => (false, "Whether to interpolate the heatmap for a smoother appearance"),
     :plot_title => (nothing, "Plot title. If nothing, automatically determined from condition name and channel"),
     :show_title => (true, "Whether to show the plot title"),
@@ -228,6 +229,7 @@ function plot_tf(tf_data::AbstractVector{<:TimeFreqData}; channel_selection = ch
     ylogscale = plot_kwargs[:yscale] in (:log10, :log, log10)
     show_title = plot_kwargs[:show_title]
     xlim = plot_kwargs[:xlim]
+    ylim = plot_kwargs[:ylim]
     xticks = plot_kwargs[:xticks]
     yticks = plot_kwargs[:yticks]
     interpolate = plot_kwargs[:interpolate]
@@ -288,6 +290,7 @@ function plot_tf(tf_data::AbstractVector{<:TimeFreqData}; channel_selection = ch
             xlogscale = xlogscale,
             ylogscale = ylogscale,
             xlim = xlim,
+            ylim = ylim,
             interpolate = interpolate,
             xticks = xticks,
             yticks = yticks,
@@ -333,6 +336,7 @@ function plot_tf(
     xlogscale = plot_kwargs[:xscale] in (:log10, :log, log10)
     ylogscale = plot_kwargs[:yscale] in (:log10, :log, log10)
     xlim = plot_kwargs[:xlim]
+    ylim = plot_kwargs[:ylim]
     xticks = plot_kwargs[:xticks]
     yticks = plot_kwargs[:yticks]
     interpolate = plot_kwargs[:interpolate]
@@ -416,6 +420,7 @@ function plot_tf(
             xlogscale = xlogscale,
             ylogscale = ylogscale,
             xlim = xlim,
+            ylim = ylim,
             interpolate = interpolate,
             xticks = xticks,
             yticks = yticks,
@@ -486,6 +491,7 @@ function _plot_tf_heatmap!(
     xlogscale::Bool = false,
     ylogscale::Bool = false,
     xlim::Union{Nothing,Tuple{Real,Real}} = nothing,
+    ylim::Union{Nothing,Tuple{Real,Real}} = nothing,
     interpolate::Bool = false,
     xticks = nothing,
     yticks = nothing,
@@ -522,6 +528,7 @@ function _plot_tf_heatmap!(
     end
 
     !isnothing(xlim) && xlims!(ax, xlim)
+    !isnothing(ylim) && ylims!(ax, ylim)
     !isnothing(xticks) && (ax.xticks = xticks)
     !isnothing(yticks) && (ax.yticks = yticks)
 

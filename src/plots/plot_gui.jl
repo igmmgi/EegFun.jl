@@ -401,6 +401,13 @@ function _plot_epochs(gui_state)
     cond_sel = isempty(cond_list) ? conditions() : conditions(cond_list)
     selected_channels = _gui_selected_channels(gui_state)
 
+    epoch_list = _parse_gui_int_field(gui_state.epoch[])
+    if isnothing(epoch_list)
+        @minimal_warning "Requested plot settings incompatible: recheck!"
+        return
+    end
+    epoch_sel = isempty(epoch_list) ? epochs() : epochs(epoch_list)
+
     if _is_pattern(fname)
         res = _resolve_batch_files_helper(gui_state)
         isnothing(res) && return
@@ -412,7 +419,9 @@ function _plot_epochs(gui_state)
                 participant_selection = part_sel,
                 condition_selection = cond_sel,
                 channel_selection = selected_channels,
+                epoch_selection = epoch_sel,
                 layout = Symbol(gui_state.layout_type[]),
+                average_channels = gui_state.average_channels[],
                 xlim = _gui_lim(gui_state.xlim[]),
                 ylim = _gui_lim(gui_state.ylim[]),
                 yreversed = gui_state.invert_y[],
@@ -420,13 +429,6 @@ function _plot_epochs(gui_state)
         end
         return
     end
-
-    epoch_list = _parse_gui_int_field(gui_state.epoch[])
-    if isnothing(epoch_list)
-        @minimal_warning "Requested plot settings incompatible: recheck!"
-        return
-    end
-    epoch_sel = isempty(epoch_list) ? epochs() : epochs(epoch_list)
 
     _guarded_async("Epochs") do
         plot_epochs(

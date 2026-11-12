@@ -358,6 +358,7 @@ end
 
 function plot_epochs(
     dat::EpochData;
+    condition_selection = conditions(),
     channel_selection = channels(),
     sample_selection = samples(),
     interval_selection::Interval = times(),
@@ -368,7 +369,7 @@ function plot_epochs(
 )
     return plot_epochs(
         [dat];
-        condition_selection = conditions(),
+        condition_selection = condition_selection,
         channel_selection = channel_selection,
         sample_selection = sample_selection,
         interval_selection = interval_selection,
