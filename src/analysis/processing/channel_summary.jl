@@ -266,7 +266,7 @@ function channel_summary(
                 @view(std_col[rng]),
                 @view(range_col[rng]),
                 @view(var_col[rng]),
-                @view(zvar_col[rng])
+                @view(zvar_col[rng]),
             )
         else
             single_dat = ContinuousData(dat.file, epoch_df, dat.layout, dat.sample_rate, dat.analysis_info)
@@ -283,7 +283,7 @@ function channel_summary(
                 @view(std_col[rng]),
                 @view(range_col[rng]),
                 @view(var_col[rng]),
-                @view(zvar_col[rng])
+                @view(zvar_col[rng]),
             )
         end
     end
