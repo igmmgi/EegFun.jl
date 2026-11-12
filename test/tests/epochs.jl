@@ -1487,6 +1487,12 @@ using Random
         vec_flag = [copy(ep_flag), copy(ep_flag)]
         EegFun.reject_epochs!(vec_flag, :bad_a)
         @test all(EegFun.n_epochs(d) == 3 for d in vec_flag)
+
+        # 4. log_epochs_table with 1 argument (4 columns) and 2 arguments (6 columns)
+        df_log1 = EegFun.log_epochs_table(vec_ep)
+        @test ncol(df_log1) == 4
+        df_log2 = EegFun.log_epochs_table(vec_ep, vec_ep)
+        @test ncol(df_log2) == 6
     end
 
 end

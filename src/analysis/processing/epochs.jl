@@ -769,9 +769,10 @@ Log an [`epochs_table`](@ref) via `@info` and return the summary `DataFrame`.
 """
 function log_epochs_table(epochs...; print_table::Bool = false, kwargs...)
     df = epochs_table(epochs...; print_table = print_table)
+    align = ncol(df) == 4 ? [:l, :r, :l, :r] : [:l, :r, :l, :r, :r, :r]
     table_output = sprint() do output_io
         io_context = IOContext(output_io, :displaysize => displaysize(stdout))
-        pretty_table(io_context, df; alignment = [:l, :r, :l, :r, :r, :r], kwargs...)
+        pretty_table(io_context, df; alignment = align, kwargs...)
     end
     @info "\n\n$table_output\n"
     return df
