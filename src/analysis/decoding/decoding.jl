@@ -612,7 +612,7 @@ end
 
 function grand_average(dat::AbstractVector{<:DecodedData})
     isempty(dat) && @minimal_error("Cannot create grand average from empty decoded data list")
-    length(dat) == 1 && return dat[1]
+    length(dat) == 1 && return copy(dat[1])
 
     first_decoded = dat[1]
     first_times = first_decoded.times
@@ -670,10 +670,10 @@ function grand_average(dat::AbstractVector{<:DecodedData})
 
     return DecodedData(
         "grand_average",
-        first_condition_names,
-        first_times,
+        copy(first_condition_names),
+        copy(first_times),
         grand_avg_accuracy,
-        first_channels,
+        copy(first_channels),
         first_params;
         stderror = grand_avg_stderror,
         confusion_matrix = grand_avg_confusion,

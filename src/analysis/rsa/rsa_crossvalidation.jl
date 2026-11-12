@@ -316,6 +316,6 @@ function rsa_crossvalidated(
         selected_channels,
         layout_sub,
         first_epoch.sample_rate;
-        analysis_info = first_epoch.analysis_info,
+        analysis_info = copy(first_epoch.analysis_info),
     )
 end

@@ -196,13 +196,15 @@ function _eeglab_extract_continuous_events!(trigger_vec::Vector{Int}, trigger_in
             _record_eeglab_event!(trigger_vec, trigger_info_vec, lat_val, typ_val, pos_val, n_timepoints)
         end
     elseif haskey(events, "latency") && (haskey(events, "type") || haskey(events, "position"))
-        latencies = vec(events["latency"])
-        types = haskey(events, "type") ? vec(events["type"]) : nothing
-        positions = haskey(events, "position") ? vec(events["position"]) : nothing
+        latencies = _as_eeglab_vec(events["latency"])
+        types = haskey(events, "type") ? _as_eeglab_vec(events["type"]) : nothing
+        positions = haskey(events, "position") ? _as_eeglab_vec(events["position"]) : nothing
         @info "Extracted $(length(latencies)) events"
         _record_eeglab_struct_events!(trigger_vec, trigger_info_vec, latencies, types, positions, n_timepoints)
     end
 end
+
+_as_eeglab_vec(x) = x isa AbstractArray ? vec(x) : [x]
 
 function _eeglab_to_continuousdata(eeg::AbstractDict, filepath::String, preserve_radial_distance::Bool)
     n_timepoints, sample_rate, ch_names, data_array, times, layout = _load_common_eeglab_components(eeg, filepath, preserve_radial_distance)
@@ -266,6 +268,7 @@ end
 function _extract_channel_names(chanlocs)
     isempty(chanlocs) && @minimal_error("No channel location information found in .set file")
     labels = chanlocs["labels"]
+    labels isa Union{AbstractString,Symbol} && return [Symbol(labels)]
     labels isa AbstractVector && return Symbol.(labels)
     labels isa AbstractMatrix && return Symbol.(vec(labels))
     @minimal_error("Unexpected chanlocs.labels format")

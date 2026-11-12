@@ -715,6 +715,11 @@ end # EegFun testset
             EegFun.channel_summary("erps_nonseq"; input_dir = cond_dir, output_dir = out_nonseq)
             df_nonseq = CSV.read(joinpath(out_nonseq, "channel_summary.csv"), DataFrame)
             @test sort(unique(df_nonseq.condition)) == [2, 5]
+
+            # Identical non-zero channel variances produce finite 0.0 zvar
+            zv = [1.0, 1.0, 1.0]
+            EegFun._fill_zvar!(zv, [4.5, 4.5, 4.5])
+            @test zv == [0.0, 0.0, 0.0]
         end
 
     finally

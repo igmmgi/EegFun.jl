@@ -861,6 +861,7 @@ using OrderedCollections
             dat3 = EegFun.EpochData("test", 3, "NoTrig", [df_notrig], layout, 100, EegFun.AnalysisInfo())
             # Should safely return an empty array, no crash
             @test isempty(EegFun.trigger_info(dat3))
+            @test EegFun._search_single_trigger([0, 5, 0, 6], 1:10, [0, 5]) == [4]
         end
     end
 end

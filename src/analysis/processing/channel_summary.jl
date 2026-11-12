@@ -99,6 +99,7 @@ function _fill_zvar!(zvar_slice::AbstractVector{Float64}, var_slice::AbstractVec
     n == 1 && (zvar_slice[1] = NaN; return nothing)
     μ = mean(var_slice)
     s = std(var_slice)
+    s == 0.0 && (fill!(zvar_slice, 0.0); return nothing)
     inv_s = 1.0 / s
     @inbounds @simd for i = 1:n
         zvar_slice[i] = (var_slice[i] - μ) * inv_s

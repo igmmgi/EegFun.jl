@@ -641,6 +641,8 @@ using EegFun
         show(io, empty_nc)
         show(io, empty_rsa)
         @test contains(String(take!(io)), "N/A")
+        @test ga.layout !== sub_rsas[1].layout
+        @test ga.analysis_info !== sub_rsas[1].analysis_info
     end
 
 end # @testset "RSA"

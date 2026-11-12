@@ -199,4 +199,11 @@ end
     @test EegFun.channel_labels(ica.layout) == [:Fz, :Pz]
     ica.layout.data[1, :label] = :Mutated
     @test lay3.data[1, :label] == :Fz
+
+    # 4. Single-channel chanlocs and single-event struct in _eeglab_extract_continuous_events!
+    @test EegFun._extract_channel_names(Dict{String,Any}("labels" => "Cz")) == [:Cz]
+    tv = zeros(Int, 10)
+    tiv = fill("", 10)
+    EegFun._eeglab_extract_continuous_events!(tv, tiv, Dict{String,Any}("latency" => 4.0, "type" => "S 9"), 10)
+    @test tv[4] == 9
 end

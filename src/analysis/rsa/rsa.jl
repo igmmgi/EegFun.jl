@@ -516,7 +516,7 @@ function rsa(
         selected_channels,
         layout_sub,
         first_epoch.sample_rate;
-        analysis_info = first_epoch.analysis_info,
+        analysis_info = copy(first_epoch.analysis_info),
     )
 end
 
@@ -855,9 +855,9 @@ function grand_average(rsa_data_list::AbstractVector{<:RsaData}; compute_noise_c
         grand_rdm,
         first_rsa.dissimilarity_measure,
         copy(first_rsa.channels),
-        first_rsa.layout,
+        copy(first_rsa.layout),
         first_rsa.sample_rate;
         noise_ceiling = noise_ceiling,
-        analysis_info = first_rsa.analysis_info,
+        analysis_info = copy(first_rsa.analysis_info),
     )
 end

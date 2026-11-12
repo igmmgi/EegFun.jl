@@ -82,7 +82,7 @@ function compare_rejections(rejection1::Vector{EpochRejectionInfo}, rejection2::
         rej_after[idx] = n2
         rep_ok[idx] = n_repaired
         pct_rep[idx] = n1 > 0 ? round(100.0 * n_repaired / n1; digits = 1) : 0.0
-        pct_kept[idx] = round(100.0 * (n_original - n2) / n_original; digits = 1)
+        pct_kept[idx] = n_original > 0 ? round(100.0 * (n_original - n2) / n_original; digits = 1) : 0.0
     end
 
     return DataFrame(

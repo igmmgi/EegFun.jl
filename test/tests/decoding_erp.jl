@@ -231,9 +231,10 @@ using Statistics
         expected_avg = mean([d.average_score for d in all_decoded])
         @test ga.average_score ≈ expected_avg
 
-        # Single participant should return itself
+        # Single participant should return a copy with identical scores
         single_ga = EegFun.grand_average([all_decoded[1]])
-        @test single_ga === all_decoded[1]
+        @test single_ga !== all_decoded[1]
+        @test single_ga.average_score == all_decoded[1].average_score
 
         # Base.copy isolation and empty DecodedData show guard
         cp = copy(ga)
@@ -275,6 +276,12 @@ using Statistics
         c_nan = copy(c_min)
         c_nan.data[1].Ch1[1] = NaN
         @test_throws EegFun.EegFunError EegFun.decode_libsvm([c_maj, c_nan]; n_iterations = 1, n_folds = 2, show_progress = false)
+
+        ga_1 = EegFun.grand_average([res_it1])
+        @test ga_1 !== res_it1
+        ga_2 = EegFun.grand_average([res_it1, res_imb])
+        @test ga_2.times !== res_it1.times
+        @test ga_2.channels !== res_it1.channels
     end
 
 end # @testset "ERP Decoding"

@@ -243,7 +243,8 @@ end
 
 _search_single_trigger(array, trigger::Integer, ignore_values::Vector{Int} = [0]) =
     search_sequence(array, trigger; ignore_values = ignore_values)
-_search_single_trigger(array, trigger::UnitRange, ignore_values::Vector{Int} = [0]) = search_sequence(array, [trigger])
+_search_single_trigger(array, trigger::UnitRange, ignore_values::Vector{Int} = [0]) =
+    search_sequence(array, [trigger]; ignore_values = ignore_values)
 _search_single_trigger(array, trigger::Symbol, ignore_values::Vector{Int} = [0]) = @minimal_error("Single wildcard sequences not supported")
 function _search_single_trigger(array, trigger::Vector{<:Integer}, ignore_values::Vector{Int} = [0])
     isempty(trigger) && return Int[]
