@@ -288,37 +288,38 @@ function simulate_erp()
 
     trial_plot_data = Observable(Point2f[])
     erp_plot_data = Observable(Point2f[])
-    time_obs = Observable(Float64[])
-    lower_obs = Observable(Float64[])
-    upper_obs = Observable(Float64[])
+    lower_obs = Observable(zeros(Float64, n_samples))
+    upper_obs = Observable(zeros(Float64, n_samples))
+    has_trials_obs = Observable(true)
+    show_band = @lift($show_ci && $has_trials_obs)
     show_trials = @lift(!$show_ci)
 
-    band!(ax, time_obs, lower_obs, upper_obs; color = (:blue, 0.2), visible = show_ci)
+    band!(ax, collect(Float64, time), lower_obs, upper_obs; color = (:blue, 0.2), visible = show_band)
     lines!(ax, trial_plot_data, color = (:gray, 0.15), visible = show_trials)
     lines!(ax, erp_plot_data, color = :blue, linewidth = 3, label = "Empirical Average")
 
     function update_plot(new_signals, new_erp)
         n_trials, n_smpl = size(new_signals)
         if n_trials == 0
+            has_trials_obs[] = false
             trial_plot_data[] = Point2f[]
             erp_plot_data[] = Point2f[]
-            time_obs[] = Float64[]
-            lower_obs[] = Float64[]
-            upper_obs[] = Float64[]
+            lower_obs[] = zeros(Float64, n_samples)
+            upper_obs[] = zeros(Float64, n_samples)
             autolimits!(ax)
             return
         end
 
+        has_trials_obs[] = true
         if n_trials > 1
             stds = vec(std(new_signals, dims = 1))
             ci_margin = 1.96 .* stds ./ sqrt(n_trials)
             lower_obs[] = new_erp .- ci_margin
             upper_obs[] = new_erp .+ ci_margin
         else
-            lower_obs[] = new_erp
-            upper_obs[] = new_erp
+            lower_obs[] = copy(new_erp)
+            upper_obs[] = copy(new_erp)
         end
-        time_obs[] = time
 
         max_drawn_trials = min(n_trials, 50)
         points = Vector{Point2f}(undef, max_drawn_trials * (n_smpl + 1))
