@@ -226,6 +226,8 @@ include("demos/eog/signal_example_eog.jl")
 include("demos/emg/signal_example_emg.jl")
 include("demos/ecg/signal_example_ecg_einthoven.jl")
 include("demos/ecg/signal_example_ecg_hrv.jl")
+include("demos/eda/signal_example_eda_scr.jl")
+include("demos/eda/signal_example_eda_habituation.jl")
 
 # Precompilation
 include("precompile.jl")

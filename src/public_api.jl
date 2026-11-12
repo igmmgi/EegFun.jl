@@ -427,6 +427,8 @@ public signal_example_decoding
 public signal_example_dotproduct
 public signal_example_ecg_einthoven
 public signal_example_ecg_hrv
+public signal_example_eda_habituation
+public signal_example_eda_scr
 public signal_example_emg
 public signal_example_heog
 public signal_example_ica_clt

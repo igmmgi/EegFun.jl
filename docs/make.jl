@@ -155,11 +155,13 @@ pages = [
         ],
         "Machine Learning" => ["Decoding" => "tutorials/teaching/machine_learning/signal_example_decoding.md"],
         "ERP" => ["Simulate ERP" => "tutorials/teaching/erp/simulate_erp.md"],
-        "Psychophysiology (EOG / EMG / ECG)" => [
+        "Psychophysiology (EOG / EMG / ECG / EDA)" => [
             "EOG Dipole & Derivation" => "tutorials/teaching/eog/signal_example_eog.md",
             "Surface EMG Cascade" => "tutorials/teaching/emg/signal_example_emg.md",
             "ECG Einthoven's Triangle" => "tutorials/teaching/ecg/signal_example_ecg_einthoven.md",
             "ECG Heart Rate Variability" => "tutorials/teaching/ecg/signal_example_ecg_hrv.md",
+            "EDA Sweat Gland & SCR Measures" => "tutorials/teaching/eda/signal_example_eda_scr.md",
+            "EDA Habituation & Overlap" => "tutorials/teaching/eda/signal_example_eda_habituation.md",
         ],
     ],
     "Cheatsheet" => "cheatsheet.md",

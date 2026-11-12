@@ -160,6 +160,8 @@ import Logging
             EegFun.signal_example_tf,
             EegFun.signal_example_composition,
             EegFun.signal_example_emg,
+            EegFun.signal_example_eda_scr,
+            EegFun.signal_example_eda_habituation,
         ]
         Logging.with_logger(Logging.NullLogger()) do
             for demo_fn in demo_functions

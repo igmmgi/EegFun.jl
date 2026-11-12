@@ -1,6 +1,6 @@
 name = "EegFun"
 uuid = "aa15e9e4-a77e-4972-a32b-58bceaaa184b"
-version = "0.8.0"
+version = "0.9.0"
 authors = ["Ian G. MacKenzie <ian.mackenzie@uni-tuebingen.de>", "Carolin Dudschig <carolin.dudschig@uni-tuebingen.de>"]
 
 [deps]
