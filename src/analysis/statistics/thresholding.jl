@@ -98,8 +98,8 @@ function _compute_nonparametric_threshold_individual(
     n_voxels = prod(grid_dims)
     n_permutations = size(permutation_t_matrices, N)
 
-    thresholds_positive = Array{Float64,N-1}(undef, grid_dims)
-    thresholds_negative = Array{Float64,N-1}(undef, grid_dims)
+    thresholds_positive = Array{Float64,N - 1}(undef, grid_dims)
+    thresholds_negative = Array{Float64,N - 1}(undef, grid_dims)
     tail == :right && fill!(thresholds_negative, NaN)
     tail == :left && fill!(thresholds_positive, NaN)
 
