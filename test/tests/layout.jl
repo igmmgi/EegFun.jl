@@ -421,6 +421,15 @@ using OrderedCollections
 
             # Should be back to original
             @test layout.data.label == original_labels
+
+            # Renaming to an existing unrenamed channel throws without corrupting layout or data
+            @test_throws EegFun.EegFunError EegFun.rename_channel!(layout, Dict(:Fp1 => :Fp2))
+            @test layout.data.label == original_labels
+
+            cdat = EegFun.create_test_continuous_data(n = 20, n_channels = 2)
+            @test_throws EegFun.EegFunError EegFun.rename_channel!(cdat, Dict(:Ch1 => :Ch2))
+            @test cdat.layout.data.label == [:Ch1, :Ch2]
+            @test hasproperty(cdat.data, :Ch1) && hasproperty(cdat.data, :Ch2)
         end
     end
 

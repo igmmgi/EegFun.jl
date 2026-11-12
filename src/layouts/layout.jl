@@ -490,6 +490,12 @@ function rename_channel!(layout::Layout, rename_dict::Dict{Symbol,Symbol})
         @minimal_error "Cannot rename channels to duplicate names: $(join(duplicate_names, ", "))"
     end
 
+    unrenamed = Set{Symbol}(labels[i] for i in eachindex(labels) if i ∉ matched_rows)
+    collisions = filter(in(unrenamed), target_names)
+    if !isempty(collisions)
+        @minimal_error "Cannot rename channels to existing channel names: $(join(unique(collisions), ", "))"
+    end
+
     @inbounds for k in eachindex(matched_rows)
         labels[matched_rows[k]] = target_names[k]
     end
