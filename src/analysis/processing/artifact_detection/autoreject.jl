@@ -214,9 +214,14 @@ function _repair_epochs_cached!(
             push!(ch_layout_indices, idx)
         end
 
-        if length(ch_layout_indices) == n_channels && (hasproperty(layout.data, :inc) || hasproperty(layout.data, :x2))
+        if length(ch_layout_indices) == n_channels &&
+           ((hasproperty(layout.data, :inc) && hasproperty(layout.data, :azi)) || has_3d_coords(layout) || has_2d_coords(layout))
             try
-                U_all, _ = _spline_geometry(layout.data, ch_layout_indices)
+                U_all = if (hasproperty(layout.data, :inc) && hasproperty(layout.data, :azi)) || has_3d_coords(layout)
+                    _spherical_coords(layout, target_channels; warn_zero = false)
+                else
+                    first(_spline_geometry(layout.data, ch_layout_indices))
+                end
                 f_legendre = _g_factors(m, 50)
                 has_spline_coords = true
             catch e
@@ -265,6 +270,10 @@ function _repair_epochs_cached!(
             end
         end
 
+        if isnothing(layout.neighbors) &&
+           ((hasproperty(layout.data, :inc) && hasproperty(layout.data, :azi) && has_valid_coordinates(layout)) || has_3d_coords(layout))
+            get_neighbors_xyz!(layout, 0.5)
+        end
         if !isnothing(layout.neighbors)
             plans = _resolve_neighbor_plans(target_channels, pattern, layout.neighbors; bad_channels = pattern, log_repairs = false)
             if !isempty(plans)

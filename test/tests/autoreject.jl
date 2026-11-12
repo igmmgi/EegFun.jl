@@ -479,6 +479,45 @@ max_repair_perc = 0.1
             @test maximum(abs.(cleaned_nb.data[2].Ch1)) < 100.0
             @test maximum(abs.(cleaned_nb.data[2].Ch2)) < 100.0
         end
+
+        # 3. Polar-only layout (no :x2/:x3 and neighbors === nothing) works for spherical_spline and neighbor_interpolation
+        lay_polar = EegFun.Layout(
+            DataFrame(label = [:Ch1, :Ch2, :Ch3, :Ch4, :Ch5], inc = [20.0, 20.0, 20.0, 20.0, 15.0], azi = [0.0, 90.0, 180.0, 270.0, 0.0]),
+            nothing,
+            nothing,
+            nothing,
+        )
+        ep_pol = EegFun.create_test_epoch_data(n = 60, fs = 100, n_epochs = 8, n_channels = 5, seed = 21)
+        ep_pol.layout = copy(lay_polar)
+        ep_pol.data[2][10:20, :Ch1] .+= 600.0
+
+        cleaned_sp, res_sp = EegFun.autoreject(
+            ep_pol;
+            mode = :local,
+            repair_method = :spherical_spline,
+            n_folds = 2,
+            consensus_perc = 0.5,
+            max_repair_perc = 0.4,
+            seed = 7,
+            verbose = false,
+        )
+        @test 2 in res_sp.epochs_repaired
+        @test maximum(abs.(cleaned_sp.data[2].Ch1)) < 100.0
+
+        ep_pol_nb = copy(ep_pol)
+        ep_pol_nb.layout = copy(lay_polar)
+        cleaned_pnb, res_pnb = EegFun.autoreject(
+            ep_pol_nb;
+            mode = :local,
+            repair_method = :neighbor_interpolation,
+            n_folds = 2,
+            consensus_perc = 0.5,
+            max_repair_perc = 0.4,
+            seed = 7,
+            verbose = false,
+        )
+        @test 2 in res_pnb.epochs_repaired
+        @test maximum(abs.(cleaned_pnb.data[2].Ch1)) < 100.0
     end
 
 end
