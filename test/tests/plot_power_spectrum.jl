@@ -26,6 +26,13 @@ using EegFun
 
         result_log = EegFun.plot_channel_spectrum(dat; max_freq = 50.0, xscale = :log10, yscale = :linear, display_plot = false)
         @test result_log.fig isa Figure
+        line_log = first(filter(p -> p isa Makie.Lines, result_log.axes[1].scene.plots))
+        @test all(pt[1] > 0 for pt in line_log[1][])
+        menus = filter(b -> b isa Menu, result_log.fig.content)
+        menus[1].selection[] = "Linear (Hz)"
+        @test any(pt[1] == 0 for pt in line_log[1][])
+        menus[1].selection[] = "Log10 (Hz)"
+        @test all(pt[1] > 0 for pt in line_log[1][])
     end
 
     @testset "OrderedDict freq_bands and ICA spectrum centering + labels" begin

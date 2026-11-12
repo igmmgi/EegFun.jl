@@ -199,26 +199,33 @@ function _plot_power_spectrum_data!(
         y_mode_obs[] = sel
     end
 
+    pos_masks = [f .> 0 for f in freq_data]
+    min_pos_freq = minimum((minimum(f[m]) for (f, m) in zip(freq_data, pos_masks) if any(m)); init = 0.1)
+    log_xmin = min_pos_freq < max_freq ? min_pos_freq : 0.1
+
     if x_scale == :log10
-        xlims!(ax, (0.1, max_freq))
+        xlims!(ax, (log_xmin, max_freq))
         ax.xscale = log10
     else
-        xlims!(ax, (0, max_freq))
+        xlims!(ax, (0.0, max_freq))
     end
 
     get_power_data(u) = u == :dB ? [10.0 .* log10.(max.(psd_raw, 1e-10)) for psd_raw in power_raw_data] : power_raw_data
     initial_power_data = get_power_data(unit)
 
     n_ch = length(channels_to_plot)
-    psd_observables = Vector{Observable}(undef, n_ch)
+    pts_observables = Vector{Observable{Vector{Point2f}}}(undef, n_ch)
     lw = plot_kwargs[:linewidth]
     lalpha = plot_kwargs[:line_alpha]
 
     for (i, ch) in enumerate(channels_to_plot)
-        psd_obs = Observable(initial_power_data[i])
-        psd_observables[i] = psd_obs
+        pts_init =
+            x_scale == :log10 ? Point2f.(freq_data[i][pos_masks[i]], initial_power_data[i][pos_masks[i]]) :
+            Point2f.(freq_data[i], initial_power_data[i])
+        pts_obs = Observable(pts_init)
+        pts_observables[i] = pts_obs
         lbl = !isnothing(line_labels) && i <= length(line_labels) ? String(line_labels[i]) : string(ch)
-        lines!(ax, freq_data[i], psd_obs, label = lbl, linewidth = lw, alpha = lalpha)
+        lines!(ax, pts_obs, label = lbl, linewidth = lw, alpha = lalpha)
     end
 
     init_min, init_max, init_pos_min = _calc_power_extrema(initial_power_data)
@@ -227,8 +234,13 @@ function _plot_power_spectrum_data!(
     if plot_kwargs[:show_freq_bands]
         band_ax = Axis(fig[2, 1], height = 50)
         band_ax_ref[] = band_ax
+        if x_scale == :log10
+            xlims!(band_ax, log_xmin, max_freq)
+            band_ax.xscale = log10
+        else
+            xlims!(band_ax, 0.0, max_freq)
+        end
         linkxaxes!(ax, band_ax)
-        xlims!(band_ax, 0.1, max_freq)
         ylims!(band_ax, 0, 1)
         hidedecorations!(band_ax)
         hidespines!(band_ax)
@@ -242,18 +254,35 @@ function _plot_power_spectrum_data!(
     end
 
     on(x_scale_obs) do scale
-        xlims!(ax, (0.1, max_freq))
-        xscale_fn = scale == :log10 ? log10 : identity
-        ax.xscale = xscale_fn
-        !isnothing(band_ax_ref[]) && (band_ax_ref[].xscale = xscale_fn)
+        cur_unit = y_mode_obs[] == "Decibels (dB)" ? :dB : :linear
+        converted = get_power_data(cur_unit)
+        if scale == :log10
+            for i in eachindex(pts_observables)
+                pts_observables[i][] = Point2f.(freq_data[i][pos_masks[i]], converted[i][pos_masks[i]])
+            end
+            xlims!(ax, (log_xmin, max_freq))
+            !isnothing(band_ax_ref[]) && xlims!(band_ax_ref[], log_xmin, max_freq)
+            ax.xscale = log10
+            !isnothing(band_ax_ref[]) && (band_ax_ref[].xscale = log10)
+        else
+            ax.xscale = identity
+            !isnothing(band_ax_ref[]) && (band_ax_ref[].xscale = identity)
+            for i in eachindex(pts_observables)
+                pts_observables[i][] = Point2f.(freq_data[i], converted[i])
+            end
+            xlims!(ax, (0.0, max_freq))
+            !isnothing(band_ax_ref[]) && xlims!(band_ax_ref[], 0.0, max_freq)
+        end
     end
 
     on(y_mode_obs) do mode
         new_unit = mode == "Decibels (dB)" ? :dB : :linear
         new_y_scale = mode == "Log10 (μV²/Hz)" ? :log10 : :linear
         converted = get_power_data(new_unit)
-        for i in eachindex(psd_observables)
-            psd_observables[i][] = converted[i]
+        is_logx = x_scale_obs[] == :log10
+        for i in eachindex(pts_observables)
+            pts_observables[i][] =
+                is_logx ? Point2f.(freq_data[i][pos_masks[i]], converted[i][pos_masks[i]]) : Point2f.(freq_data[i], converted[i])
         end
         ax.ylabel = new_unit == :dB ? "Power Spectral Density (dB)" : plot_kwargs[:ylabel]
         pmin, pmax, ppos_min = _calc_power_extrema(converted)
