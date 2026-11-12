@@ -1,5 +1,5 @@
 """
-    signal_example_heog(; kwargs...)
+    signal_example_heog()
 
 Interactive Horizontal Electrooculography (hEOG) simulator illustrating corneo-retinal standing
 dipoles, volume-conducted electric fields, common-mode rejection (CMR), and bipolar outer-canthi
@@ -16,7 +16,7 @@ signal_example_heog()
 - `ax_eyes::Axis`: The anatomical dipole & circuit schematic axis
 - `ax_eog::Axis`: The potential vs. time signal recording axis
 """
-function signal_example_heog(; kwargs...)
+function signal_example_heog()
     _check_interactive_demo_backend("Interactive hEOG demo") || return nothing
     _set_window_title("Interactive Bipolar hEOG Recording Simulator")
 

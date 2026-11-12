@@ -1324,7 +1324,6 @@ function _toggle_channel_selection!(ax, state, channel_idx)
     state.channels.selected[channel_idx] = !state.channels.selected[channel_idx]
     _apply_channel_visual_state!(ax, state)
 end
-const _toggle_channel_visibility! = _toggle_channel_selection!
 
 function _handle_keyboard_events!(fig, ax, state)
     on(events(fig).keyboardbutton) do event

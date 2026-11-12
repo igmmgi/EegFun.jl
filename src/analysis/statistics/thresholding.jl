@@ -50,20 +50,6 @@ function _threshold_t_matrix_parametric(
     return mask_positive, mask_negative
 end
 
-function _collect_valid_t_values(permutation_t_matrices::AbstractArray{Float64,N}, predicate::F1, transform::F2) where {N,F1,F2}
-    buf = Vector{Float64}(undef, length(permutation_t_matrices))
-    cnt = 0
-    @inbounds for i in eachindex(permutation_t_matrices)
-        t_val = permutation_t_matrices[i]
-        if isfinite(t_val) && predicate(t_val)
-            cnt += 1
-            buf[cnt] = transform(t_val)
-        end
-    end
-    resize!(buf, cnt)
-    return buf
-end
-
 function _compute_nonparametric_threshold_common(
     permutation_t_matrices::AbstractArray{Float64,N},
     alpha::Real = 0.05,

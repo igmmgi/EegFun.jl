@@ -216,11 +216,11 @@ using DataFrames
         line = state.channels.data_lines[ch]
         unselected_cmap = line.colormap[]
         unselected_width = line.linewidth[]
-        EegFun._toggle_channel_visibility!(ax, state, 2)
+        EegFun._toggle_channel_selection!(ax, state, 2)
         @test line.colormap[][1] == plot_kwargs[:selected_channel_color]
         @test line.colormap[][1] != unselected_cmap[1]
         @test line.linewidth[] > unselected_width
-        EegFun._toggle_channel_visibility!(ax, state, 2)
+        EegFun._toggle_channel_selection!(ax, state, 2)
         @test line.colormap[][1] == unselected_cmap[1]
         @test line.linewidth[] == unselected_width
     end

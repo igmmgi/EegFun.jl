@@ -352,10 +352,6 @@ function _compute_t_matrix(
     data2::Array{Float64,3},
     design::Symbol;
     tail::Symbol = :both,
-    mean1_buffer::Union{Nothing,Array{Float64,2}} = nothing,
-    mean2_buffer::Union{Nothing,Array{Float64,2}} = nothing,
-    mean_diff_buffer::Union{Nothing,Array{Float64,2}} = nothing,
-    std_diff_buffer::Union{Nothing,Array{Float64,2}} = nothing,
     t_matrix_buffer::Union{Nothing,Array{Float64,2}} = nothing,
     compute_p_values::Bool = true,
     compute_se::Bool = true,
