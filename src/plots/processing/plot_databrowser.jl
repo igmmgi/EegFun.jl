@@ -1961,7 +1961,7 @@ function _draw(ax, state::DataBrowserState{<:AbstractDataState})
                 line_colormap = track(
                     @lift(
                         $(state.plot_kwargs[:show_cleaned_ica]) ? [cleaned_color, cleaned_color, :red] : [unsel_color, unsel_color, :red]
-                    )
+                    ),
                 )
                 line_width = normal_lw
             else
@@ -1992,7 +1992,7 @@ function _draw(ax, state::DataBrowserState{<:AbstractDataState})
                             $(state.view.xrange)[1],
                             $(state.view.amplitude_scale),
                         )
-                    )
+                    ),
                 )
                 _create_label!(state.channels.data_labels, col, ax, time_start_obs, label_y_obs, is_selected, any_selected)
             else
