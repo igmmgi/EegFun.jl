@@ -5,39 +5,39 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to (well, attempts to :-)) [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.8.0] - 2026-11-06
+## [0.8.0] - 2026-11-12
 
 ### Added
 
-- Implemented `Base` array/`copy`, `StatsBase.mean`, `Tables.jl`, and `DimensionalData.DimArray` interfaces across EEG, time-frequency, and spectrum data types.
-- Added BIDS layout import (`electrodes.tsv` / `coordsystem.json`) and `list_bids_runs`, plus versioned `.jld2` archive metadata (`EEGFUN_FORMAT_VERSION`).
-- Added 1-pass zero-phase FIR filtering (`filter_func = :filt_zerophase`, MNE/EEGLAB `reflect_limited` style) alongside `:filtfilt` and `:filt`, with live FIR tap/delay readout in `plot_erp_filter_gui`.
-- Added `tf_baseline` / `baseline!` support for `TimeFreqEpochData`, Smulders (2010) jackknife `pseudovalues`, `erp_measurements` `area_boundary` / `peak_polarity` options, and `RideComponent` `time_window` / latency centering.
-- Added decoupled `alpha` / `cluster_alpha` keywords in `permutation_test` and explicit `rng` support across statistical, decoding, and RSA routines.
-- Added standardized plot title controls (`window_title`, `figure_title`, `plot_title`, `plot_title_position`) for compact multi-channel grids, plus a dedicated interactive GUI tutorial suite (`tutorials/gui/`).
+- `Base` array/`copy`, `StatsBase.mean`, `Tables.jl`, and `DimensionalData.DimArray` interfaces for EEG data types.
+- BIDS layout import (`electrodes.tsv` / `coordsystem.json`), `list_bids_runs`, and `.jld2` format versioning.
+- 1-pass zero-phase FIR filtering (`filter_func = :filt_zerophase`) and FIR delay readout in `plot_erp_filter_gui`.
+- `tf_baseline` support for `TimeFreqEpochData`, jackknife `pseudovalues`, and `erp_measurements` `area_boundary` / `peak_polarity` options.
+- Decoupled `alpha` / `cluster_alpha` keywords in `permutation_test` and explicit `rng` support across statistics, decoding, and RSA.
+- Standardized plot title controls (`window_title`, `figure_title`, `plot_title`) and interactive GUI tutorial scripts (`tutorials/gui/`).
 
 ### Changed
 
-- Bumped minimum Julia version to `1.13` and updated package `[compat]` bounds (`AnovaFun` `0.5`).
-- Enforced a zero-export API (`395` curated `public` bindings in `src/public_api.jl`; qualify calls with `EegFun.`).
-- Standardized British `neighbour*` types, fields, keywords, and `.toml` keys to US English (`Neighbors`, `Layout.neighbors`, `neighbor_criterion`, default `0.35`).
-- Standardized `plot_*` return values to `(; fig, axes, ...)`, per-figure `theme_eegfun()` application, and `plot_tf_stats` `mask_style` keyword.
-- Aligned `tf_morlet`, `tf_stft`, and `tf_multitaper` with MNE discrete L2 wavelet normalization and zero-padded linear FFT convolution, and adopted EEGLAB `pop_eegfiltnew` default FIR transition-width heuristics.
+- Bumped minimum Julia version to `1.13` and updated `[compat]` bounds (`AnovaFun` `0.5`).
+- Switched to a zero-export API using `public` declarations (`EegFun.<name>`).
+- Standardized `neighbour*` identifiers and config keys to US English (`Neighbors`, `neighbor_criterion`).
+- Standardized `plot_*` return values to `(; fig, axes, ...)` and per-figure `theme_eegfun()` styling.
+- Aligned time-frequency (`tf_morlet`, `tf_stft`, `tf_multitaper`) and FIR filter defaults with MNE/EEGLAB conventions.
 - Defaulted `analytic_test` `correction_method` to `:none`.
-- Simplified internal implementations and reduced allocations across artifact detection, spherical-spline repair/CSD, statistics, time-frequency, Extended Infomax ICA, RSA/decoding, and Makie plotting.
+- Streamlined internal implementations and reduced allocations across processing, ICA, statistics, time-frequency, decoding/RSA, and plotting.
 
 ### Fixed
 
-- **Decoding & RSA**: Added leak-free within-fold feature z-scoring, linear SVM bias, macro-averaged balanced accuracy, and `LIBLINEAR` memory cleanup in `decode_libsvm`; switched `rsa_crossvalidated` to unbiased cross-fold Crossnobis RDMs with demeaned Ledoit–Wolf shrinkage, Nili et al. (2014) noise ceilings, and Mantel condition permutations.
-- **Time-Frequency & Statistics**: Eliminated circular FFT boundary bleed, used primary-taper multitaper phase and circular phase averaging, and switched `EpochData` spectra to per-epoch Welch averaging; fixed centered two-pass variance on CPU/GPU, two-sided cluster p-values, and thread-safe permutation RNG/buffers.
-- **ICA, Processing & I/O**: Fixed Extended Infomax/Picard/AMICA updates and orthogonal subspace preservation in `add_ica_components!`; stabilized spherical-spline conditioning in channel/artifact repair and CSD, CleanLine phase reconstruction, `jackknife_average` participant metadata, and `conditions(...)` ordering; eliminated shallow-copy aliasing across non-mutating wrappers and fixed EEGLAB/FieldTrip/BIDS import edge cases.
-- **Plotting & GUIs**: Fixed `plot_databrowser` ICA caching/selection, `plot_erp_stats` legends, interactive demo layout sizing, and `display_plot = false` handling.
+- Fixed cross-validation leakage in `decode_libsvm` and updated `rsa_crossvalidated` to unbiased cross-fold Crossnobis RDMs and Mantel permutations.
+- Fixed circular FFT boundary bleed, multitaper phase extraction, and per-epoch Welch spectrum averaging.
+- Fixed two-sided cluster permutation p-values, centered variance calculation on CPU/GPU, and thread-safe permutation buffers.
+- Fixed ICA (`infomax_extended_ica`, `picard_ica`, `amica_ica`), spherical-spline repair/CSD conditioning, and non-mutating wrapper copy isolation.
+- Fixed EEGLAB, FieldTrip, and BIDS import edge cases and interactive Makie GUI state handling.
 
 ### Removed
 
-- Legacy and duplicate public bindings (`read_fieldtrip_csv`, `get_all_components`, `signal_example_eog`, `plot_layout`, `plot_layout!`, and batch file-pattern overloads of `realign!` and `calculate_trigger_interval!`).
-- Deprecated keyword aliases (`threshold` in `permutation_test`, 3-arg `ClusterInfo`, `:vssum` baseline alias, `ylogscale`/`colorbar` in `plot_tf_stats`, and `xlims`/`ylims`/`xlabel`/`ylabel` plot aliases) and legacy UK-spelling `.toml`/`.jld2` shims.
-- Implicit `convert(Matrix/Array/DataFrame, dat)` and scalar/linear indexing methods on EEG containers (use `Matrix(dat)`, `Array(dat)`, or `DataFrame(dat)`).
+- Legacy/duplicate bindings (`read_fieldtrip_csv`, `get_all_components`, `signal_example_eog`, `plot_layout`, `plot_layout!`) and deprecated keyword/spelling aliases.
+- Implicit `convert(Matrix/Array/DataFrame, dat)` methods (use `Matrix(dat)`, `Array(dat)`, or `DataFrame(dat)`).
 
 ## [0.7.0] - 2026-08-07
 
