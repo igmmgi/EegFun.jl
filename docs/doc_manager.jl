@@ -172,12 +172,15 @@ function check_doc_coverage(project_root::String; skip_build_check::Bool = true)
 
                 i = 1
                 while i <= length(lines)
-                    line = strip(lines[i])
+                    raw_line = lines[i]
 
-                    # Extract function name from definitions
-                    fname_match = match(r"^function\s+(\w+)", line)
+                    # Extract top-level non-internal function name from definitions (exclude _-prefixed helpers)
+                    fname_match = match(r"^function\s+([a-zA-Z]\w*!?)\s*\(", raw_line)
                     if fname_match === nothing
-                        fname_match = match(r"^(\w+)\(.*\)\s*=", line)
+                        fname_match = match(r"^([a-zA-Z]\w*!?)\(.*\)\s*=(?!=)", raw_line)
+                    end
+                    if fname_match === nothing
+                        fname_match = match(r"^([a-zA-Z]\w*!?)\($", rstrip(raw_line))
                     end
 
                     if fname_match !== nothing
