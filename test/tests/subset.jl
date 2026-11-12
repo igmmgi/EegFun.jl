@@ -448,5 +448,31 @@ using DataFrames
         @test sub_empty isa EegFun.EpochData
         @test isempty(sub_empty.data)
         @test EegFun.channel_labels(sub_empty) == [:Ch1]
+
+        # Boolean mask selectors (BitVector / Vector{Bool}) and batch subset on Vector{ErpData}
+        erp_b = EegFun.create_test_erp_data(n_channels = 3)
+        smask = erp_b.data.time .> 0.0
+        sub_b = EegFun.subset(erp_b; sample_selection = smask, channel_selection = [true, false, true])
+        @test nrow(sub_b.data) == count(smask)
+        @test EegFun.channel_labels(sub_b) == [:Ch1, :Ch3]
+        @test_throws EegFun.EegFunError EegFun.subset(erp_b; sample_selection = [true, false])
+
+        ep_b = EegFun.create_test_epoch_data(n = 20, n_epochs = 3, n_channels = 2)
+        sub_ep_b = EegFun.subset(ep_b; epoch_selection = [false, true, true])
+        @test EegFun.n_epochs(sub_ep_b) == 2
+
+        sub_cond_b = EegFun.subset([spec1, spec2]; condition_selection = [false, true])
+        @test length(sub_cond_b) == 1 && sub_cond_b[1].condition == 2
+        @test EegFun._to_participant_func([true, false, true])([10, 20, 30]) == [true, false, true]
+
+        mktempdir() do tmp
+            JLD2.jldsave(joinpath(tmp, "1_erps.jld2"); data = [erp_b, erp_b])
+            redirect_stdio(stdout = devnull, stderr = devnull) do
+                EegFun.subset("erps"; input_dir = tmp, channel_selection = [:Ch1])
+            end
+            loaded_erps = EegFun.read_data(joinpath(tmp, "subset_erps", "1_erps.jld2"))
+            @test length(loaded_erps) == 2
+            @test EegFun.channel_labels(loaded_erps[1]) == [:Ch1]
+        end
     end
 end

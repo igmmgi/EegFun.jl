@@ -464,6 +464,10 @@ _to_sample_func(::Nothing) = samples()
 _to_sample_func(::Colon) = samples()
 _to_sample_func(f::Function) = f === Colon() ? samples() : f
 _to_sample_func(col::Symbol) = samples(col)
+_to_sample_func(mask::AbstractVector{Bool}) =
+    x ->
+        length(mask) == nrow(x) ? collect(Bool, mask) :
+        @minimal_error("Boolean sample mask length ($(length(mask))) must match number of samples ($(nrow(x)))")
 _to_sample_func(idx::Integer) = x -> Bool[i == idx for i = 1:nrow(x)]
 _to_sample_func(idx) = x -> Bool[i in idx for i = 1:nrow(x)]
 
@@ -474,6 +478,7 @@ _to_channel_func(ch::Symbol) = channels(ch)
 _to_channel_func(chans::AbstractVector{Symbol}) = channels(collect(chans))
 _to_channel_func(idx::AbstractString) = channels(Symbol(idx))
 _to_channel_func(idx::AbstractVector{<:AbstractString}) = channels(Symbol.(idx))
+_to_channel_func(mask::AbstractVector{Bool}) = channels(findall(mask))
 _to_channel_func(idx::Integer) = channels(Int(idx))
 _to_channel_func(idx::AbstractVector{<:Integer}) = channels(collect(Int, idx))
 _to_channel_func(idx::AbstractRange) = channels(collect(Int, idx))
@@ -482,6 +487,7 @@ _to_channel_func(idx) = channels(idx)
 _to_epoch_func(::Nothing) = epochs()
 _to_epoch_func(::Colon) = epochs()
 _to_epoch_func(f::Function) = f === Colon() ? epochs() : f
+_to_epoch_func(mask::AbstractVector{Bool}) = epochs(findall(mask))
 _to_epoch_func(idx::Integer) = epochs(Int(idx))
 _to_epoch_func(idx::AbstractVector{<:Integer}) = epochs(collect(Int, idx))
 _to_epoch_func(idx::AbstractRange) = epochs(collect(Int, idx))
@@ -490,6 +496,7 @@ _to_epoch_func(idx) = epochs(idx)
 _to_condition_func(::Nothing) = conditions()
 _to_condition_func(::Colon) = conditions()
 _to_condition_func(f::Function) = f === Colon() ? conditions() : f
+_to_condition_func(mask::AbstractVector{Bool}) = conditions(findall(mask))
 _to_condition_func(idx::Integer) = conditions(Int(idx))
 _to_condition_func(idx::AbstractVector{<:Integer}) = conditions(collect(Int, idx))
 _to_condition_func(idx::AbstractRange) = conditions(collect(Int, idx))
@@ -500,6 +507,7 @@ _to_condition_func(idx) = conditions(idx)
 _to_participant_func(::Nothing) = participants()
 _to_participant_func(::Colon) = participants()
 _to_participant_func(f::Function) = f === Colon() ? participants() : f
+_to_participant_func(mask::AbstractVector{Bool}) = x -> collect(Bool, mask)
 _to_participant_func(idx::Integer) = participants(Int(idx))
 _to_participant_func(idx::AbstractVector{<:Integer}) = participants(collect(Int, idx))
 _to_participant_func(idx::AbstractRange) = participants(collect(Int, idx))

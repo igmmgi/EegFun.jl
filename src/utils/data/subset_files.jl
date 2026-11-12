@@ -9,7 +9,7 @@ function _process_subset_file(filepath::String, output_path::String; kwargs...)
     jldsave(output_path; data = subset_data, format_version = EEGFUN_FORMAT_VERSION)
 
     if subset_data isa Vector && !isempty(subset_data) && hasproperty(subset_data[1], :data)
-        n_items = sum(length(cond.data) for cond in subset_data)
+        n_items = subset_data[1].data isa Vector ? sum(length(cond.data) for cond in subset_data) : length(subset_data)
         return BatchResult(true, fname, "Processed subset. Elements remaining: $n_items")
     elseif hasproperty(subset_data, :data) && subset_data.data isa Vector
         return BatchResult(true, fname, "Processed subset. Elements remaining: $(length(subset_data.data))")
