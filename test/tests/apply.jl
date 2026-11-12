@@ -193,6 +193,11 @@ using EegFun
 
         # Original should be unchanged
         @test dat.analysis_info.hp_filter == original_hp
+        @test isempty(ica_result.removed_activations)
+
+        # Calling non-mutating apply_analysis_settings again should produce identical results
+        dat_new2 = EegFun.apply_analysis_settings(dat, ica_result, settings)
+        @test dat_new2.data.Ch1 == dat_new.data.Ch1
 
         # New data should be modified
         @test dat_new.analysis_info.hp_filter == 0.1
