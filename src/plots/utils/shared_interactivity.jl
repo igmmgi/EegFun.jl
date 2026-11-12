@@ -181,24 +181,28 @@ function _finish_figure_channel_selection!(
 )
     (plot_layout.type in (:topo, :grid) && channel_selection_active[]) || return
     current_bounds = _norm_screen_rect(fig, selection_state.bounds[], events(fig).mouseposition[]; clamp_unit = true)
+    current_idx = selection_state.current_selection_idx
+    if isnothing(current_idx) || current_idx > length(selection_state.selection_bounds)
+        push!(selection_state.selection_bounds, current_bounds)
+    else
+        selection_state.selection_bounds[current_idx] = current_bounds
+    end
     channels = plot_layout isa PlotLayout ? plot_layout.channels : get(plot_layout, :channels, Symbol[])
     axes_rects = _get_axes_rectangles(axes, channels, fig)
 
     all_selected_channels = Symbol[]
     all_overlapping_axes_rects = Tuple{NTuple{4,Float64},Vector{Symbol}}[]
+    seen_rects = Set{NTuple{4,Float64}}()
 
     for selection_bounds in selection_state.selection_bounds
         for (axis_rect, chs) in axes_rects
             if _rectangles_overlap(selection_bounds, axis_rect)
                 append!(all_selected_channels, chs)
-                push!(all_overlapping_axes_rects, (axis_rect, chs))
+                if axis_rect ∉ seen_rects
+                    push!(seen_rects, axis_rect)
+                    push!(all_overlapping_axes_rects, (axis_rect, chs))
+                end
             end
-        end
-    end
-    for (axis_rect, chs) in axes_rects
-        if _rectangles_overlap(current_bounds, axis_rect)
-            append!(all_selected_channels, chs)
-            push!(all_overlapping_axes_rects, (axis_rect, chs))
         end
     end
 
@@ -409,7 +413,7 @@ end
 function _find_closest_channel(mouse_time, mouse_amp, current_epoch, selected_channels)
     tcol = current_epoch[!, :time]
     mt = Float64(mouse_time)
-    closest_time_idx = tcol isa Vector{Float64} ? _closest_time_idx_typed(tcol, mt) : _closest_time_idx_typed(tcol, mt)
+    closest_time_idx = _closest_time_idx_typed(tcol, mt)
     closest_time_idx == 0 && return nothing, Inf
 
     lookup = DataFrames.index(current_epoch).lookup

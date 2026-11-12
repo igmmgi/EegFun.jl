@@ -288,7 +288,7 @@ function plot_topography(
     if interactive
         deregister_interaction!(ax, :rectanglezoom)
         _setup_topo_keyboard_handlers!(fig, ax; zoom_step = plot_kwargs[:zoom_step])
-        (dat isa ErpData || dat isa EpochData) && _setup_topo_selection!(fig, ax, dat, interval_selection)
+        dat isa ErpData && _setup_topo_selection!(fig, ax, dat, interval_selection)
     end
 
     display_plot && _display_figure(fig)
@@ -499,7 +499,7 @@ function plot_topography(
     if interactive
         deregister_interaction!.(axes, :rectanglezoom)
         _setup_topo_keyboard_handlers!(fig, axes; zoom_step = plot_kwargs[:zoom_step])
-        if all(d -> d isa ErpData || d isa EpochData, dat)
+        if all(d -> d isa ErpData, dat)
             _setup_shared_topo_selection!(fig, dat, TopoSelectionState(axes, interval_selection))
         end
     end
@@ -1070,7 +1070,15 @@ function _setup_shared_topo_selection!(fig::Figure, datasets::Vector, shared_sel
     on(events(fig).mousebutton) do event
         mouse_pos = events(fig).mouseposition[]
         active_ax, active_dataset = _find_active_axis_with_dataset(shared_selection_state.axes, mouse_pos, datasets)
-        isnothing(active_ax) && return
+        if isnothing(active_ax)
+            if event.button == Mouse.left &&
+               event.action == Mouse.release &&
+               shared_selection_state.active[] &&
+               !isempty(shared_selection_state.axes)
+                _finish_topo_selection!(first(shared_selection_state.axes), shared_selection_state, first(datasets))
+            end
+            return
+        end
 
         if event.button == Mouse.left
             if event.action == Mouse.press
