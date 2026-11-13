@@ -522,4 +522,49 @@ using DataFrames
         state.marker_visibility[:trigger] = true
         @test get(state.marker_visibility, :trigger, false) == true
     end
+
+    @testset "time-in-seconds window controls and page navigation" begin
+        cdat = EegFun.create_test_continuous_data(n = 5000, fs = 100, n_channels = 3, seed = 77)
+        plot_kwargs = EegFun._merge_plot_kwargs(EegFun.PLOT_DATABROWSER_KWARGS, Dict{Symbol,Any}(:window_duration => 5.0))
+        fig = Figure()
+        ax = Axis(fig[1, 1])
+        state = EegFun._create_browser_state(cdat, cdat.layout.data.label, ax, nothing, plot_kwargs)
+        EegFun._setup_ui(fig, ax, state, cdat, nothing, plot_kwargs)
+        EegFun._draw(ax, state)
+
+        # Initial window should be 5.0 s * 100 Hz = 500 samples
+        @test state.view.xrange[] == 1:500
+
+        # _set_window_duration! updates window length in seconds
+        EegFun._set_window_duration!(state, 10.0)
+        @test state.view.xrange[] == 1:1000
+
+        # PageDown / PageUp steps by a full window on continuous data
+        EegFun._handle_navigation!(ax, state, :page_forward)
+        @test state.view.xrange[] == 1001:2000
+        EegFun._handle_navigation!(ax, state, :page_back)
+        @test state.view.xrange[] == 1:1000
+
+        # Clamping near the end of the recording when expanding window duration
+        state.view.xrange[] = 4501:5000
+        EegFun._set_window_duration!(state, 10.0)
+        @test state.view.xrange[] == 4001:5000
+
+        # PageDown / PageUp steps by 5 epochs on epoched data
+        epoch_dat, _ = EegFun.create_test_epoch_data_with_artifacts(n_epochs = 12, n_channels = 3)
+        ep_kwargs = EegFun._merge_plot_kwargs(EegFun.PLOT_DATABROWSER_KWARGS, Dict{Symbol,Any}())
+        ep_fig = Figure()
+        ep_ax = Axis(ep_fig[1, 1])
+        ep_state = EegFun._create_browser_state(epoch_dat, epoch_dat.layout.data.label, ep_ax, nothing, ep_kwargs)
+        EegFun._draw(ep_ax, ep_state)
+        @test ep_state.data.current_epoch[] == 1
+        EegFun._handle_navigation!(ep_ax, ep_state, :page_forward)
+        @test ep_state.data.current_epoch[] == 6
+        EegFun._handle_navigation!(ep_ax, ep_state, :page_forward)
+        @test ep_state.data.current_epoch[] == 11
+        EegFun._handle_navigation!(ep_ax, ep_state, :page_forward)
+        @test ep_state.data.current_epoch[] == 12
+        EegFun._handle_navigation!(ep_ax, ep_state, :page_back)
+        @test ep_state.data.current_epoch[] == 7
+    end
 end

@@ -41,6 +41,7 @@ const _PLOT_HELP_INFO = Dict{Symbol,PlotHelpInfo}(
             ("Down", "Zoom out on Y-axis (amplitude scale)"),
             ("Left", "Scroll backward in time"),
             ("Right", "Scroll forward in time"),
+            ("PageUp / PageDown", "Step backward / forward by a full window (or 5 epochs)"),
             ("Mouse Wheel", "Zoom in/out"),
             ("Right Mouse + Drag", "Pan view (when outside region)"),
             ("Shift + Left Click + Drag", "Select x-region (multiple selections allowed)"),

@@ -21,6 +21,7 @@ const PLOT_DATABROWSER_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :channel_offset_margin => (0.9, "Margin factor for channel offset range"),
 
     # Navigation
+    :window_duration => (10.0, "Initial window duration in seconds for continuous data"),
     :scroll_step => (200, "Number of samples to scroll per arrow key press"),
     :zoom_step => (100, "Y-axis zoom increment per arrow key press"),
 
@@ -279,7 +280,7 @@ function _create_browser_state(dat::T, channel_labels, ax, ica, plot_kwargs) whe
     end
     state_type = _data_state_type(T)
     return DataBrowserState{state_type}(
-        view = ViewState(length(channel_labels), _get_initial_window_size(dat), plot_kwargs),
+        view = ViewState(length(channel_labels), _get_initial_window_size(dat, plot_kwargs), plot_kwargs),
         channels = ChannelState(channel_labels),
         data = state_type(dat, plot_kwargs),
         selection = SelectionState(ax, plot_kwargs),
@@ -288,9 +289,13 @@ function _create_browser_state(dat::T, channel_labels, ax, ica, plot_kwargs) whe
     )
 end
 
-_get_initial_window_size(dat::ContinuousData) = min(5000, n_samples(dat))
-_get_initial_window_size(dat::ErpData) = n_samples(dat)
-_get_initial_window_size(dat::EpochData) = nrow(dat.data[1])
+function _get_initial_window_size(dat::ContinuousData, plot_kwargs = Dict{Symbol,Any}())
+    dur_sec = Float64(get(plot_kwargs, :window_duration, 10.0))
+    sr = dat.sample_rate > 0 ? Float64(dat.sample_rate) : 500.0
+    return clamp(round(Int, dur_sec * sr), min(2, n_samples(dat)), n_samples(dat))
+end
+_get_initial_window_size(dat::ErpData, plot_kwargs = Dict{Symbol,Any}()) = n_samples(dat)
+_get_initial_window_size(dat::EpochData, plot_kwargs = Dict{Symbol,Any}()) = nrow(dat.data[1])
 
 _data_state_type(::Type{ContinuousData}) = ContinuousDataState
 _data_state_type(::Type{EpochData}) = EpochedDataState
@@ -954,26 +959,73 @@ function _create_extreme_slider(fig, state)
     return (lbl, slider_extreme)
 end
 
+function _set_window_duration!(state::ContinuousDataBrowserState, duration_sec::Real)
+    n_total = nrow(state.data.current[].data)
+    n_total <= 1 && return
+    sr = state.data.original.sample_rate > 0 ? Float64(state.data.original.sample_rate) : 1.0
+    w = clamp(round(Int, Float64(duration_sec) * sr), 2, n_total)
+    start_idx = clamp(first(state.view.xrange[]), 1, max(1, n_total - w + 1))
+    state.view.xrange[] = start_idx:(start_idx+w-1)
+end
+
 function _create_sliders(fig, state::ContinuousDataBrowserState, dat)
     extreme_widgets = state.ica.is_active ? nothing : _create_extreme_slider(fig, state)
 
-    slider_range = Slider(fig[3, 1], range = 100:50:30000, startvalue = length(state.view.xrange[]), snap = true)
-    slider_x = Slider(fig[2, 1], range = 1:50:nrow(state.data.current[].data), startvalue = first(state.view.xrange[]), snap = true)
+    sr = dat.sample_rate > 0 ? Float64(dat.sample_rate) : 1.0
+    n_total = nrow(state.data.current[].data)
+    total_sec = n_total / sr
+
+    pos_grid = fig[2, 1] = GridLayout(tellwidth = true, tellheight = true)
+    Label(pos_grid[1, 1], "Position:", fontsize = 13, halign = :left, width = 62)
+    step_samples = max(1, round(Int, 0.1 * sr))
+    slider_x = Slider(pos_grid[1, 2], range = 1:step_samples:n_total, startvalue = first(state.view.xrange[]), snap = true)
+    pos_lbl_text = @lift begin
+        rng = $(state.view.xrange)
+        tvec = state.data.current[].data.time
+        t0 = round(tvec[clamp(first(rng), 1, length(tvec))], digits = 1)
+        t1 = round(tvec[clamp(last(rng), 1, length(tvec))], digits = 1)
+        t_end = round(tvec[end], digits = 1)
+        "$(t0)–$(t1) / $(t_end) s"
+    end
+    Label(pos_grid[1, 3], pos_lbl_text, fontsize = 13, halign = :right, width = 145)
+    colgap!(pos_grid, 8)
+
+    win_grid = fig[3, 1] = GridLayout(tellwidth = true, tellheight = true)
+    Label(win_grid[1, 1], "Window:", fontsize = 13, halign = :left, width = 62)
+    min_sec = round(max(0.1, min(1.0, total_sec)), digits = 1)
+    max_sec = round(max(min_sec, min(60.0, total_sec)), digits = 1)
+    step_sec = max_sec <= 5.0 ? 0.1 : 0.5
+    sec_range = min_sec < max_sec ? (min_sec:step_sec:max_sec) : (min_sec:0.1:(min_sec+0.1))
+    init_sec = clamp(round(length(state.view.xrange[]) / sr, digits = 1), first(sec_range), last(sec_range))
+
+    slider_range = Slider(win_grid[1, 2], range = sec_range, startvalue = init_sec, snap = true)
+    win_lbl_text = @lift "$(round(length($(state.view.xrange)) / sr, digits = 1)) s"
+    Label(win_grid[1, 3], win_lbl_text, fontsize = 13, halign = :right, width = 52)
+
+    preset_secs = [s for s in (1.0, 5.0, 10.0, 30.0) if s <= max_sec + 1e-6]
+    for (j, psec) in enumerate(preset_secs)
+        btn = Button(win_grid[1, 3+j], label = "$(Int(psec))s", width = 38, height = 24, fontsize = 12)
+        on(_ -> _set_window_duration!(state, psec), btn.clicks)
+    end
+    colgap!(win_grid, 6)
 
     updating_from_key = Ref(false)
 
-    function _update_window(start::Int, w::Int)
-        new_range = start:min(nrow(state.data.current[].data), start+w-1)
-        length(new_range) > 1 && (state.view.xrange[] = new_range)
+    function _update_window(start::Int, dur_sec::Real)
+        n_cur = nrow(state.data.current[].data)
+        n_cur <= 1 && return
+        w = clamp(round(Int, Float64(dur_sec) * sr), 2, n_cur)
+        s = clamp(start, 1, max(1, n_cur - w + 1))
+        state.view.xrange[] = s:(s+w-1)
     end
 
-    on(w -> (updating_from_key[] || _update_window(slider_x.value[], w)), slider_range.value)
+    on(dur_sec -> (updating_from_key[] || _update_window(slider_x.value[], dur_sec)), slider_range.value)
     on(start -> (updating_from_key[] || _update_window(start, slider_range.value[])), slider_x.value)
 
     on(state.view.xrange) do rng
         updating_from_key[] = true
         set_close_to!(slider_x, first(rng))
-        set_close_to!(slider_range, length(rng))
+        set_close_to!(slider_range, length(rng) / sr)
         updating_from_key[] = false
     end
 
@@ -1056,7 +1108,14 @@ _get_epoch_menu(fig, ax, state::EpochedDataBrowserState) = _create_epoch_menu(fi
 # Navigation & Interaction
 # =============================================================================
 
-const KEYBOARD_ACTIONS = Dict(Keyboard.left => :left, Keyboard.right => :right, Keyboard.up => :up, Keyboard.down => :down)
+const KEYBOARD_ACTIONS = Dict(
+    Keyboard.left => :left,
+    Keyboard.right => :right,
+    Keyboard.up => :up,
+    Keyboard.down => :down,
+    Keyboard.page_up => :page_back,
+    Keyboard.page_down => :page_forward,
+)
 
 function _handle_navigation!(ax, state::DataBrowserState{<:AbstractDataState}, action::Symbol)
     if action == :up
@@ -1067,6 +1126,10 @@ function _handle_navigation!(ax, state::DataBrowserState{<:AbstractDataState}, a
         _handle_left_navigation(ax, state)
     elseif action == :right
         _handle_right_navigation(ax, state)
+    elseif action == :page_back
+        _handle_page_back(ax, state)
+    elseif action == :page_forward
+        _handle_page_forward(ax, state)
     end
 end
 
@@ -1074,9 +1137,12 @@ _handle_left_navigation(ax, state::ContinuousDataBrowserState) = _xback!(ax, sta
 _handle_left_navigation(ax, state::EpochedDataBrowserState) = _step_epoch_backward(ax, state)
 _handle_right_navigation(ax, state::ContinuousDataBrowserState) = _xforward!(ax, state)
 _handle_right_navigation(ax, state::EpochedDataBrowserState) = _step_epoch_forward(ax, state)
+_handle_page_back(ax, state::ContinuousDataBrowserState) = _xback!(ax, state, length(state.view.xrange.val))
+_handle_page_back(ax, state::EpochedDataBrowserState) = _step_epoch!(ax, state, -5)
+_handle_page_forward(ax, state::ContinuousDataBrowserState) = _xforward!(ax, state, length(state.view.xrange.val))
+_handle_page_forward(ax, state::EpochedDataBrowserState) = _step_epoch!(ax, state, 5)
 
-function _xback!(ax, state::ContinuousDataBrowserState)
-    step = state.plot_kwargs[:scroll_step]
+function _xback!(ax, state::ContinuousDataBrowserState, step::Int = state.plot_kwargs[:scroll_step])
     current_range = state.view.xrange.val
     current_range[1] <= 1 && return
     shift = min(step, current_range[1] - 1)
@@ -1084,8 +1150,7 @@ function _xback!(ax, state::ContinuousDataBrowserState)
     _restore_axis_limits!(ax, state)
 end
 
-function _xforward!(ax, state::ContinuousDataBrowserState)
-    step = state.plot_kwargs[:scroll_step]
+function _xforward!(ax, state::ContinuousDataBrowserState, step::Int = state.plot_kwargs[:scroll_step])
     current_range = state.view.xrange.val
     max_idx = nrow(state.data.current[].data)
     current_range[end] >= max_idx && return
