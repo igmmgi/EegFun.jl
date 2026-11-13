@@ -615,4 +615,41 @@ using DataFrames
         @test sum(cdat.data[!, ch1]) / length(cdat.data[!, ch1]) ≈ orig_ch1_mean
         @test sum(state.data.current[].data[!, ch1]) / length(state.data.current[].data[!, ch1]) ≈ orig_ch1_mean
     end
+
+    @testset "ICA component ranking metrics and EOG correlation" begin
+        cdat = EegFun.create_test_continuous_data(n = 1500, fs = 100, n_channels = 4, seed = 99)
+        ica_res = EegFun.run_ica(cdat)
+
+        # 1. Without vEOG/hEOG channels
+        metrics_no_eog = EegFun._ica_component_metrics(cdat, ica_res)
+        @test length(metrics_no_eog.variance_pct) == 4
+        @test sum(metrics_no_eog.variance_pct) ≈ 100.0
+        @test issorted(metrics_no_eog.variance_pct[metrics_no_eog.var_rank], rev = true)
+        @test all(isnan, metrics_no_eog.veog_corr)
+        @test all(isnan, metrics_no_eog.heog_corr)
+        lbl_no_eog = EegFun._format_ica_component_label(ica_res.ica_label[1], 1, metrics_no_eog)
+        @test occursin("%", lbl_no_eog)
+        @test !occursin("EOG", lbl_no_eog)
+
+        # 2. With vEOG and hEOG channels present
+        cdat.data[!, :vEOG] = copy(cdat.data[!, cdat.layout.data.label[1]])
+        cdat.data[!, :hEOG] = copy(cdat.data[!, cdat.layout.data.label[2]])
+        metrics_eog = EegFun._ica_component_metrics(cdat, ica_res)
+        @test !any(isnan, metrics_eog.veog_corr)
+        @test !any(isnan, metrics_eog.heog_corr)
+        @test all(0.0 .<= metrics_eog.veog_corr .<= 1.0)
+        @test all(0.0 .<= metrics_eog.heog_corr .<= 1.0)
+        @test maximum(metrics_eog.veog_corr) > 0.5
+        @test issorted(metrics_eog.veog_corr[metrics_eog.veog_rank], rev = true)
+        @test issorted(metrics_eog.heog_corr[metrics_eog.heog_rank], rev = true)
+
+        lbl_eog = EegFun._format_ica_component_label(ica_res.ica_label[1], 1, metrics_eog)
+        @test occursin("v:", lbl_eog)
+        @test occursin("h:", lbl_eog)
+
+        summary_str = EegFun._ica_ranking_summary_text(ica_res, metrics_eog)
+        @test occursin("Top Variance:", summary_str)
+        @test occursin("Top vEOG |r|:", summary_str)
+        @test occursin("Top hEOG |r|:", summary_str)
+    end
 end
