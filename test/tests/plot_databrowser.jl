@@ -616,41 +616,42 @@ using DataFrames
         @test sum(state.data.current[].data[!, ch1]) / length(state.data.current[].data[!, ch1]) ≈ orig_ch1_mean
     end
 
-    @testset "ICA component ranking metrics and EOG correlation" begin
+    @testset "ICA component ranking metrics and channel correlation" begin
         cdat = EegFun.create_test_continuous_data(n = 1500, fs = 100, n_channels = 4, seed = 99)
         ica_res = EegFun.run_ica(cdat)
 
-        # 1. Without vEOG/hEOG channels
-        metrics_no_eog = EegFun._ica_component_metrics(cdat, ica_res)
-        @test length(metrics_no_eog.variance_pct) == 4
-        @test sum(metrics_no_eog.variance_pct) ≈ 100.0
-        @test issorted(metrics_no_eog.variance_pct[metrics_no_eog.var_rank], rev = true)
-        @test all(isnan, metrics_no_eog.veog_corr)
-        @test all(isnan, metrics_no_eog.heog_corr)
-        lbl_no_eog = EegFun._format_ica_component_label(ica_res.ica_label[1], 1, metrics_no_eog)
-        @test occursin("%", lbl_no_eog)
-        @test !occursin("EOG", lbl_no_eog)
+        # 1. Without a correlation channel selected (default)
+        metrics_no_ch = EegFun._ica_component_metrics(cdat, ica_res)
+        @test length(metrics_no_ch.variance_pct) == 4
+        @test sum(metrics_no_ch.variance_pct) ≈ 100.0
+        @test issorted(metrics_no_ch.variance_pct[metrics_no_ch.var_rank], rev = true)
+        @test isnothing(metrics_no_ch.channel)
+        @test all(isnan, metrics_no_ch.channel_corr)
+        lbl_no_ch = EegFun._format_ica_component_label(ica_res.ica_label[1], 1, metrics_no_ch)
+        @test occursin("%", lbl_no_ch)
+        @test !occursin("r=", lbl_no_ch)
 
-        # 2. With vEOG and hEOG channels present
-        cdat.data[!, :vEOG] = copy(cdat.data[!, cdat.layout.data.label[1]])
-        cdat.data[!, :hEOG] = copy(cdat.data[!, cdat.layout.data.label[2]])
-        metrics_eog = EegFun._ica_component_metrics(cdat, ica_res)
-        @test !any(isnan, metrics_eog.veog_corr)
-        @test !any(isnan, metrics_eog.heog_corr)
-        @test all(0.0 .<= metrics_eog.veog_corr .<= 1.0)
-        @test all(0.0 .<= metrics_eog.heog_corr .<= 1.0)
-        @test maximum(metrics_eog.veog_corr) > 0.5
-        @test issorted(metrics_eog.veog_corr[metrics_eog.veog_rank], rev = true)
-        @test issorted(metrics_eog.heog_corr[metrics_eog.heog_rank], rev = true)
+        # 2. With a user-defined extra channel (:my_eog) and boolean column (:is_blink)
+        cdat.data[!, :my_eog] = copy(cdat.data[!, cdat.layout.data.label[1]])
+        cdat.data[!, :is_blink] = falses(1500)
+        avail_chs = EegFun._ica_correlatable_channels(cdat)
+        @test first(avail_chs) == :my_eog
+        @test :is_blink ∉ avail_chs
+        @test all(ch -> ch in avail_chs, cdat.layout.data.label)
 
-        lbl_eog = EegFun._format_ica_component_label(ica_res.ica_label[1], 1, metrics_eog)
-        @test occursin("v:", lbl_eog)
-        @test occursin("h:", lbl_eog)
+        metrics_ch = EegFun._ica_component_metrics(cdat, ica_res; channel = :my_eog)
+        @test metrics_ch.channel == :my_eog
+        @test !any(isnan, metrics_ch.channel_corr)
+        @test all(0.0 .<= metrics_ch.channel_corr .<= 1.0)
+        @test maximum(metrics_ch.channel_corr) > 0.5
+        @test issorted(metrics_ch.channel_corr[metrics_ch.corr_rank], rev = true)
 
-        summary_str = EegFun._ica_ranking_summary_text(ica_res, metrics_eog)
+        lbl_ch = EegFun._format_ica_component_label(ica_res.ica_label[1], 1, metrics_ch)
+        @test occursin("r=", lbl_ch)
+
+        summary_str = EegFun._ica_ranking_summary_text(ica_res, metrics_ch)
         @test occursin("Top Variance:", summary_str)
-        @test occursin("Top vEOG |r|:", summary_str)
-        @test occursin("Top hEOG |r|:", summary_str)
+        @test occursin("Top |r| with my_eog:", summary_str)
 
         # 3. Verify _show_ica_menu builds cleanly without error
         plot_kwargs = EegFun._merge_plot_kwargs(EegFun.PLOT_DATABROWSER_KWARGS, Dict{Symbol,Any}())

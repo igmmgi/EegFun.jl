@@ -691,65 +691,69 @@ function _toggle_ica_component!(state, component_id::Union{Nothing,Int})
     return nothing
 end
 
-function _df_eog_signal(df::DataFrame, col::Symbol)
-    if hasproperty(df, col)
-        return Float64.(df[!, col])
-    elseif col == :vEOG && all(c -> hasproperty(df, c), (:Fp1, :Fp2, :IO1, :IO2))
-        return 0.5 .* (Float64.(df[!, :Fp1]) .+ Float64.(df[!, :Fp2])) .- 0.5 .* (Float64.(df[!, :IO1]) .+ Float64.(df[!, :IO2]))
-    elseif col == :hEOG && all(c -> hasproperty(df, c), (:F9, :F10))
-        return Float64.(df[!, :F9]) .- Float64.(df[!, :F10])
+function _ica_correlatable_channels(dat::EegData)::Vector{Symbol}
+    df = dat isa SingleDataFrameEeg ? dat.data : (isempty(dat.data) ? DataFrame() : dat.data[1])
+    nrow(df) == 0 && return Symbol[]
+    is_numeric_col(c::Symbol) = hasproperty(df, c) && (eltype(df[!, c]) <: Real) && !(eltype(df[!, c]) <: Bool)
+    extras = Symbol[c for c in extra_labels(dat) if is_numeric_col(c)]
+    scalp = Symbol[c for c in channel_labels(dat) if is_numeric_col(c) && c ∉ extras]
+    return vcat(extras, scalp)
+end
+
+function _ica_channel_vector(dat::SingleDataFrameEeg, col::Symbol)
+    hasproperty(dat.data, col) || return nothing
+    v = dat.data[!, col]
+    (eltype(v) <: Real && !(eltype(v) <: Bool)) || return nothing
+    return Float64.(v)
+end
+
+function _ica_channel_vector(dat::EpochData, col::Symbol)
+    (isempty(dat.data) || !hasproperty(dat.data[1], col)) && return nothing
+    v1 = dat.data[1][!, col]
+    (eltype(v1) <: Real && !(eltype(v1) <: Bool)) || return nothing
+    return reduce(vcat, (Float64.(df[!, col]) for df in dat.data))
+end
+
+function _ica_activation_matrix(dat::EegData, ica::InfoIca)::Matrix{Float64}
+    cols = ica.layout.data.label
+    X = if dat isa SingleDataFrameEeg
+        _pack_df_to_matrix(dat.data, cols)
+    elseif dat isa EpochData && !isempty(dat.data)
+        n_tot = sum(nrow(df) for df in dat.data)
+        _pack_dfs_to_matrix(dat.data, cols, n_tot)
+    else
+        return Matrix{Float64}(undef, 0, length(ica.ica_label))
     end
-    return nothing
+    size(X, 1) <= 1 && return Matrix{Float64}(undef, 0, length(ica.ica_label))
+    inv_scale = 1.0 / ica.scale
+    @inbounds for j in axes(X, 2)
+        mj = ica.mean[j]
+        @simd for i in axes(X, 1)
+            X[i, j] = (X[i, j] - mj) * inv_scale
+        end
+    end
+    return X * transpose(ica.unmixing)
 end
 
-_ica_eog_channel_vector(dat::SingleDataFrameEeg, col::Symbol) = _df_eog_signal(dat.data, col)
-
-function _ica_eog_channel_vector(dat::EpochData, col::Symbol)
-    isempty(dat.data) && return nothing
-    first_sig = _df_eog_signal(dat.data[1], col)
-    isnothing(first_sig) && return nothing
-    return reduce(vcat, (_df_eog_signal(df, col) for df in dat.data))
-end
-
-function _ica_component_metrics(dat::EegData, ica::InfoIca)
+function _ica_component_metrics(
+    dat::EegData,
+    ica::InfoIca;
+    channel::Union{Nothing,Symbol} = nothing,
+    acts::Union{Nothing,Matrix{Float64}} = nothing,
+)
     n_comps = length(ica.ica_label)
     var_total = sum(ica.variance)
     variance_pct = var_total > 0 ? (Float64.(ica.variance) ./ var_total .* 100.0) : zeros(Float64, n_comps)
+    channel_corr = fill(NaN, n_comps)
 
-    veog_vec = _ica_eog_channel_vector(dat, :vEOG)
-    heog_vec = _ica_eog_channel_vector(dat, :hEOG)
-    veog_corr = fill(NaN, n_comps)
-    heog_corr = fill(NaN, n_comps)
-
-    if !isnothing(veog_vec) || !isnothing(heog_vec)
-        cols = ica.layout.data.label
-        X = if dat isa SingleDataFrameEeg
-            _pack_df_to_matrix(dat.data, cols)
-        elseif dat isa EpochData && !isempty(dat.data)
-            n_tot = sum(nrow(df) for df in dat.data)
-            _pack_dfs_to_matrix(dat.data, cols, n_tot)
-        else
-            Matrix{Float64}(undef, 0, length(cols))
-        end
-        if size(X, 1) > 1
-            inv_scale = 1.0 / ica.scale
-            @inbounds for j in axes(X, 2)
-                mj = ica.mean[j]
-                @simd for i in axes(X, 1)
-                    X[i, j] = (X[i, j] - mj) * inv_scale
-                end
-            end
-            acts = X * transpose(ica.unmixing)
-            if !isnothing(veog_vec) && length(veog_vec) == size(acts, 1) && std(veog_vec) > eps(Float64)
+    if !isnothing(channel)
+        ch_vec = _ica_channel_vector(dat, channel)
+        if !isnothing(ch_vec)
+            act_mat = isnothing(acts) ? _ica_activation_matrix(dat, ica) : acts
+            if size(act_mat, 1) == length(ch_vec) && length(ch_vec) > 1 && std(ch_vec) > eps(Float64)
                 for c = 1:n_comps
-                    sc = std(view(acts, :, c))
-                    veog_corr[c] = sc > eps(Float64) ? abs(cor(view(acts, :, c), veog_vec)) : 0.0
-                end
-            end
-            if !isnothing(heog_vec) && length(heog_vec) == size(acts, 1) && std(heog_vec) > eps(Float64)
-                for c = 1:n_comps
-                    sc = std(view(acts, :, c))
-                    heog_corr[c] = sc > eps(Float64) ? abs(cor(view(acts, :, c), heog_vec)) : 0.0
+                    sc = std(view(act_mat, :, c))
+                    channel_corr[c] = sc > eps(Float64) ? abs(cor(view(act_mat, :, c), ch_vec)) : 0.0
                 end
             end
         end
@@ -757,24 +761,17 @@ function _ica_component_metrics(dat::EegData, ica::InfoIca)
 
     return (
         variance_pct = variance_pct,
-        veog_corr = veog_corr,
-        heog_corr = heog_corr,
         var_rank = sortperm(variance_pct, rev = true),
-        veog_rank = all(isnan, veog_corr) ? collect(1:n_comps) : sortperm(replace(veog_corr, NaN => -1.0), rev = true),
-        heog_rank = all(isnan, heog_corr) ? collect(1:n_comps) : sortperm(replace(heog_corr, NaN => -1.0), rev = true),
+        channel = channel,
+        channel_corr = channel_corr,
+        corr_rank = all(isnan, channel_corr) ? collect(1:n_comps) : sortperm(replace(channel_corr, NaN => -1.0), rev = true),
     )
 end
 
 function _format_ica_component_label(comp_label, comp_idx::Int, metrics)
     var_str = @sprintf("%.1f%%", metrics.variance_pct[comp_idx])
-    has_v = !isnan(metrics.veog_corr[comp_idx])
-    has_h = !isnan(metrics.heog_corr[comp_idx])
-    if has_v && has_h
-        return @sprintf("%s (%s | v:%.2f h:%.2f)", string(comp_label), var_str, metrics.veog_corr[comp_idx], metrics.heog_corr[comp_idx])
-    elseif has_v
-        return @sprintf("%s (%s | vEOG:%.2f)", string(comp_label), var_str, metrics.veog_corr[comp_idx])
-    elseif has_h
-        return @sprintf("%s (%s | hEOG:%.2f)", string(comp_label), var_str, metrics.heog_corr[comp_idx])
+    if !isnan(metrics.channel_corr[comp_idx])
+        return @sprintf("%s (%s | r=%.2f)", string(comp_label), var_str, metrics.channel_corr[comp_idx])
     else
         return @sprintf("%s (%s)", string(comp_label), var_str)
     end
@@ -785,13 +782,9 @@ function _ica_ranking_summary_text(ica::InfoIca, metrics; top_k::Int = 3)
     k == 0 && return ""
     var_parts = [@sprintf("%s (%.1f%%)", string(ica.ica_label[c]), metrics.variance_pct[c]) for c in metrics.var_rank[1:k]]
     sections = ["Top Variance: " * join(var_parts, ", ")]
-    if !all(isnan, metrics.veog_corr)
-        v_parts = [@sprintf("%s (%.2f)", string(ica.ica_label[c]), metrics.veog_corr[c]) for c in metrics.veog_rank[1:k]]
-        push!(sections, "Top vEOG |r|: " * join(v_parts, ", "))
-    end
-    if !all(isnan, metrics.heog_corr)
-        h_parts = [@sprintf("%s (%.2f)", string(ica.ica_label[c]), metrics.heog_corr[c]) for c in metrics.heog_rank[1:k]]
-        push!(sections, "Top hEOG |r|: " * join(h_parts, ", "))
+    if !isnothing(metrics.channel) && !all(isnan, metrics.channel_corr)
+        c_parts = [@sprintf("%s (%.2f)", string(ica.ica_label[c]), metrics.channel_corr[c]) for c in metrics.corr_rank[1:k]]
+        push!(sections, "Top |r| with $(metrics.channel): " * join(c_parts, ", "))
     end
     return join(sections, "   |   ")
 end
@@ -799,24 +792,29 @@ end
 function _show_ica_menu(state, ax, ica; display_plot::Bool = true)
     all_components = ica.ica_label
     n_comps = length(all_components)
-    metrics = _ica_component_metrics(state.data.original, ica)
-    has_v = !all(isnan, metrics.veog_corr)
-    has_h = !all(isnan, metrics.heog_corr)
-    n_cols = (has_v || has_h) ? 4 : 6
+    orig_dat = state.data.original
+    avail_channels = _ica_correlatable_channels(orig_dat)
+    acts_cache = Ref{Union{Nothing,Matrix{Float64}}}(nothing)
+    metrics_ref = Ref(_ica_component_metrics(orig_dat, ica))
+    n_cols = 5
 
     menu_fig = _eegfun_figure(size = (960, 680))
     header_area = menu_fig[1, 1] = GridLayout()
     Label(header_area[1, 1], "Select ICA Components to Remove", fontsize = 18, halign = :center)
-    summary_str = _ica_ranking_summary_text(ica, metrics)
-    !isempty(summary_str) && Label(header_area[2, 1], summary_str, fontsize = 13, color = :gray30, halign = :center)
+    summary_obs = Observable(_ica_ranking_summary_text(ica, metrics_ref[]))
+    Label(header_area[2, 1], summary_obs, fontsize = 13, color = :gray30, halign = :center)
 
-    sort_area = header_area[3, 1] = GridLayout()
-    Label(sort_area[1, 1], "Order by:", fontsize = 13, halign = :right)
-    sort_options = Tuple{String,Symbol}[("IC # (Variance %)", :id)]
-    has_v && push!(sort_options, ("vEOG |r|", :veog))
-    has_h && push!(sort_options, ("hEOG |r|", :heog))
-    sort_btns = [Button(sort_area[1, j+1], label = lbl, height = 26, fontsize = 12) for (j, (lbl, _)) in enumerate(sort_options)]
+    ctrl_area = header_area[3, 1] = GridLayout()
+    Label(ctrl_area[1, 1], "Correlate with:", fontsize = 13, halign = :right)
+    menu_labels = vcat(["None"], string.(avail_channels))
+    menu_vals = Union{Nothing,Symbol}[nothing; avail_channels]
+    ch_menu = Menu(ctrl_area[1, 2], options = zip(menu_labels, menu_vals), default = "None", width = 160)
+
+    Label(ctrl_area[1, 3], "Order by:", fontsize = 13, halign = :right)
+    sort_options = Tuple{String,Symbol}[("IC # (Variance %)", :id), ("Channel |r|", :corr)]
+    sort_btns = [Button(ctrl_area[1, 3+j], label = lbl, height = 26, fontsize = 12) for (j, (lbl, _)) in enumerate(sort_options)]
     sort_mode = Observable(:id)
+    colgap!(ctrl_area, 10)
 
     selected_set = Set{Int}(state.ica.removed_components)
     scroll_area = menu_fig[2, 1] = GridLayout()
@@ -832,7 +830,7 @@ function _show_ica_menu(state, ax, ica; display_plot::Bool = true)
         cb = Checkbox(scroll_area[row, col_base+1], checked = c_idx in selected_set, width = 16, height = 16)
         lbl = Label(
             scroll_area[row, col_base+2],
-            _format_ica_component_label(all_components[c_idx], c_idx, metrics),
+            _format_ica_component_label(all_components[c_idx], c_idx, metrics_ref[]),
             fontsize = 13,
             halign = :left,
         )
@@ -857,28 +855,37 @@ function _show_ica_menu(state, ax, ica; display_plot::Bool = true)
     end
     rowgap!(scroll_area, 5)
 
-    function _refresh_ica_grid!(mode::Symbol)
-        order = if mode == :variance
-            metrics.var_rank
-        elseif mode == :veog
-            metrics.veog_rank
-        elseif mode == :heog
-            metrics.heog_rank
-        else
-            1:n_comps
-        end
+    function _refresh_ica_grid!()
+        m = metrics_ref[]
+        summary_obs[] = _ica_ranking_summary_text(ica, m)
+        order = (sort_mode[] == :corr && !all(isnan, m.channel_corr)) ? m.corr_rank : (1:n_comps)
         updating_grid[] = true
         for k = 1:n_comps
             c_idx = order[k]
             current_order[k] = c_idx
-            lbls[k].text = _format_ica_component_label(all_components[c_idx], c_idx, metrics)
+            lbls[k].text = _format_ica_component_label(all_components[c_idx], c_idx, m)
             cbs[k].checked[] = c_idx in selected_set
         end
         updating_grid[] = false
     end
 
     _radio_buttons!(sort_btns, sort_mode, [opt[2] for opt in sort_options])
-    on(_refresh_ica_grid!, sort_mode)
+    on(_ -> _refresh_ica_grid!(), sort_mode)
+
+    on(ch_menu.selection) do sel_ch
+        if !isnothing(sel_ch) && isnothing(acts_cache[])
+            acts_cache[] = _ica_activation_matrix(orig_dat, ica)
+        end
+        metrics_ref[] = _ica_component_metrics(orig_dat, ica; channel = sel_ch, acts = acts_cache[])
+        if isnothing(sel_ch)
+            sort_mode[] == :id ? _refresh_ica_grid!() : (sort_mode[] = :id)
+        else
+            sort_mode[] == :corr ? _refresh_ica_grid!() : (sort_mode[] = :corr)
+        end
+        for (b, v) in zip(sort_btns, [opt[2] for opt in sort_options])
+            b.buttoncolor[] = v == sort_mode[] ? :lightblue : :white
+        end
+    end
 
     group_area = menu_fig[3, 1] = GridLayout()
     btn_reset = Button(group_area[1, 1], label = "None (Reset)")
@@ -890,21 +897,19 @@ function _show_ica_menu(state, ax, ica; display_plot::Bool = true)
         end
         updating_grid[] = false
     end
-    if has_v || has_h
-        btn_eog = Button(group_area[1, 2], label = "High EOG (|r| ≥ 0.5)")
-        on(btn_eog.clicks) do _
-            empty!(selected_set)
-            for c = 1:n_comps
-                v_high = !isnan(metrics.veog_corr[c]) && metrics.veog_corr[c] >= 0.5
-                h_high = !isnan(metrics.heog_corr[c]) && metrics.heog_corr[c] >= 0.5
-                (v_high || h_high) && push!(selected_set, c)
-            end
-            updating_grid[] = true
-            for (k, cb) in enumerate(cbs)
-                cb.checked[] = current_order[k] in selected_set
-            end
-            updating_grid[] = false
+    btn_high_corr = Button(group_area[1, 2], label = "Select |r| ≥ 0.5")
+    on(btn_high_corr.clicks) do _
+        m = metrics_ref[]
+        all(isnan, m.channel_corr) && return
+        empty!(selected_set)
+        for c = 1:n_comps
+            !isnan(m.channel_corr[c]) && m.channel_corr[c] >= 0.5 && push!(selected_set, c)
         end
+        updating_grid[] = true
+        for (k, cb) in enumerate(cbs)
+            cb.checked[] = current_order[k] in selected_set
+        end
+        updating_grid[] = false
     end
 
     action_area = menu_fig[4, 1] = GridLayout()
