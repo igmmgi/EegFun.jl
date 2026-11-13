@@ -458,15 +458,23 @@ using DataFrames
         @test trig_events[1].code == 10
         @test abs(trig_events[1].time - t_trig) < 1e-12
 
-        # 4. Extract and plot all epochs for trigger 10
+        # 4. Extract and plot all epochs for trigger 10 (with auto-baseline)
+        extracted_eps = EegFun._extract_trigger_epochs(state, 10, x_min, x_max, t_trig)
+        pre_mask = extracted_eps.data[1].time .<= 0.0
+        @test abs(sum(extracted_eps.data[1][pre_mask, state.channels.labels[1]]) / count(pre_mask)) < 1e-10
+
         all_res = EegFun._plot_all_trigger_epochs(state, 10, x_min, x_max, t_trig; display_plot = false)
         @test haskey(all_res, :fig)
         @test all_res.fig isa Figure
 
-        # 5. Extract and plot ERP for trigger 10
+        # 5. Extract and plot ERP and ERP Image for trigger 10
         erp_res = EegFun._plot_trigger_erp(state, 10, x_min, x_max, t_trig; display_plot = false)
         @test haskey(erp_res, :fig)
         @test erp_res.fig isa Figure
+
+        erp_img_res = EegFun._plot_trigger_erp_image(state, 10, x_min, x_max, t_trig; display_plot = false)
+        @test haskey(erp_img_res, :fig)
+        @test erp_img_res.fig isa Figure
 
         # 6. Test channel selection helpers and target channel routing
         @test EegFun._get_browser_target_channels(state) == state.channels.labels[state.channels.visible]

@@ -1176,10 +1176,23 @@ end
 
 _find_region_triggers(state, clicked_region_idx = nothing) = _RegionTriggerEvent[]
 
-function _plot_all_trigger_epochs(state::ContinuousDataBrowserState, code::Integer, x_min::Real, x_max::Real, t_trig::Real; kwargs...)
+function _extract_trigger_epochs(state::ContinuousDataBrowserState, code::Integer, x_min::Real, x_max::Real, t_trig::Real)
     epoch_cond = EpochCondition(name = "Trigger_$code", trigger_sequences = [[code]])
+    all_epochs = extract_epochs(state.data.current[], 1, epoch_cond, (x_min - t_trig, x_max - t_trig))
+    if !isempty(all_epochs.data)
+        t_vec = time_vector(all_epochs)
+        if !isempty(t_vec) && first(t_vec) < 0.0 <= last(t_vec)
+            baseline!(all_epochs, times(first(t_vec), 0.0))
+        else
+            baseline!(all_epochs)
+        end
+    end
+    return all_epochs
+end
+
+function _plot_all_trigger_epochs(state::ContinuousDataBrowserState, code::Integer, x_min::Real, x_max::Real, t_trig::Real; kwargs...)
     try
-        all_epochs = extract_epochs(state.data.current[], 1, epoch_cond, (x_min - t_trig, x_max - t_trig))
+        all_epochs = _extract_trigger_epochs(state, code, x_min, x_max, t_trig)
         return plot_epochs(all_epochs; channel_selection = channels(_get_browser_target_channels(state)), kwargs...)
     catch e
         @minimal_warning "Could not extract all epochs for trigger $code: $e"
@@ -1188,13 +1201,22 @@ function _plot_all_trigger_epochs(state::ContinuousDataBrowserState, code::Integ
 end
 
 function _plot_trigger_erp(state::ContinuousDataBrowserState, code::Integer, x_min::Real, x_max::Real, t_trig::Real; kwargs...)
-    epoch_cond = EpochCondition(name = "Trigger_$code", trigger_sequences = [[code]])
     try
-        all_epochs = extract_epochs(state.data.current[], 1, epoch_cond, (x_min - t_trig, x_max - t_trig))
+        all_epochs = _extract_trigger_epochs(state, code, x_min, x_max, t_trig)
         erp = average_epochs(all_epochs)
         return plot_erp(erp; channel_selection = channels(_get_browser_target_channels(state)), kwargs...)
     catch e
         @minimal_warning "Could not compute ERP for trigger $code: $e"
+        return nothing
+    end
+end
+
+function _plot_trigger_erp_image(state::ContinuousDataBrowserState, code::Integer, x_min::Real, x_max::Real, t_trig::Real; kwargs...)
+    try
+        all_epochs = _extract_trigger_epochs(state, code, x_min, x_max, t_trig)
+        return plot_erp_image(all_epochs; channel_selection = channels(_get_browser_target_channels(state)), kwargs...)
+    catch e
+        @minimal_warning "Could not plot ERP image for trigger $code: $e"
         return nothing
     end
 end
@@ -1232,6 +1254,7 @@ function _show_additional_menu(state, clicked_region_idx = nothing)
                 ev = trigger_events[findfirst(e -> e.code == code, trigger_events)]
                 push!(menu_items, ("Plot Epochs (Trigger $code)", () -> _plot_all_trigger_epochs(state, code, x_min, x_max, ev.time)))
                 push!(menu_items, ("Plot ERP (Trigger $code)", () -> _plot_trigger_erp(state, code, x_min, x_max, ev.time)))
+                push!(menu_items, ("Plot ERP Image (Trigger $code)", () -> _plot_trigger_erp_image(state, code, x_min, x_max, ev.time)))
             end
         end
     end
