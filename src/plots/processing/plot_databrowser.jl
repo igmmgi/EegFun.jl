@@ -17,6 +17,7 @@ const PLOT_DATABROWSER_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :unselected_channel_color => (:darkgrey, "Color for unselected channels"),
     :cleaned_channel_color => (:green, "Color for cleaned/corrected channels (Data - ICA)"),
     :show_cleaned_ica => (false, "Whether to show cleaned/corrected channels (Data - ICA) by default"),
+    :remove_dc => (false, "Subtract each channel's window mean (DC offset) for display"),
     :channel_offset_scale => (1500, "Scale factor for channel vertical offset"),
     :channel_offset_margin => (0.9, "Margin factor for channel offset range"),
 
@@ -104,6 +105,7 @@ mutable struct ViewState
     offset::Vector{Float64}
     crit_val::Observable{Float64}
     butterfly::Observable{Bool}
+    remove_dc::Observable{Bool}
     amplitude_scale::Observable{Float64}
     show_original_ica::Observable{Bool}
     show_subtracted_ica::Observable{Bool}
@@ -119,6 +121,7 @@ mutable struct ViewState
             offset,
             Observable(0.0),
             Observable(false),
+            Observable(Bool(get(plot_kwargs, :remove_dc, false))),
             Observable(1.0),
             Observable(false),
             Observable(false),
@@ -337,7 +340,10 @@ function _setup_ui(fig, ax, state::DataBrowserState{<:AbstractDataState}, dat, i
 end
 
 function _create_toggles(fig, ax, state, dat)
-    configs = [ToggleConfig("Butterfly Plot", _ -> _butterfly_plot!(ax, state))]
+    configs = [
+        ToggleConfig("Butterfly Plot", _ -> _butterfly_plot!(ax, state)),
+        ToggleConfig("Remove DC", active -> (state.view.remove_dc[] = active)),
+    ]
 
     for (marker_symbol, toggle_label) in ((:trigger, "Trigger"), (:is_vEOG, "vEOG"), (:is_hEOG, "hEOG"))
         if _has_column(state.data, marker_symbol)
@@ -355,7 +361,8 @@ function _create_toggles(fig, ax, state, dat)
 
     toggles_grid = Vector{Any}[]
     for config in configs
-        tog = Toggle(fig)
+        init_active = config.label == "Remove DC" ? state.view.remove_dc[] : false
+        tog = Toggle(fig, active = init_active)
         on(config.action, tog.active)
 
         if config.label == "Trigger"
@@ -1326,9 +1333,13 @@ function _find_closest_browser_channel(ax, state, mouse_x, mouse_y)
     min_distance = Inf
     closest_channel = nothing
     scale = state.view.amplitude_scale[]
+    rem_dc = state.view.remove_dc[]
+    win = state.view.xrange[]
     for (idx, visible) in enumerate(state.channels.visible)
         visible || continue
-        channel_y = current_data[x_idx, state.channels.labels[idx]] * scale + state.view.offset[idx]
+        col = state.channels.labels[idx]
+        dc = rem_dc ? mean(@view current_data[!, col][win]) : 0.0
+        channel_y = (current_data[x_idx, col] - dc) * scale + state.view.offset[idx]
         distance = abs(mouse_y - channel_y)
         if distance < min_distance
             min_distance = distance
@@ -1691,9 +1702,10 @@ function _butterfly_plot!(ax, state)
     !isempty(state.extra_channel.channels) && _draw_extra_channel!(ax, state)
 end
 
-function _window_points!(pts::Vector{Point2{Float64}}, x, y, scale, offset)
+function _window_points!(pts::Vector{Point2{Float64}}, x, y, scale, offset, remove_dc::Bool = false)
+    dc = remove_dc && !isempty(y) ? mean(y) : 0.0
     @inbounds for i in eachindex(pts)
-        pts[i] = Point2{Float64}(x[i], y[i] * scale + offset)
+        pts[i] = Point2{Float64}(x[i], (y[i] - dc) * scale + offset)
     end
     return pts
 end
@@ -1784,6 +1796,7 @@ function _fill_ica_points!(
     scale::Float64,
     offset::Float64,
     subtract_raw::Bool,
+    remove_dc::Bool = false,
 )
     comps = state.ica.removed_components
     if isempty(comps)
@@ -1792,7 +1805,7 @@ function _fill_ica_points!(
                 buf[j] = Point2{Float64}(x[j], offset)
             end
         else
-            _window_points!(buf, x, raw, scale, offset)
+            _window_points!(buf, x, raw, scale, offset, remove_dc)
         end
         return buf
     end
@@ -1800,6 +1813,7 @@ function _fill_ica_points!(
     ica = state.ica.original::InfoIca
     win_off = first(win) - first(rng)
     n_comps = length(comps)
+    val_sum = 0.0
     @inbounds for j in eachindex(buf)
         val = Float64(raw[j])
         r = j + win_off
@@ -1808,7 +1822,13 @@ function _fill_ica_points!(
             val += (ica.mixing[ch_row, comp] * ica.scale) * acts[r, k]
         end
         subtract_raw && (val -= raw[j])
-        buf[j] = Point2{Float64}(x[j], val * scale + offset)
+        val_sum += val
+        buf[j] = Point2{Float64}(x[j], val)
+    end
+    dc = (remove_dc && !subtract_raw && !isempty(buf)) ? (val_sum / length(buf)) : 0.0
+    @inbounds for j in eachindex(buf)
+        p = buf[j]
+        buf[j] = Point2{Float64}(p[1], (p[2] - dc) * scale + offset)
     end
     return buf
 end
@@ -1818,6 +1838,7 @@ end
 function _color_mask_observable(state, epoch_obs, get_data, col::Symbol, ch_row::Int)
     xrange = state.view.xrange
     crit_obs = state.view.crit_val
+    remove_dc_obs = state.view.remove_dc
     obs = Observable(fill(false, length(xrange[])))
     all_false = Ref(true)
     function refresh(_...)
@@ -1831,6 +1852,7 @@ function _color_mask_observable(state, epoch_obs, get_data, col::Symbol, ch_row:
             cur = state.data.current[]
             ep = epoch_obs[]
             raw = get_data(cur, ep, win, col)
+            rem_dc = remove_dc_obs[]
             if state.ica.is_active &&
                ch_row > 0 &&
                !state.plot_kwargs[:show_cleaned_ica][] &&
@@ -1840,6 +1862,20 @@ function _color_mask_observable(state, epoch_obs, get_data, col::Symbol, ch_row:
                 ica = state.ica.original::InfoIca
                 comps = state.ica.removed_components
                 win_off = first(win) - first(rng)
+                dc = 0.0
+                if rem_dc && n > 0
+                    s = 0.0
+                    @inbounds for j = 1:n
+                        val = Float64(raw[j])
+                        r = j + win_off
+                        for k in eachindex(comps)
+                            comp = comps[k]
+                            val += (ica.mixing[ch_row, comp] * ica.scale) * acts[r, k]
+                        end
+                        s += val
+                    end
+                    dc = s / n
+                end
                 @inbounds for j = 1:n
                     val = Float64(raw[j])
                     r = j + win_off
@@ -1847,11 +1883,12 @@ function _color_mask_observable(state, epoch_obs, get_data, col::Symbol, ch_row:
                         comp = comps[k]
                         val += (ica.mixing[ch_row, comp] * ica.scale) * acts[r, k]
                     end
-                    buf[j] = abs(val) >= crit
+                    buf[j] = abs(val - dc) >= crit
                 end
             else
+                dc = (rem_dc && !isempty(raw)) ? mean(raw) : 0.0
                 @inbounds for j = 1:n
-                    buf[j] = abs(raw[j]) >= crit
+                    buf[j] = abs(raw[j] - dc) >= crit
                 end
             end
             all_false[] = false
@@ -1866,7 +1903,16 @@ function _color_mask_observable(state, epoch_obs, get_data, col::Symbol, ch_row:
     refresh()
     push!(
         state.channels.draw_observers,
-        onany(refresh, xrange, crit_obs, state.data.current, epoch_obs, state.plot_kwargs[:show_cleaned_ica], state.view.show_original_ica),
+        onany(
+            refresh,
+            xrange,
+            crit_obs,
+            remove_dc_obs,
+            state.data.current,
+            epoch_obs,
+            state.plot_kwargs[:show_cleaned_ica],
+            state.view.show_original_ica,
+        ),
     )
     return obs
 end
@@ -1906,6 +1952,7 @@ function _draw(ax, state::DataBrowserState{<:AbstractDataState})
                 state.data.current,
                 epoch_obs,
                 state.view.amplitude_scale,
+                state.view.remove_dc,
                 state.plot_kwargs[:show_cleaned_ica],
                 state.view.show_original_ica,
             ) do buf, _
@@ -1916,10 +1963,11 @@ function _draw(ax, state::DataBrowserState{<:AbstractDataState})
                 t_view = get_time(cur, ep, win)
                 scale = state.view.amplitude_scale[]
                 off = state.view.offset[idx]
+                rem_dc = state.view.remove_dc[]
                 if state.ica.is_active && ch_row > 0 && !state.plot_kwargs[:show_cleaned_ica][] && state.view.show_original_ica[]
-                    _fill_ica_points!(buf, t_view, raw, state, ep, win, ch_row, scale, off, false)
+                    _fill_ica_points!(buf, t_view, raw, state, ep, win, ch_row, scale, off, false, rem_dc)
                 else
-                    _window_points!(buf, t_view, raw, scale, off)
+                    _window_points!(buf, t_view, raw, scale, off, rem_dc)
                 end
                 return true
             end
@@ -1932,6 +1980,7 @@ function _draw(ax, state::DataBrowserState{<:AbstractDataState})
                     state.data.current,
                     epoch_obs,
                     state.view.amplitude_scale,
+                    state.view.remove_dc,
                     state.view.show_original_ica,
                 ) do buf, resized
                     win = state.view.xrange[]
@@ -1949,6 +1998,7 @@ function _draw(ax, state::DataBrowserState{<:AbstractDataState})
                             state.view.amplitude_scale[],
                             state.view.offset[idx],
                             false,
+                            state.view.remove_dc[],
                         )
                         original_nan[] = false
                         return true
@@ -2056,6 +2106,7 @@ function _draw(ax, state::DataBrowserState{<:AbstractDataState})
                             state.view.offset[idx],
                             $(state.view.xrange)[1],
                             $(state.view.amplitude_scale),
+                            $(state.view.remove_dc) ? mean(get_data($(state.data.current), $(epoch_obs), $(state.view.xrange), $col)) : 0.0,
                         )
                     ),
                 )
@@ -2096,14 +2147,14 @@ end
 function _get_data_accessors(::ContinuousDataState)
     get_data = (current, ep, range, col) -> @view current.data[!, col][range]
     get_time = (current, ep, range) -> @view current.data.time[range]
-    get_label_y = (current, ep, col, offset, sample_idx, scale) -> current.data[sample_idx, col] * scale + offset
+    get_label_y = (current, ep, col, offset, sample_idx, scale, dc = 0.0) -> (current.data[sample_idx, col] - dc) * scale + offset
     return get_data, get_time, get_label_y
 end
 
 function _get_data_accessors(::EpochedDataState)
     get_data = (current, ep, range, col) -> @view current.data[ep][!, col][range]
     get_time = (current, ep, range) -> @view current.data[ep].time[range]
-    get_label_y = (current, ep, col, offset, sample_idx, scale) -> current.data[ep][!, col][sample_idx] * scale + offset
+    get_label_y = (current, ep, col, offset, sample_idx, scale, dc = 0.0) -> (current.data[ep][!, col][sample_idx] - dc) * scale + offset
     return get_data, get_time, get_label_y
 end
 

@@ -567,4 +567,52 @@ using DataFrames
         EegFun._handle_navigation!(ep_ax, ep_state, :page_back)
         @test ep_state.data.current_epoch[] == 7
     end
+
+    @testset "Remove DC offset display toggle" begin
+        cdat = EegFun.create_test_continuous_data(n = 1000, fs = 100, n_channels = 2, seed = 88)
+        ch1, ch2 = cdat.layout.data.label[1], cdat.layout.data.label[2]
+        # Add large DC offsets to raw channels
+        cdat.data[!, ch1] .+= 5000.0
+        cdat.data[!, ch2] .-= 3000.0
+        orig_ch1_mean = sum(cdat.data[!, ch1]) / length(cdat.data[!, ch1])
+
+        plot_kwargs = EegFun._merge_plot_kwargs(EegFun.PLOT_DATABROWSER_KWARGS, Dict{Symbol,Any}(:window_duration => 5.0))
+        fig = Figure()
+        ax = Axis(fig[1, 1])
+        state = EegFun._create_browser_state(cdat, cdat.layout.data.label, ax, nothing, plot_kwargs)
+        EegFun._setup_ui(fig, ax, state, cdat, nothing, plot_kwargs)
+        EegFun._draw(ax, state)
+
+        win = state.view.xrange[]
+        scale = state.view.amplitude_scale[]
+        off1 = state.view.offset[1]
+        line1 = state.channels.data_lines[ch1]
+
+        # Initially remove_dc is false: points include the +5000 DC offset
+        @test state.view.remove_dc[] == false
+        pts_raw = [p[2] for p in line1[1][]]
+        expected_raw = cdat.data[win, ch1] .* scale .+ off1
+        @test maximum(abs.(pts_raw .- expected_raw)) < 1e-10
+
+        # Enable Remove DC: points subtract the window mean and center around off1
+        state.view.remove_dc[] = true
+        win_mean1 = sum(cdat.data[win, ch1]) / length(win)
+        pts_dc = [p[2] for p in line1[1][]]
+        expected_dc = (cdat.data[win, ch1] .- win_mean1) .* scale .+ off1
+        @test maximum(abs.(pts_dc .- expected_dc)) < 1e-10
+
+        # Closest channel lookup at (t_first, expected_dc[1]) finds channel 1
+        t_first = cdat.data.time[first(win)]
+        @test EegFun._find_closest_browser_channel(ax, state, t_first, expected_dc[1]) == 1
+
+        # Critical value mask evaluates DC-removed amplitude rather than raw +5000 DC offset
+        state.view.crit_val[] = 500.0
+        @test all(iszero, line1.color[])
+        state.view.remove_dc[] = false
+        @test all(isone, line1.color[])
+
+        # Underlying DataFrame is not mutated
+        @test sum(cdat.data[!, ch1]) / length(cdat.data[!, ch1]) ≈ orig_ch1_mean
+        @test sum(state.data.current[].data[!, ch1]) / length(state.data.current[].data[!, ch1]) ≈ orig_ch1_mean
+    end
 end
