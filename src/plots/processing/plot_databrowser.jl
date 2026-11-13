@@ -935,8 +935,9 @@ function _show_ica_menu(state, ax, ica; display_plot::Bool = true)
     menu_fig = _eegfun_figure(size = (960, 680))
     header_area = menu_fig[1, 1] = GridLayout()
     Label(header_area[1, 1], "Select ICA Components to Remove", fontsize = 18, halign = :center)
+    Label(header_area[2, 1], "Right-click label to further inspect", fontsize = 12, color = :gray45, halign = :center)
 
-    ctrl_area = header_area[2, 1] = GridLayout()
+    ctrl_area = header_area[3, 1] = GridLayout()
     Label(ctrl_area[1, 1], "Correlate with:", fontsize = 13, halign = :right)
     menu_labels = vcat(["None"], string.(avail_channels))
     menu_vals = Union{Nothing,Symbol}[nothing; avail_channels]
