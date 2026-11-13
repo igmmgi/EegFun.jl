@@ -341,8 +341,8 @@ end
 
 function _create_toggles(fig, ax, state, dat)
     configs = [
-        ToggleConfig("Butterfly Plot", _ -> _butterfly_plot!(ax, state)),
         ToggleConfig("Remove DC", active -> (state.view.remove_dc[] = active)),
+        ToggleConfig("Butterfly Plot", _ -> _butterfly_plot!(ax, state)),
     ]
 
     for (marker_symbol, toggle_label) in ((:trigger, "Trigger"), (:is_vEOG, "vEOG"), (:is_hEOG, "hEOG"))
@@ -1150,10 +1150,11 @@ function _create_sliders(fig, state::ContinuousDataBrowserState, dat)
     n_total = nrow(state.data.current[].data)
     total_sec = n_total / sr
 
-    pos_grid = fig[2, 1] = GridLayout(tellwidth = true, tellheight = true)
-    Label(pos_grid[1, 1], "Position:", fontsize = 13, halign = :left, width = 62)
+    sliders_grid = fig[2, 1] = GridLayout(tellwidth = true, tellheight = true)
+
+    Label(sliders_grid[1, 1], "Position:", fontsize = 13, halign = :left, width = 62)
     step_samples = max(1, round(Int, 0.1 * sr))
-    slider_x = Slider(pos_grid[1, 2], range = 1:step_samples:n_total, startvalue = first(state.view.xrange[]), snap = true)
+    slider_x = Slider(sliders_grid[1, 2], range = 1:step_samples:n_total, startvalue = first(state.view.xrange[]), snap = true)
     pos_lbl_text = @lift begin
         rng = $(state.view.xrange)
         tvec = state.data.current[].data.time
@@ -1162,27 +1163,28 @@ function _create_sliders(fig, state::ContinuousDataBrowserState, dat)
         t_end = round(tvec[end], digits = 1)
         "$(t0)–$(t1) / $(t_end) s"
     end
-    Label(pos_grid[1, 3], pos_lbl_text, fontsize = 13, halign = :right, width = 145)
-    colgap!(pos_grid, 8)
+    Label(sliders_grid[1, 3], pos_lbl_text, fontsize = 13, halign = :left, tellwidth = false)
 
-    win_grid = fig[3, 1] = GridLayout(tellwidth = true, tellheight = true)
-    Label(win_grid[1, 1], "Window:", fontsize = 13, halign = :left, width = 62)
+    Label(sliders_grid[2, 1], "Window:", fontsize = 13, halign = :left, width = 62)
     min_sec = round(max(0.1, min(1.0, total_sec)), digits = 1)
     max_sec = round(max(min_sec, min(60.0, total_sec)), digits = 1)
     step_sec = max_sec <= 5.0 ? 0.1 : 0.5
     sec_range = min_sec < max_sec ? (min_sec:step_sec:max_sec) : (min_sec:0.1:(min_sec+0.1))
     init_sec = clamp(round(length(state.view.xrange[]) / sr, digits = 1), first(sec_range), last(sec_range))
 
-    slider_range = Slider(win_grid[1, 2], range = sec_range, startvalue = init_sec, snap = true)
+    slider_range = Slider(sliders_grid[2, 2], range = sec_range, startvalue = init_sec, snap = true)
+    win_right = sliders_grid[2, 3] = GridLayout(halign = :left)
     win_lbl_text = @lift "$(round(length($(state.view.xrange)) / sr, digits = 1)) s"
-    Label(win_grid[1, 3], win_lbl_text, fontsize = 13, halign = :right, width = 52)
+    Label(win_right[1, 1], win_lbl_text, fontsize = 13, halign = :left, width = 48)
 
     preset_secs = [s for s in (1.0, 5.0, 10.0, 30.0) if s <= max_sec + 1e-6]
     for (j, psec) in enumerate(preset_secs)
-        btn = Button(win_grid[1, 3+j], label = "$(Int(psec))s", width = 38, height = 24, fontsize = 12)
+        btn = Button(win_right[1, 1+j], label = "$(Int(psec))s", width = 38, height = 24, fontsize = 12)
         on(_ -> _set_window_duration!(state, psec), btn.clicks)
     end
-    colgap!(win_grid, 6)
+    colgap!(win_right, 6)
+    colgap!(sliders_grid, 10)
+    rowgap!(sliders_grid, 6)
 
     updating_from_key = Ref(false)
 
