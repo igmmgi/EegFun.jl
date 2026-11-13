@@ -782,18 +782,6 @@ function _format_ica_component_label(comp_label, comp_idx::Int, metrics)
     end
 end
 
-function _ica_ranking_summary_text(ica::InfoIca, metrics; top_k::Int = 3)
-    k = min(top_k, length(ica.ica_label))
-    k == 0 && return ""
-    var_parts = [@sprintf("%s (%.1f%%)", string(ica.ica_label[c]), metrics.variance_pct[c]) for c in metrics.var_rank[1:k]]
-    sections = ["Top Variance: " * join(var_parts, ", ")]
-    if !isnothing(metrics.channel) && !all(isnan, metrics.channel_corr)
-        c_parts = [@sprintf("%s (%.2f)", string(ica.ica_label[c]), metrics.channel_corr[c]) for c in metrics.corr_rank[1:k]]
-        push!(sections, "Top |r| with $(metrics.channel): " * join(c_parts, ", "))
-    end
-    return join(sections, "   |   ")
-end
-
 function _show_ica_menu(state, ax, ica; display_plot::Bool = true)
     all_components = ica.ica_label
     n_comps = length(all_components)
@@ -806,10 +794,8 @@ function _show_ica_menu(state, ax, ica; display_plot::Bool = true)
     menu_fig = _eegfun_figure(size = (960, 680))
     header_area = menu_fig[1, 1] = GridLayout()
     Label(header_area[1, 1], "Select ICA Components to Remove", fontsize = 18, halign = :center)
-    summary_obs = Observable(_ica_ranking_summary_text(ica, metrics_ref[]))
-    Label(header_area[2, 1], summary_obs, fontsize = 13, color = :gray30, halign = :center)
 
-    ctrl_area = header_area[3, 1] = GridLayout()
+    ctrl_area = header_area[2, 1] = GridLayout()
     Label(ctrl_area[1, 1], "Correlate with:", fontsize = 13, halign = :right)
     menu_labels = vcat(["None"], string.(avail_channels))
     menu_vals = Union{Nothing,Symbol}[nothing; avail_channels]
@@ -862,7 +848,6 @@ function _show_ica_menu(state, ax, ica; display_plot::Bool = true)
 
     function _refresh_ica_grid!()
         m = metrics_ref[]
-        summary_obs[] = _ica_ranking_summary_text(ica, m)
         order = (sort_mode[] == :corr && !all(isnan, m.channel_corr)) ? m.corr_rank : (1:n_comps)
         updating_grid[] = true
         for k = 1:n_comps

@@ -649,10 +649,6 @@ using DataFrames
         lbl_ch = EegFun._format_ica_component_label(ica_res.ica_label[1], 1, metrics_ch)
         @test occursin("r=", lbl_ch)
 
-        summary_str = EegFun._ica_ranking_summary_text(ica_res, metrics_ch)
-        @test occursin("Top Variance:", summary_str)
-        @test occursin("Top |r| with my_eog:", summary_str)
-
         # 3. Verify _show_ica_menu builds cleanly and handles channel selection callbacks
         plot_kwargs = EegFun._merge_plot_kwargs(EegFun.PLOT_DATABROWSER_KWARGS, Dict{Symbol,Any}())
         fig = Figure()
