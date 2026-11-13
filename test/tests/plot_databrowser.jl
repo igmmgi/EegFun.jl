@@ -651,5 +651,13 @@ using DataFrames
         @test occursin("Top Variance:", summary_str)
         @test occursin("Top vEOG |r|:", summary_str)
         @test occursin("Top hEOG |r|:", summary_str)
+
+        # 3. Verify _show_ica_menu builds cleanly without error
+        plot_kwargs = EegFun._merge_plot_kwargs(EegFun.PLOT_DATABROWSER_KWARGS, Dict{Symbol,Any}())
+        fig = Figure()
+        ax = Axis(fig[1, 1])
+        state = EegFun._create_browser_state(cdat, cdat.layout.data.label, ax, ica_res, plot_kwargs)
+        menu_fig = EegFun._show_ica_menu(state, ax, ica_res; display_plot = false)
+        @test menu_fig isa Figure
     end
 end

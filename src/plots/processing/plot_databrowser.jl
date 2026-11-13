@@ -786,7 +786,7 @@ function _ica_ranking_summary_text(ica::InfoIca, metrics; top_k::Int = 3)
     return join(sections, "   |   ")
 end
 
-function _show_ica_menu(state, ax, ica)
+function _show_ica_menu(state, ax, ica; display_plot::Bool = true)
     all_components = ica.ica_label
     n_comps = length(all_components)
     metrics = _ica_component_metrics(state.data.original, ica)
@@ -810,14 +810,44 @@ function _show_ica_menu(state, ax, ica)
 
     selected_set = Set{Int}(state.ica.removed_components)
     scroll_area = menu_fig[2, 1] = GridLayout()
-    current_cbs = Ref{Vector{Checkbox}}(Checkbox[])
-    current_order = Ref{Vector{Int}}(collect(1:n_comps))
+    current_order = collect(1:n_comps)
+    updating_grid = Ref(false)
+    cbs = Checkbox[]
+    lbls = Label[]
 
-    function _populate_ica_grid!(mode::Symbol)
-        for item in contents(scroll_area)
-            delete!(item)
+    for k = 1:n_comps
+        row = ((k - 1) ÷ n_cols) + 1
+        col_base = ((k - 1) % n_cols) * 2
+        c_idx = current_order[k]
+        cb = Checkbox(scroll_area[row, col_base+1], checked = c_idx in selected_set, width = 16, height = 16)
+        lbl = Label(
+            scroll_area[row, col_base+2],
+            _format_ica_component_label(all_components[c_idx], c_idx, metrics),
+            fontsize = 13,
+            halign = :left,
+        )
+        push!(cbs, cb)
+        push!(lbls, lbl)
+        slot = k
+        on(cb.checked) do active
+            updating_grid[] && return
+            comp_id = current_order[slot]
+            if active
+                push!(selected_set, comp_id)
+            else
+                delete!(selected_set, comp_id)
+            end
         end
-        trim!(scroll_area)
+    end
+    actual_cols = min(n_cols, n_comps)
+    for c = 1:actual_cols
+        col_base = (c - 1) * 2
+        colgap!(scroll_area, col_base + 1, 5)
+        c < actual_cols && colgap!(scroll_area, col_base + 2, 20)
+    end
+    rowgap!(scroll_area, 5)
+
+    function _refresh_ica_grid!(mode::Symbol)
         order = if mode == :variance
             metrics.var_rank
         elseif mode == :veog
@@ -825,41 +855,30 @@ function _show_ica_menu(state, ax, ica)
         elseif mode == :heog
             metrics.heog_rank
         else
-            collect(1:n_comps)
+            1:n_comps
         end
-        current_order[] = order
-        cbs = _build_checkbox_grid!(
-            scroll_area,
-            order,
-            n_cols,
-            (c_idx, _) -> c_idx in selected_set;
-            fontsize = 13,
-            label_fn = c_idx -> _format_ica_component_label(all_components[c_idx], c_idx, metrics),
-        )
-        for (k, cb) in enumerate(cbs)
+        updating_grid[] = true
+        for k = 1:n_comps
             c_idx = order[k]
-            on(cb.checked) do active
-                if active
-                    push!(selected_set, c_idx)
-                else
-                    delete!(selected_set, c_idx)
-                end
-            end
+            current_order[k] = c_idx
+            lbls[k].text = _format_ica_component_label(all_components[c_idx], c_idx, metrics)
+            cbs[k].checked[] = c_idx in selected_set
         end
-        current_cbs[] = cbs
+        updating_grid[] = false
     end
 
     _radio_buttons!(sort_btns, sort_mode, [opt[2] for opt in sort_options])
-    on(_populate_ica_grid!, sort_mode)
-    _populate_ica_grid!(:id)
+    on(_refresh_ica_grid!, sort_mode)
 
     group_area = menu_fig[3, 1] = GridLayout()
     btn_reset = Button(group_area[1, 1], label = "None (Reset)")
     on(btn_reset.clicks) do _
         empty!(selected_set)
-        for cb in current_cbs[]
+        updating_grid[] = true
+        for cb in cbs
             cb.checked[] = false
         end
+        updating_grid[] = false
     end
     if has_v || has_h
         btn_eog = Button(group_area[1, 2], label = "High EOG (|r| ≥ 0.5)")
@@ -870,9 +889,11 @@ function _show_ica_menu(state, ax, ica)
                 h_high = !isnan(metrics.heog_corr[c]) && metrics.heog_corr[c] >= 0.5
                 (v_high || h_high) && push!(selected_set, c)
             end
-            for (k, cb) in enumerate(current_cbs[])
-                cb.checked[] = current_order[][k] in selected_set
+            updating_grid[] = true
+            for (k, cb) in enumerate(cbs)
+                cb.checked[] = current_order[k] in selected_set
             end
+            updating_grid[] = false
         end
     end
 
@@ -902,7 +923,7 @@ function _show_ica_menu(state, ax, ica)
         j < length(display_items) && colgap!(display_area, col + 1, 30)
     end
 
-    _display_in_screen(menu_fig; size = (960, 680))
+    display_plot && _display_in_screen(menu_fig; size = (960, 680))
     return menu_fig
 end
 
