@@ -174,9 +174,10 @@ function _plot_power_spectrum_data!(
     )
 
     controls_area = fig[1, 2] = GridLayout()
-    colsize!(fig.layout, 1, Relative(0.85))
-    colsize!(fig.layout, 2, Relative(0.15))
-    rowsize!(fig.layout, 1, Relative(0.95))
+    grid_layout = fig isa Figure ? fig.layout : fig
+    colsize!(grid_layout, 1, Relative(0.85))
+    colsize!(grid_layout, 2, Relative(0.15))
+    rowsize!(grid_layout, 1, Relative(0.95))
 
     x_options = ["Linear (Hz)", "Log10 (Hz)"]
     x_default_idx = x_scale == :log10 ? 2 : 1

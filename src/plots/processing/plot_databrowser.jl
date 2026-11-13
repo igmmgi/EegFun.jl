@@ -782,6 +782,147 @@ function _format_ica_component_label(comp_label, comp_idx::Int, metrics)
     end
 end
 
+function _show_ica_component_preview(
+    state,
+    ica::InfoIca,
+    comp_idx::Int;
+    corr_channel::Union{Nothing,Symbol} = nothing,
+    acts::Union{Nothing,Matrix{Float64}} = nothing,
+    display_plot::Bool = true,
+)
+    orig_dat = state.data.original
+    act_mat = isnothing(acts) ? _ica_activation_matrix(orig_dat, ica) : acts
+    act_vec = collect(view(act_mat, :, comp_idx))
+
+    var_total = sum(ica.variance)
+    var_pct = var_total > 0 ? (Float64(ica.variance[comp_idx]) / var_total * 100.0) : 0.0
+    comp_name = string(ica.ica_label[comp_idx])
+
+    preview_fig = _eegfun_figure(size = (1050, 680))
+
+    topo_grid = preview_fig[1, 1] = GridLayout()
+    ax_topo = Axis(topo_grid[1, 1], title = @sprintf("%s (%.1f%%)", comp_name, var_pct))
+    _plot_topography!(
+        preview_fig,
+        ax_topo,
+        ica,
+        comp_idx;
+        colorbar_plot = true,
+        colorbar_label = "a.u.",
+        point_plot = true,
+        label_plot = false,
+    )
+
+    spec_grid = preview_fig[1, 2] = GridLayout()
+    ax_spec = Axis(spec_grid[1, 1])
+    sr = orig_dat.sample_rate > 0 ? Float64(orig_dat.sample_rate) : 256.0
+    _plot_power_spectrum!(
+        spec_grid,
+        ax_spec,
+        [act_vec],
+        [Symbol("IC_", comp_idx)],
+        sr;
+        max_freq = min(100.0, sr / 2),
+        plot_title = "$comp_name Power Spectrum",
+        show_freq_bands = true,
+    )
+
+    act_grid = preview_fig[2, 1:2] = GridLayout()
+    ch_vec = !isnothing(corr_channel) ? _ica_channel_vector(orig_dat, corr_channel) : nothing
+    has_corr_ch = !isnothing(ch_vec) && length(ch_vec) == length(act_vec) && length(ch_vec) > 1 && std(ch_vec) > eps(Float64)
+    act_title = if has_corr_ch
+        r_val = std(act_vec) > eps(Float64) ? abs(cor(act_vec, ch_vec)) : 0.0
+        @sprintf("%s Activation (|r| with %s = %.2f)", comp_name, string(corr_channel), r_val)
+    else
+        "$comp_name Activation"
+    end
+
+    ax_act = Axis(act_grid[1, 1], xlabel = "Time (s)", ylabel = "Activation (a.u.)", title = act_title)
+
+    if state.data isa ContinuousDataState
+        t_vec = orig_dat.data.time
+        n_total = length(t_vec)
+        xrange_obs = Observable(state.view.xrange[])
+
+        if has_corr_ch
+            ch_mean = mean(ch_vec)
+            act_std = std(act_vec)
+            scale_factor = (act_std > eps(Float64) ? act_std : 1.0) / std(ch_vec)
+            scaled_ch = [(v - ch_mean) * scale_factor for v in ch_vec]
+            lines!(
+                ax_act,
+                @lift(@view(t_vec[$xrange_obs])),
+                @lift(@view(scaled_ch[$xrange_obs]));
+                color = (:steelblue, 0.7),
+                linewidth = 1.2,
+                label = string(corr_channel),
+            )
+        end
+
+        lines!(
+            ax_act,
+            @lift(@view(t_vec[$xrange_obs])),
+            @lift(@view(act_vec[$xrange_obs]));
+            color = :red,
+            linewidth = 1.5,
+            label = comp_name,
+        )
+        has_corr_ch && axislegend(ax_act, position = :rt)
+
+        init_rng = xrange_obs[]
+        xlims!(ax_act, t_vec[first(init_rng)], t_vec[last(init_rng)])
+
+        step_samples = max(1, round(Int, 0.1 * sr))
+        slider_pos = Slider(act_grid[2, 1], range = 1:step_samples:n_total, startvalue = first(init_rng), snap = true)
+        updating_slider = Ref(false)
+
+        on(slider_pos.value) do start_pos
+            updating_slider[] && return
+            w = length(xrange_obs[])
+            s = clamp(Int(round(start_pos)), 1, max(1, n_total - w + 1))
+            e = min(n_total, s + w - 1)
+            xrange_obs[] = s:e
+            xlims!(ax_act, t_vec[s], t_vec[e])
+        end
+
+        on(state.view.xrange) do rng
+            updating_slider[] = true
+            xrange_obs[] = rng
+            xlims!(ax_act, t_vec[first(rng)], t_vec[last(rng)])
+            set_close_to!(slider_pos, first(rng))
+            updating_slider[] = false
+        end
+    elseif state.data isa EpochDataState
+        ep_act_points = @lift begin
+            ep_idx = clamp($(state.data.current_epoch), 1, length(orig_dat.data))
+            ep_df = orig_dat.data[ep_idx]
+            n_ep_samps = nrow(ep_df)
+            labels = ica.layout.data.label
+            n_ch = length(labels)
+            ep_mat = Matrix{Float64}(undef, n_ch, n_ep_samps)
+            inv_scale = 1.0 / ica.scale
+            @inbounds for c = 1:n_ch
+                col = ep_df[!, labels[c]]
+                mc = ica.mean[c]
+                for s = 1:n_ep_samps
+                    ep_mat[c, s] = (Float64(col[s]) - mc) * inv_scale
+                end
+            end
+            ep_act = vec(view(ica.unmixing, comp_idx:comp_idx, :) * ep_mat)
+            Point2f.(ep_df.time, ep_act)
+        end
+        lines!(ax_act, ep_act_points; color = :red, linewidth = 1.5, label = comp_name)
+    end
+
+    colsize!(preview_fig.layout, 1, Relative(0.35))
+    colsize!(preview_fig.layout, 2, Relative(0.65))
+    rowsize!(preview_fig.layout, 1, Relative(0.58))
+    rowsize!(preview_fig.layout, 2, Relative(0.42))
+
+    display_plot && _display_in_screen(preview_fig; size = (1050, 680))
+    return (fig = preview_fig, axes = [ax_topo, ax_spec, ax_act])
+end
+
 function _show_ica_menu(state, ax, ica; display_plot::Bool = true)
     all_components = ica.ica_label
     n_comps = length(all_components)
@@ -900,6 +1041,49 @@ function _show_ica_menu(state, ax, ica; display_plot::Bool = true)
             cb.checked[] = current_order[k] in selected_set
         end
         updating_grid[] = false
+    end
+    btn_preview = Button(group_area[1, 3], label = "Preview Selected")
+    on(btn_preview.clicks) do _
+        if isempty(selected_set)
+            @info "Check one or more ICA components (or click any component label) to preview."
+            return
+        end
+        if isnothing(acts_cache[])
+            acts_cache[] = _ica_activation_matrix(orig_dat, ica)
+        end
+        for c_idx in sort!(collect(selected_set))
+            _show_ica_component_preview(
+                state,
+                ica,
+                c_idx;
+                corr_channel = ch_menu.selection[],
+                acts = acts_cache[],
+                display_plot = display_plot,
+            )
+        end
+    end
+
+    on(events(menu_fig).mousebutton) do event
+        if event.action == Mouse.press && event.button in (Mouse.left, Mouse.right)
+            mpos = Point2f(events(menu_fig).mouseposition[])
+            for (k, lbl) in enumerate(lbls)
+                if mpos in lbl.layoutobservables.computedbbox[]
+                    if isnothing(acts_cache[])
+                        acts_cache[] = _ica_activation_matrix(orig_dat, ica)
+                    end
+                    _show_ica_component_preview(
+                        state,
+                        ica,
+                        current_order[k];
+                        corr_channel = ch_menu.selection[],
+                        acts = acts_cache[],
+                        display_plot = display_plot,
+                    )
+                    return Consume(true)
+                end
+            end
+        end
+        return Consume(false)
     end
 
     action_area = menu_fig[4, 1] = GridLayout()

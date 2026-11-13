@@ -660,5 +660,15 @@ using DataFrames
         @test length(menus) == 1
         @test_nowarn menus[1].selection[] = :my_eog
         @test_nowarn menus[1].selection[] = nothing
+
+        # 4. Verify _show_ica_component_preview builds 2D topography + power spectrum + activation trace
+        prev1 = EegFun._show_ica_component_preview(state, ica_res, 1; display_plot = false)
+        @test prev1.fig isa Figure
+        @test length(prev1.axes) == 3
+
+        prev2 = EegFun._show_ica_component_preview(state, ica_res, 1; corr_channel = :my_eog, display_plot = false)
+        @test prev2.fig isa Figure
+        @test length(prev2.axes) == 3
+        @test occursin("my_eog", prev2.axes[3].title[])
     end
 end
