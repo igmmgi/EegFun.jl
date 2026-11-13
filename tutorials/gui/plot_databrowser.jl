@@ -79,7 +79,7 @@ EegFun.plot_databrowser(dat; channel_line_width = 2, selection_color = (:green, 
 # ICA OVERLAY & LIVE COMPONENT REMOVAL PREVIEW
 #######################################################################
 
-ica_result = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_100), percentage_of_data = 25)
+ica_result = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_100), percentage_of_data = 100)
 EegFun.plot_databrowser(dat, ica_result)
 
 #######################################################################
