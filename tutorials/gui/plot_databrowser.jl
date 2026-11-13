@@ -62,7 +62,9 @@ dat = EegFun.create_eegfun_data(dat, layout)
 EegFun.rereference!(dat, :avg)
 EegFun.highpass_filter!(dat, 0.5)
 
-# Flag extreme values and epoch intervals (Boolean columns) + add a custom continuous trace
+# Flag extreme values, EOG channels/onsets, and epoch intervals (Boolean columns) + add a custom continuous trace
+EegFun.calculate_eog_channels!(dat, EegFun.EogConfig())
+EegFun.detect_eog_onsets!(dat, EegFun.EogConfig())
 EegFun.is_extreme_value!(dat, 100)
 EegFun.mark_epoch_intervals!(dat, [1, 2], [-0.2, 1.0])
 dat.data[:, :sinewave] = 50.0 .* sin.(2π .* 10.0 .* dat.data[:, :time])

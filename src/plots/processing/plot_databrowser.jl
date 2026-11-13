@@ -691,14 +691,24 @@ function _toggle_ica_component!(state, component_id::Union{Nothing,Int})
     return nothing
 end
 
-function _ica_eog_channel_vector(dat::SingleDataFrameEeg, col::Symbol)
-    hasproperty(dat.data, col) || return nothing
-    return Float64.(dat.data[!, col])
+function _df_eog_signal(df::DataFrame, col::Symbol)
+    if hasproperty(df, col)
+        return Float64.(df[!, col])
+    elseif col == :vEOG && all(c -> hasproperty(df, c), (:Fp1, :Fp2, :IO1, :IO2))
+        return 0.5 .* (Float64.(df[!, :Fp1]) .+ Float64.(df[!, :Fp2])) .- 0.5 .* (Float64.(df[!, :IO1]) .+ Float64.(df[!, :IO2]))
+    elseif col == :hEOG && all(c -> hasproperty(df, c), (:F9, :F10))
+        return Float64.(df[!, :F9]) .- Float64.(df[!, :F10])
+    end
+    return nothing
 end
 
+_ica_eog_channel_vector(dat::SingleDataFrameEeg, col::Symbol) = _df_eog_signal(dat.data, col)
+
 function _ica_eog_channel_vector(dat::EpochData, col::Symbol)
-    (isempty(dat.data) || !hasproperty(dat.data[1], col)) && return nothing
-    return reduce(vcat, (Float64.(df[!, col]) for df in dat.data))
+    isempty(dat.data) && return nothing
+    first_sig = _df_eog_signal(dat.data[1], col)
+    isnothing(first_sig) && return nothing
+    return reduce(vcat, (_df_eog_signal(df, col) for df in dat.data))
 end
 
 function _ica_component_metrics(dat::EegData, ica::InfoIca)
@@ -802,7 +812,7 @@ function _show_ica_menu(state, ax, ica; display_plot::Bool = true)
 
     sort_area = header_area[3, 1] = GridLayout()
     Label(sort_area[1, 1], "Order by:", fontsize = 13, halign = :right)
-    sort_options = Tuple{String,Symbol}[("IC #", :id), ("Variance %", :variance)]
+    sort_options = Tuple{String,Symbol}[("IC # (Variance %)", :id)]
     has_v && push!(sort_options, ("vEOG |r|", :veog))
     has_h && push!(sort_options, ("hEOG |r|", :heog))
     sort_btns = [Button(sort_area[1, j+1], label = lbl, height = 26, fontsize = 12) for (j, (lbl, _)) in enumerate(sort_options)]
