@@ -735,12 +735,17 @@ function _ica_activation_matrix(dat::EegData, ica::InfoIca)::Matrix{Float64}
     return X * transpose(ica.unmixing)
 end
 
+const _IcaComponentMetrics = NamedTuple{
+    (:variance_pct, :var_rank, :channel, :channel_corr, :corr_rank),
+    Tuple{Vector{Float64},Vector{Int},Union{Nothing,Symbol},Vector{Float64},Vector{Int}},
+}
+
 function _ica_component_metrics(
     dat::EegData,
     ica::InfoIca;
     channel::Union{Nothing,Symbol} = nothing,
     acts::Union{Nothing,Matrix{Float64}} = nothing,
-)
+)::_IcaComponentMetrics
     n_comps = length(ica.ica_label)
     var_total = sum(ica.variance)
     variance_pct = var_total > 0 ? (Float64.(ica.variance) ./ var_total .* 100.0) : zeros(Float64, n_comps)
@@ -759,13 +764,13 @@ function _ica_component_metrics(
         end
     end
 
-    return (
-        variance_pct = variance_pct,
-        var_rank = sortperm(variance_pct, rev = true),
-        channel = channel,
-        channel_corr = channel_corr,
-        corr_rank = all(isnan, channel_corr) ? collect(1:n_comps) : sortperm(replace(channel_corr, NaN => -1.0), rev = true),
-    )
+    return _IcaComponentMetrics((
+        variance_pct,
+        sortperm(variance_pct, rev = true),
+        channel,
+        channel_corr,
+        all(isnan, channel_corr) ? collect(1:n_comps) : sortperm(replace(channel_corr, NaN => -1.0), rev = true),
+    ))
 end
 
 function _format_ica_component_label(comp_label, comp_idx::Int, metrics)

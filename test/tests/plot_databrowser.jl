@@ -653,12 +653,16 @@ using DataFrames
         @test occursin("Top Variance:", summary_str)
         @test occursin("Top |r| with my_eog:", summary_str)
 
-        # 3. Verify _show_ica_menu builds cleanly without error
+        # 3. Verify _show_ica_menu builds cleanly and handles channel selection callbacks
         plot_kwargs = EegFun._merge_plot_kwargs(EegFun.PLOT_DATABROWSER_KWARGS, Dict{Symbol,Any}())
         fig = Figure()
         ax = Axis(fig[1, 1])
         state = EegFun._create_browser_state(cdat, cdat.layout.data.label, ax, ica_res, plot_kwargs)
         menu_fig = EegFun._show_ica_menu(state, ax, ica_res; display_plot = false)
         @test menu_fig isa Figure
+        menus = [b for b in menu_fig.content if b isa Menu]
+        @test length(menus) == 1
+        @test_nowarn menus[1].selection[] = :my_eog
+        @test_nowarn menus[1].selection[] = nothing
     end
 end
