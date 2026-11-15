@@ -29,6 +29,29 @@ using Random
                 bdf_cnt = EegFun.trigger_count(raw_bdf)
                 @test occursin("Raw vs Cleaned", sprint(show, bdf_cnt))
                 @test nrow(EegFun.all_data(bdf_cnt)) >= 1
+
+                # Truncated BDF file (header declares 40 records, file has 15.5 records)
+                trunc_path = joinpath(raw_dir, "short2_trunc.bdf")
+                rec_bytes = n_chan * sr * 3
+                hdr_bytes = 256 * (n_chan + 1)
+                write(trunc_path, short_buf[1:(hdr_bytes+15*rec_bytes+div(rec_bytes, 2))])
+                res_trunc = EegFun.check_raw_data(raw_dir)
+                @test nrow(res_trunc) == 2
+                row_ok = res_trunc[res_trunc.file .== "short1.bdf", :]
+                row_tr = res_trunc[res_trunc.file .== "short2_trunc.bdf", :]
+                @test row_ok.issue[1] == ""
+                @test row_tr.issue[1] == "*"
+                @test row_tr.duration_min[1] == round(15 / 60.0; digits = 2)
+
+                # Unfinalized BDF file (header num_data_records = -1, 12 complete records on disk)
+                unclosed_buf = copy(short_buf[1:(hdr_bytes+12*rec_bytes)])
+                unclosed_buf[237:244] .= codeunits(rpad("-1", 8))
+                unclosed_path = joinpath(raw_dir, "short3_unclosed.bdf")
+                write(unclosed_path, unclosed_buf)
+                res_unclosed = EegFun.check_raw_data(raw_dir)
+                row_unc = res_unclosed[res_unclosed.file .== "short3_unclosed.bdf", :]
+                @test row_unc.issue[1] == "*"
+                @test row_unc.duration_min[1] == round(12 / 60.0; digits = 2)
             end
 
             mktempdir() do empty_dir

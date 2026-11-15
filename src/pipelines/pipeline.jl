@@ -303,7 +303,23 @@ function _pipeline_dry_run_summary(
     @info "✓ Found $(length(raw_data_files)) file(s) to process:"
     for (i, f) in enumerate(raw_data_files)
         status = isfile(_make_output_filename(output_directory, f, "_epochs")) ? "(already processed)" : "(pending)"
-        @info "  $i. $(basename(f)) $status"
+        bdf_note = ""
+        if get_file_extension(f) == ".bdf"
+            info = _bdf_file_integrity(f)
+            if info.status == :truncated
+                act_mb = round(info.actual_bytes / (1024 * 1024); digits = 2)
+                exp_mb = round(info.expected_bytes / (1024 * 1024); digits = 2)
+                bdf_note = " [TRUNCATED: $act_mb / $exp_mb MiB]"
+                @minimal_warning "BDF file $(basename(f)) is truncated on disk ($act_mb / $exp_mb MiB; $(info.actual_records) / $(info.header_records) complete records)."
+            elseif info.status == :corrupt_header
+                bdf_note = " [CORRUPT HEADER]"
+                @minimal_warning "BDF file $(basename(f)) has a truncated or unreadable header."
+            elseif info.status == :unfinalized
+                bdf_note = " [unfinalized header: ~$(info.actual_records) records]"
+                @minimal_warning "BDF file $(basename(f)) has unfinalized header record count ($(info.header_records)); ~$(info.actual_records) complete records on disk."
+            end
+        end
+        @info "  $i. $(basename(f)) $status$bdf_note"
     end
     @info ""
     @info subsection("Preprocessing Settings")

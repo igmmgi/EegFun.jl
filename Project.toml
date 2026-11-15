@@ -62,7 +62,7 @@ EegFunMetalExt = "Metal"
 [compat]
 AMDGPU = "2"
 AnovaFun = "0.5"
-BiosemiDataFormat = "0.2"
+BiosemiDataFormat = "0.2, 0.3"
 BrainVisionDataFormat = "0.1"
 CSV = "0.10, 1"
 CUDA = "5, 6"

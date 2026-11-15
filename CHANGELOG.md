@@ -5,11 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to (well, attempts to :-)) [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.9.0] - 2026-11-12
+## [0.9.0] - 2026-11-15
 
 ### Added
 
 - Interactive Electrodermal Activity (EDA) psychophysiology demos (`signal_example_eda_scr` and `signal_example_eda_habituation`).
+
+### Changed
+
+- Updated `BiosemiDataFormat` compatibility bounds to `0.2, 0.3`.
+
+### Fixed
+
+- Added BDF file byte-size and header integrity checks in `check_raw_data` and `preprocess` dry-run validation (`validate_config`) so truncated, unfinalized, or corrupt `.bdf` files are flagged and reported with actual on-disk durations.
 
 ## [0.8.0] - 2026-11-12
 
