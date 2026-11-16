@@ -110,7 +110,13 @@ function plot_erp_stats(
     plot_layout = create_layout(layout, selected_channels, result.data[1].layout; layout_kwargs...)
     axes, layout_channels = _apply_layout!(fig, plot_layout; plot_kwargs...)
 
-    cond_indices = plot_erp ? get_selected_conditions(result.data, condition_selection) : Int[]
+    cond_indices = if !plot_erp
+        Int[]
+    elseif result.test_info.type === :LMM && condition_selection isa AllSelection
+        Int[1]
+    else
+        get_selected_conditions(result.data, condition_selection)
+    end
     elec_index_map = Dict{Symbol,Int}(ch => i for (i, ch) in enumerate(all_electrodes))
 
     for (ax, channel) in zip(axes, layout_channels)
@@ -507,6 +513,84 @@ function plot_stat_heatmap(result::StatsResult; kwargs...)
     if !isempty(plot_kwargs[:figure_title])
         Label(fig[0, :], plot_kwargs[:figure_title], fontsize = plot_kwargs[:figure_title_fontsize], font = :bold, tellwidth = false)
     end
+    plot_kwargs[:display_plot] && _display_figure(fig)
+    return (fig = fig, axes = [ax])
+end
+
+"""
+    plot_erp_stats(result::LmmStatsResult; coef = 2, alpha::Real = 0.05, kwargs...)
+
+Plot the fitted fixed-effect waveform (`β̂`), SE band, z-values, and permutation significance
+for one predictor of an [`LmmStatsResult`](@ref) via [`extract_predictor_stats`](@ref).
+"""
+function plot_erp_stats(result::LmmStatsResult; coef = 2, coef_idx::Union{Nothing,Int} = nothing, alpha::Real = 0.05, kwargs...)
+    c_idx = _resolve_lmm_coef_idx(result, something(coef_idx, coef))
+    return plot_erp_stats(extract_predictor_stats(result, result.coefficients[c_idx]; alpha = alpha); kwargs...)
+end
+
+"""
+    plot_stat_heatmap!(fig, ax, result::LmmStatsResult; coef = 2, cluster_thresh::Real = 2.0, threshold_p = nothing, kwargs...)
+
+Mutating variant of `plot_stat_heatmap` for `LmmStatsResult`.
+"""
+function plot_stat_heatmap!(
+    fig::Union{Figure,Nothing},
+    ax::Axis,
+    result::LmmStatsResult;
+    coef = 2,
+    coef_idx::Union{Nothing,Int} = nothing,
+    cluster_thresh::Real = 2.0,
+    threshold_p = nothing,
+    kwargs...,
+)
+    c_idx = _resolve_lmm_coef_idx(result, something(coef_idx, coef))
+    time_points = result.time_points
+    electrodes = result.channels
+    t_values = Matrix{Float64}(_lmm_stat_slice(result, c_idx))
+
+    # threshold_p masks on the corrected p-values when permutation inference was run, otherwise on
+    # the uncorrected p-values (never silently mixing the two)
+    mask = if !isnothing(threshold_p)
+        p = (!isnothing(result.p_corrected) && c_idx in result.tested) ? result.p_corrected : result.p_parametric
+        p[:, :, c_idx] .<= threshold_p
+    else
+        abs.(t_values) .>= cluster_thresh
+    end
+
+    return _plot_stat_heatmap_core!(fig, ax, time_points, electrodes, t_values, mask; kwargs...)
+end
+
+"""
+    plot_stat_heatmap(result::LmmStatsResult; coef = 2, cluster_thresh::Real = 2.0, threshold_p = nothing, kwargs...)
+
+Plot a 2D spatiotemporal heatmap (`Channels × Time`) of test statistics for a Linear Mixed-Effects Model predictor.
+"""
+function plot_stat_heatmap(
+    result::LmmStatsResult;
+    coef = 2,
+    coef_idx::Union{Nothing,Int} = nothing,
+    cluster_thresh::Real = 2.0,
+    threshold_p = nothing,
+    kwargs...,
+)
+    c_idx = _resolve_lmm_coef_idx(result, something(coef_idx, coef))
+    plot_kwargs = _merge_plot_kwargs(PLOT_ERP_KWARGS, kwargs; validate = false)
+    coef_name = result.coefficients[c_idx]
+    window_title = get(kwargs, :window_title, "LMM Heatmap: $(coef_name)")
+    xlabel_def = get(kwargs, :time_unit, :s) == :ms ? "Time (ms)" : "Time (s)"
+    xlabel = get(kwargs, :xlabel, xlabel_def)
+    ylabel = get(kwargs, :ylabel, "Channels")
+    title_str = get(kwargs, :plot_title, "LMM Heatmap: $(coef_name)")
+
+    fig = _eegfun_figure(size = (900, 600), title = window_title, figure_padding = plot_kwargs[:figure_padding])
+    ax = Axis(fig[1, 1], xlabel = xlabel, ylabel = ylabel, title = title_str)
+
+    plot_stat_heatmap!(fig, ax, result; coef_idx = c_idx, cluster_thresh = cluster_thresh, threshold_p = threshold_p, kwargs...)
+
+    if !isempty(plot_kwargs[:figure_title])
+        Label(fig[0, :], plot_kwargs[:figure_title], fontsize = plot_kwargs[:figure_title_fontsize], font = :bold, tellwidth = false)
+    end
+
     plot_kwargs[:display_plot] && _display_figure(fig)
     return (fig = fig, axes = [ax])
 end

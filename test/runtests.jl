@@ -1,6 +1,8 @@
 using Test
 using CairoMakie
 using DimensionalData
+using MixedModels
+using StatsModels
 using EegFun
 
 println("Running EegFun.jl Test Suite")
@@ -93,6 +95,7 @@ end
     include("tests/utils.jl")
     include("tests/tables.jl")
     include("tests/bids_export.jl")
+    include("tests/mme_validation.jl")
     include("tests/cleanline.jl")
     include("tests/csd.jl")
     include("tests/freq_spectrum.jl")

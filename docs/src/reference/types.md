@@ -64,6 +64,7 @@ EegFun.StatisticalData
 EegFun.StatsResult
 EegFun.PermutationResult
 EegFun.AnalyticResult
+EegFun.LmmStatsResult
 EegFun.TFStatisticalData
 EegFun.TFStatsResult
 EegFun.TFClusterPermutationResult
@@ -126,6 +127,7 @@ EegFun.ResampleConfig
 ```@docs
 EegFun.VALID_MEASUREMENT_TYPES
 EegFun.MEASUREMENT_TYPE_LABELS
+EegFun.LMM_FIT_STATUS
 ```
 
 ## See Also

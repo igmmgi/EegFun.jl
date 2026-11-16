@@ -45,6 +45,8 @@ public InfoIca
 public InputFilesConfig
 public Interval
 public Layout
+public LMM_FIT_STATUS
+public LmmStatsResult
 public MultiDataFrameEeg
 public Neighbors
 public NoiseCeiling
@@ -313,6 +315,8 @@ public woody_filter
 
 # === Statistics ===
 public analytic_test
+public extract_predictor_stats
+public fit_mass_lmm
 public generate_permutation_matrix
 public permutation_test
 public prepare_stats

@@ -597,3 +597,164 @@ function _max_cluster_stat_tf(
 
     return extreme_stat
 end
+
+# === THRESHOLD-FREE CLUSTER ENHANCEMENT (TFCE) ===
+
+function _accumulate_tfce_polarity!(
+    tfce_map::Matrix{Float64},
+    t_map::AbstractMatrix{<:AbstractFloat},
+    threshold_max::Float64,
+    dh::Float64,
+    E::Float64,
+    H::Float64,
+    sign_mult::Float64,
+    spatial_connectivity::SparseMatrixCSC{Bool},
+    has_spatial::Bool,
+    has_temporal::Bool,
+    labels_buf::Matrix{Int},
+    queue_buf::Vector{Tuple{Int,Int}},
+)
+    n_electrodes, n_time = size(t_map)
+    rv = rowvals(spatial_connectivity)
+    h = dh
+    while h <= threshold_max
+        fill!(labels_buf, 0)
+        h_factor = (h^H) * dh * sign_mult
+        cid = 0
+        @inbounds for t_idx = 1:n_time, e_idx = 1:n_electrodes
+            val = Float64(t_map[e_idx, t_idx]) * sign_mult
+            (!(val >= h) || labels_buf[e_idx, t_idx] > 0) && continue
+
+            cid += 1
+            labels_buf[e_idx, t_idx] = cid
+            queue_buf[1] = (e_idx, t_idx)
+            q_head = 1
+            q_tail = 1
+
+            while q_head <= q_tail
+                curr_e, curr_t = queue_buf[q_head]
+                q_head += 1
+
+                if has_spatial
+                    for ptr in nzrange(spatial_connectivity, curr_e)
+                        ne = rv[ptr]
+                        if labels_buf[ne, curr_t] == 0 && Float64(t_map[ne, curr_t]) * sign_mult >= h
+                            labels_buf[ne, curr_t] = cid
+                            q_tail += 1
+                            queue_buf[q_tail] = (ne, curr_t)
+                        end
+                    end
+                end
+
+                if has_temporal
+                    if curr_t > 1 && labels_buf[curr_e, curr_t-1] == 0 && Float64(t_map[curr_e, curr_t-1]) * sign_mult >= h
+                        labels_buf[curr_e, curr_t-1] = cid
+                        q_tail += 1
+                        queue_buf[q_tail] = (curr_e, curr_t - 1)
+                    end
+                    if curr_t < n_time && labels_buf[curr_e, curr_t+1] == 0 && Float64(t_map[curr_e, curr_t+1]) * sign_mult >= h
+                        labels_buf[curr_e, curr_t+1] = cid
+                        q_tail += 1
+                        queue_buf[q_tail] = (curr_e, curr_t + 1)
+                    end
+                end
+            end
+
+            contrib = (Float64(q_tail)^E) * h_factor
+            for k = 1:q_tail
+                ce, ct = queue_buf[k]
+                tfce_map[ce, ct] += contrib
+            end
+        end
+        h += dh
+    end
+    return tfce_map
+end
+
+function _compute_tfce!(
+    tfce_map::Matrix{Float64},
+    t_map::AbstractMatrix{<:AbstractFloat},
+    spatial_connectivity::SparseMatrixCSC{Bool},
+    cluster_type::Symbol,
+    labels_buf::Matrix{Int},
+    queue_buf::Vector{Tuple{Int,Int}};
+    E::Real = 0.5,
+    H::Real = 2.0,
+    dh::Real = 0.1,
+)
+    dh_f = Float64(dh)
+    dh_f > 0.0 || @minimal_error("tfce_dh must be positive, got $dh")
+    E_f = Float64(E)
+    H_f = Float64(H)
+    fill!(tfce_map, 0.0)
+
+    max_pos = 0.0
+    max_neg = 0.0
+    @inbounds for x in t_map
+        v = Float64(x)
+        if isfinite(v)
+            v > max_pos && (max_pos = v)
+            -v > max_neg && (max_neg = -v)
+        end
+    end
+
+    has_spatial = cluster_type in (:spatial, :spatiotemporal, :full)
+    has_temporal = cluster_type in (:temporal, :spatiotemporal, :full)
+
+    if max_pos >= dh_f
+        _accumulate_tfce_polarity!(
+            tfce_map,
+            t_map,
+            max_pos,
+            dh_f,
+            E_f,
+            H_f,
+            1.0,
+            spatial_connectivity,
+            has_spatial,
+            has_temporal,
+            labels_buf,
+            queue_buf,
+        )
+    end
+    if max_neg >= dh_f
+        _accumulate_tfce_polarity!(
+            tfce_map,
+            t_map,
+            max_neg,
+            dh_f,
+            E_f,
+            H_f,
+            -1.0,
+            spatial_connectivity,
+            has_spatial,
+            has_temporal,
+            labels_buf,
+            queue_buf,
+        )
+    end
+    return tfce_map
+end
+
+"""
+    _compute_tfce(t_map, electrodes, time_points, spatial_connectivity, cluster_type; E = 0.5, H = 2.0, dh = 0.1)
+
+Compute the Threshold-Free Cluster Enhancement (TFCE) map for a 2D statistic matrix (`electrodes × time`).
+Non-finite entries (`NaN`, `Inf`) are ignored and receive a TFCE score of `0.0`.
+"""
+function _compute_tfce(
+    t_map::AbstractMatrix{<:AbstractFloat},
+    electrodes::Vector{Symbol},
+    time_points::Vector{Float64},
+    spatial_connectivity::SparseMatrixCSC{Bool},
+    cluster_type::Symbol;
+    E::Real = 0.5,
+    H::Real = 2.0,
+    dh::Real = 0.1,
+)
+    n_electrodes, n_time = size(t_map)
+    tfce_map = zeros(Float64, n_electrodes, n_time)
+    labels_buf = Matrix{Int}(undef, n_electrodes, n_time)
+    queue_buf = Vector{Tuple{Int,Int}}(undef, n_electrodes * n_time)
+    return _compute_tfce!(tfce_map, t_map, spatial_connectivity, cluster_type, labels_buf, queue_buf; E = E, H = H, dh = dh)
+end

@@ -83,6 +83,7 @@ time_vector(dat::Vector{T}) where {T<:EegData} = isempty(dat) ? Float64[] : time
 time_vector(df::DataFrame)::Vector{Float64} = hasproperty(df, :time) ? df[!, :time] : Float64[]
 time_vector(dat::Union{StatisticalData,TFStatisticalData})::Vector{Float64} = dat.analysis.time_points
 time_vector(res::StatsResult)::Vector{Float64} = res.time_points
+time_vector(res::LmmStatsResult)::Vector{Float64} = res.time_points
 
 """
     frequency_vector(dat) -> Vector{Float64}
@@ -142,6 +143,7 @@ channel_labels(dat::Vector{<:EegData})::Vector{Symbol} = isempty(dat) ? Symbol[]
 channel_labels(dat::Union{StatisticalData,TFStatisticalData})::Vector{Symbol} =
     isempty(dat.data) ? Symbol[] : channel_labels(first(dat.data))
 channel_labels(res::StatsResult)::Vector{Symbol} = res.electrodes
+channel_labels(res::LmmStatsResult)::Vector{Symbol} = res.channels
 
 """
     channel_data(dat::EegData) -> DataFrame
@@ -202,6 +204,7 @@ n_samples(dat::MultiDataFrameEeg, epoch::Int)::Int = nrow(dat.data[epoch])
 n_samples(dat::DataFrame)::Int = nrow(dat)
 n_samples(dat::Union{StatisticalData,TFStatisticalData})::Int = length(dat.analysis.time_points)
 n_samples(res::StatsResult)::Int = length(res.time_points)
+n_samples(res::LmmStatsResult)::Int = length(res.time_points)
 
 """
     n_channels(dat) -> Int
@@ -216,6 +219,7 @@ end
 n_channels(layout::Layout)::Int = nrow(layout.data)
 n_channels(dat::Union{StatisticalData,TFStatisticalData})::Int = isempty(dat.data) ? 0 : n_channels(first(dat.data))
 n_channels(res::StatsResult)::Int = length(channel_labels(res))
+n_channels(res::LmmStatsResult)::Int = length(res.channels)
 
 """
     n_layout(layout::Layout) -> Int
