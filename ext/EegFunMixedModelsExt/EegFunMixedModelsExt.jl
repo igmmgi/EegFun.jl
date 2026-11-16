@@ -220,7 +220,10 @@ function fit_mass_lmm(epochs::EegFun.EpochData, f::FormulaTerm; correction::Symb
         end
     end
 
-    if isnothing(spatial_connectivity) && correction in (:cluster, :tfce) && !isnothing(epochs.layout)
+    if isnothing(spatial_connectivity) &&
+       correction in (:cluster, :tfce) &&
+       !isnothing(epochs.layout) &&
+       (!isnothing(epochs.layout.neighbors) || EegFun.has_valid_coordinates(epochs.layout))
         spatial_connectivity = EegFun._build_connectivity_matrix(all_channels, epochs.layout, :spatiotemporal)
     end
 
@@ -246,11 +249,10 @@ end
 #
 # Under H0, whole-block sign flipping of the reduced-model (Freedman–Lane) residuals preserves
 # their joint distribution when blocks are independent and block-level errors are symmetric.
-# To guarantee multi-pixel FWER control under random slopes, singular boundary fits (θ̂ = 0),
-# between-subject predictors, and unbalanced trial counts without refitting, each flip η ∈ {-1, +1}^S
-# (and the observed identity flip η = 1) is studentized by its Bell–McCaffrey / Pustejovsky–Tipton
-# CR2 cluster-robust standard error and mapped to a Normal-equivalent z-score via Satterthwaite
-# degrees of freedom.
+# For multi-pixel FWER control under random slopes, boundary fits (θ̂ = 0), between-subject
+# predictors, and unequal trial counts without refitting, each flip η ∈ {-1, +1}^S (and the
+# observed identity flip η = 1) is studentized by its Bell–McCaffrey / Pustejovsky–Tipton CR2
+# cluster-robust standard error and mapped to a Normal-equivalent z-score via Satterthwaite df.
 
 _block_ids(col) = (lv = unique(col); idx = Dict(v => i for (i, v) in enumerate(lv)); [idx[v] for v in col])
 
@@ -527,7 +529,9 @@ function _cr2_pivotal_z!(
         if isnothing(Hs_pre) || isnothing(As_pre)
             Hs = Matrix(Symmetric(R' * XtVX_s[s] * R))
             eig = eigen(Symmetric(Hs))
-            inv_sqrt = [1.0 / sqrt(max(1.0 - ev, 1e-8)) for ev in eig.values]
+            # Moore–Penrose pseudoinverse (I_p - H_s)^(+1/2): zero out unit-leverage directions (ev ≈ 1)
+            # rather than amplifying floating-point roundoff on single-block predictors.
+            inv_sqrt = [ev < 1.0 - 1e-8 ? 1.0 / sqrt(1.0 - ev) : 0.0 for ev in eig.values]
             As = eig.vectors * Diagonal(inv_sqrt) * eig.vectors'
         else
             Hs = Hs_pre[s]
@@ -542,11 +546,16 @@ function _cr2_pivotal_z!(
         B[s, :] .= XtVX_s[s] * vs
     end
 
-    tr1 = sum(d) - sum(abs2, F)
+    tr1 = 0.0
+    for s = 1:S
+        tr1 += max(0.0, d[s] - sum(abs2, view(F, s, :)))
+    end
     FtF = F' * F
     tr2 = sum(abs2, d) - 2.0 * sum(d[s] * sum(abs2, view(F, s, :)) for s = 1:S) + sum(abs2, FtF)
-    (tr1 > 0 && tr2 > 0 && isfinite(tr1) && isfinite(tr2)) || (fill!(out_null, NaN); return NaN)
-    df_bm = clamp(tr1^2 / tr2, 1.0, Float64(max(1, S - 1)))
+    (tr1 >= (1.0 - 1e-5) * M[pc, pc] && tr2 > 0 && isfinite(tr1) && isfinite(tr2)) || (fill!(out_null, NaN); return NaN)
+    raw_df = tr1^2 / tr2
+    raw_df >= 1.0 - 1e-6 || (fill!(out_null, NaN); return NaN)
+    df_bm = clamp(raw_df, 1.0, Float64(max(1, S - 1)))
 
     Q = M * W
     q_obs = vec(sum(Q; dims = 2))
@@ -700,7 +709,7 @@ function _compute_pixel!(scr::LmmScratch, ctx)
     for s = 1:S
         Hs = Matrix(Symmetric(R' * XtVX_s[s] * R))
         eig = eigen(Symmetric(Hs))
-        inv_sqrt = [1.0 / sqrt(max(1.0 - ev, 1e-8)) for ev in eig.values]
+        inv_sqrt = [ev < 1.0 - 1e-8 ? 1.0 / sqrt(1.0 - ev) : 0.0 for ev in eig.values]
         Hs_pre[s] = Hs
         As_pre[s] = eig.vectors * Diagonal(inv_sqrt) * eig.vectors'
     end
@@ -997,11 +1006,58 @@ function _fit_mass_lmm(
                            "has $(2^(n_blocks - 1)) distinct patterns, too few to reach p < 0.05. At least 6 blocks are required."
             n_blocks < 8 &&
                 @warn "Only $n_blocks levels of :$flip_col: the permutation distribution is coarse (≤ $(2^(n_blocks - 1)) distinct values)."
-            H, exhaustive = _sign_flip_matrix(n_blocks, n_perms, rng)
-            _warn_small_n_perms(size(H, 2), exhaustive)
-            @info "Permutation inference: whole-block sign flipping by :$flip_col ($n_blocks blocks, " *
-                  (exhaustive ? "all $(size(H, 2)) distinct patterns" : "$(size(H, 2)) random patterns") *
-                  "), correction = :$correction, testing $(join(coef_names[tested], ", "))"
+
+            # Check OLS block leverage up front: any coefficient identified from a single block
+            # (or with < 1 effective CR2 degree of freedom across blocks) cannot be block-permuted.
+            p_est = length(est_cols)
+            rows_b = [findall(==(b), block_ids) for b = 1:n_blocks]
+            XtX_s = [X0_est[r, :]' * X0_est[r, :] for r in rows_b]
+            chol_0 = cholesky(Symmetric(sum(XtX_s)); check = false)
+            if issuccess(chol_0)
+                M0 = inv(chol_0)
+                R0 = Matrix(chol_0.U) \ Matrix{Float64}(I, p_est, p_est)
+                Hs0 = [Matrix(Symmetric(R0' * XtX_s[s] * R0)) for s = 1:n_blocks]
+                As0 = map(Hs0) do Hs
+                    eig = eigen(Symmetric(Hs))
+                    w = [ev < 1.0 - 1e-8 ? 1.0 / sqrt(1.0 - ev) : 0.0 for ev in eig.values]
+                    eig.vectors * Diagonal(w) * eig.vectors'
+                end
+                untestable = Int[]
+                for c in tested
+                    pc = findfirst(==(c), est_cols)::Int
+                    a = R0[pc, :]
+                    d0 = zeros(n_blocks)
+                    F0 = zeros(n_blocks, p_est)
+                    for s = 1:n_blocks
+                        cs = As0[s] * a
+                        fs = Hs0[s] * cs
+                        d0[s] = dot(cs, fs)
+                        F0[s, :] .= fs
+                    end
+                    tr1 = sum(max(0.0, d0[s] - sum(abs2, view(F0, s, :))) for s = 1:n_blocks)
+                    FtF = F0' * F0
+                    tr2 = sum(abs2, d0) - 2.0 * sum(d0[s] * sum(abs2, view(F0, s, :)) for s = 1:n_blocks) + sum(abs2, FtF)
+                    if !(tr1 >= (1.0 - 1e-5) * M0[pc, pc] && tr2 > 0 && tr1^2 / tr2 >= 2.0 - 1e-6)
+                        push!(untestable, c)
+                    end
+                end
+                if !isempty(untestable)
+                    @warn "Coefficient(s) $(join(coef_names[untestable], ", ")) have fewer than 2 effective across-block " *
+                          "degrees of freedom (e.g. identified from only one or two levels of :$flip_col) and are excluded from " *
+                          "permutation testing; their p_corrected is NaN."
+                    tested = setdiff(tested, untestable)
+                end
+            end
+
+            if isempty(tested)
+                do_perm = false
+            else
+                H, exhaustive = _sign_flip_matrix(n_blocks, n_perms, rng)
+                _warn_small_n_perms(size(H, 2), exhaustive)
+                @info "Permutation inference: whole-block sign flipping by :$flip_col ($n_blocks blocks, " *
+                      (exhaustive ? "all $(size(H, 2)) distinct patterns" : "$(size(H, 2)) random patterns") *
+                      "), correction = :$correction, testing $(join(coef_names[tested], ", "))"
+            end
         end
         n_flips = size(H, 2)
         store_maps = do_perm && correction !== :maxt
@@ -1043,7 +1099,7 @@ function _fit_mass_lmm(
             if n_threads > 1
                 @info "Fitting $(length(tasks)) mixed models across $n_epochs epochs on $n_threads threads..."
             else
-                @info "Fitting $(length(tasks)) mixed models across $n_epochs epochs on 1 thread (launch Julia with `julia -t auto` for multi-core speedups)..."
+                @info "Fitting $(length(tasks)) mixed models across $n_epochs epochs on 1 thread (start Julia with `julia -t auto` to use multiple threads)..."
             end
         end
 

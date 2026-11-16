@@ -800,3 +800,55 @@ end
     @test EegFun._lmm_perm_pvalue(null_zeros, 0.0, true) == 1.0
     @test EegFun._lmm_perm_pvalue(null_zeros, 0.0, false) == 1.0
 end
+
+@testset "fit_mass_lmm: single-block leverage predictor and coordinate-free EpochData fallback" begin
+    rng = MersenneTwister(303)
+    eeg, meta = _sim_lmm(rng; S = 10, n_s = 12, n_ch = 2, n_tp = 3, cond_effect = 1.2)
+    # Predictor `rare` is non-zero in only 1 subject (unit block leverage -> 0 across-block CR2 df):
+    # `rare` must be excluded from permutation testing with a warning, without corrupting `condition`.
+    meta.rare = [s == "S01" && isodd(i) ? 1.0 : 0.0 for (i, s) in enumerate(meta.subject)]
+    f_rare = @formula(amplitude ~ 1 + condition + rare + (1 | subject))
+    res_rare = @test_logs (:warn, r"fewer than 2 effective across-block degrees of freedom") match_mode = :any EegFun.fit_mass_lmm(
+        eeg,
+        meta,
+        f_rare;
+        n_perms = 99,
+        rng = MersenneTwister(11),
+        progress = false,
+    )
+    ic = findfirst(==("condition"), res_rare.coefficients)
+    ir = findfirst(==("rare"), res_rare.coefficients)
+    @test ic in res_rare.tested
+    @test ir ∉ res_rare.tested
+    @test all(isfinite, res_rare.beta[:, :, ir])
+    @test all(isnan, res_rare.p_corrected[:, :, ir])
+    @test all(0.0 .< res_rare.p_corrected[:, :, ic] .<= 1.0)
+
+    # Between-subject single-block indicator (exact unit block leverage λ = 1.0 on S01)
+    meta.rare_subj = [s == "S01" ? 1.0 : 0.0 for s in meta.subject]
+    res_rare_s = @test_logs (:warn, r"fewer than 2 effective across-block degrees of freedom") match_mode = :any EegFun.fit_mass_lmm(
+        eeg,
+        meta,
+        @formula(amplitude ~ 1 + condition + rare_subj + (1 | subject));
+        n_perms = 99,
+        rng = MersenneTwister(11),
+        progress = false,
+    )
+    irs = findfirst(==("rare_subj"), res_rare_s.coefficients)
+    @test irs ∉ res_rare_s.tested
+    @test all(isnan, res_rare_s.p_corrected[:, :, irs])
+    @test all(0.0 .< res_rare_s.p_corrected[:, :, ic] .<= 1.0)
+
+    # Coordinate-free EpochData with correction = :cluster falls back to temporal clustering with a warning
+    epochs_nocoord, _ = _mock_epochs(rng; S = 8, n_s = 6, n_channels = 3, n_timepoints = 5)
+    epochs_nocoord.layout = EegFun.Layout(DataFrame(label = [:Ch1, :Ch2, :Ch3]), nothing, nothing, nothing)
+    res_nc = @test_logs (:warn, r"No spatial connectivity or layout available") match_mode = :any EegFun.fit_mass_lmm(
+        epochs_nocoord,
+        @formula(amplitude ~ condition + (1 | subject));
+        n_perms = 30,
+        correction = :cluster,
+        rng = MersenneTwister(12),
+        progress = false,
+    )
+    @test all(0.0 .< res_nc.p_corrected[:, :, 2] .<= 1.0)
+end

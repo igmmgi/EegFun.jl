@@ -100,6 +100,7 @@ Quick reference for common EEG processing tasks in EegFun.jl.
 | I want to... | Function |
 | --- | --- |
 | Morlet wavelet decomposition | `EegFun.tf_morlet(epochs, frequencies=4:1:30, cycles=3)` |
+| Inter-trial phase coherence (ITC) | `EegFun.tf_morlet(epochs, frequencies=4:1:30, output=:itc)` |
 | Multitaper decomposition | `EegFun.tf_multitaper(epochs, frequencies=4:1:30)` |
 | STFT decomposition | `EegFun.tf_stft(epochs, frequencies=4:1:30)` |
 | Baseline correct TF data | `EegFun.tf_baseline!(tf, (-0.2, 0.0); method=:db)` |
@@ -116,6 +117,7 @@ Quick reference for common EEG processing tasks in EegFun.jl.
 | Prepare group data for stats | `EegFun.prepare_stats("erps", :paired, condition_selection=EegFun.conditions([1, 2]))` |
 | Run analytic t-test | `EegFun.analytic_test(stat_data)` |
 | Run permutation test | `EegFun.permutation_test(stat_data, n_permutations=1000, alpha=0.05, cluster_alpha=0.05)` |
+| Fit mass-univariate mixed model | `EegFun.fit_mass_lmm(epochs, @formula(amp ~ 1 + condition + (1 | subject)))` |
 | Test decoding against chance | `EegFun.test_against_chance(decoded_list)` |
 | Cluster permutation (decoding) | `EegFun.test_against_chance_cluster(decoded_list)` |
 

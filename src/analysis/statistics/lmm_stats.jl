@@ -13,17 +13,19 @@ standard errors `se`, Wald statistics `z_values = β̂ / SE`, and uncorrected tw
 
 For permutation inference, Freedman–Lane residuals of the reduced model (without the tested coefficient)
 are multiplied by a random sign per *block* (by default the outermost random-effects grouping factor,
-e.g. subject). At every sign flip (and at the observed identity flip `inference.z_perm_obs`), a pivotal
-Bell–McCaffrey (CR2) cluster-robust t-statistic is evaluated in closed form at the fitted variance
-ratios (no refitting) and mapped to a tail-equivalent Normal z-score via Satterthwaite degrees of freedom.
-Studentizing each flip with its block-level CR2 residual variance ensures exact FWER control across the
-channel × time grid for within- and between-subject predictors, random slopes, unequal trial counts, and
-under-specified random-effects structures, assuming independent blocks and symmetric block-level errors.
+e.g. subject). At each flip, the test statistic is studentized using a closed-form Bell–McCaffrey (CR2)
+cluster-robust standard error at the fitted variance ratios (no refitting) and mapped to a
+Normal-equivalent z-score (`inference.z_perm_obs`) via Satterthwaite degrees of freedom. This tests the
+population null (zero fixed effect across blocks) for within- and between-block predictors, random slopes,
+unequal trial counts, and under-specified random-effects structures, assuming independent blocks and
+symmetric block-level errors. Because nuisance regression and Satterthwaite degrees of freedom are
+finite-sample approximations, calibration improves with the number of blocks (at least 10–12 blocks are
+recommended in practice, especially when trial counts vary strongly across blocks).
 
 All random-effects grouping factors must be nested within the flipping block (e.g. `(1 | subject)`,
 `(1 + condition | subject)`, `(1 | subject & session)`). Crossed designs (e.g. subject × item) have no
-exact single-factor block permutation scheme and raise an error when `n_perms > 0`; use `n_perms = 0`
-for parametric results.
+single-factor block permutation scheme and raise an error when `n_perms > 0`; use `n_perms = 0` for
+parametric results.
 
 # Keyword Arguments
 - `n_perms::Int=1000`: Number of random sign flips (`0` = no permutation inference). If all
@@ -47,9 +49,8 @@ for parametric results.
 - Array method only: `channel_names`, `time_points`, `dim_order=(:channels, :timepoints, :epochs)`.
 
 # Parallelism
-Parallelised natively across Julia threads (`Threads.@threads`). Launch Julia with `julia -t auto`
-(or set `JULIA_NUM_THREADS`) before running `fit_mass_lmm` to scale across CPU cores with shared memory
-and zero worker-process overhead.
+Fits run across Julia threads (`Threads.@threads`). Start Julia with `julia -t auto` (or set
+`JULIA_NUM_THREADS`) to use multiple threads.
 
 # Rank-deficient designs
 If the fixed-effects design matrix is rank deficient (e.g. a predictor that is constant in the

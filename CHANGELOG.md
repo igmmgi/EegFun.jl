@@ -10,7 +10,7 @@ and this project adheres to (well, attempts to :-)) [Semantic Versioning](https:
 ### Added
 
 - Inter-trial phase coherence (ITC): `output = :itc` in `tf_morlet` / `tf_stft`, and `tf_itc` for single-trial `TimeFreqEpochData`. ITC results are `TimeFreqData`, so `plot_tf`, topographies, averaging, and TF statistics work on them directly.
-- Mass-univariate linear mixed models (`fit_mass_lmm`, `LmmStatsResult`, `LMM_FIT_STATUS`, `extract_predictor_stats`) via a weak-dependency extension (`EegFunMixedModelsExt`) triggered by `MixedModels` and `StatsModels`, with multithreaded fitting, Between-Within parametric degrees of freedom, closed-form Bell–McCaffrey (CR2) pivotal whole-block sign-flip FWER permutation inference (`:maxt`, `:cluster`, `:tfce`), `StatsAPI` methods, and ERP/heatmap/topography plotting support.
+- Mass-univariate linear mixed models (`fit_mass_lmm`, `LmmStatsResult`, `extract_predictor_stats`) via a `MixedModels` / `StatsModels` package extension, with whole-block sign-flip permutation FWER correction (`:maxt`, `:cluster`, `:tfce`), `StatsAPI` methods, and ERP/heatmap/topography plotting.
 
 ## [0.9.0] - 2026-11-15
 
