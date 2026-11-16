@@ -849,7 +849,9 @@ function _show_erp_context_menu!(selection_state, data, condition_checked_ref)
     menu_fig = _eegfun_figure(size = (300, 300))
 
     data_to_plot = _filter_visible_conditions(data, condition_checked_ref)
-    plot_types = data_to_plot isa Vector{ErpData} && length(data_to_plot) > 1 ? ["Topoplot", "Topoplot (average)"] : ["Topoplot"]
+    plot_types =
+        data_to_plot isa Vector{ErpData} && length(data_to_plot) > 1 ?
+        ["Topoplot", "Topoplot (average)", "Topoplot 3D", "Topoplot 3D (average)"] : ["Topoplot", "Topoplot 3D"]
 
     for (idx, plot_type) in enumerate(plot_types)
         btn = Button(menu_fig[idx, 1], label = plot_type)
@@ -862,6 +864,10 @@ function _show_erp_context_menu!(selection_state, data, condition_checked_ref)
                 plot_topography(vis_data, sample_selection = time_sel)
             elseif btn.label[] == "Topoplot (average)"
                 plot_topography(_average_conditions(vis_data), sample_selection = time_sel)
+            elseif btn.label[] == "Topoplot 3D"
+                plot_topography_3d(vis_data, sample_selection = time_sel)
+            elseif btn.label[] == "Topoplot 3D (average)"
+                plot_topography_3d(_average_conditions(vis_data), sample_selection = time_sel)
             end
         end
     end

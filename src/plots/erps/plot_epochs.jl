@@ -845,7 +845,9 @@ end
 function _show_epochs_context_menu!(selection_state, data, condition_checked_ref)
     menu_fig = _eegfun_figure()
     data_to_plot = _filter_visible_conditions(data, condition_checked_ref)
-    plot_types = data_to_plot isa Vector{EpochData} && length(data_to_plot) > 1 ? ["Topoplot", "Topoplot (average)"] : ["Topoplot"]
+    plot_types =
+        data_to_plot isa Vector{EpochData} && length(data_to_plot) > 1 ?
+        ["Topoplot", "Topoplot (average)", "Topoplot 3D", "Topoplot 3D (average)"] : ["Topoplot", "Topoplot 3D"]
 
     for (idx, plot_type) in enumerate(plot_types)
         btn = Button(menu_fig[idx, 1], label = plot_type)
@@ -860,6 +862,10 @@ function _show_epochs_context_menu!(selection_state, data, condition_checked_ref
                 plot_topography(erp_data, sample_selection = time_sel)
             elseif btn.label[] == "Topoplot (average)"
                 plot_topography(erp_data isa Vector{ErpData} ? _average_conditions(erp_data) : erp_data, sample_selection = time_sel)
+            elseif btn.label[] == "Topoplot 3D"
+                plot_topography_3d(erp_data, sample_selection = time_sel)
+            elseif btn.label[] == "Topoplot 3D (average)"
+                plot_topography_3d(erp_data isa Vector{ErpData} ? _average_conditions(erp_data) : erp_data, sample_selection = time_sel)
             end
         end
     end

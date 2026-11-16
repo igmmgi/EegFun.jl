@@ -149,6 +149,7 @@ const PLOT_TOPOGRAPHY_3D_KWARGS = merge(
 
 """
     plot_topography_3d(dat::SingleDataFrameEeg; scrubber::Bool = false, kwargs...)
+    plot_topography_3d(dat::AbstractVector{<:SingleDataFrameEeg}; kwargs...)
     plot_topography_3d(dat::MultiDataFrameEeg, epoch::Int; scrubber::Bool = false, kwargs...)
 
 Plot a smooth 3D interpolation of EEG data mapped onto a realistically proportioned head mesh.
@@ -157,6 +158,105 @@ and amplitude scaling controls.
 
 $(_generate_kwargs_doc(PLOT_TOPOGRAPHY_3D_KWARGS))
 """
+function plot_topography_3d(
+    dat::AbstractVector{<:SingleDataFrameEeg};
+    channel_selection = channels(),
+    sample_selection = samples(),
+    interval_selection::Interval = times(),
+    baseline_interval::Interval = nothing,
+    scrubber::Bool = false,
+    display_plot = true,
+    interactive = true,
+    kwargs...,
+)
+    isempty(dat) && @minimal_error "Cannot plot empty vector of datasets"
+    if length(dat) == 1
+        return plot_topography_3d(
+            dat[1];
+            channel_selection = channel_selection,
+            sample_selection = sample_selection,
+            interval_selection = interval_selection,
+            baseline_interval = baseline_interval,
+            scrubber = scrubber,
+            display_plot = display_plot,
+            interactive = interactive,
+            kwargs...,
+        )
+    end
+
+    if string(Makie.current_backend()) == "CairoMakie"
+        @minimal_warning "CairoMakie detected. 3D plots require GLMakie for full interactivity. You may want to run `using GLMakie; GLMakie.activate!()`."
+    end
+
+    !isnothing(baseline_interval) && (dat = baseline.(dat, Ref(baseline_interval)))
+    subsets = [
+        subset(d, channel_selection = channel_selection, sample_selection = sample_selection, interval_selection = interval_selection)
+        for d in dat
+    ]
+
+    layout_df = subsets[1].layout.data
+    (!hasproperty(layout_df, :inc) || !hasproperty(layout_df, :azi)) &&
+        @minimal_error "Cannot create 3D topographic plot: layout missing spherical coordinates (:inc, :azi)."
+
+    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_3D_KWARGS, kwargs)
+    dims = pop!(plot_kwargs, :dims, nothing)
+    rows, cols = isnothing(dims) ? _best_rect(length(subsets)) : dims
+
+    all_channel_data = [Float64[mean(s.data[!, lbl]) for lbl in s.layout.data.label] for s in subsets]
+    global_max = maximum(maximum(abs, cd) for cd in all_channel_data)
+    default_cr = global_max > 0 ? (-global_max, global_max) : (-1.0, 1.0)
+    colorrange = something(pop!(plot_kwargs, :colorrange, nothing), default_cr)
+    colormap = pop!(plot_kwargs, :colormap, nothing)
+    show_title = pop!(plot_kwargs, :show_title, true)
+    colorbar_plot = pop!(plot_kwargs, :colorbar_plot, true)
+    colorbar_kwargs = pop!(plot_kwargs, :colorbar_kwargs, (;))
+    cam_az = pop!(plot_kwargs, :camera_azimuth, nothing)
+    cam_el = pop!(plot_kwargs, :camera_elevation, nothing)
+
+    _set_window_title(_generate_window_title(dat))
+    fontsize_kw = isnothing(plot_kwargs[:theme_fontsize]) ? (;) : (; fontsize = plot_kwargs[:theme_fontsize])
+    fig = _eegfun_figure(; figure_padding = plot_kwargs[:figure_padding], fontsize_kw...)
+
+    hm = _get_cached_head_mesh()
+    axes = LScene[]
+    last_mesh = nothing
+
+    for (idx, s) in enumerate(subsets)
+        r = fld(idx - 1, cols) + 1
+        c = mod(idx - 1, cols) + 1
+        cell = fig[r, c] = GridLayout()
+        if show_title
+            t_str = hasproperty(s, :condition_name) ? String(s.condition_name) : "Dataset $idx"
+            Label(cell[1, 1, Top()], t_str, fontsize = plot_kwargs[:plot_title_fontsize], font = :bold)
+        end
+        ax = LScene(cell[1, 1], show_axis = false)
+        push!(axes, ax)
+
+        sensors = _snap_to_mesh_cached(s.layout.data, hm)
+        pts = _sensors_to_matrix(sensors)
+        vertex_colors = _interp_3d_colors(pts, all_channel_data[idx], hm.grid)
+        last_mesh = mesh!(
+            ax,
+            hm.mesh,
+            color = vertex_colors,
+            colormap = _resolve_theme_colormap(ax, colormap),
+            colorrange = colorrange,
+            shading = true,
+        )
+        _render_3d_sensors_and_labels!(ax, sensors, s.layout.data.label, plot_kwargs)
+        _apply_3d_camera!(ax, cam_az, cam_el)
+    end
+
+    if colorbar_plot && !isnothing(last_mesh)
+        cb_pos = _get_colorbar_position(pop!(plot_kwargs, :colorbar_position, :right), 1:rows, 1:cols)
+        Colorbar(fig[cb_pos...], last_mesh; colorbar_kwargs...)
+    end
+
+    display_plot && _display_figure(fig)
+    _set_window_title("Makie")
+    return (fig = fig, axes = axes, ax = first(axes))
+end
+
 function plot_topography_3d(
     dat::SingleDataFrameEeg;
     channel_selection = channels(),

@@ -21,6 +21,15 @@ using EegFun
         # Test colorrange
         res_cr = EegFun.plot_topography_3d(dat; colorrange = (-3.0, 3.0), display_plot = false)
         @test res_cr.fig isa Figure
+
+        # Test vector of SingleDataFrameEeg (multi-condition 3D topoplot)
+        dat2 = copy(dat)
+        dat2.condition = 2
+        dat2.condition_name = "condition_2"
+        res_vec = EegFun.plot_topography_3d([dat, dat2]; display_plot = false)
+        @test res_vec.fig isa Figure
+        @test length(res_vec.axes) == 2
+        @test all(a -> a isa LScene, res_vec.axes)
     end
 
     @testset "plot_topography_3d with kwargs" begin
