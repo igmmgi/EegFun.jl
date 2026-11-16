@@ -101,5 +101,3 @@ EegFun.plot_databrowser(joinpath(DEMO_OUTPUT, "dat.jld2"))
 EegFun.plot_databrowser(joinpath(DEMO_OUTPUT, "epochs.jld2"))
 EegFun.plot_databrowser(joinpath(DEMO_OUTPUT, "dat.jld2"), joinpath(DEMO_OUTPUT, "ica.jld2"))
 EegFun.plot_databrowser(joinpath(DEMO_OUTPUT, "epochs.jld2"), joinpath(DEMO_OUTPUT, "ica.jld2"))
-
-
