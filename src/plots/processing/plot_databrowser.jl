@@ -838,6 +838,7 @@ function _show_ica_component_preview(
     end
 
     ax_act = Axis(act_grid[1, 1], xlabel = "Time (s)", ylabel = "Activation (a.u.)", title = act_title)
+    browser_listeners = Makie.Observables.ObserverFunction[]
 
     if state.data isa ContinuousDataState
         t_vec = orig_dat.data.time
@@ -885,16 +886,17 @@ function _show_ica_component_preview(
             xlims!(ax_act, t_vec[s], t_vec[e])
         end
 
-        on(state.view.xrange) do rng
+        listener = on(state.view.xrange) do rng
             updating_slider[] = true
             xrange_obs[] = rng
             xlims!(ax_act, t_vec[first(rng)], t_vec[last(rng)])
             set_close_to!(slider_pos, first(rng))
             updating_slider[] = false
         end
-    elseif state.data isa EpochDataState
-        ep_act_points = @lift begin
-            ep_idx = clamp($(state.data.current_epoch), 1, length(orig_dat.data))
+        push!(browser_listeners, listener)
+    elseif state.data isa EpochedDataState
+        function _epoch_activation_points(ep)
+            ep_idx = clamp(ep, 1, length(orig_dat.data))
             ep_df = orig_dat.data[ep_idx]
             n_ep_samps = nrow(ep_df)
             labels = ica.layout.data.label
@@ -909,9 +911,23 @@ function _show_ica_component_preview(
                 end
             end
             ep_act = vec(view(ica.unmixing, comp_idx:comp_idx, :) * ep_mat)
-            Point2f.(ep_df.time, ep_act)
+            return Point2f.(ep_df.time, ep_act)
         end
+        ep_act_points = Observable(_epoch_activation_points(state.data.current_epoch[]))
         lines!(ax_act, ep_act_points; color = :red, linewidth = 1.5, label = comp_name)
+        listener = on(state.data.current_epoch) do ep
+            ep_act_points[] = _epoch_activation_points(ep)
+            reset_limits!(ax_act)
+        end
+        push!(browser_listeners, listener)
+    end
+
+    # Detach from the browser's observables when the preview closes so closed windows stop updating and can be freed
+    on(events(preview_fig).window_open) do is_open
+        if !is_open
+            foreach(Makie.off, browser_listeners)
+            empty!(browser_listeners)
+        end
     end
 
     colsize!(preview_fig.layout, 1, Relative(0.35))
@@ -1046,7 +1062,7 @@ function _show_ica_menu(state, ax, ica; display_plot::Bool = true)
     btn_preview = Button(group_area[1, 3], label = "Preview Selected")
     on(btn_preview.clicks) do _
         if isempty(selected_set)
-            @info "Check one or more ICA components (or click any component label) to preview."
+            @info "Check one or more ICA components (or right-click any component label) to preview."
             return
         end
         if isnothing(acts_cache[])
@@ -1065,7 +1081,7 @@ function _show_ica_menu(state, ax, ica; display_plot::Bool = true)
     end
 
     on(events(menu_fig).mousebutton) do event
-        if event.action == Mouse.press && event.button in (Mouse.left, Mouse.right)
+        if event.action == Mouse.press && event.button == Mouse.right
             mpos = Point2f(events(menu_fig).mouseposition[])
             for (k, lbl) in enumerate(lbls)
                 if mpos in lbl.layoutobservables.computedbbox[]

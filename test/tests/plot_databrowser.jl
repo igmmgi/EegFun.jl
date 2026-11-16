@@ -678,5 +678,26 @@ using DataFrames
         @test prev2.fig isa Figure
         @test length(prev2.axes) == 3
         @test occursin("my_eog", prev2.axes[3].title[])
+
+        # Preview listeners on the browser's xrange are detached when the preview window closes
+        n_before = length(Makie.Observables.listeners(state.view.xrange))
+        prev3 = EegFun._show_ica_component_preview(state, ica_res, 2; display_plot = false)
+        @test length(Makie.Observables.listeners(state.view.xrange)) == n_before + 1
+        events(prev3.fig).window_open[] = false
+        @test length(Makie.Observables.listeners(state.view.xrange)) == n_before
+
+        # Preview on epoched data (follows current epoch, detaches on close)
+        ep_dat, _ = EegFun.create_test_epoch_data_with_artifacts(n_epochs = 4, n_channels = 4)
+        ep_ica = EegFun.run_ica(ep_dat)
+        ep_fig = Figure()
+        ep_ax = Axis(ep_fig[1, 1])
+        ep_state = EegFun._create_browser_state(ep_dat, ep_dat.layout.data.label, ep_ax, ep_ica, plot_kwargs)
+        n_ep_before = length(Makie.Observables.listeners(ep_state.data.current_epoch))
+        ep_prev = EegFun._show_ica_component_preview(ep_state, ep_ica, 1; display_plot = false)
+        @test ep_prev.fig isa Figure
+        @test length(ep_prev.axes) == 3
+        @test_nowarn ep_state.data.current_epoch[] = 2
+        events(ep_prev.fig).window_open[] = false
+        @test length(Makie.Observables.listeners(ep_state.data.current_epoch)) == n_ep_before
     end
 end
