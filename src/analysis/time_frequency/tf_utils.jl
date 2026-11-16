@@ -165,6 +165,23 @@ struct TFGeometry
     return_trials::Bool
     return_phase::Bool
     filter_edges::Bool
+    itc::Bool  # accumulate unit phasors across trials (inter-trial phase coherence) instead of power
+end
+
+# Unit-length phasor e^{iφ} of a complex coefficient (zero-magnitude coefficients contribute nothing)
+@inline _unit_phasor(z::Complex) = (m = abs(z); m > 0 ? z / m : zero(z))
+
+# Validate the `output` keyword of tf_morlet / tf_stft; returns `true` when ITC is requested
+function _validate_tf_output(output::Symbol, return_trials::Bool, n_trials::Int)
+    output in (:power, :itc) || @minimal_error("`output` must be :power or :itc, got :$output")
+    output === :itc || return false
+    return_trials && @minimal_error("`output = :itc` is a cross-trial measure and cannot be combined with `return_trials = true`")
+    n_trials < 2 && @minimal_error("`output = :itc` requires at least 2 trials, got $n_trials")
+    if n_trials < 10
+        chance = round(sqrt(π / (4 * n_trials)), digits = 2)
+        @minimal_warning "ITC from only $n_trials trials is strongly biased upwards (chance level ≈ $chance)."
+    end
+    return true
 end
 
 function _tf_batch_fft_plans(n_fft::Int, n_trials::Int, gpu_active::Bool)
@@ -428,6 +445,7 @@ end
 
 function _tf_result(dat::EpochData, out::TFOutput, channels::Vector{Symbol}, method::Symbol, g::TFGeometry)
     col_names = vcat([:time, :freq], channels)
+    g.itc && (method = Symbol(method, :_itc))
     if g.return_trials
         pow_dfs = [_build_tf_df(out.time_col, out.freq_col, @view(out.power_trials[:, tr]), col_names) for tr = 1:g.n_trials]
         phs_dfs = [_build_tf_df(out.time_col, out.freq_col, @view(out.phase_trials[:, tr]), col_names) for tr = 1:g.n_trials]
@@ -503,6 +521,10 @@ function _tf_single_taper_channel!(
             if return_trials
                 @views gb.eegpower_trials_gpu[:, fi, :] .= transpose(abs2.(extracted_gpu))
                 return_phase && (@views gb.eegconv_trials_gpu[:, fi, :] .= transpose(extracted_gpu))
+            elseif g.itc
+                sum!(gb.sum_complex_gpu, _unit_phasor.(extracted_gpu))
+                @views gb.eegconv_avg_gpu[fi, :] .= vec(gb.sum_complex_gpu)
+                @views gb.eegpower_avg_gpu[fi, :] .= abs.(vec(gb.sum_complex_gpu))
             else
                 gb.extracted_power_gpu .= abs2.(extracted_gpu)
                 sum!(gb.sum_power_gpu, gb.extracted_power_gpu)
@@ -551,6 +573,16 @@ function _tf_single_taper_channel!(
                             eegpower_trials[tr, fi, ti] = abs2(local_conv_result[idx, tr])
                         end
                     end
+                end
+            elseif g.itc
+                @inbounds for ti = 1:n_times
+                    idx = time_indices[ti] + off
+                    u_sum = 0.0im
+                    for tr = 1:n_trials
+                        u_sum += _unit_phasor(local_conv_result[idx, tr])
+                    end
+                    eegpower_avg[fi, ti] = abs(u_sum) * inv_n_trials
+                    eegconv_avg[fi, ti] = u_sum * inv_n_trials
                 end
             elseif return_phase
                 @inbounds for ti = 1:n_times

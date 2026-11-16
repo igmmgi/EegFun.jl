@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to (well, attempts to :-)) [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Inter-trial phase coherence (ITC): `output = :itc` in `tf_morlet` / `tf_stft`, and `tf_itc` for single-trial `TimeFreqEpochData`. ITC results are `TimeFreqData`, so `plot_tf`, topographies, averaging, and TF statistics work on them directly.
+
 ## [0.9.0] - 2026-11-15
 
 ### Added

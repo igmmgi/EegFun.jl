@@ -2,6 +2,7 @@ using Test
 using JLD2
 using DataFrames
 using Statistics
+using Random
 using EegFun
 
 @testset "Time-Frequency Batch Processing" begin
@@ -259,4 +260,57 @@ end
     @test all(isfinite, center_phases)
     # Phase should sweep smoothly across cycles rather than collapsing to constant/noise
     @test maximum(center_phases) - minimum(center_phases) > 3.0
+end
+
+@testset "Inter-trial phase coherence (ITC)" begin
+    # Ch1: identical 10 Hz phase on every trial (ITC ≈ 1); Ch2: random 10 Hz phase per trial (ITC ≈ chance)
+    rng = MersenneTwister(3)
+    n_ep = 40
+    ep = EegFun.create_test_epoch_data(n = 500, fs = 250, n_epochs = n_ep, n_channels = 2, seed = 3)
+    t = ep.data[1].time
+    for df in ep.data
+        df.Ch1 .= cos.(2π * 10.0 .* t) .+ 0.2 .* randn(rng, length(t))
+        df.Ch2 .= cos.(2π * 10.0 .* t .+ 2π * rand(rng)) .+ 0.2 .* randn(rng, length(t))
+    end
+    freqs = [6.0, 10.0, 14.0]
+
+    itc = EegFun.tf_morlet(ep; frequencies = freqs, cycles = 5, output = :itc)
+    @test itc isa EegFun.TimeFreqData
+    @test itc.method == :wavelet_itc
+    @test EegFun._is_itc(itc)
+    mask = (itc.data_power.freq .== 10.0) .& (0.5 .<= itc.data_power.time .<= 1.5)
+    @test all(itc.data_power.Ch1[mask] .> 0.95)
+    @test mean(itc.data_power.Ch2[mask]) < 0.35
+    @test all(v -> isnan(v) || 0.0 <= v <= 1.0 + 1e-12, itc.data_power.Ch1)
+    @test all(v -> isnan(v) || 0.0 <= v <= 1.0 + 1e-12, itc.data_power.Ch2)
+
+    # Kernel ITC matches ITC computed from stored single-trial phases
+    trials = EegFun.tf_morlet(ep; frequencies = freqs, cycles = 5, return_trials = true, return_phase = true)
+    itc_trials = EegFun.tf_itc(trials)
+    @test itc_trials.method == :wavelet_itc
+    for ch in (:Ch1, :Ch2)
+        @test isapprox(itc.data_power[!, ch], itc_trials.data_power[!, ch]; rtol = 1e-8, nans = true)
+    end
+    @test length(EegFun.tf_itc([trials, trials])) == 2
+
+    # STFT ITC
+    itc_stft = EegFun.tf_stft(ep; frequencies = [10.0], window_length = 0.4, time_steps = 0.02, output = :itc)
+    @test itc_stft.method == :taper_fixed_itc
+    smask = 0.5 .<= itc_stft.data_power.time .<= 1.5
+    @test all(itc_stft.data_power.Ch1[smask] .> 0.95)
+
+    # Errors and warnings
+    @test_throws EegFun.EegFunError EegFun.tf_morlet(ep; frequencies = freqs, output = :itc, return_trials = true)
+    @test_throws EegFun.EegFunError EegFun.tf_morlet(ep; frequencies = freqs, output = :bogus)
+    @test_throws EegFun.EegFunError EegFun.tf_multitaper(ep; frequencies = freqs, cycles = 4, output = :itc)
+    no_phase = EegFun.tf_morlet(ep; frequencies = freqs, cycles = 5, return_trials = true)
+    @test_throws EegFun.EegFunError EegFun.tf_itc(no_phase)
+    ep_small = EegFun.subset(ep; epoch_selection = EegFun.epochs(1:5))
+    @test_logs (:warn, r"biased upwards") match_mode = :any EegFun.tf_morlet(ep_small; frequencies = freqs, cycles = 5, output = :itc)
+    @test_logs (:warn, r"unusual for ITC") match_mode = :any EegFun.tf_baseline(itc, (0.5, 0.7); method = :db)
+
+    # Labels
+    @test EegFun._tf_colorbar_label(itc, nothing, :db) == "ITC"
+    @test EegFun._tf_colorbar_label(EegFun.tf_baseline(itc, (0.5, 0.7); method = :absolute), nothing, :db) == "ITC (baseline-subtracted)"
+    @test EegFun._tf_colorbar_label(EegFun.tf_morlet(ep; frequencies = freqs), nothing, :db) == "Power"
 end

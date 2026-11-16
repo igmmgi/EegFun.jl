@@ -213,6 +213,9 @@ tf_baseline!(tf_data, (-0.3, 0.0); method=:db)
 function tf_baseline!(tf_data::TimeFreqData, baseline_interval::Tuple{Real,Real}; method::Symbol = :db)
     _check_tf_not_baselined(tf_data.baseline)
     _validate_tf_baseline_method(method)
+    if _is_itc(tf_data) && method ∉ (:absolute, :zscore)
+        @minimal_warning "Baseline method :$method is a power ratio and is unusual for ITC values; consider method = :absolute (subtraction)."
+    end
     ch_labels = channel_labels(tf_data)
     @info "Applying $(method) baseline correction ($(baseline_interval[1])s to $(baseline_interval[2])s)"
     _tf_baseline_df!(tf_data.data_power, ch_labels, baseline_interval, method; parallel_channels = true)

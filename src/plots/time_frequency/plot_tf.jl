@@ -733,15 +733,17 @@ function _plot_tf_heatmap!(
     )
 end
 
-function _tf_baseline_unit_label(method::Symbol)
-    method == :db && return "Power (dB)"
-    method == :percent && return "Power (% change)"
-    method == :relchange && return "Power (relative)"
-    return "Power"
+function _tf_baseline_unit_label(method::Symbol, quantity::String = "Power")
+    method == :db && return "$quantity (dB)"
+    method == :percent && return "$quantity (% change)"
+    method == :relchange && return "$quantity (relative)"
+    method == :absolute && quantity != "Power" && return "$quantity (baseline-subtracted)"
+    return quantity
 end
 
 function _tf_colorbar_label(tf_plot::TimeFreqData, baseline_interval, baseline_method::Symbol)
-    !isnothing(tf_plot.baseline) && return _tf_baseline_unit_label(tf_plot.baseline.method)
-    !isnothing(baseline_interval) && return _tf_baseline_unit_label(baseline_method)
-    return "Power"
+    quantity = _tf_quantity_label(tf_plot)
+    !isnothing(tf_plot.baseline) && return _tf_baseline_unit_label(tf_plot.baseline.method, quantity)
+    !isnothing(baseline_interval) && return _tf_baseline_unit_label(baseline_method, quantity)
+    return quantity
 end

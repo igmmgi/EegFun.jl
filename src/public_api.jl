@@ -321,6 +321,7 @@ public prepare_stats
 public freq_spectrum
 public tf_baseline
 public tf_baseline!
+public tf_itc
 public tf_morlet
 public tf_multitaper
 public tf_stft

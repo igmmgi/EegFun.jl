@@ -288,6 +288,15 @@ using EegFun
         @test res_vec.fig isa Figure
     end
 
+    @testset "plot_tf labels ITC data" begin
+        ep = EegFun.create_test_epoch_data(n = 500, fs = 250, n_epochs = 12, n_channels = 2, seed = 5)
+        itc = EegFun.tf_morlet(ep; frequencies = [6.0, 10.0, 14.0], cycles = 5, output = :itc)
+        res = EegFun.plot_tf(itc; display_plot = false)
+        cbs = [b for b in res.fig.content if b isa Colorbar]
+        @test length(cbs) == 1
+        @test cbs[1].label[] == "ITC"
+    end
+
     @testset "plot_tf 2D time-frequency selection and context menu" begin
         tf = tf_participant1[1]
         out = EegFun.plot_tf(tf; layout = :single, yscale = :log10, display_plot = false)

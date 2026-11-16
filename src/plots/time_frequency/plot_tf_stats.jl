@@ -166,11 +166,12 @@ function plot_tf_stats(
 
     axes, layout_channels = _apply_layout!(fig, plot_layout; xgrid = false, ygrid = false, xminorgrid = false, yminorgrid = false)
 
+    quantity = _tf_quantity_label(result.data[1])
     if eff_show_title
         test_type = result isa TFAnalyticResult ? "Analytic" : "Permutation"
         content_label =
             content == :tvalues ? "t-values" :
-            content == :difference ? "Power Difference" :
+            content == :difference ? "$quantity Difference" :
             content == :power_a ? result.data[1].condition_name : result.data[2].condition_name
         header_text = isnothing(eff_plot_title) ? "$test_type Test — $content_label" : String(eff_plot_title)
         if !isempty(header_text)
@@ -244,7 +245,7 @@ function plot_tf_stats(
     length(axes) > 1 && linkaxes!(axes...)
 
     if show_cb && !isnothing(last_hm)
-        cb_label = content == :tvalues ? "t-statistic" : content == :difference ? "Power Difference" : "Power"
+        cb_label = content == :tvalues ? "t-statistic" : content == :difference ? "$quantity Difference" : quantity
         if plot_layout.type === :grid
             n_rows, n_cols = plot_layout.dims
             Colorbar(fig[1:n_rows, n_cols+1], last_hm, label = cb_label)

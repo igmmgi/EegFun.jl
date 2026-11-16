@@ -35,9 +35,14 @@ function tf_multitaper(
     pad::Union{Nothing,Symbol} = nothing,
     return_trials::Bool = false,
     return_phase::Bool = false,
+    output::Symbol = :power,
     filter_edges::Bool = true,
     use_gpu::Bool = false,
 )
+    output === :itc && @minimal_error(
+        "`output = :itc` is not supported for tf_multitaper (phase comes from the first taper only); use tf_morlet or tf_stft"
+    )
+    output === :power || @minimal_error("`output` must be :power or :itc, got :$output")
     sdat, gpu_active = _tf_prepare(dat, pad, use_gpu, channel_selection, interval_selection, frequencies)
     selected_channels = channel_labels(sdat)
     num_frex = length(frequencies)
@@ -72,6 +77,7 @@ function tf_multitaper(
         return_trials,
         return_phase,
         filter_edges,
+        false,
     )
 
     n_tapers_per_freq = Vector{Int}(undef, num_frex)

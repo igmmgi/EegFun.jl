@@ -134,6 +134,7 @@ include("analysis/time_frequency/tf_utils.jl")
 include("analysis/time_frequency/tf_morlet.jl")
 include("analysis/time_frequency/tf_stft.jl")
 include("analysis/time_frequency/tf_multitaper.jl")
+include("analysis/time_frequency/tf_itc.jl")
 include("analysis/time_frequency/freq_spectrum.jl")
 include("analysis/time_frequency/baseline.jl")
 

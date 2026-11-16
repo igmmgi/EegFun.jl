@@ -7,6 +7,7 @@
               pad::Union{Nothing,Symbol}=nothing,
               return_trials::Bool=false,
               return_phase::Bool=false,
+              output::Symbol=:power,
               filter_edges::Bool=true,
               use_gpu::Bool=false)
 
@@ -15,10 +16,17 @@ normalization (``\\|W\\|_2 = \\sqrt{2}``).
 
 Returns `TimeFreqData` when `return_trials=false` or `TimeFreqEpochData` when `return_trials=true`.
 
+With `output = :itc`, returns inter-trial phase coherence instead of power: a `TimeFreqData` whose
+`data_power` holds ITC values (0 = random phase across trials, 1 = identical phase in every trial),
+`data_phase` holds the preferred (mean) phase, and `method` is tagged `:wavelet_itc`. ITC is biased upwards
+by small trial counts (chance level ≈ `sqrt(π / (4N))` for `N` trials), so compare conditions with equal
+trial numbers. Cannot be combined with `return_trials = true`.
+
 # Examples
 ```julia
 tf_data = tf_morlet(epochs; frequencies=range(2, 40, length=30), cycles=7)
 tf_trials = tf_morlet(epochs; frequencies=logrange(2, 40, length=20), cycles=(3, 10), return_trials=true, return_phase=true)
+itc = tf_morlet(epochs; frequencies=logrange(2, 40, length=20), cycles=(3, 10), output=:itc)
 ```
 """
 function tf_morlet(
@@ -30,12 +38,14 @@ function tf_morlet(
     pad::Union{Nothing,Symbol} = nothing,
     return_trials::Bool = false,
     return_phase::Bool = false,
+    output::Symbol = :power,
     filter_edges::Bool = true,
     use_gpu::Bool = false,
 )
     sdat, gpu_active = _tf_prepare(dat, pad, use_gpu, channel_selection, interval_selection, frequencies)
     n_samples_unpadded = n_samples(sdat)
     n_trials = n_epochs(sdat)
+    itc = _validate_tf_output(output, return_trials, n_trials)
     times_out = time_vector(sdat)
     num_frex = length(frequencies)
 
@@ -56,8 +66,9 @@ function tf_morlet(
         num_frex,
         length(time_indices_out),
         return_trials,
-        return_phase,
+        return_phase || itc,
         filter_edges,
+        itc,
     )
 
     wavelet_padded = Vector{ComplexF64}(undef, n_conv_pow2)

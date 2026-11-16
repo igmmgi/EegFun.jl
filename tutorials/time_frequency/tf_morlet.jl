@@ -116,3 +116,18 @@ EegFun.plot_tf(
     colormap = :jet,
     interpolate = true,
 )
+
+
+#######################################################################
+@info EegFun.section("TEST 3: Inter-Trial Phase Coherence (ITC)")
+#######################################################################
+# ITC measures phase consistency across trials (0 = random phase, 1 = identical phase in every trial),
+# separating phase-locked (evoked) from non-phase-locked (induced) activity.
+# ITC is biased upwards with few trials (chance ≈ sqrt(π / (4N))), so compare conditions with equal trial counts.
+itc = EegFun.tf_morlet(data_cohen, frequencies = logrange(2, 40, length = 30), cycles = (3, 10), output = :itc)
+EegFun.plot_tf(itc; xlim = (-0.2, 1.0), yscale = :log10, colormap = :viridis)
+
+# The same ITC from stored single-trial phases (memory-heavy: keeps every trial)
+tf_trials =
+    EegFun.tf_morlet(data_cohen, frequencies = logrange(2, 40, length = 30), cycles = (3, 10), return_trials = true, return_phase = true)
+itc_from_trials = EegFun.tf_itc(tf_trials)

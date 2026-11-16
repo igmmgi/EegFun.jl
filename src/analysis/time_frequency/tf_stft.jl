@@ -9,6 +9,7 @@
             pad::Union{Nothing,Symbol}=nothing,
             return_trials::Bool=false,
             return_phase::Bool=false,
+            output::Symbol=:power,
             filter_edges::Bool=true,
             use_gpu::Bool=false)
 
@@ -17,10 +18,14 @@ Specify **exactly one** of `window_length` (fixed window in seconds) or `cycles`
 
 Returns `TimeFreqData` when `return_trials=false` or `TimeFreqEpochData` when `return_trials=true`.
 
+With `output = :itc`, returns inter-trial phase coherence instead of power (see [`tf_morlet`](@ref));
+`method` is tagged `:taper_fixed_itc` or `:taper_adaptive_itc`.
+
 # Examples
 ```julia
 tf_data = tf_stft(epochs; window_length=0.3)
 tf_adaptive = tf_stft(epochs; frequencies=2:1:30, cycles=7, interval_selection=times(-0.5, 1.5), time_steps=0.05)
+itc = tf_stft(epochs; window_length=0.3, output=:itc)
 ```
 """
 function tf_stft(
@@ -34,6 +39,7 @@ function tf_stft(
     pad::Union{Nothing,Symbol} = nothing,
     return_trials::Bool = false,
     return_phase::Bool = false,
+    output::Symbol = :power,
     filter_edges::Bool = true,
     use_gpu::Bool = false,
 )
@@ -50,6 +56,7 @@ function tf_stft(
 
     time_indices, times_out = _tf_time_grid(sdat, time_steps)
     n_trials = n_epochs(sdat)
+    itc = _validate_tf_output(output, return_trials, n_trials)
     n_samples_per_epoch = n_samples(sdat)
     freqs = collect(frequencies)
 
@@ -79,8 +86,9 @@ function tf_stft(
         num_frex,
         n_times,
         return_trials,
-        return_phase,
+        return_phase || itc,
         filter_edges,
+        itc,
     )
 
     wavelet_padded = Vector{ComplexF64}(undef, n_samples_padded)

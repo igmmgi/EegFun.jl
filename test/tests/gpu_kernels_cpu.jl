@@ -50,6 +50,14 @@ using Random
                 tf_trials_cpu = fn(ep_dat; use_gpu = false, return_trials = true, kw...)
                 tf_trials_gpu = fn(ep_dat; use_gpu = true, return_trials = true, kw...)
                 @test isapprox(tf_trials_cpu.data_power[1].Ch1, tf_trials_gpu.data_power[1].Ch1; rtol = 1e-5, nans = true)
+
+                # Inter-trial phase coherence (not supported for multitaper)
+                if fn !== EegFun.tf_multitaper
+                    itc_cpu = fn(ep_dat; use_gpu = false, output = :itc, kw...)
+                    itc_gpu = fn(ep_dat; use_gpu = true, output = :itc, kw...)
+                    @test isapprox(itc_cpu.data_power.Ch1, itc_gpu.data_power.Ch1; rtol = 1e-5, nans = true)
+                    @test isapprox(itc_cpu.data_phase.Ch1, itc_gpu.data_phase.Ch1; rtol = 1e-5, nans = true)
+                end
             end
         end
 

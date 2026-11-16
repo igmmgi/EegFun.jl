@@ -541,7 +541,7 @@ function plot_topography_stats(
     end
 
     test_type = result isa TFAnalyticResult ? "Analytic" : "Permutation"
-    data_label = topo_data == :tvalues ? "t-statistic" : "Power Difference"
+    data_label = topo_data == :tvalues ? "t-statistic" : "$(_tf_quantity_label(result.data[1])) Difference"
     freq_str = "$(round(Int, fr[1]))–$(round(Int, fr[2])) Hz"
     user_title = !isnothing(plot_title) && !isempty(plot_title) ? plot_title : figure_title
     fig_title = isempty(user_title) ? "$test_type Test — $data_label ($freq_str)" : user_title
@@ -628,7 +628,7 @@ function plot_topography_stats(
     end
 
     cb = if colorbar_plot
-        cb_label = topo_data == :tvalues ? "t-statistic" : "Power Difference"
+        cb_label = data_label
         Colorbar(fig[1:n_rows, n_cols+1]; colorbar_kwargs..., colormap = actual_colormap, colorrange = colorrange, label = cb_label)
     else
         nothing
