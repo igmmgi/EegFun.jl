@@ -5,6 +5,9 @@ const _SIGNED_TF_BASELINE_METHODS = (:db, :percent, :relchange, :normchange, :zs
 const PLOT_TF_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Display
     :display_plot => (true, "Whether to display the plot"),
+    :interactive => (true, "Whether to enable interactive 2D time × frequency selection and context menu"),
+    :selection_color => (:blue, "Color for interactive time-frequency selection rectangles"),
+    :selection_alpha => (0.25, "Alpha (transparency) for interactive selection rectangles"),
     :theme_fontsize => (nothing, "Font size for theme"),
 
     # Layout
@@ -312,6 +315,18 @@ function plot_tf(tf_data::AbstractVector{<:TimeFreqData}; channel_selection = ch
         Colorbar(fig[cb_pos...], last_hm; label = cb_label, colorbar_kwargs...)
     end
 
+    if plot_kwargs[:interactive]
+        _setup_tf_interactivity!(
+            fig,
+            axes,
+            tf_plots,
+            freqs_vec,
+            all_times;
+            selection_color = plot_kwargs[:selection_color],
+            selection_alpha = plot_kwargs[:selection_alpha],
+        )
+    end
+
     plot_kwargs[:display_plot] && _display_figure(fig)
     _set_window_title("Makie")
     return (fig = fig, axes = axes)
@@ -471,12 +486,186 @@ function plot_tf(
         end
     end
 
+    if plot_kwargs[:interactive]
+        _setup_tf_interactivity!(
+            fig,
+            axes,
+            tf_plot,
+            freqs_vec,
+            all_times;
+            selection_color = plot_kwargs[:selection_color],
+            selection_alpha = plot_kwargs[:selection_alpha],
+        )
+    end
+
     plot_kwargs[:display_plot] && _display_figure(fig)
     _set_window_title("Makie")
     return (fig = fig, axes = axes)
 end
 
 # === INTERNAL HELPERS ===
+
+mutable struct TFSelectionState
+    active::Observable{Bool}
+    visible::Observable{Bool}
+    bounds::Observable{NTuple{4,Float64}}
+    rectangles::Vector{Makie.Poly}
+    active_axis::Union{Nothing,Axis}
+end
+
+function _snap_tf_interval(lo::Float64, hi::Float64, grid::Vector{Float64})::Tuple{Float64,Float64}
+    lo, hi = minmax(lo, hi)
+    any(x -> lo <= x <= hi, grid) && return (lo, hi)
+    mid = 0.5 * (lo + hi)
+    best_idx = argmin(abs.(grid .- mid))
+    val = grid[best_idx]
+    return (val, val)
+end
+
+function _is_within_tf_selection(sel::TFSelectionState, x::Real, y::Real)::Bool
+    sel.visible[] || return false
+    t1, f1, t2, f2 = sel.bounds[]
+    tmin, tmax = minmax(t1, t2)
+    fmin, fmax = minmax(f1, f2)
+    return (tmin <= x <= tmax) && (fmin <= y <= fmax)
+end
+
+function _update_tf_selection!(sel::TFSelectionState, t1::Real, f1::Real, t2::Real, f2::Real)
+    pts = Point2f[Point2f(t1, f1), Point2f(t2, f1), Point2f(t2, f2), Point2f(t1, f2)]
+    for rect in sel.rectangles
+        rect[1] = pts
+        rect.visible[] = true
+    end
+end
+
+function _clear_tf_selection!(sel::TFSelectionState)
+    for rect in sel.rectangles
+        rect[1] = [Point2f(0.1, 1.0)]
+        rect.visible[] = false
+    end
+    sel.bounds[] = (0.0, 0.0, 0.0, 0.0)
+    sel.visible[] = false
+    sel.active[] = false
+    sel.active_axis = nothing
+end
+
+function _show_tf_context_menu!(
+    sel::TFSelectionState,
+    tf_source,
+    freqs_vec::Vector{Float64},
+    all_times::Vector{Float64};
+    display_plot::Bool = true,
+)
+    t1, f1, t2, f2 = sel.bounds[]
+    t_range = _snap_tf_interval(t1, t2, all_times)
+    f_range = _snap_tf_interval(f1, f2, freqs_vec)
+
+    _set_window_title("TF Context Menu")
+    menu_fig = _eegfun_figure(size = (300, 160))
+    Label(
+        menu_fig[1, 1],
+        @sprintf("%.1f–%.1f Hz, %.0f–%.0f ms", f_range[1], f_range[2], t_range[1] * 1000, t_range[2] * 1000),
+        fontsize = 13,
+        color = :gray40,
+        tellwidth = false,
+    )
+    btn = Button(menu_fig[2, 1], label = "Topoplot", tellwidth = false)
+    on(btn.clicks) do _
+        cur_t1, cur_f1, cur_t2, cur_f2 = sel.bounds[]
+        tr = _snap_tf_interval(cur_t1, cur_t2, all_times)
+        fr = _snap_tf_interval(cur_f1, cur_f2, freqs_vec)
+        plot_topography(tf_source; freq_range = fr, interval_selection = times(tr[1], tr[2]), display_plot = display_plot)
+    end
+    display_plot && _display_in_screen(menu_fig; size = (300, 160))
+    return menu_fig
+end
+
+function _setup_tf_interactivity!(
+    fig::Figure,
+    axes::Vector{Axis},
+    tf_source,
+    freqs_vec::Vector{Float64},
+    all_times::Vector{Float64};
+    selection_color = :blue,
+    selection_alpha::Real = 0.25,
+)
+    rectangles = Makie.Poly[]
+    for ax in axes
+        haskey(ax.interactions, :rectanglezoom) && deregister_interaction!(ax, :rectanglezoom)
+        rect = poly!(
+            ax,
+            [Point2f(0.1, 1.0)];
+            color = (selection_color, Float64(selection_alpha)),
+            strokecolor = selection_color,
+            strokewidth = 1.5,
+            visible = false,
+            overdraw = true,
+            space = :data,
+        )
+        push!(rectangles, rect)
+    end
+
+    sel = TFSelectionState(Observable(false), Observable(false), Observable((0.0, 0.0, 0.0, 0.0)), rectangles, nothing)
+    started_in_existing = Ref(false)
+
+    on(events(fig).mousebutton) do event
+        mpos = events(fig).mouseposition[]
+        target_ax = nothing
+        for ax in axes
+            if _is_mouse_in_axis(ax, mpos)
+                target_ax = ax
+                break
+            end
+        end
+
+        if event.button == Mouse.left
+            if event.action == Mouse.press && !isnothing(target_ax)
+                mx, my = mouseposition(target_ax)
+                started_in_existing[] = _is_within_tf_selection(sel, mx, my)
+                sel.active[] = true
+                sel.active_axis = target_ax
+                sel.bounds[] = (Float64(mx), Float64(my), Float64(mx), Float64(my))
+                _update_tf_selection!(sel, mx, my, mx, my)
+            elseif event.action == Mouse.release && sel.active[]
+                ax_use = something(sel.active_axis, target_ax, first(axes))
+                mx, my = mouseposition(ax_use)
+                t1, f1, _, _ = sel.bounds[]
+                t2, f2 = Float64(mx), Float64(my)
+                if abs(t2 - t1) < 1e-4 || abs(f2 - f1) < 1e-4
+                    _clear_tf_selection!(sel)
+                else
+                    sel.active[] = false
+                    sel.visible[] = true
+                    sel.bounds[] = (min(t1, t2), min(f1, f2), max(t1, t2), max(f1, f2))
+                    _update_tf_selection!(sel, sel.bounds[]...)
+                end
+                sel.active_axis = nothing
+            end
+        elseif event.button == Mouse.right && event.action == Mouse.press && !isnothing(target_ax)
+            mx, my = mouseposition(target_ax)
+            if _is_within_tf_selection(sel, mx, my)
+                _show_tf_context_menu!(sel, tf_source, freqs_vec, all_times)
+            end
+        end
+    end
+
+    on(events(fig).mouseposition) do _
+        if sel.active[] && !isnothing(sel.active_axis)
+            mx, my = mouseposition(sel.active_axis)
+            t1, f1, _, _ = sel.bounds[]
+            sel.bounds[] = (t1, f1, Float64(mx), Float64(my))
+            _update_tf_selection!(sel, t1, f1, mx, my)
+        end
+    end
+
+    on(events(fig).keyboardbutton) do event
+        if event.action == Keyboard.press && event.key == Keyboard.c
+            _clear_tf_selection!(sel)
+        end
+    end
+
+    return sel
+end
 
 function _plot_tf_heatmap!(
     ax::Axis,

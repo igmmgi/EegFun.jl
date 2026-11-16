@@ -259,4 +259,35 @@ using EegFun
         @test res_vec.fig isa Figure
     end
 
+    @testset "plot_tf 2D time-frequency selection and context menu" begin
+        tf = tf_participant1[1]
+        out = EegFun.plot_tf(tf; layout = :single, yscale = :log10, display_plot = false)
+        @test out.fig isa Figure
+
+        all_times = EegFun._sorted_unique_f64(tf.data_power[!, :time])
+        freqs_vec = EegFun._sorted_unique_f64(tf.data_power[!, :freq])
+
+        # Exact and narrow (between grid points) interval snapping
+        @test EegFun._snap_tf_interval(8.0, 12.0, [4.0, 8.0, 10.0, 12.0, 16.0]) == (8.0, 12.0)
+        @test EegFun._snap_tf_interval(9.5, 9.9, [4.0, 8.0, 10.0, 12.0, 16.0]) == (10.0, 10.0)
+        @test EegFun._snap_tf_interval(8.1, 8.5, [4.0, 8.0, 10.0, 12.0, 16.0]) == (8.0, 8.0)
+
+        sel = EegFun._setup_tf_interactivity!(out.fig, out.axes, tf, freqs_vec, all_times)
+        EegFun._update_tf_selection!(sel, 0.1, 8.0, 0.4, 13.0)
+        sel.bounds[] = (0.1, 8.0, 0.4, 13.0)
+        sel.visible[] = true
+        @test EegFun._is_within_tf_selection(sel, 0.25, 10.0)
+        @test !EegFun._is_within_tf_selection(sel, -0.2, 10.0)
+
+        menu_fig = EegFun._show_tf_context_menu!(sel, tf, freqs_vec, all_times; display_plot = false)
+        @test menu_fig isa Figure
+        btns = [b for b in menu_fig.content if b isa Button]
+        @test length(btns) == 1
+        @test btns[1].label[] == "Topoplot"
+        @test_nowarn notify(btns[1].clicks)
+
+        EegFun._clear_tf_selection!(sel)
+        @test !sel.visible[]
+    end
+
 end # @testset "TF Plots"
