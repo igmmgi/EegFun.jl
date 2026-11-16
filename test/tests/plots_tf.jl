@@ -220,6 +220,35 @@ using EegFun
         out_nosig = EegFun.plot_tf_stats(tf_res_nosig; channel_selection = EegFun.channels(:Oz), mask_style = :alpha, display_plot = false)
         hm_nosig = only(filter(p -> p isa Makie.Heatmap, out_nosig.axes[1].scene.plots))
         @test hm_nosig.alpha[] ≈ 0.15
+
+        # Support for layout = :single, :grid (with layout_kwargs), and :topo
+        out_single = EegFun.plot_tf_stats(
+            tf_analytic_result;
+            layout = :single,
+            channel_selection = EegFun.channels(:Oz, :Pz, :Cz),
+            display_plot = false,
+        )
+        @test out_single.fig isa Figure
+        @test length(out_single.axes) == 1
+
+        out_grid_custom = EegFun.plot_tf_stats(
+            tf_analytic_result;
+            layout = :grid,
+            layout_kwargs = (; grid_dims = (1, 3)),
+            channel_selection = EegFun.channels(:Oz, :Pz, :Cz),
+            display_plot = false,
+        )
+        @test out_grid_custom.fig isa Figure
+        @test length(out_grid_custom.axes) == 3
+
+        out_topo = EegFun.plot_tf_stats(
+            tf_analytic_result;
+            layout = :topo,
+            channel_selection = EegFun.channels(:Oz, :Pz, :Cz),
+            display_plot = false,
+        )
+        @test out_topo.fig isa Figure
+        @test length(out_topo.axes) == 3
     end
 
     @testset "plot_topography_stats (TF) subsets unanalyzed layout channels" begin

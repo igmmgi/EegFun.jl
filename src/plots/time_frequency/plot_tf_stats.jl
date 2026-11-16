@@ -2,6 +2,8 @@
 
 """
     plot_tf_stats(result::TFStatsResult;
+                  layout::Union{Symbol, PlotLayout} = :grid,
+                  layout_kwargs = (;),
                   channel_selection = channels(),
                   channel_plot_order::Union{Nothing, AbstractVector} = nothing,
                   content::Symbol = :tvalues,
@@ -18,13 +20,15 @@
                   figure_size = nothing,
                   display_plot::Bool = true)
 
-Plot TF statistical results as heatmaps with significance overlays.
+Plot TF statistical results as heatmaps with significance overlays across `:single`, `:grid`, `:topo`, or custom `PlotLayout` layouts.
 
 Works with both `TFClusterPermutationResult` (from `permutation_test`) and
 `TFAnalyticResult` (from `analytic_test`).
 
 # Arguments
 - `result::TFStatsResult`: Statistical result to plot
+- `layout::Union{Symbol, PlotLayout}`: `:single`, `:grid` (default), `:topo`, or a `PlotLayout`
+- `layout_kwargs`: Additional layout configuration parameters (e.g. `grid_dims`, `topo_plot_width`, `topo_plot_height`)
 - `channel_selection`: Channel selection predicate (default: all channels)
 - `content::Symbol`: What to plot as the heatmap:
   - `:tvalues` (default) - t-statistic values
@@ -70,6 +74,8 @@ plot_tf_stats(result_analytic, mask_style=:alpha, colormap=:viridis)
 """
 function plot_tf_stats(
     result::TFStatsResult;
+    layout::Union{Symbol,PlotLayout} = :grid,
+    layout_kwargs = (;),
     channel_selection = channels(),
     channel_plot_order::Union{Nothing,AbstractVector} = nothing,
     content::Symbol = :tvalues,
@@ -100,38 +106,65 @@ function plot_tf_stats(
 
     all_electrodes = result.electrodes
     selected_channels = _select_tf_channels(all_electrodes, channel_selection, channel_plot_order)
+    plot_channels = layout === :single ? [first(selected_channels)] : selected_channels
     frequencies = result.frequencies
     time_points = result.time_points
 
     ext_a = content in (:difference, :power_a) ? _tf_make_extractor(result.data[1].data_power, frequencies, time_points) : nothing
     ext_b = content in (:difference, :power_b) ? _tf_make_extractor(result.data[2].data_power, frequencies, time_points) : nothing
 
-    channel_entries = Tuple{Symbol,Int,Matrix{Float64}}[]
-    sizehint!(channel_entries, length(selected_channels))
-    for ch_sym in selected_channels
+    channel_entries = Dict{Symbol,Tuple{Int,Matrix{Float64}}}()
+    sizehint!(channel_entries, length(plot_channels))
+    for ch_sym in plot_channels
         ch_idx = findfirst(==(ch_sym), all_electrodes)
         isnothing(ch_idx) && continue
-        push!(channel_entries, (ch_sym, ch_idx, _extract_tf_stats_matrix(result, ch_idx, content; ext_a = ext_a, ext_b = ext_b)))
+        channel_entries[ch_sym] = (ch_idx, _extract_tf_stats_matrix(result, ch_idx, content; ext_a = ext_a, ext_b = ext_b))
     end
     isempty(channel_entries) && @minimal_error("No channels matched. Available: $(all_electrodes)")
 
-    n_channels = length(channel_entries)
-    n_cols = min(n_channels, 3)
-    n_rows = cld(n_channels, n_cols)
+    valid_plot_channels = [ch for ch in plot_channels if haskey(channel_entries, ch)]
+    n_channels = length(valid_plot_channels)
+    layout_grid_dims = get(layout_kwargs, :grid_dims, nothing)
+    default_grid_dims = if !isnothing(layout_grid_dims)
+        layout_grid_dims
+    else
+        n_c = min(n_channels, 3)
+        (cld(n_channels, n_c), n_c)
+    end
+
+    eff_layout_kwargs = Dict{Symbol,Any}(
+        :grid_dims => default_grid_dims,
+        :grid_rowgap => get(layout_kwargs, :grid_rowgap, 10),
+        :grid_colgap => get(layout_kwargs, :grid_colgap, 10),
+        :topo_plot_width => get(layout_kwargs, :topo_plot_width, 0.1),
+        :topo_plot_height => get(layout_kwargs, :topo_plot_height, 0.1),
+    )
+
+    eeg_layout = !isempty(result.data) && hasproperty(result.data[1], :layout) ? result.data[1].layout : nothing
+    plot_layout = create_layout(layout, valid_plot_channels, eeg_layout; eff_layout_kwargs...)
 
     if isnothing(figure_size)
-        figure_size = (n_cols * (show_cb ? 500 : 400), n_rows * 350)
+        figure_size = if plot_layout.type === :single
+            (800, 500)
+        elseif plot_layout.type === :topo
+            (1200, 1000)
+        else
+            n_rows, n_cols = plot_layout.dims
+            (n_cols * (show_cb ? 500 : 400), n_rows * 350)
+        end
     end
 
     fig = _eegfun_figure(size = figure_size)
     cmap = _resolve_theme_colormap(fig, colormap)
 
     cr = if isnothing(colorrange)
-        gmin, gmax = _tf_finite_extrema((entry[3] for entry in channel_entries))
+        gmin, gmax = _tf_finite_extrema((entry[2] for entry in values(channel_entries)))
         _tf_auto_colorrange(gmin, gmax, cmap; force_symmetric = content in (:tvalues, :difference))
     else
         colorrange
     end
+
+    axes, layout_channels = _apply_layout!(fig, plot_layout; xgrid = false, ygrid = false, xminorgrid = false, yminorgrid = false)
 
     if eff_show_title
         test_type = result isa TFAnalyticResult ? "Analytic" : "Permutation"
@@ -140,25 +173,26 @@ function plot_tf_stats(
             content == :difference ? "Power Difference" :
             content == :power_a ? result.data[1].condition_name : result.data[2].condition_name
         header_text = isnothing(eff_plot_title) ? "$test_type Test — $content_label" : String(eff_plot_title)
-        !isempty(header_text) && Label(fig[0, 1:n_cols], header_text, fontsize = 16, font = :bold)
+        if !isempty(header_text)
+            if plot_layout.type === :grid
+                _, n_cols = plot_layout.dims
+                Label(fig[0, 1:n_cols], header_text, fontsize = 16, font = :bold)
+            else
+                Label(fig[0, 1], header_text, fontsize = 16, font = :bold)
+            end
+        end
     end
 
-    axes = Vector{Axis}(undef, n_channels)
     last_hm = nothing
 
-    for (ch_i, (ch_sym, ch_idx, data_mat)) in enumerate(channel_entries)
-        row = fld(ch_i - 1, n_cols) + 1
-        col = mod(ch_i - 1, n_cols) + 1
+    for (ax, ch_sym) in zip(axes, layout_channels)
+        ch_idx, data_mat = channel_entries[ch_sym]
 
-        ax = Axis(
-            fig[row, col],
-            xlabel = "Time (s)",
-            ylabel = "Frequency (Hz)",
-            title = eff_show_title ? string(ch_sym) : "",
-            xscale = use_xlog ? log10 : identity,
-            yscale = use_ylog ? log10 : identity,
-        )
-        axes[ch_i] = ax
+        ax.xlabel = "Time (s)"
+        ax.ylabel = "Frequency (Hz)"
+        ax.title = eff_show_title ? string(ch_sym) : ""
+        ax.xscale = use_xlog ? log10 : identity
+        ax.yscale = use_ylog ? log10 : identity
         use_ylog && (ax.ytickformat = values -> [string(round(Int, v)) for v in values])
 
         sig_mask = mask_style != :none ? _extract_tf_significance_mask(result, ch_idx) : nothing
@@ -200,11 +234,25 @@ function plot_tf_stats(
         end
     end
 
+    if plot_layout.type === :topo
+        for ax in axes
+            hidedecorations!(ax, grid = false, ticks = true, ticklabels = true)
+            hidespines!(ax)
+        end
+    end
+
     length(axes) > 1 && linkaxes!(axes...)
 
     if show_cb && !isnothing(last_hm)
         cb_label = content == :tvalues ? "t-statistic" : content == :difference ? "Power Difference" : "Power"
-        Colorbar(fig[1:n_rows, n_cols+1], last_hm, label = cb_label)
+        if plot_layout.type === :grid
+            n_rows, n_cols = plot_layout.dims
+            Colorbar(fig[1:n_rows, n_cols+1], last_hm, label = cb_label)
+        elseif plot_layout.type === :topo
+            Colorbar(fig[1, 2], last_hm, label = cb_label, height = Relative(0.5))
+        else
+            Colorbar(fig[1, 2], last_hm, label = cb_label)
+        end
     end
 
     display_plot && _display_figure(fig)
