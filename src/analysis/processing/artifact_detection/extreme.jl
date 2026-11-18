@@ -7,24 +7,6 @@ function _is_extreme_value!(mask::AbstractVector{Bool}, signal::AbstractVector{<
     return nothing
 end
 
-function _detect_extreme_values(dat::SingleDataFrameEeg, threshold::Real; channel_selection = channels(), sample_selection = samples())
-    selected_channels = get_selected_channels(dat, channel_selection; include_meta = false, include_extra = false)
-    isempty(selected_channels) && @minimal_error("No channels selected for extreme value detection")
-    selected_samples = get_selected_samples(dat, sample_selection)
-    isempty(selected_samples) && @minimal_error("No samples selected for extreme value detection")
-
-    n_samp = n_samples(dat)
-    sample_mask = falses(n_samp)
-    sample_mask[selected_samples] .= true
-    thresh_f = Float64(threshold)
-    return Dict{Symbol,Vector{Bool}}(
-        ch => Vector{Bool}(_is_extreme_value(dat.data[!, ch], thresh_f) .& sample_mask) for ch in selected_channels
-    )
-end
-
-_n_extreme_value(df::DataFrame, channels::AbstractVector{Symbol}, threshold::Real) =
-    [count(x -> abs(x) > threshold, df[!, ch]) for ch in channels]
-
 """
     is_extreme_value!(dat::SingleDataFrameEeg, threshold::Real; channel_selection = channels(),
                       sample_selection = samples(), interval_selection = times(), mode::Symbol = :combined, channel_out = nothing)

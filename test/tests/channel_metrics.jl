@@ -109,18 +109,6 @@ using OrderedCollections
         @test length(rej) == 3
     end
 
-    @testset "compute_probability!" begin
-        # Test probability computation
-        data = randn(1000)
-        proba_map = zeros(Float64, 1000)  # Must match data length
-
-        result = EegFun.compute_probability!(proba_map, data, 50)
-
-        @test result isa Vector{Float64}
-        @test length(result) == 1000
-        @test all(0 <= x <= 1 for x in result)  # All values between 0 and 1
-    end
-
     @testset "_trim_extremes" begin
         # Test extreme value trimming
         x = [1.0, 2.0, 3.0, 100.0, 4.0, 5.0, 6.0, 200.0, 7.0, 8.0, 9.0]
@@ -198,24 +186,6 @@ using OrderedCollections
         jp, rej = EegFun._joint_probability(signal, 0.0, 2, 1000)
         @test length(jp) == 3
         @test all(rej .== false)
-    end
-
-    @testset "compute_probability! - Gaussian approximation" begin
-        # Test with bins <= 0 (Gaussian approximation)
-        data = randn(1000)
-        proba_map = zeros(Float64, 1000)
-
-        result = EegFun.compute_probability!(proba_map, data, 0)
-        @test result isa Vector{Float64}
-        @test length(result) == 1000
-        @test all(0 <= x <= 1 for x in result)  # All values between 0 and 1
-        @test isapprox(sum(result), 1.0, atol = 1e-10)  # Should sum to 1
-
-        # Test with negative bins
-        proba_map2 = zeros(Float64, 1000)
-        result2 = EegFun.compute_probability!(proba_map2, data, -10)
-        @test length(result2) == 1000
-        @test isapprox(sum(result2), 1.0, atol = 1e-10)
     end
 
     @testset "correlation_matrix_dual_selection" begin

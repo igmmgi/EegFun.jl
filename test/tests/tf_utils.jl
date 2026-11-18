@@ -54,25 +54,6 @@ using Statistics
         @test all(isnan, mat_miss[2, :])   # 99 Hz doesn't exist
     end
 
-    @testset "_tf_matrix_to_df!" begin
-        freqs = [5.0, 10.0]
-        times = [0.0, 0.1, 0.2]
-        n_f = length(freqs)
-        n_t = length(times)
-
-        freq_col = repeat(freqs, inner = n_t)
-        time_col = repeat(times, outer = n_f)
-
-        df = DataFrame(freq = freq_col, time = time_col, Ch1 = zeros(n_f * n_t))
-
-        mat = [1.0 2.0 3.0; 4.0 5.0 6.0]  # [2 freqs × 3 times]
-        EegFun._tf_matrix_to_df!(df, :Ch1, mat, freqs, times)
-
-        # Read back and verify
-        mat_back = EegFun._tf_df_to_matrix(df, :Ch1, freqs, times)
-        @test mat_back == mat
-    end
-
     @testset "Roundtrip with float tolerance" begin
         # Test that slight float variations still match
         freqs = [1.0 / 3.0, 2.0 / 3.0]  # imprecise floats

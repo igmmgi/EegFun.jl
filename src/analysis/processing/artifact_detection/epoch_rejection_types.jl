@@ -10,8 +10,6 @@ end
 
 Base.show(io::IO, r::Rejection) = print(io, "Rejection(:$(r.channel), $(r.epoch))")
 
-is_equal_rejection(a::Rejection, b::Rejection) = a.channel == b.channel && a.epoch == b.epoch
-
 """
     unique_rejections(rejections)
 

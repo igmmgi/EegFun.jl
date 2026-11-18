@@ -163,17 +163,6 @@ end
 
 _validate_input_dir(dir::String) = isdir(dir) ? nothing : "Input directory does not exist: $dir"
 
-function _validate_channel_groups(groups::Vector{Vector{Symbol}})
-    isempty(groups) && return "Channel groups cannot be empty"
-    for (i, group) in enumerate(groups)
-        isempty(group) && return "Channel group $i is empty"
-        if length(group) < 2
-            @minimal_warning "Channel group $i has only $(length(group)) channel(s): $group. Consider using more channels for meaningful averaging."
-        end
-    end
-    return nothing
-end
-
 function _validate_condition_groups(groups::AbstractVector)
     isempty(groups) && return "Condition groups cannot be empty"
     all_conditions = Set{Int}()

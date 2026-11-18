@@ -44,24 +44,6 @@ using Statistics
     end
 
     # ────────────────────────────────────────────────────────────
-    # 2. _equalize_trials
-    # ────────────────────────────────────────────────────────────
-    @testset "_equalize_trials" begin
-        Random.seed!(302)
-        # Create arrays with different trial counts
-        data1 = randn(3, 10, 12)  # 12 trials
-        data2 = randn(3, 10, 8)   # 8 trials
-        data_arrays = [data1, data2]
-        n_trials = [12, 8]
-
-        eq_data, eq_trials = EegFun._equalize_trials(data_arrays, n_trials)
-
-        @test eq_trials == [8, 8]
-        @test size(eq_data[1], 3) == 8
-        @test size(eq_data[2], 3) == 8
-    end
-
-    # ────────────────────────────────────────────────────────────
     # 3. decode_libsvm (EpochData)
     # ────────────────────────────────────────────────────────────
     @testset "decode_libsvm (ERP) - basic" begin

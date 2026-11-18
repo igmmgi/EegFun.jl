@@ -364,48 +364,6 @@ function _joint_probability(signal::AbstractMatrix{<:Real}, threshold::Real, nor
     return _normalize_and_threshold_jp!(jp, threshold, normalize)
 end
 
-function compute_probability!(probaMap::Vector{Float64}, data::AbstractVector{<:Real}, bins::Int)::Vector{Float64}
-    isempty(data) && @minimal_error("Cannot compute probability for empty data vector")
-    n = length(data)
-
-    if bins > 0
-        min_val, max_val = extrema(data)
-        range_val = max_val - min_val
-        if range_val == 0
-            fill!(probaMap, 1.0 / n)
-            return probaMap
-        end
-
-        sortbox = zeros(Int, bins)
-        bm1 = bins - 1
-        @inbounds for x in data
-            bin = clamp(floor(Int, (x - min_val) / range_val * bm1) + 1, 1, bins)
-            sortbox[bin] += 1
-        end
-        inv_n = 1.0 / n
-        @inbounds for (i, x) in enumerate(data)
-            bin = clamp(floor(Int, (x - min_val) / range_val * bm1) + 1, 1, bins)
-            probaMap[i] = sortbox[bin] * inv_n
-        end
-    else
-        μ, σ = mean(data), std(data)
-        if σ == 0
-            fill!(probaMap, 1.0 / n)
-            return probaMap
-        end
-        inv_sqrt2pi = 1.0 / sqrt(2π)
-        sum_p = 0.0
-        @inbounds for (i, x) in enumerate(data)
-            z = (x - μ) / σ
-            p = exp(-0.5 * z * z) * inv_sqrt2pi
-            probaMap[i] = p
-            sum_p += p
-        end
-        probaMap ./= sum_p
-    end
-    return probaMap
-end
-
 function _trim_extremes(x::Vector{Float64})
     n = length(x)
     trim = round(Int, n * 0.1)

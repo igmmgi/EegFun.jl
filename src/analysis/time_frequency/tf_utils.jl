@@ -41,25 +41,6 @@ function _tf_df_to_matrix(
     return _tf_df_to_matrix!(mat, df, channel, rounded_freqs, rounded_times, row_index)
 end
 
-function _tf_matrix_to_df!(
-    df::DataFrame,
-    channel::Symbol,
-    mat::Matrix{Float64},
-    frequencies::Vector{Float64},
-    time_points::Vector{Float64},
-    row_index::Dict{Tuple{Float64,Float64},Int} = _tf_build_row_index(df),
-)
-    col = df[!, channel]::Vector{Float64}
-    @inbounds for (ti, t) in enumerate(time_points)
-        rt = round(t, digits = 6)
-        for (fi, f) in enumerate(frequencies)
-            row = get(row_index, (round(f, digits = 6), rt), nothing)
-            !isnothing(row) && (col[row] = mat[fi, ti])
-        end
-    end
-    return nothing
-end
-
 function _filter_edges!(
     eegpower::AbstractArray,
     eegconv::Union{AbstractArray,Nothing},

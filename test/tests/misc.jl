@@ -78,13 +78,6 @@ using Random
 
         @test length(y_detrended) == length(y)
         @test isa(y_detrended, Vector{Float64})
-
-        # Test _extract_int
-        @test EegFun._extract_int("channel_123_data") == 123
-        @test EegFun._extract_int("test_456") == 456
-        @test isnothing(EegFun._extract_int("no_numbers_here"))
-        @test isnothing(EegFun._extract_int(""))
-        @test EegFun._extract_int("123abc456") == 123  # Extracts first integer group
     end
 
     @testset "String parsing" begin
@@ -176,15 +169,6 @@ using Random
     end
 
     @testset "Plot utilities" begin
-        # Test _orientation function
-        p1 = [0.0, 0.0]
-        p2 = [1.0, 0.0]
-        p3 = [0.0, 1.0]
-
-        @test EegFun._orientation(p1, p2, p3) == 2  # Counterclockwise
-        @test EegFun._orientation(p1, p3, p2) == 1  # Clockwise
-        @test EegFun._orientation(p1, p2, [2.0, 0.0]) == 0  # Collinear
-
         # Test _get_defaults
         kwargs_dict = Dict{Symbol,Tuple{Any,String}}(:a => (1, "test"), :b => (2.0, "test2"))
         defaults = EegFun._get_defaults(kwargs_dict)

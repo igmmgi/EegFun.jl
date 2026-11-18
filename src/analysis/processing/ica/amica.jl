@@ -783,7 +783,6 @@ function _amica_optimize_gpu!(
 )
     N, n = size(dat_ica_t)
     dat_gpu = gpu_array(Float32.(dat_ica_t))
-    A = gpu_array(Float32.(A_cpu))
 
     y = gpu_array(zeros(Float32, N, n, m))
     y_rho = gpu_array(zeros(Float32, N, n, m))
@@ -968,7 +967,6 @@ function _amica_optimize_gpu!(
         )
 
         reparameterize_amica!(A_cpu, location_cpu, scale_cpu)
-        A .= gpu_array(Float32.(A_cpu))
         location .= gpu_array(Float32.(location_cpu))
         scale .= gpu_array(Float32.(scale_cpu))
 

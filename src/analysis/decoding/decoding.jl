@@ -177,21 +177,6 @@ function _prepare_decoding_data(epochs::AbstractVector{<:TimeFreqEpochData})
     return data_arrays, n_trials_per_condition
 end
 
-function _equalize_trials(
-    data_arrays::Vector{Array{Float64,3}},
-    n_trials_per_condition::Vector{Int},
-    rng::AbstractRNG = Random.default_rng(),
-)
-    min_trials = minimum(n_trials_per_condition)
-    for (cond_idx, data_array) in enumerate(data_arrays)
-        if size(data_array, 3) > min_trials
-            selected_trials = sort!(Random.randperm(rng, size(data_array, 3))[1:min_trials])
-            data_arrays[cond_idx] = data_array[:, :, selected_trials]
-        end
-    end
-    return data_arrays, fill(min_trials, length(data_arrays))
-end
-
 function _extract_timepoint_data!(
     x_all_t::Matrix{Float64},
     labels::Vector{Int},

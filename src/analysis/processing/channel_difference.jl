@@ -95,9 +95,6 @@ function channel_difference!(
     @info "Channel sets: $(chs1) vs. $(chs2) -> $(out_sym)"
 
     existing = Set(all_labels(dat))
-    missing_channels = [ch for ch in unique(vcat(chs1, chs2)) if ch ∉ existing]
-    !isempty(missing_channels) && @minimal_error "Missing channels in data: $(missing_channels)"
-
     out_sym ∈ existing && @minimal_warning "Overwriting existing channel '$(out_sym)'"
     if out_sym ∈ chs1 || out_sym ∈ chs2
         @minimal_warning "Output channel '$(out_sym)' is also in the input channel sets. This may cause unexpected behavior."

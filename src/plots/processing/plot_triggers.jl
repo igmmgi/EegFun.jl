@@ -28,58 +28,6 @@ const PLOT_TRIGGERS_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :yminorgrid => (false, "Whether to show y-axis minor grid"),
 )
 
-function _filter_triggers(trigger_times, trigger_values, ignore_triggers)
-    isempty(ignore_triggers) && return trigger_times, trigger_values
-    ignore_set = Set(ignore_triggers)
-    keep_mask = .!in.(trigger_values, Ref(ignore_set))
-    return trigger_times[keep_mask], trigger_values[keep_mask]
-end
-
-function _filter_triggers(trigger_times, trigger_codes, trigger_info, ignore_triggers)
-    isempty(ignore_triggers) && return trigger_times, trigger_codes, trigger_info
-    ignore_set = Set(ignore_triggers)
-    keep_mask = .!in.(trigger_codes, Ref(ignore_set))
-    return trigger_times[keep_mask], trigger_codes[keep_mask], trigger_info[keep_mask]
-end
-
-function _trigger_time_count(time, triggers, ignore_triggers = Int[])
-    trigger_times = Float64[]
-    trigger_values = Int[]
-    has_ignore = !isempty(ignore_triggers)
-    ignore_set = has_ignore ? Set(ignore_triggers) : nothing
-
-    @inbounds for i in eachindex(triggers, time)
-        v = triggers[i]
-        if v != 0 && (!has_ignore || !(v in ignore_set))
-            push!(trigger_times, Float64(time[i]))
-            push!(trigger_values, Int(v))
-        end
-    end
-    isempty(trigger_values) && return trigger_times, trigger_values, OrderedDict{Int,Int}()
-
-    counts = Dict{Int,Int}()
-    for v in trigger_values
-        counts[v] = get(counts, v, 0) + 1
-    end
-    trigger_count = OrderedDict{Int,Int}()
-    for k in sort!(collect(keys(counts)))
-        trigger_count[k] = counts[k]
-    end
-    return trigger_times, trigger_values, trigger_count
-end
-
-function _trigger_time_count(times::Vector{Float64}, trigger_codes::Vector{Int16}, trigger_info::Vector{String}, ignore_triggers = Int[])
-    if !isempty(ignore_triggers)
-        times, trigger_codes, trigger_info = _filter_triggers(times, trigger_codes, trigger_info, ignore_triggers)
-    end
-    trigger_count = OrderedDict{Int,Int}()
-    for val in trigger_codes
-        k = Int(val)
-        trigger_count[k] = get(trigger_count, k, 0) + 1
-    end
-    return times, Int.(trigger_codes), trigger_count
-end
-
 function _plot_trigger_vertical_lines!(
     ax::Axis,
     times::Vector{Float64},

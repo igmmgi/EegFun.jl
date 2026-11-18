@@ -145,17 +145,6 @@ using EegFun
         @test_throws Exception EegFun.n_extreme_value(dat, 20, channel_selection = EegFun.channels(Symbol[]))
     end
 
-    @testset "_n_extreme_value" begin
-        dat = EegFun.create_test_continuous_data_with_artifacts()
-
-        # Test internal function
-        counts = EegFun._n_extreme_value(dat.data, [:Ch1, :Ch2], 20.0)
-
-        @test counts isa Vector{Int}
-        @test length(counts) == 2
-        @test counts[2] > counts[1]  # Channel A should have more extreme values
-    end
-
     @testset "edge cases" begin
         dat = EegFun.create_test_continuous_data_with_artifacts()
 
@@ -335,10 +324,6 @@ using EegFun
 
         @test r1.channel == :Ch1
         @test r1.epoch == 1
-
-        # Test is_equal_rejection
-        @test EegFun.is_equal_rejection(r1, r3)
-        @test !EegFun.is_equal_rejection(r1, r2)
 
         # Test unique_rejections
         rejections = [r1, r2, r3]
@@ -703,32 +688,6 @@ using EegFun
         EegFun.is_extreme_value!(epochs, 100, sample_selection = sample_selection_epoch_fn, epoch_selection = EegFun.epochs([1]))
 
         @test :is_extreme_value_100 in propertynames(epochs.data[1])
-    end
-
-    @testset "_detect_extreme_values" begin
-        dat = EegFun.create_test_continuous_data_with_artifacts()
-
-        # Test internal function directly
-        results = EegFun._detect_extreme_values(dat, 20.0)
-
-        @test results isa Dict
-        @test :Ch1 in keys(results)
-        @test :Ch2 in keys(results)
-        @test all(v -> v isa Vector{Bool}, values(results))
-
-        # Test with channel selection
-        results2 = EegFun._detect_extreme_values(dat, 20.0, channel_selection = EegFun.channels([:Ch1]))
-
-        @test :Ch1 in keys(results2)
-        @test :Ch2 ∉ keys(results2)
-
-        # Test with sample selection
-        sample_mask = falses(nrow(dat.data))
-        sample_mask[100:200] .= true
-        sample_selection_fn = x -> sample_mask  # Function that returns the mask
-        results3 = EegFun._detect_extreme_values(dat, 20.0, sample_selection = sample_selection_fn)
-
-        @test results3 isa Dict
     end
 
     @testset "detect_bad_epochs_automatic edge cases" begin

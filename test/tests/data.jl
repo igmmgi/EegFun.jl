@@ -238,11 +238,6 @@ using OrderedCollections
     end
 
     @testset "Mathematical utilities" begin
-        # Test _datarange
-        @test EegFun._datarange([1, 2, 3, 4, 5]) == 4.0
-        @test EegFun._datarange([5, 1, 3, 2, 4]) == 4.0
-        @test EegFun._datarange([1.0]) == 0.0
-
         # Test _colmeans
         df = DataFrame(A = [1.0, 2.0, 3.0], B = [4.0, 5.0, 6.0], C = [7.0, 8.0, 9.0])
         @test EegFun._colmeans(df, [:A, :B]) == [2.5, 3.5, 4.5]  # mean of A and B for each row
@@ -252,22 +247,6 @@ using OrderedCollections
         mat = [1.0 2.0; 3.0 4.0; 5.0 6.0]
         @test EegFun._colmeans(mat) == [1.5, 3.5, 5.5]  # row means (mean of each row)
         @test EegFun._colmeans(mat, [1, 2]) == [1.5, 3.5, 5.5]  # all columns
-
-        # Test _data_limits_x
-        df = DataFrame(time = [0.1, 0.2, 0.3, 0.4, 0.5])
-        @test EegFun._data_limits_x(df) == (0.1, 0.5)
-        @test EegFun._data_limits_x(df; col = :time) == (0.1, 0.5)
-        @test isnothing(EegFun._data_limits_x(DataFrame()))
-
-        # Test _data_limits_y
-        df = DataFrame(Fz = [1.0, 2.0, 3.0, 4.0, 5.0])
-        @test EegFun._data_limits_y(df, :Fz) == [1.0, 5.0]
-        @test isnothing(EegFun._data_limits_y(DataFrame(), :Fz))
-
-        # Test _data_limits_y with multiple columns
-        df = DataFrame(Fz = [1.0, 2.0, 3.0], Cz = [4.0, 5.0, 6.0], Pz = [7.0, 8.0, 9.0])
-        @test EegFun._data_limits_y(df, [:Fz, :Cz, :Pz]) == [1.0, 9.0]
-        @test isnothing(EegFun._data_limits_y(DataFrame(), [:Fz, :Cz]))
     end
 
     @testset "DataFrame subsetting utilities" begin
@@ -586,10 +565,6 @@ using OrderedCollections
         cont_data = EegFun.ContinuousData("test_data", df, layout, 250, analysis_info)
         ylims_cont = EegFun._ylimits(cont_data)
         @test ylims_cont == ylims
-
-        # Test empty data and guards
-        @test isnothing(EegFun._data_limits_y(df, Symbol[]))
-        @test EegFun._datarange(Float64[]) == 0.0
     end
 
     @testset "Base Array Interface and Conversions" begin
@@ -833,8 +808,6 @@ using OrderedCollections
         tf2 = EegFun.create_test_tf_data(condition = 2, n_channels = 1)
         tf1.data_phase[!, :Ch1] .= π - 0.1
         tf2.data_phase[!, :Ch1] .= -π + 0.1
-        diff_frames = EegFun._difference_frames(tf1, tf2)
-        @test all(isapprox.(diff_frames[2][!, :Ch1], -0.2, atol = 1e-10))
         derived_diff = EegFun._derive_condition(
             tf1,
             1,
@@ -845,8 +818,6 @@ using OrderedCollections
             ),
         )
         @test all(isapprox.(derived_diff.data_phase[!, :Ch1], -0.2, atol = 1e-10))
-        avg_frames = EegFun._average_frames([tf1, tf2])
-        @test all(x -> isapprox(abs(x), π, atol = 1e-10), avg_frames[2][!, :Ch1])
 
         # find_closest_time_index empty guard & NaN-safe ylimits + include_extra
         @test_throws EegFun.EegFunError EegFun.find_closest_time_index(Float64[], 0.0)
@@ -858,7 +829,6 @@ using OrderedCollections
             flag = [true, false, true],
         )
         cont_nan = EegFun.ContinuousData("nan", df_nan, copy(layout), 10, info)
-        @test EegFun._data_limits_y(df_nan, [:Fz, :Cz]) == [-2.0, 4.0]
         ylims_no_extra = EegFun._ylimits(cont_nan; include_extra = false)
         ylims_extra = EegFun._ylimits(cont_nan; include_extra = true)
         @test ylims_extra[2] > ylims_no_extra[2]

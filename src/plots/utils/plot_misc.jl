@@ -569,19 +569,6 @@ function _abbreviate_parts_with_prefix(name_parts::Vector{String}, n_prefix::Int
     return String(take!(io))
 end
 
-function _abbreviate_name(name::String, common_prefix_parts::Vector{String})
-    isempty(common_prefix_parts) && return name
-    name_parts = _split_into_parts(name)
-    io = IOBuffer()
-    for part in common_prefix_parts
-        _write_abbreviated_part!(io, part)
-    end
-    for i = (length(common_prefix_parts)+1):length(name_parts)
-        write(io, name_parts[i])
-    end
-    return String(take!(io))
-end
-
 function _common_prefix_from_parts(all_parts::Vector{Vector{String}})
     length(all_parts) <= 1 && return String[]
     first_parts = all_parts[1]
@@ -595,9 +582,6 @@ function _common_prefix_from_parts(all_parts::Vector{Vector{String}})
     end
     return n_common >= 2 ? first_parts[1:n_common] : String[]
 end
-
-_find_common_prefix_parts(names::Vector{String}) =
-    length(names) <= 1 ? String[] : _common_prefix_from_parts([_split_into_parts(name) for name in names])
 
 function _shorten_condition_names(
     condition_names::Vector{String};

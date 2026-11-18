@@ -107,21 +107,6 @@ function detrend(x::AbstractVector, y::AbstractVector)::Vector{Float64}
     return out
 end
 
-function _extract_int(s::String)::Union{Int,Nothing}
-    cu = codeunits(s)
-    n = length(cu)
-    i = 1
-    @inbounds while i <= n && !(0x30 <= cu[i] <= 0x39)
-        i += 1
-    end
-    i > n && return nothing
-    j = i + 1
-    @inbounds while j <= n && (0x30 <= cu[j] <= 0x39)
-        j += 1
-    end
-    return parse(Int, SubString(s, i, j - 1))
-end
-
 function _natural_sort_key(s::AbstractString)::String
     cu = codeunits(s)
     n = length(cu)
@@ -262,12 +247,6 @@ _merge_plot_kwargs(defaults_dict::Dict{Symbol,Tuple{Any,String}}, user_kwargs::D
     _merge_plot_kwargs(defaults_dict, NamedTuple(user_kwargs); validate = validate)
 _merge_plot_kwargs(defaults_dict::Dict{Symbol,Tuple{Any,String}}, user_kwargs::Base.Pairs; validate::Bool = true)::Dict{Symbol,Any} =
     _merge_plot_kwargs(defaults_dict, NamedTuple(user_kwargs); validate = validate)
-
-function _orientation(p1::Vector{Float64}, p2::Vector{Float64}, p3::Vector{Float64})::Int
-    val = (p2[2] - p1[2]) * (p3[1] - p2[1]) - (p2[1] - p1[1]) * (p3[2] - p2[2])
-    abs(val) < 1e-10 && return 0
-    return val > 0 ? 1 : 2
-end
 
 function _generate_kwargs_doc(kwargs_dict::Dict{Symbol,Tuple{Any,String}})::String
     doc_lines = [

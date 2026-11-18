@@ -6,12 +6,6 @@ function find_closest_time_index(times::AbstractVector{<:Real}, target::Real)
     return abs(times[idx] - target) < abs(times[idx-1] - target) ? idx : idx - 1
 end
 
-function _datarange(x::AbstractVector)::Float64
-    isempty(x) && return 0.0
-    mn, mx = extrema(x)
-    return Float64(mx - mn)
-end
-
 function _add_col!(out::Vector{Float64}, col::Vector{Float64}, N::Int)
     @inbounds @simd for i = 1:N
         out[i] += col[i]
@@ -61,38 +55,6 @@ function _colmeans(mat::Matrix, cols)::Vector{Float64}
     return out
 end
 
-function _data_limits_x(dat::DataFrame; col::Symbol = :time)
-    isempty(dat) && return nothing
-    return extrema(dat[!, col])
-end
-
-function _nan_safe_extrema(v::AbstractVector{Float64})
-    mn, mx = Inf, -Inf
-    found = false
-    @inbounds for x in v
-        if !isnan(x)
-            mn = min(mn, x)
-            mx = max(mx, x)
-            found = true
-        end
-    end
-    return found ? (mn, mx) : nothing
-end
-
-function _nan_safe_extrema(v::AbstractVector)
-    mn, mx = Inf, -Inf
-    found = false
-    @inbounds for x in v
-        if !ismissing(x) && !(x isa AbstractFloat && isnan(x))
-            val = Float64(x)
-            mn = min(mn, val)
-            mx = max(mx, val)
-            found = true
-        end
-    end
-    return found ? (mn, mx) : nothing
-end
-
 function _nan_safe_extrema_rows(col::Vector{Float64}, rows::Vector{Int})
     mn, mx = Inf, -Inf
     found = false
@@ -120,27 +82,6 @@ function _nan_safe_extrema_rows(col::AbstractVector, rows::Vector{Int})
         end
     end
     return found ? (mn, mx) : nothing
-end
-
-function _data_limits_y(dat::DataFrame, col::Symbol)
-    isempty(dat) && return nothing
-    ext = _nan_safe_extrema(dat[!, col])
-    return isnothing(ext) ? nothing : [ext[1], ext[2]]
-end
-
-function _data_limits_y(dat::DataFrame, cols::Vector{Symbol})
-    (isempty(dat) || isempty(cols)) && return nothing
-    global_min, global_max = Inf, -Inf
-    found = false
-    @inbounds for col in cols
-        ext = _nan_safe_extrema(dat[!, col])
-        if !isnothing(ext)
-            global_min = min(global_min, ext[1])
-            global_max = max(global_max, ext[2])
-            found = true
-        end
-    end
-    return found ? [global_min, global_max] : nothing
 end
 
 function _filter_ylimit_cols(raw_cols::Vector{Symbol}, lay_labels::AbstractVector{Symbol}, df0::DataFrame)::Vector{Symbol}

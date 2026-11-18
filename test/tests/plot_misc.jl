@@ -26,26 +26,6 @@ import Logging
         @test EegFun._split_into_parts("Example") == ["Example"]
     end
 
-    @testset "_find_common_prefix_parts" begin
-        # Test with common prefix
-        names = ["ExampleCondition1", "ExampleCondition2", "ExampleCondition3"]
-        @test EegFun._find_common_prefix_parts(names) == ["Example", "Condition"]
-
-        # Test with no common prefix
-        names = ["ExampleCondition1", "AnotherCondition1"]
-        @test EegFun._find_common_prefix_parts(names) == String[]
-
-        # Test with underscores
-        names = ["switch_rep_easy1", "switch_rep_hard2"]
-        @test EegFun._find_common_prefix_parts(names) == ["switch", "_", "rep", "_"]
-
-        # Test single name
-        @test EegFun._find_common_prefix_parts(["Example"]) == String[]
-
-        # Test empty
-        @test EegFun._find_common_prefix_parts(String[]) == String[]
-    end
-
     @testset "_abbreviate_parts" begin
         # Test basic abbreviation
         @test EegFun._abbreviate_parts(["Example", "Condition"]) == "ExaCon"
@@ -61,21 +41,6 @@ import Logging
         # Test short parts
         @test EegFun._abbreviate_parts(["A", "B"]) == "AB"
         @test EegFun._abbreviate_parts(["AB", "CD"]) == "ABCD"
-    end
-
-    @testset "_abbreviate_name" begin
-        # Test with common prefix
-        common = ["Example", "Condition"]
-        @test EegFun._abbreviate_name("ExampleCondition1", common) == "ExaCon1"
-        @test EegFun._abbreviate_name("ExampleCondition2", common) == "ExaCon2"
-
-        # Test with underscores
-        common = ["switch", "_", "rep", "_"]
-        @test EegFun._abbreviate_name("switch_rep_easy1", common) == "Swi_Rep_easy1"
-        @test EegFun._abbreviate_name("switch_rep_hard2", common) == "Swi_Rep_hard2"
-
-        # Test with empty common prefix
-        @test EegFun._abbreviate_name("Example", String[]) == "Example"
     end
 
     @testset "_shorten_condition_names" begin

@@ -137,38 +137,6 @@ using Logging
         @test occursin("does not exist", result)
     end
 
-    @testset "_validate_channel_groups" begin
-        # Test valid channel groups
-        groups = [[:Fz, :Cz], [:Pz, :Oz], [:M1, :M2]]
-        result = EegFun._validate_channel_groups(groups)
-        @test isnothing(result)
-
-        # Test empty groups
-        result = EegFun._validate_channel_groups(Vector{Symbol}[])
-        @test result isa String
-        @test occursin("cannot be empty", result)
-
-        # Test empty group
-        result = EegFun._validate_channel_groups([Symbol[]])
-        @test result isa String
-        @test occursin("Channel group 1 is empty", result)
-
-        # Test single channel group (should warn but not error)
-        groups_single = [[:Fz], [:Cz, :Pz]]
-        result = EegFun._validate_channel_groups(groups_single)
-        @test isnothing(result)  # Should not error, just warn
-
-        # Test multiple single-channel groups
-        groups_multi_single = [[:Fz], [:Cz], [:Pz]]
-        result = EegFun._validate_channel_groups(groups_multi_single)
-        @test isnothing(result)  # Should warn but not error
-
-        # Test large groups
-        groups_large = [[:Fz, :Cz, :Pz, :Oz, :M1, :M2]]
-        result = EegFun._validate_channel_groups(groups_large)
-        @test isnothing(result)
-    end
-
     @testset "_validate_condition_groups" begin
         # Test valid condition groups
         groups = [[1, 2], [3, 4], [5, 6]]
