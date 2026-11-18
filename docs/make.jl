@@ -196,13 +196,9 @@ if build_pdf
         end
     end
 
-    # Filter out duplicate pages to prevent Typst label errors
-    # Explanations contains duplicate files already in Tutorials
-    filter!(p -> p[1] != "Explanations", pages)
-
-    # Remove Layouts from Tutorials because it is hundreds of images
+    # Remove Layouts gallery from PDF build because it embeds hundreds of images
     for section in pages
-        if section[1] == "Tutorials"
+        if section[1] == "Explanations"
             filter!(p -> p[1] != "Layouts", section[2])
         end
     end
