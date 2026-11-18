@@ -122,7 +122,7 @@ function _select_conditions_by_field(items::AbstractVector, condition_selection)
         if allunique(cond_nums) && all(>(0), cond_nums)
             if hasfield(typeof(cond_func), :condition_indices)
                 req_ids = getfield(cond_func, :condition_indices)
-                return Int[i for (i, c) in enumerate(cond_nums) if c in req_ids]
+                return Int[idx for r in unique(req_ids) for idx in (findfirst(==(r), cond_nums),) if !isnothing(idx)]
             elseif hasfield(typeof(cond_func), :f) && hasfield(typeof(getfield(cond_func, :f)), :condition_indices)
                 req_ids = getfield(getfield(cond_func, :f), :condition_indices)
                 return Int[i for (i, c) in enumerate(cond_nums) if !(c in req_ids)]

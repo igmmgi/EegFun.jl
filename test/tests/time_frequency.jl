@@ -313,4 +313,29 @@ end
     @test EegFun._tf_colorbar_label(itc, nothing, :db) == "ITC"
     @test EegFun._tf_colorbar_label(EegFun.tf_baseline(itc, (0.5, 0.7); method = :absolute), nothing, :db) == "ITC (baseline-subtracted)"
     @test EegFun._tf_colorbar_label(EegFun.tf_morlet(ep; frequencies = freqs), nothing, :db) == "Power"
+
+    # TF baseline dispatch (nothing, Function predicate, ITC auto :absolute default) & zero-power tf_itc parity
+    tf_pow = EegFun.tf_morlet(ep; frequencies = freqs)
+    tf_nobl = EegFun.baseline(tf_pow, nothing)
+    @test isnothing(tf_nobl.baseline)
+    @test isequal(tf_nobl.data_power.Ch1, tf_pow.data_power.Ch1)
+
+    tf_fn = EegFun.baseline(tf_pow, df -> (0.5 .<= df.time .<= 0.7))
+    tf_tup = EegFun.tf_baseline(tf_pow, (0.5, 0.7))
+    @test tf_fn.baseline.method == :db
+    @test isapprox(tf_fn.data_power.Ch1, tf_tup.data_power.Ch1; nans = true)
+
+    itc_auto = EegFun.tf_baseline(itc, (0.5, 0.7))
+    @test itc_auto.baseline.method == :absolute
+
+    ep_zero = EegFun.create_test_epoch_data(n = 128, fs = 128, n_epochs = 12, n_channels = 1)
+    for df in ep_zero.data
+        df.Ch1 .= 0.0
+    end
+    itc_direct_z = EegFun.tf_morlet(ep_zero; frequencies = [10.0], cycles = 3, output = :itc, filter_edges = false)
+    trials_z = EegFun.tf_morlet(ep_zero; frequencies = [10.0], cycles = 3, return_trials = true, return_phase = true, filter_edges = false)
+    @test EegFun.n_epochs(trials_z) == 12
+    itc_from_trials_z = EegFun.tf_itc(trials_z)
+    @test all(==(0.0), itc_direct_z.data_power.Ch1)
+    @test all(==(0.0), itc_from_trials_z.data_power.Ch1)
 end

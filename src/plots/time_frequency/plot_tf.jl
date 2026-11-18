@@ -464,6 +464,20 @@ function plot_tf(
             hidedecorations!(ax, grid = false, ticks = true, ticklabels = true)
             hidespines!(ax)
         end
+    elseif plot_layout.type == :custom
+        if get(plot_layout.metadata, :custom_mode, :canvas) === :grid
+            rows, cols = plot_layout.dims
+            for (idx, ax) in enumerate(axes)
+                pos = plot_layout.positions[idx]
+                Int(pos[2]) != 1 && (ax.ylabel = ""; ax.yticklabelsvisible = false)
+                Int(pos[1]) != rows && (ax.xlabel = ""; ax.xticklabelsvisible = false)
+            end
+        else
+            for ax in axes
+                hidedecorations!(ax, grid = false, ticks = true, ticklabels = true)
+                hidespines!(ax)
+            end
+        end
     end
 
     length(axes) > 1 && linkaxes!(axes...)

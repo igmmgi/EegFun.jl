@@ -1249,6 +1249,14 @@ using EegFun
         @test !any(ep_schema.data[1].is_flatline)
         stacked = EegFun.all_data(ep_schema)
         @test nrow(stacked) == 400
+
+        # Flatlined epoch (NaN kurtosis) does not disable z-score rejection on remaining epochs
+        ep_flat_z = EegFun.create_test_epoch_data(n = 100, n_epochs = 8, n_channels = 2, seed = 77)
+        ep_flat_z.data[1][!, :Ch1] .= 0.0  # exact zero variance -> kurtosis == NaN
+        ep_flat_z.data[2][!, :Ch1] .= 0.01 .* randn(MersenneTwister(88), 100)
+        ep_flat_z.data[2][50, :Ch1] = 250.0  # huge spike -> extreme kurtosis & variance z-score
+        rej_flat_z = EegFun.detect_bad_epochs_automatic(ep_flat_z; z_criterion = 2.0, abs_criterion = 0.0)
+        @test any(r -> r.epoch == 2 && r.channel == :Ch1, rej_flat_z.rejected)
     end
 
 end

@@ -643,6 +643,17 @@ using EegFun
         @test contains(String(take!(io)), "N/A")
         @test ga.layout !== sub_rsas[1].layout
         @test ga.analysis_info !== sub_rsas[1].analysis_info
+
+        # 8. Multi-condition structure and empty-trial validation in RSA
+        ep_ok = EegFun.create_test_epoch_data(n = 40, fs = 100, n_epochs = 4, n_channels = 3)
+        ep_mismatched = EegFun.create_test_epoch_data(n = 20, fs = 100, n_epochs = 4, n_channels = 3)
+        ep_mismatched.condition = 2
+        @test_throws EegFun.EegFunError EegFun.rsa([ep_ok, ep_mismatched])
+
+        ep_empty = copy(ep_ok)
+        ep_empty.condition = 2
+        empty!(ep_empty.data)
+        @test_throws EegFun.EegFunError EegFun.rsa([ep_ok, ep_empty])
     end
 
 end # @testset "RSA"

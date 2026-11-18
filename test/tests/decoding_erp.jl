@@ -264,6 +264,18 @@ using Statistics
         ga_2 = EegFun.grand_average([res_it1, res_imb])
         @test ga_2.times !== res_it1.times
         @test ga_2.channels !== res_it1.channels
+
+        # Structure and bounds validation in decode_libsvm & libsvm_classifier
+        c_short = EegFun.create_test_epoch_data(n = 20, fs = 100, n_epochs = 8, n_channels = 2)
+        c_short.condition = 2
+        @test_throws EegFun.EegFunError EegFun.decode_libsvm([c_maj, c_short]; n_iterations = 1, n_folds = 2, show_progress = false)
+
+        c_zero = copy(c_min)
+        empty!(c_zero.data)
+        @test_throws EegFun.EegFunError EegFun.decode_libsvm([c_maj, c_zero]; n_iterations = 1, n_folds = 2, show_progress = false)
+
+        @test_throws EegFun.EegFunError EegFun.libsvm_classifier(ones(4, 3), [1, 2], ones(2, 3))
+        @test_throws EegFun.EegFunError EegFun.libsvm_classifier(ones(4, 3), [1, 1, 2, 2], ones(2, 5))
     end
 
 end # @testset "ERP Decoding"

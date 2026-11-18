@@ -141,13 +141,31 @@ compressed by `(N - 1)^2` relative to single-participant variance:
 - Smulders, F. T. Y. (2010). Simplifying jackknifing of ERPs and getting more out of it. *Psychophysiology*, 47(2), 387-392.
 """
 function jackknife_average(erps::AbstractVector{<:ErpData}; condition_selection = conditions(), pseudovalues::Bool = false)::Vector{ErpData}
+    isempty(erps) && @minimal_error("Cannot create jackknife averages from empty ERP list")
     @info "Starting jackknife averaging"
-    erps_filtered = erps[_select_conditions_by_field(erps, condition_selection)]
-    length(erps_filtered) < 2 && @minimal_error("Need at least 2 participants for jackknife averaging")
-    _have_same_structure(erps_filtered) ||
-        @minimal_error("ERPs have inconsistent structure (sample rate, number of samples, or channel labels)")
 
-    jackknife_results = _create_jackknife_averages(erps_filtered; pseudovalues = pseudovalues)
+    data_by_condition = group_by_condition(erps)
+    all_cond_nums = collect(keys(data_by_condition))
+    rep_items = ErpData[first(data_by_condition[num]) for num in all_cond_nums]
+    selected_indices = _select_conditions_by_field(rep_items, condition_selection)
+    selected_cond_nums = all_cond_nums[selected_indices]
+
+    if isempty(selected_cond_nums)
+        @minimal_warning "No conditions selected or found for jackknife averaging"
+        return ErpData[]
+    end
+
+    jackknife_results = ErpData[]
+    for cond_num in selected_cond_nums
+        cond_erps = data_by_condition[cond_num]
+        length(cond_erps) < 2 && @minimal_error(
+            "Need at least 2 participants per condition for jackknife averaging (condition $cond_num has $(length(cond_erps)))"
+        )
+        _have_same_structure(cond_erps) ||
+            @minimal_error("ERPs in condition $cond_num have inconsistent structure (sample rate, number of samples, or channel labels)")
+        append!(jackknife_results, _create_jackknife_averages(cond_erps; pseudovalues = pseudovalues))
+    end
+
     @info "Jackknife averaging complete"
     return jackknife_results
 end

@@ -164,14 +164,38 @@ function create_layout(layout_spec::Union{Symbol,PlotLayout}, channels::Vector{S
 end
 
 """
-    create_custom_layout(positions::Vector{Tuple{Float64, Float64}}, channels::Vector{Symbol})
+    create_custom_layout(positions::AbstractVector{<:Tuple{Integer,Integer}}, channels::Vector{Symbol}; kwargs...)
+    create_custom_layout(positions::AbstractVector{<:Tuple{Real,Real}}, channels::Vector{Symbol}; kwargs...)
 
-Create a custom layout with specific `(x, y)` positions for each channel.
+Create a custom `PlotLayout` placing each channel at either:
+- explicit positive `(row, col)` integer grid cells (e.g. `[(1, 2), (2, 1), (2, 3)]`), or
+- continuous `(x, y)` canvas coordinates (in `[0, 1]` or arbitrary coordinates normalized across channels).
 """
-function create_custom_layout(positions::Vector{Tuple{Float64,Float64}}, channels::Vector{Symbol})
+function create_custom_layout(positions::AbstractVector{<:Tuple{Integer,Integer}}, channels::Vector{Symbol}; kwargs...)
+    isempty(channels) && @minimal_error("Cannot create custom layout with empty channel list")
     length(positions) == length(channels) ||
         @minimal_error("n positions ($(length(positions))) must match n channels ($(length(channels)))")
-    return PlotLayout(:custom, [0, 0], positions, channels, Dict{Symbol,Any}())
+    all(p -> p[1] >= 1 && p[2] >= 1, positions) ||
+        @minimal_error("Grid positions must be positive (row, col) integer indices, got: $positions")
+
+    rows = maximum(Int(p[1]) for p in positions)
+    cols = maximum(Int(p[2]) for p in positions)
+    metadata = _merge_plot_kwargs(LAYOUT_KWARGS, kwargs; validate = false)
+    metadata[:custom_mode] = :grid
+    fpos = Tuple{Float64,Float64}[(Float64(p[1]), Float64(p[2])) for p in positions]
+    return PlotLayout(:custom, [rows, cols], fpos, copy(channels), metadata)
+end
+
+function create_custom_layout(positions::AbstractVector{<:Tuple{Real,Real}}, channels::Vector{Symbol}; kwargs...)
+    isempty(channels) && @minimal_error("Cannot create custom layout with empty channel list")
+    length(positions) == length(channels) ||
+        @minimal_error("n positions ($(length(positions))) must match n channels ($(length(channels)))")
+    all(p -> isfinite(p[1]) && isfinite(p[2]), positions) || @minimal_error("Canvas positions must be finite (x, y) coordinates")
+
+    metadata = _merge_plot_kwargs(LAYOUT_KWARGS, kwargs; validate = false)
+    metadata[:custom_mode] = :canvas
+    fpos = Tuple{Float64,Float64}[(Float64(p[1]), Float64(p[2])) for p in positions]
+    return PlotLayout(:custom, [1, 1], fpos, copy(channels), metadata)
 end
 
 function _validate_dims(dims, n_items::Int)
@@ -237,9 +261,28 @@ function _apply_layout!(fig::Figure, plot_layout::PlotLayout; kwargs...)
             _add_axis_and_channel!(axes, channels, ax, channel)
         end
     elseif plot_layout.type == :custom
-        for (channel, pos) in zip(plot_layout.channels, plot_layout.positions)
-            ax = _create_axis(fig, fig[pos[1], pos[2]]; kwargs...)
-            _add_axis_and_channel!(axes, channels, ax, channel)
+        positions = plot_layout.positions
+        isempty(positions) && @minimal_error("Cannot create custom layout with empty positions")
+        if get(plot_layout.metadata, :custom_mode, :canvas) === :grid
+            for (channel, pos) in zip(plot_layout.channels, positions)
+                ax = _create_axis(fig, fig[Int(pos[1]), Int(pos[2])]; kwargs...)
+                _add_axis_and_channel!(axes, channels, ax, channel)
+            end
+            _apply_grid_spacing!(fig, plot_layout)
+        else
+            plot_width = get(plot_layout.metadata, :topo_plot_width, 0.10)
+            plot_height = get(plot_layout.metadata, :topo_plot_height, 0.10)
+            minx, maxx = extrema(pos[1] for pos in positions)
+            miny, maxy = extrema(pos[2] for pos in positions)
+            use_raw_unit = minx >= 0.0 && maxx <= 1.0 && miny >= 0.0 && maxy <= 1.0 && (maxx > minx || maxy > miny)
+            xrange = maxx == minx ? 1.0 : maxx - minx
+            yrange = maxy == miny ? 1.0 : maxy - miny
+            for (channel, pos) in zip(plot_layout.channels, positions)
+                hx = use_raw_unit ? pos[1] : (maxx == minx ? 0.5 : (pos[1] - minx) / xrange)
+                vy = use_raw_unit ? pos[2] : (maxy == miny ? 0.5 : (pos[2] - miny) / yrange)
+                ax = _create_topo_axis(fig, plot_width, plot_height, hx, vy; kwargs...)
+                _add_axis_and_channel!(axes, channels, ax, channel)
+            end
         end
     end
 
@@ -275,6 +318,20 @@ function _apply_layout_axis_properties!(axes::Vector{Axis}, plot_layout::PlotLay
             ax.title = _resolve_layout_title(kwargs, string(plot_layout.channels[idx]))
             hidedecorations!(ax, grid = false, ticks = true, ticklabels = true)
             hidespines!(ax)
+        end
+    elseif plot_layout.type == :custom
+        if get(plot_layout.metadata, :custom_mode, :canvas) === :grid
+            rows, cols = plot_layout.dims
+            for (idx, ax) in enumerate(axes)
+                pos = plot_layout.positions[idx]
+                _set_grid_axis_properties!(ax, plot_layout.channels[idx], Int(pos[1]), Int(pos[2]), rows, cols; kwargs...)
+            end
+        else
+            for (idx, ax) in enumerate(axes)
+                ax.title = _resolve_layout_title(kwargs, string(plot_layout.channels[idx]))
+                hidedecorations!(ax, grid = false, ticks = true, ticklabels = true)
+                hidespines!(ax)
+            end
         end
     end
     for ax in axes

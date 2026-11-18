@@ -237,7 +237,7 @@ function plot_epochs(
         legend_refs = Union{Legend,Nothing}[]
 
         line_refs = if plot_kwargs[:interactive]
-            n_axes = (layout == :grid || layout == :topo) ? length(all_plot_channels) : 1
+            n_axes = plot_layout.type in (:grid, :topo, :custom) ? length(plot_layout.channels) : 1
             [Dict{Int,Dict{Symbol,Any}}() for _ = 1:n_axes]
         else
             nothing
@@ -266,7 +266,7 @@ function plot_epochs(
                 length(all_plot_channels) == 1 ? string(all_plot_channels[1]) :
                 "Avg: $(_print_vector(all_plot_channels, max_length = 8, n_ends = 3))"
             _finalize_epochs_axis!(ax, plot_kwargs)
-        elseif layout == :single
+        elseif plot_layout.type == :single
             ax = Axis(fig[1, 1])
             push!(axes, ax)
             ax_line_refs = plot_kwargs[:interactive] ? line_refs[1] : nothing
@@ -291,8 +291,8 @@ function plot_epochs(
             leg = _add_legend!(ax, all_plot_channels, dat_subset, plot_kwargs)
             !isnothing(leg) && push!(legend_refs, leg)
             _finalize_epochs_axis!(ax, plot_kwargs)
-        elseif layout == :grid
-            grid_dims = plot_layout.type == :grid ? Tuple(plot_layout.dims) : _best_rect(length(all_plot_channels))
+        elseif plot_layout.type == :grid
+            grid_dims = Tuple(plot_layout.dims)
             _plot_epochs_grid_multi!(
                 fig,
                 axes,
@@ -305,7 +305,7 @@ function plot_epochs(
                 dat_subset_avg = dat_subset_avg,
                 time_cat_list = time_cat_list,
             )
-        elseif layout == :topo
+        elseif plot_layout.type == :topo
             _plot_epochs_topo_multi!(
                 fig,
                 axes,
@@ -318,6 +318,34 @@ function plot_epochs(
                 time_cat_list = time_cat_list,
                 plot_layout = plot_layout,
             )
+        elseif plot_layout.type == :custom
+            created_axes, layout_channels = _apply_layout!(fig, plot_layout; plot_kwargs...)
+            append!(axes, created_axes)
+            ylim = something_or_calc_ylim(plot_kwargs[:ylim], dat_subset, layout_channels)
+            is_grid_custom = get(plot_layout.metadata, :custom_mode, :canvas) === :grid
+            for (idx, (ax, ch)) in enumerate(zip(axes, layout_channels))
+                ax_line_refs = !isnothing(line_refs) && idx <= length(line_refs) ? line_refs[idx] : nothing
+                _plot_epochs_conditions_on_axis!(
+                    ax,
+                    dat_subset,
+                    ch,
+                    condition_colors_list,
+                    plot_kwargs,
+                    ax_line_refs;
+                    dat_subset_avg = dat_subset_avg,
+                    time_cat_list = time_cat_list,
+                )
+                _add_legend!(ax, [ch], dat_subset, plot_kwargs)
+                _finalize_epochs_axis!(
+                    ax,
+                    plot_kwargs;
+                    ylim = ylim,
+                    xlabel = is_grid_custom ? plot_kwargs[:xlabel] : "",
+                    ylabel = is_grid_custom ? plot_kwargs[:ylabel] : "",
+                )
+            end
+            _apply_layout_axis_properties!(axes, plot_layout; plot_kwargs...)
+            length(axes) > 1 && Makie.linkaxes!(axes...)
         end
 
         if plot_kwargs[:interactive]
@@ -344,7 +372,7 @@ function plot_epochs(
             right_click_handler = (sel, mouse_x, data) -> _handle_epochs_right_click!(sel, mouse_x, data, condition_checked_ref)
             _setup_unified_selection!(fig, axes, selection_state, dat_subset, right_click_handler)
 
-            if plot_layout.type in (:topo, :grid)
+            if plot_layout.type in (:topo, :grid, :custom)
                 _setup_channel_selection_events!(fig, selection_state, plot_layout, dat_subset, axes)
             end
         end

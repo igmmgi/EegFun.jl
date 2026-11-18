@@ -729,6 +729,41 @@ using LinearAlgebra
             MersenneTwister(5),
         )
         @test all(isfinite, prep_gpu_std.work.weights)
+
+        # 6. Zero-variance ICA component does not poison EOG robust z-score detection
+        n_samp = 500
+        t_bl = range(0.0, 5.0; length = n_samp)
+        blink_sig = exp.(-((t_bl .- 2.0) ./ 0.08) .^ 2) .+ exp.(-((t_bl .- 4.0) ./ 0.08) .^ 2)
+        dat_zv = create_synthetic_continuous(; n = n_samp, fs = 100, nch = 4)
+        dat_zv.data[!, :vEOG] = blink_sig
+        dat_zv.data[!, :hEOG] = 0.01 .* sin.(2π .* 1.3 .* t_bl)
+        # Construct an InfoIca whose IC1 tracks vEOG, IC2 is completely flat (zero variance), IC3-IC4 are clean sinusoids
+        S = zeros(4, n_samp)
+        S[1, :] = blink_sig
+        S[2, :] .= 0.0
+        S[3, :] = sin.(2π .* 6.0 .* t_bl)
+        S[4, :] = cos.(2π .* 11.0 .* t_bl)
+        A = Matrix{Float64}(I, 4, 4)
+        for ci = 1:4
+            ch_sym = EegFun.channel_labels(dat_zv)[ci]
+            dat_zv.data[!, ch_sym] = S[ci, :]
+        end
+        ica_zv = EegFun.InfoIca(
+            "zv",
+            A,
+            A,
+            A,
+            [10.0, 0.0, 5.0, 5.0],
+            1.0,
+            zeros(4),
+            [:IC1, :IC2, :IC3, :IC4],
+            Dict{Int,Matrix{Float64}}(),
+            copy(dat_zv.layout),
+            falses(4),
+        )
+        eog_comps, eog_df = EegFun.identify_eog_components(dat_zv, ica_zv; z_threshold = 1.0)
+        @test 1 in eog_comps[:vEOG]
+        @test all(isfinite, eog_df.vEOG_zscore)
     end
 
 end

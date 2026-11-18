@@ -39,14 +39,17 @@ function _apply_baseline!(dat::AbstractVector{DataFrame}, channels::AbstractVect
     return nothing
 end
 
+const _TimeDomainEegData = Union{ContinuousData,ErpData,EpochData}
+
 """
-    baseline!(dat::EegData, baseline_interval::Interval = times(); channel_selection = channels()) -> EegData
-    baseline!(dat::AbstractVector{<:EegData}, baseline_interval::Interval = times(); channel_selection = channels())
+    baseline!(dat::Union{ContinuousData,ErpData,EpochData}, baseline_interval::Interval = times(); channel_selection = channels())
+    baseline!(dat::AbstractVector{<:Union{ContinuousData,ErpData,EpochData}}, baseline_interval::Interval = times(); channel_selection = channels())
 
 Subtract the mean amplitude over `baseline_interval` from each selected channel in-place.
-Omitting `baseline_interval` uses the full time range.
+Omitting `baseline_interval` uses the full time range; passing `nothing` leaves `dat` unchanged.
 """
-function baseline!(dat::EegData, baseline_interval::Interval = times(); channel_selection = channels())
+function baseline!(dat::_TimeDomainEegData, baseline_interval::Interval = times(); channel_selection = channels())
+    isnothing(baseline_interval) && return dat
     bl_idx = _validate_baseline_interval(dat, baseline_interval)
     selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
     if isempty(selected_channels)
@@ -62,7 +65,8 @@ function baseline!(dat::EegData, baseline_interval::Interval = times(); channel_
     return dat
 end
 
-function baseline!(dat::AbstractVector{<:EegData}, baseline_interval::Interval = times(); channel_selection = channels())
+function baseline!(dat::AbstractVector{<:_TimeDomainEegData}, baseline_interval::Interval = times(); channel_selection = channels())
+    isnothing(baseline_interval) && return dat
     for d in dat
         baseline!(d, baseline_interval; channel_selection = channel_selection)
     end
@@ -76,8 +80,8 @@ end
 
 Non-mutating or batch JLD2 version of [`baseline!`](@ref).
 """
-baseline(dat::EegData, args...; kwargs...) = baseline!(copy(dat), args...; kwargs...)
-baseline(dat::AbstractVector{<:EegData}, args...; kwargs...) = [baseline(d, args...; kwargs...) for d in dat]
+baseline(dat::_TimeDomainEegData, args...; kwargs...) = baseline!(copy(dat), args...; kwargs...)
+baseline(dat::AbstractVector{<:_TimeDomainEegData}, args...; kwargs...) = [baseline(d, args...; kwargs...) for d in dat]
 
 _default_baseline_output_dir(input_dir::String, pattern::String, baseline_interval::Tuple{Real,Real}) =
     joinpath(input_dir, "baseline_$(clean_pattern(pattern))_$(baseline_interval[1])_to_$(baseline_interval[2])")

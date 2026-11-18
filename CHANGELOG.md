@@ -12,6 +12,18 @@ and this project adheres to (well, attempts to :-)) [Semantic Versioning](https:
 - Inter-trial phase coherence (ITC): `output = :itc` in `tf_morlet` / `tf_stft`, and `tf_itc` for single-trial `TimeFreqEpochData`. ITC results are `TimeFreqData`, so `plot_tf`, topographies, averaging, and TF statistics work on them directly.
 - Mass-univariate linear mixed models (`fit_mass_lmm`, `LmmStatsResult`, `extract_predictor_stats`) via a `MixedModels` / `StatsModels` package extension, with whole-block sign-flip permutation FWER correction (`:maxt`, `:cluster`, `:tfce`), `StatsAPI` methods, and ERP/heatmap/topography plotting.
 
+### Fixed
+
+- Fixed in-memory `jackknife_average(erps)` to group ERPs by condition and apply `condition_selection` per condition rather than pooling conditions together.
+- Fixed `create_custom_layout` rendering across ERP, epoch, and time-frequency plots, supporting both positive integer `(row, col)` grid positions and continuous `(x, y)` canvas positions.
+- Fixed `prepare_stats` condition selection with named/predicate selectors, out-of-order paired participants, and single-participant paired guard.
+- Fixed `NaN` z-score poisoning in ICA artifact identification and `detect_bad_epochs_automatic` when a single ICA component or epoch segment has zero variance.
+- Fixed BIDS `export_bids` / `read_bids` spherical electrode coordinate round-trip, BrainVision multi-file (`.vhdr`/`.eeg`/`.vmrk`) and `.xdf.gz` export, optional BIDS filename entities, and categorical `trial_type` trigger code assignment.
+- Fixed `read_fieldtrip` `cfg.event` struct-of-arrays parsing and trailing `"Status"` channel stripping on epoched data.
+- Fixed `EegFunMetalExt` to declare `supports_fft = false` so `tf_morlet`, `tf_stft`, and `tf_multitaper` fall back cleanly to CPU instead of calling unsupported `MtlArray` FFT plans.
+- Added multi-condition structure, frequency-vector, and non-empty trial validation in `decode_libsvm`, `libsvm_classifier`, `rsa`, and `n_epochs(::TimeFreqEpochData)`.
+- Restricted time-domain `baseline(!)` and `freq_spectrum` to `Union{ContinuousData,ErpData,EpochData}`, added `Nothing` and `Function` interval support to TF `baseline(!)`, defaulted ITC baseline normalization to `:absolute`, and fixed zero-power sample handling in `tf_itc`.
+
 ## [0.9.0] - 2026-11-15
 
 ### Added

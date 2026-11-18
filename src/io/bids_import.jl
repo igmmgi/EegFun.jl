@@ -104,16 +104,25 @@ function list_bids_runs(dataset_dir::String; datatype::String = "eeg")::DataFram
     )
 end
 
-function _parse_bids_event_value(v)::Int
-    (v === nothing || ismissing(v)) && return 1
-    v isa Integer && return Int(v)
-    (v isa Real && !isnan(v)) && return round(Int, v)
+function _try_parse_bids_event_int(v)::Union{Int,Nothing}
+    (v === nothing || ismissing(v)) && return nothing
+    v isa Integer && return Int(v) != 0 ? Int(v) : nothing
+    (v isa Real && !isnan(v)) && (r = round(Int, v); return r != 0 ? r : nothing)
     s_val = strip(string(v))
-    (isempty(s_val) || lowercase(s_val) == "n/a") && return 1
+    (isempty(s_val) || lowercase(s_val) == "n/a") && return nothing
     parsed = tryparse(Int, s_val)
-    !isnothing(parsed) && return parsed
+    !isnothing(parsed) && return parsed != 0 ? parsed : nothing
     m = match(r"-?\d+", s_val)
-    return !isnothing(m) ? something(tryparse(Int, m.match), 1) : 1
+    if !isnothing(m)
+        mc = tryparse(Int, m.match)
+        !isnothing(mc) && mc != 0 && return mc
+    end
+    return nothing
+end
+
+function _parse_bids_event_value(v)::Int
+    c = _try_parse_bids_event_int(v)
+    return isnothing(c) ? 1 : c
 end
 
 function _parse_bids_event_label(tt_raw, val_raw)::String
@@ -127,6 +136,8 @@ function _parse_bids_event_label(tt_raw, val_raw)::String
     end
     return "event"
 end
+
+_inject_bids_events!(dat, ::DataFrame) = nothing
 
 function _inject_bids_events!(dat::ContinuousData, events_df::DataFrame)
     hasproperty(events_df, :onset) || return
@@ -149,7 +160,39 @@ function _inject_bids_events!(dat::ContinuousData, events_df::DataFrame)
     tts = hasproperty(events_df, :trial_type) ? events_df.trial_type : nothing
     sr = sample_rate(dat)
 
-    for i in eachindex(onsets)
+    n_ev = length(onsets)
+    explicit_codes = Vector{Union{Int,Nothing}}(undef, n_ev)
+    labels = Vector{String}(undef, n_ev)
+    used_codes = Set{Int}()
+    unmapped_labels = String[]
+
+    for i = 1:n_ev
+        val_raw = isnothing(vals) ? nothing : vals[i]
+        tt_raw = isnothing(tts) ? nothing : tts[i]
+        c = _try_parse_bids_event_int(val_raw)
+        lbl = _parse_bids_event_label(tt_raw, val_raw)
+        explicit_codes[i] = c
+        labels[i] = lbl
+        if !isnothing(c)
+            push!(used_codes, c)
+        elseif !(lbl in unmapped_labels)
+            push!(unmapped_labels, lbl)
+        end
+    end
+
+    sort!(unmapped_labels)
+    label_to_code = Dict{String,Int}()
+    next_code = 1
+    for lbl in unmapped_labels
+        while next_code in used_codes
+            next_code += 1
+        end
+        label_to_code[lbl] = next_code
+        push!(used_codes, next_code)
+        next_code += 1
+    end
+
+    for i = 1:n_ev
         raw_onset = onsets[i]
         ismissing(raw_onset) && continue
         onset_val = raw_onset isa Number ? Float64(raw_onset) : tryparse(Float64, strip(string(raw_onset)))
@@ -157,10 +200,10 @@ function _inject_bids_events!(dat::ContinuousData, events_df::DataFrame)
         samp_idx = round(Int, onset_val * sr) + 1
         (1 <= samp_idx <= n) || continue
 
-        val_raw = isnothing(vals) ? nothing : vals[i]
-        tt_raw = isnothing(tts) ? nothing : tts[i]
-        trig_col[samp_idx] = _parse_bids_event_value(val_raw)
-        info_col[samp_idx] = _parse_bids_event_label(tt_raw, val_raw)
+        c = explicit_codes[i]
+        lbl = labels[i]
+        trig_col[samp_idx] = isnothing(c) ? label_to_code[lbl] : c
+        info_col[samp_idx] = lbl
     end
 end
 
@@ -190,7 +233,9 @@ function read_bids(dataset_dir::String; subject::String, task::String, session::
     files = sort!(readdir(eeg_dir); by = _natural_sort_key)
     dt_escaped = _bids_regex_escape(datatype)
     base_escaped = _bids_regex_escape(base_prefix)
-    run_rx = run > 0 ? Regex("^$(base_escaped)_run-0*$(run)_$(dt_escaped)\$") : Regex("^$(base_escaped)_$(dt_escaped)\$")
+    run_rx =
+        run > 0 ? Regex("^$(base_escaped)(?:_.*)?_run-0*$(run)(?:_.*)?_$(dt_escaped)\$") :
+        Regex("^$(base_escaped)(?:_(?!run-)[^_]+)*_$(dt_escaped)\$")
 
     binary_files = filter(files) do f
         ext = get_file_extension(f)
@@ -209,6 +254,11 @@ function read_bids(dataset_dir::String; subject::String, task::String, session::
 
     layout = nothing
     electrodes_file = joinpath(eeg_dir, "$(sub_prefix)$(ses_prefix)_electrodes.tsv")
+    if !isfile(electrodes_file)
+        sub_ses_rx = Regex("^$(_bids_regex_escape("$(sub_prefix)$(ses_prefix)"))(?:_[^_]+)*_electrodes\\.tsv\$")
+        elec_idx = findfirst(f -> occursin(sub_ses_rx, f), files)
+        !isnothing(elec_idx) && (electrodes_file = joinpath(eeg_dir, files[elec_idx]))
+    end
     if isfile(electrodes_file)
         elec_df = DataFrame(CSV.File(electrodes_file))
         if all(col -> hasproperty(elec_df, col), (:name, :x, :y, :z))

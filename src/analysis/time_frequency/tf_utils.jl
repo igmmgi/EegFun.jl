@@ -86,9 +86,14 @@ function _validate_tf_pad(pad)
 end
 
 function _tf_gpu_active(use_gpu::Bool)
-    gpu_active = use_gpu && is_gpu_available()
-    use_gpu && !gpu_active && @minimal_warning "GPU requested but CUDA is not available or functional. Falling back to CPU."
-    return gpu_active
+    use_gpu || return false
+    is_gpu_fft_available() && return true
+    if is_gpu_available()
+        @minimal_warning "GPU backend $(GLOBAL_GPU_STATE.backend_name) does not support FFT plans for time-frequency decomposition. Falling back to CPU."
+    else
+        @minimal_warning "GPU requested but no GPU backend is available or functional. Falling back to CPU."
+    end
+    return false
 end
 
 function _subset_tf_data(dat::EpochData, channel_selection, interval_selection::Interval)

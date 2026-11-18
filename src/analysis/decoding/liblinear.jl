@@ -18,6 +18,10 @@ function libsvm_classifier(
     cost::Real = 1.0,
 )
     cost <= 0 && @minimal_error("SVM cost parameter must be positive, got $cost")
+    size(X_train, 1) == length(y_train) ||
+        @minimal_error("X_train rows ($(size(X_train, 1))) must match y_train length ($(length(y_train)))")
+    size(X_train, 2) == size(X_test, 2) ||
+        @minimal_error("X_train features ($(size(X_train, 2))) must match X_test features ($(size(X_test, 2)))")
     (any(!isfinite, X_train) || any(!isfinite, X_test)) && @minimal_error("Input features contain NaN or Inf values")
 
     n_train = size(X_train, 1)

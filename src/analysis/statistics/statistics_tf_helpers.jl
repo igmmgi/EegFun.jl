@@ -40,7 +40,7 @@ function prepare_stats(
     frequency_selection::Interval = nothing,
     interval_selection::Interval = nothing,
     baseline_interval::Interval = nothing,
-    baseline_method::Symbol = :db,
+    baseline_method::Union{Symbol,Nothing} = nothing,
     analysis_interval::Interval = nothing,
 )
     condition1, condition2, selected_cond_nums = _select_two_conditions(tfs, design, condition_selection, "TF data")
@@ -65,17 +65,24 @@ function prepare_stats(
         for tf in condition2
             _check_tf_not_baselined(tf.baseline)
         end
-        _validate_tf_baseline_method(baseline_method)
-        bl_tuple = baseline_interval isa AllSelection ? _full_tf_interval(ref_tf) : _to_tf_interval(baseline_interval)
+        is_itc_data = all(_is_itc, condition1) && all(_is_itc, condition2)
+        eff_method = isnothing(baseline_method) ? (is_itc_data ? :absolute : :db) : baseline_method
+        _validate_tf_baseline_method(eff_method)
+        if is_itc_data && eff_method ∉ (:absolute, :zscore)
+            @minimal_warning "Baseline method :$eff_method is a power ratio and is unusual for ITC values; consider baseline_method = :absolute."
+        end
+        bl_tuple =
+            baseline_interval isa AllSelection ? _full_tf_interval(ref_tf) :
+            baseline_interval isa Function ? _func_tf_interval(ref_tf, baseline_interval) : _to_tf_interval(baseline_interval)
         b_start, b_end = _validate_and_resolve_tf_baseline_times(all_times, bl_tuple)
         base_range = b_start:b_end
 
-        full_data1 = _baseline_tf_4d!(_extract_tf_array(condition1, electrodes, frequencies, all_times), base_range, baseline_method)
-        full_data2 = _baseline_tf_4d!(_extract_tf_array(condition2, electrodes, frequencies, all_times), base_range, baseline_method)
+        full_data1 = _baseline_tf_4d!(_extract_tf_array(condition1, electrodes, frequencies, all_times), base_range, eff_method)
+        full_data2 = _baseline_tf_4d!(_extract_tf_array(condition2, electrodes, frequencies, all_times), base_range, eff_method)
 
         display_data1 = isnothing(time_mask) ? full_data1 : full_data1[:, :, :, time_mask]
         display_data2 = isnothing(time_mask) ? full_data2 : full_data2[:, :, :, time_mask]
-        bl_info = BaselineInfo(method = baseline_method, window = bl_tuple)
+        bl_info = BaselineInfo(method = eff_method, window = bl_tuple)
     else
         display_data1 = _extract_tf_array(condition1, electrodes, frequencies, display_times)
         display_data2 = _extract_tf_array(condition2, electrodes, frequencies, display_times)

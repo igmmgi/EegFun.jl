@@ -20,6 +20,7 @@ using Random
     # 2. Temporarily register KernelAbstractions.CPU() to exercise all GPU kernels & CPU-vs-GPU equivalence
     prev_state = (
         EegFun.GLOBAL_GPU_STATE.active,
+        EegFun.GLOBAL_GPU_STATE.supports_fft,
         EegFun.GLOBAL_GPU_STATE.backend_name,
         EegFun.GLOBAL_GPU_STATE.device_name,
         EegFun.GLOBAL_GPU_STATE.backend_obj,
@@ -150,11 +151,24 @@ using Random
             @test res_indep_gpu isa EegFun.PermutationResult
             @test length(res_indep_gpu.permutation_distribution.positive) == 12
         end
+
+        # 2d. Non-FFT GPU backend (e.g. Metal: supports_fft = false) falls back cleanly to CPU for TF
+        EegFun.register_gpu_backend!(:MockMetal, "Mock Metal GPU", EegFun.KernelAbstractions.CPU(), identity; supports_fft = false)
+        @test EegFun.is_gpu_available() == true
+        @test EegFun.is_gpu_fft_available() == false
+        tf_nofft = @test_logs (:warn, r"does not support FFT") match_mode = :any EegFun.tf_morlet(
+            ep_dat;
+            frequencies = [8.0, 16.0],
+            cycles = 3,
+            use_gpu = true,
+        )
+        @test tf_nofft isa EegFun.TimeFreqData
     finally
         EegFun.GLOBAL_GPU_STATE.active = prev_state[1]
-        EegFun.GLOBAL_GPU_STATE.backend_name = prev_state[2]
-        EegFun.GLOBAL_GPU_STATE.device_name = prev_state[3]
-        EegFun.GLOBAL_GPU_STATE.backend_obj = prev_state[4]
-        EegFun.GLOBAL_GPU_STATE.converter = prev_state[5]
+        EegFun.GLOBAL_GPU_STATE.supports_fft = prev_state[2]
+        EegFun.GLOBAL_GPU_STATE.backend_name = prev_state[3]
+        EegFun.GLOBAL_GPU_STATE.device_name = prev_state[4]
+        EegFun.GLOBAL_GPU_STATE.backend_obj = prev_state[5]
+        EegFun.GLOBAL_GPU_STATE.converter = prev_state[6]
     end
 end

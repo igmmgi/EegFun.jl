@@ -96,24 +96,34 @@ function export_bids(;
     _bids_write_readme(output_dir, dataset_name)
 
     for raw_file in raw_files
-        base, raw_ext = splitext(raw_file)
+        base = basename_without_ext(raw_file)
+        raw_ext = get_file_extension(raw_file)
         sub_id = pmap[base]
         sub_eeg_dir = joinpath(output_dir, sub_id, "eeg")
         mkpath(sub_eeg_dir)
 
         bids_prefix = "$(sub_id)_task-$(task)"
         raw_src = joinpath(raw_dir, raw_file)
-        cp(raw_src, joinpath(sub_eeg_dir, "$(bids_prefix)_eeg$(raw_ext)"); force = overwrite)
+        _bids_copy_raw_recording(raw_src, sub_eeg_dir, bids_prefix, raw_ext, overwrite)
         @info "  $sub_id: copied raw data"
 
         try
-            raw_data = read_raw_data(raw_src)
-            dat = isnothing(layout) ? create_eegfun_data(raw_data) : create_eegfun_data(raw_data, layout)
+            dat = if raw_ext == ".set"
+                loaded = read_eeglab(raw_src)
+                eeg_dat = loaded isa Tuple ? loaded[1] : loaded
+                !isnothing(layout) && (eeg_dat.layout = copy(layout))
+                eeg_dat
+            else
+                raw_data = read_raw_data(raw_src)
+                isnothing(layout) ? create_eegfun_data(raw_data) : create_eegfun_data(raw_data, layout)
+            end
 
-            _bids_write_eeg_sidecar(sub_eeg_dir, bids_prefix, dat, task, power_line_frequency, recommended)
-            _bids_write_channels_tsv(sub_eeg_dir, bids_prefix, dat)
-            _bids_write_events_tsv(sub_eeg_dir, bids_prefix, dat)
-            _bids_write_events_json(sub_eeg_dir, bids_prefix)
+            if dat isa ContinuousData
+                _bids_write_eeg_sidecar(sub_eeg_dir, bids_prefix, dat, task, power_line_frequency, recommended)
+                _bids_write_channels_tsv(sub_eeg_dir, bids_prefix, dat)
+                _bids_write_events_tsv(sub_eeg_dir, bids_prefix, dat)
+                _bids_write_events_json(sub_eeg_dir, bids_prefix)
+            end
 
             if !isnothing(layout) && has_valid_coordinates(layout)
                 _bids_write_electrodes_tsv(sub_eeg_dir, sub_id, layout)
@@ -144,10 +154,51 @@ function _bids_write_readme(output_dir::String, dataset_name::String)
     end
 end
 
+function _bids_copy_raw_recording(raw_src::String, sub_eeg_dir::String, bids_prefix::String, raw_ext::String, overwrite::Bool)
+    if raw_ext == ".vhdr"
+        src_dir = dirname(raw_src)
+        src_base = basename_without_ext(raw_src)
+        vhdr_text = read(raw_src, String)
+        m_data = match(r"(?m)^DataFile\s*=\s*(.+?)\s*$", vhdr_text)
+        m_mrk = match(r"(?m)^MarkerFile\s*=\s*(.+?)\s*$", vhdr_text)
+        data_file = isnothing(m_data) ? "$(src_base).eeg" : String(m_data.captures[1])
+        marker_file = isnothing(m_mrk) ? "$(src_base).vmrk" : String(m_mrk.captures[1])
+
+        new_eeg = "$(bids_prefix)_eeg.eeg"
+        new_vmrk = "$(bids_prefix)_eeg.vmrk"
+        new_vhdr = "$(bids_prefix)_eeg.vhdr"
+
+        eeg_src = joinpath(src_dir, data_file)
+        isfile(eeg_src) && cp(eeg_src, joinpath(sub_eeg_dir, new_eeg); force = overwrite)
+
+        vmrk_src = joinpath(src_dir, marker_file)
+        if isfile(vmrk_src)
+            vmrk_text = read(vmrk_src, String)
+            vmrk_rewritten = replace(vmrk_text, r"(?m)^DataFile\s*=\s*.*$" => "DataFile=$(new_eeg)")
+            write(joinpath(sub_eeg_dir, new_vmrk), vmrk_rewritten)
+        end
+
+        vhdr_rewritten = replace(vhdr_text, r"(?m)^DataFile\s*=\s*.*$" => "DataFile=$(new_eeg)")
+        vhdr_rewritten = replace(vhdr_rewritten, r"(?m)^MarkerFile\s*=\s*.*$" => "MarkerFile=$(new_vmrk)")
+        write(joinpath(sub_eeg_dir, new_vhdr), vhdr_rewritten)
+    else
+        cp(raw_src, joinpath(sub_eeg_dir, "$(bids_prefix)_eeg$(raw_ext)"); force = overwrite)
+        if raw_ext == ".set"
+            for companion_ext in (".fdt", ".dat")
+                companion_src = joinpath(dirname(raw_src), "$(basename_without_ext(raw_src))$(companion_ext)")
+                if isfile(companion_src)
+                    cp(companion_src, joinpath(sub_eeg_dir, basename(companion_src)); force = overwrite)
+                end
+            end
+        end
+    end
+    return nothing
+end
+
 function _bids_build_participant_map(raw_files::Vector{String}, user_map::Union{Nothing,Dict{String,String}})
     pmap = Dict{String,String}()
     for raw_file in raw_files
-        base = splitext(raw_file)[1]
+        base = basename_without_ext(raw_file)
         pmap[base] =
             (!isnothing(user_map) && haskey(user_map, base)) ? user_map[base] : @sprintf("sub-%02d", _extract_participant_id(raw_file))
     end
@@ -300,11 +351,30 @@ function _write_electrode_rows(io::IO, labels::AbstractVector, xs::AbstractVecto
 end
 
 function _bids_write_electrodes_tsv(dir::String, prefix::String, layout::Layout)
-    _ensure_coordinates_3d!(layout)
     df = layout.data
-    open(joinpath(dir, "$(prefix)_electrodes.tsv"), "w") do io
-        println(io, "name\tx\ty\tz")
-        _write_electrode_rows(io, df.label, df.x3, df.y3, df.z3)
+    if hasproperty(df, :inc) && hasproperty(df, :azi) && eltype(df.inc) <: Number && eltype(df.azi) <: Number
+        n = nrow(df)
+        xs = Vector{Float64}(undef, n)
+        ys = Vector{Float64}(undef, n)
+        zs = Vector{Float64}(undef, n)
+        @inbounds for i = 1:n
+            inc_i = Float64(df.inc[i])
+            azi_i = Float64(df.azi[i])
+            si = sind(inc_i)
+            xs[i] = si * cosd(azi_i)
+            ys[i] = si * sind(azi_i)
+            zs[i] = cosd(inc_i)
+        end
+        open(joinpath(dir, "$(prefix)_electrodes.tsv"), "w") do io
+            println(io, "name\tx\ty\tz")
+            _write_electrode_rows(io, df.label, xs, ys, zs)
+        end
+    else
+        _ensure_coordinates_3d!(layout)
+        open(joinpath(dir, "$(prefix)_electrodes.tsv"), "w") do io
+            println(io, "name\tx\ty\tz")
+            _write_electrode_rows(io, df.label, df.x3, df.y3, df.z3)
+        end
     end
 end
 
@@ -312,7 +382,7 @@ function _bids_write_coordsystem_json(dir::String, prefix::String)
     coord = OrderedDict{String,Any}(
         "EEGCoordinateSystem" => "Other",
         "EEGCoordinateUnits" => "n/a",
-        "EEGCoordinateSystemDescription" => "Spherical coordinates converted from inclination/azimuth via EegFun.jl polar_to_cartesian_xyz!",
+        "EEGCoordinateSystemDescription" => "Unit-sphere Cartesian coordinates converted from spherical inclination/azimuth",
     )
     _bids_write_json(joinpath(dir, "$(prefix)_coordsystem.json"), coord)
 end
@@ -356,7 +426,7 @@ function _bids_copy_derivatives(
     n_copied = 0
     for raw_file in raw_files
         base = basename_without_ext(raw_file)
-        sub_id = pmap[splitext(raw_file)[1]]
+        sub_id = pmap[base]
         sub_dir = joinpath(deriv_out, sub_id, "eeg")
         mkpath(sub_dir)
         bids_prefix = "$(sub_id)_task-$(task)"

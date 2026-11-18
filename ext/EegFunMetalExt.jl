@@ -14,7 +14,7 @@ function __init__()
         catch
             "Apple Silicon GPU"
         end
-        EegFun.register_gpu_backend!(:Metal, dev_name, Metal.MetalBackend(), _to_metal)
+        EegFun.register_gpu_backend!(:Metal, dev_name, Metal.MetalBackend(), _to_metal; supports_fft = false)
     end
 end
 

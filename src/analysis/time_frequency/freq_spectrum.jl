@@ -27,7 +27,7 @@ function _welch_channel_epochs!(
 end
 
 """
-    freq_spectrum(dat::EegData;
+    freq_spectrum(dat::Union{ContinuousData,ErpData,EpochData};
                   channel_selection=channels(),
                   window_size::Union{Int,Nothing}=nothing,
                   overlap::Real=0.5,
@@ -51,13 +51,14 @@ spectrum = freq_spectrum(epochs; channel_selection=channels(:Cz), window_size=20
 ```
 """
 function freq_spectrum(
-    dat::EegData;
+    dat::Union{ContinuousData,ErpData,EpochData};
     channel_selection = channels(),
     window_size::Union{Int,Nothing} = nothing,
     overlap::Real = 0.5,
     window_function::Function = DSP.hanning,
     max_freq::Union{Nothing,Real} = nothing,
 )
+    !isnothing(max_freq) && max_freq <= 0 && @minimal_error("`max_freq` must be positive, got $max_freq")
     selected_channels = get_selected_channels(dat, channel_selection; include_meta = false, include_extra = false)
     isempty(selected_channels) && @minimal_error("No channels selected. Available channels: $(channel_labels(dat))")
     (dat isa MultiDataFrameEeg && isempty(dat.data)) && @minimal_error("Cannot compute frequency spectrum on empty epoch data")
@@ -91,6 +92,7 @@ function freq_spectrum(
     full_freqs = collect(Float64, cfgs[1].freq)
     n_full = length(full_freqs)
     keep_len = isnothing(max_freq) ? n_full : something(findlast(<=(max_freq), full_freqs), 0)
+    keep_len == 0 && @minimal_error("No frequency bins <= `max_freq` ($max_freq Hz)")
     freqs_out = keep_len == n_full ? full_freqs : full_freqs[1:keep_len]
 
     ch_cols = Vector{Vector{Float64}}(undef, n_ch)

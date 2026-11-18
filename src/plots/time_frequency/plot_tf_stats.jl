@@ -146,7 +146,7 @@ function plot_tf_stats(
     if isnothing(figure_size)
         figure_size = if plot_layout.type === :single
             (800, 500)
-        elseif plot_layout.type === :topo
+        elseif plot_layout.type === :topo || (plot_layout.type === :custom && get(plot_layout.metadata, :custom_mode, :canvas) === :canvas)
             (1200, 1000)
         else
             n_rows, n_cols = plot_layout.dims
@@ -175,7 +175,7 @@ function plot_tf_stats(
             content == :power_a ? result.data[1].condition_name : result.data[2].condition_name
         header_text = isnothing(eff_plot_title) ? "$test_type Test — $content_label" : String(eff_plot_title)
         if !isempty(header_text)
-            if plot_layout.type === :grid
+            if plot_layout.type === :grid || (plot_layout.type === :custom && get(plot_layout.metadata, :custom_mode, :canvas) === :grid)
                 _, n_cols = plot_layout.dims
                 Label(fig[0, 1:n_cols], header_text, fontsize = 16, font = :bold)
             else

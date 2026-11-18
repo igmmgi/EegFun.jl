@@ -172,17 +172,16 @@ PrecompileTools.@compile_workload begin
             erp_fake2.condition = 2
             EegFun.condition_difference([erp[1], erp_fake2], [(1, 2)])
 
-            # 10. ERP Metrics
+            # 10. ERP Metrics & Grand / Jackknife average
             EegFun.gfp(erp[1])
             EegFun.global_dissimilarity(erp[1])
             EegFun.lrp(erp[1], erp_fake2; channel_selection = EegFun.channels([:C3, :C4]))
-            EegFun.jackknife_average([erp[1], erp_fake2])
 
-            # 11. Grand average (ERP & TF)
             erp_p1 = copy(erp[1])
             erp_p1.file = "p1"
             erp_p2 = copy(erp[1])
             erp_p2.file = "p2"
+            EegFun.jackknife_average([erp_p1, erp_p2])
             EegFun.grand_average([erp_p1, erp_p2])
 
             # 12. Time-frequency decomposition & operations

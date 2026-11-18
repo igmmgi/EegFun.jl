@@ -32,10 +32,14 @@ function tf_itc(tf::TimeFreqEpochData)::TimeFreqData
     n_trials = length(tf.data_phase)
     n_trials < 2 && @minimal_error("ITC requires at least 2 trials, got $n_trials")
     _is_itc(tf) && @minimal_error("Data are already ITC values")
+    if n_trials < 10
+        @minimal_warning "Small trial count ($n_trials < 10): ITC is positively biased at low trial counts (chance ≈ $(round(sqrt(pi / (4 * n_trials)); digits = 3)))."
+    end
 
     ref = tf.data_phase[1]
     n_rows = nrow(ref)
     all(df -> nrow(df) == n_rows, tf.data_phase) || @minimal_error("All trials must share the same time-frequency grid")
+    has_power = length(tf.data_power) == n_trials && all(df -> nrow(df) == n_rows, tf.data_power)
 
     itc_df = DataFrame(time = copy(ref.time), freq = copy(ref.freq))
     phase_df = DataFrame(time = copy(ref.time), freq = copy(ref.freq))
@@ -46,10 +50,24 @@ function tf_itc(tf::TimeFreqEpochData)::TimeFreqData
         all(isnan, ref[!, ch]) &&
             @minimal_error("tf_itc requires single-trial phase: rerun the decomposition with `return_trials = true, return_phase = true`")
         fill!(phasor_sum, 0.0im)
-        for df in tf.data_phase
-            col = df[!, ch]
-            @inbounds @simd for i in eachindex(phasor_sum, col)
-                phasor_sum[i] += cis(col[i])
+        for tr = 1:n_trials
+            pcol = tf.data_phase[tr][!, ch]
+            if has_power && hasproperty(tf.data_power[tr], ch)
+                pwcol = tf.data_power[tr][!, ch]
+                @inbounds for i in eachindex(phasor_sum, pcol, pwcol)
+                    ph = pcol[i]
+                    pw = pwcol[i]
+                    if isnan(ph) || isnan(pw)
+                        phasor_sum[i] = NaN + NaN * im
+                    elseif isfinite(ph) && isfinite(pw) && pw > 0.0
+                        phasor_sum[i] += cis(ph)
+                    end
+                end
+            else
+                @inbounds for i in eachindex(phasor_sum, pcol)
+                    ph = pcol[i]
+                    phasor_sum[i] += isnan(ph) ? (NaN + NaN * im) : cis(ph)
+                end
             end
         end
         itc_df[!, ch] = abs.(phasor_sum) .* inv_n

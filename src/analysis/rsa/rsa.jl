@@ -353,6 +353,9 @@ end
 function _prepare_and_validate_rsa(epochs::AbstractVector{<:EpochData}, channel_selection, sample_selection)
     isempty(epochs) && @minimal_error("Cannot perform RSA with empty epochs vector")
     length(epochs) < 2 && @minimal_error("Need at least 2 conditions for RSA, got $(length(epochs))")
+    any(ep -> n_epochs(ep) == 0, epochs) && @minimal_error("Cannot perform RSA on condition with 0 epochs")
+    _have_same_structure(epochs) ||
+        @minimal_error("Conditions have inconsistent structure (sample rate, samples, channels, or time vectors)")
 
     first_ep = epochs[1]
     selected_channels = get_selected_channels(first_ep, channel_selection; include_meta = false, include_extra = false)

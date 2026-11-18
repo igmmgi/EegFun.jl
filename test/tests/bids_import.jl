@@ -105,6 +105,11 @@ using CSV
             @test dat isa EegFun.ContinuousData
             @test EegFun.n_channels(dat) == 72
             @test all(col -> col in propertynames(dat.layout.data), [:label, :inc, :azi, :x2, :y2, :x3, :y3, :z3])
+            orig_lay = EegFun.read_layout(layout_file)
+            EegFun.polar_to_cartesian_xy!(orig_lay)
+            @test maximum(abs.(abs.(dat.layout.data.inc) .- abs.(orig_lay.data.inc))) < 1e-3
+            @test maximum(abs.(dat.layout.data.x2 .- orig_lay.data.x2)) < 1e-4
+            @test maximum(abs.(dat.layout.data.y2 .- orig_lay.data.y2)) < 1e-4
             @test :trigger in propertynames(dat.data)
             @test :trigger_info in propertynames(dat.data)
             @test count(!=(0), dat.data.trigger) > 0
@@ -125,6 +130,33 @@ using CSV
             samp2 = round(Int, 0.05 * EegFun.sample_rate(dat_run1)) + 1
             @test dat_run1.data.trigger[samp2] == 42
             @test dat_run1.data.trigger_info[samp2] == "cue"
+
+            # Categorical-only trial_type without numeric value column assigns distinct integer codes
+            cp(joinpath(eeg_dir, "sub-01_task-posner_eeg.bdf"), joinpath(eeg_dir, "sub-01_task-posner_acq-high_run-02_eeg.bdf"))
+            events_run02 = DataFrame(onset = [0.0, 0.05, 0.10], duration = [0, 0, 0], trial_type = ["target", "standard", "target"])
+            CSV.write(joinpath(eeg_dir, "sub-01_task-posner_acq-high_run-02_events.tsv"), events_run02; delim = '\t')
+            dat_run2 = EegFun.read_bids(bids_dir; subject = "01", task = "posner", run = 2)
+            s_t1 = 1
+            s_std = round(Int, 0.05 * EegFun.sample_rate(dat_run2)) + 1
+            s_t2 = round(Int, 0.10 * EegFun.sample_rate(dat_run2)) + 1
+            @test dat_run2.data.trigger[s_std] == 1
+            @test dat_run2.data.trigger[s_t1] == 2
+            @test dat_run2.data.trigger[s_t2] == 2
+        end
+
+        # BrainVision multi-file (.vhdr + .eeg + .vmrk) export_bids -> read_bids round-trip
+        bv_dir = joinpath(dirname(dirname(@__DIR__)), "resources", "data", "brainvision")
+        if isfile(joinpath(bv_dir, "example1.vhdr"))
+            mktempdir() do tmpbv
+                bids_bv = joinpath(tmpbv, "bids_bv")
+                EegFun.export_bids(task = "oddball", raw_dir = bv_dir, raw_pattern = "\\.vhdr\$", output_dir = bids_bv)
+                @test isfile(joinpath(bids_bv, "sub-01", "eeg", "sub-01_task-oddball_eeg.vhdr"))
+                @test isfile(joinpath(bids_bv, "sub-01", "eeg", "sub-01_task-oddball_eeg.eeg"))
+                @test isfile(joinpath(bids_bv, "sub-01", "eeg", "sub-01_task-oddball_eeg.vmrk"))
+                dat_bv = EegFun.read_bids(bids_bv; subject = "01", task = "oddball")
+                @test dat_bv isa EegFun.ContinuousData
+                @test EegFun.n_samples(dat_bv) > 0
+            end
         end
     end
 

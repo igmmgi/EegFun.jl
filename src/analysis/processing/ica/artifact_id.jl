@@ -1,15 +1,29 @@
 function _robust_z(x::AbstractVector{<:Real})
     n = length(x)
     n == 0 && return Float64[]
-    n == 1 && return [0.0]
-    med = median(x)
-    mad = median(abs.(x .- med))
+    out = zeros(Float64, n)
+    finite_vals = Float64[Float64(v) for v in x if isfinite(v)]
+    length(finite_vals) < 2 && return out
+
+    med = median(finite_vals)
+    mad = median(abs.(finite_vals .- med))
     s = 1.482602218505602 * mad
     if s > eps(Float64)
-        return (x .- med) ./ s
+        @inbounds for i = 1:n
+            v = Float64(x[i])
+            out[i] = isfinite(v) ? (v - med) / s : 0.0
+        end
+        return out
     end
-    s_std = std(x)
-    return s_std > eps(Float64) ? (x .- mean(x)) ./ s_std : zeros(Float64, n)
+    s_std = std(finite_vals)
+    if s_std > eps(Float64)
+        m = mean(finite_vals)
+        @inbounds for i = 1:n
+            v = Float64(x[i])
+            out[i] = isfinite(v) ? (v - m) / s_std : 0.0
+        end
+    end
+    return out
 end
 
 function _zscore_for_remaining(corr_vector::AbstractVector{<:Real}, remaining_indices::AbstractVector{Int})
@@ -24,7 +38,12 @@ end
 
 function _calculate_eog_correlations(components_t::Matrix{Float64}, eog_signal::AbstractVector{<:Real})
     n_components = size(components_t, 2)
-    return [abs(cor(view(components_t, :, comp_idx), eog_signal)) for comp_idx = 1:n_components]
+    out = Vector{Float64}(undef, n_components)
+    for comp_idx = 1:n_components
+        c = abs(cor(view(components_t, :, comp_idx), eog_signal))
+        out[comp_idx] = isfinite(c) ? c : 0.0
+    end
+    return out
 end
 
 function _calculate_spatial_correlations(
@@ -41,7 +60,7 @@ function _calculate_spatial_correlations(
         max_corr = 0.0
         for primary_comp in primary_components
             c = abs(cor(comp_topo, view(mixing_matrix, :, primary_comp)))
-            c > max_corr && (max_corr = c)
+            (isfinite(c) && c > max_corr) && (max_corr = c)
         end
         spatial_corrs[comp_idx] = max_corr
     end

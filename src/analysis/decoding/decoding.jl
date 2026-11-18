@@ -546,6 +546,9 @@ function decode_libsvm(
     n_iterations < 1 && @minimal_error("n_iterations must be >= 1, got $n_iterations")
     n_folds < 2 && @minimal_error("Need at least 2 folds for cross-validation, got $n_folds")
     cost <= 0 && @minimal_error("SVM cost parameter must be positive, got $cost")
+    any(ep -> n_epochs(ep) == 0, epochs) && @minimal_error("Cannot decode condition with 0 epochs")
+    _have_same_structure(epochs) ||
+        @minimal_error("Conditions have inconsistent structure (sample rate, samples, channels, times, or frequencies)")
 
     first_ep = epochs[1]
     selected_channels = get_selected_channels(first_ep, channel_selection; include_meta = false, include_extra = false)

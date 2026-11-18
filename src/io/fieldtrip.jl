@@ -63,6 +63,72 @@ function _extract_time_vector(time_data)::Vector{Float64}
     return raw isa Vector{Float64} ? raw : [Float64(x) for x in raw]
 end
 
+_as_ft_vec(x) = x isa AbstractArray ? vec(x) : Any[x]
+
+function _set_ft_event!(trigger_vec::Vector{Int}, trigger_info_vec::Vector{String}, n_timepoints::Int, raw_sample, raw_val, raw_typ)
+    s_raw = raw_sample isa AbstractArray ? (isempty(raw_sample) ? nothing : first(raw_sample)) : raw_sample
+    (s_raw isa Number && isfinite(s_raw)) || return nothing
+    s = round(Int, s_raw)
+    (1 <= s <= n_timepoints) || return nothing
+
+    if !isnothing(raw_val)
+        v = raw_val isa AbstractArray ? (isempty(raw_val) ? nothing : first(raw_val)) : raw_val
+        if v isa Number && isfinite(v)
+            trigger_vec[s] = round(Int, v)
+        elseif v isa AbstractString
+            code = _parse_marker_code(v)
+            code != 0 && (trigger_vec[s] = code)
+        end
+    end
+
+    if !isnothing(raw_typ)
+        trigger_info_vec[s] = raw_typ isa AbstractArray ? (isempty(raw_typ) ? "" : string(first(raw_typ))) : string(raw_typ)
+    end
+    return nothing
+end
+
+function _extract_ft_events!(trigger_vec::Vector{Int}, trigger_info_vec::Vector{String}, events, n_timepoints::Int)
+    if events isa AbstractDict
+        haskey(events, "sample") || return nothing
+        samples = _as_ft_vec(events["sample"])
+        @info "Extracting $(length(samples)) events from cfg.event"
+        vals = haskey(events, "value") ? _as_ft_vec(events["value"]) : nothing
+        types = haskey(events, "type") ? _as_ft_vec(events["type"]) : nothing
+        for i in eachindex(samples)
+            val = (!isnothing(vals) && i <= length(vals)) ? vals[i] : nothing
+            typ = (!isnothing(types) && i <= length(types)) ? types[i] : nothing
+            _set_ft_event!(trigger_vec, trigger_info_vec, n_timepoints, samples[i], val, typ)
+        end
+    elseif events isa AbstractArray
+        @info "Extracting $(length(events)) events from cfg.event"
+        for ev in events
+            ev isa AbstractDict || continue
+            _set_ft_event!(
+                trigger_vec,
+                trigger_info_vec,
+                n_timepoints,
+                get(ev, "sample", nothing),
+                get(ev, "value", nothing),
+                get(ev, "type", nothing),
+            )
+        end
+    elseif hasproperty(events, :names) && hasproperty(events, :values)
+        sample_idx = findfirst(==("sample"), events.names)
+        isnothing(sample_idx) && return nothing
+        samples = _as_ft_vec(events.values[sample_idx])
+        value_idx = findfirst(==("value"), events.names)
+        type_idx = findfirst(==("type"), events.names)
+        vals = !isnothing(value_idx) ? _as_ft_vec(events.values[value_idx]) : nothing
+        types = !isnothing(type_idx) ? _as_ft_vec(events.values[type_idx]) : nothing
+        for i in eachindex(samples)
+            val = (!isnothing(vals) && i <= length(vals)) ? vals[i] : nothing
+            typ = (!isnothing(types) && i <= length(types)) ? types[i] : nothing
+            _set_ft_event!(trigger_vec, trigger_info_vec, n_timepoints, samples[i], val, typ)
+        end
+    end
+    return nothing
+end
+
 function _fieldtrip_to_continuousdata(ft::AbstractDict, filepath::String, layout::Layout, sample_rate::Int)
     ch_names = _extract_ft_channel_names(vec(ft["label"]))
     data_matrix = ft["trial"][1]
@@ -77,34 +143,7 @@ function _fieldtrip_to_continuousdata(ft::AbstractDict, filepath::String, layout
     trigger_info_vec = fill("", n_timepoints)
 
     if haskey(ft, "cfg") && ft["cfg"] isa AbstractDict && haskey(ft["cfg"], "event") && !isempty(ft["cfg"]["event"])
-        events = ft["cfg"]["event"]
-        sample_idx = findfirst(==("sample"), events.names)
-        value_idx = findfirst(==("value"), events.names)
-        type_idx = findfirst(==("type"), events.names)
-
-        if !isnothing(sample_idx)
-            samples = events.values[sample_idx]
-            @info "Extracting $(length(samples)) events from cfg.event"
-            vals = !isnothing(value_idx) ? events.values[value_idx] : nothing
-            types = !isnothing(type_idx) ? events.values[type_idx] : nothing
-
-            for i in eachindex(samples)
-                s = round(Int, samples[i])
-                (1 <= s <= n_timepoints) || continue
-                if !isnothing(vals) && i <= length(vals)
-                    val = vals[i]
-                    if val isa AbstractArray
-                        !isempty(val) && (trigger_vec[s] = Int(first(val)))
-                    elseif !isnan(val)
-                        trigger_vec[s] = Int(val)
-                    end
-                end
-                if !isnothing(types) && i <= length(types)
-                    typ = types[i]
-                    trigger_info_vec[s] = typ isa AbstractArray ? (isempty(typ) ? "" : string(first(typ))) : string(typ)
-                end
-            end
-        end
+        _extract_ft_events!(trigger_vec, trigger_info_vec, ft["cfg"]["event"], n_timepoints)
     end
 
     cols = Vector{AbstractVector}(undef, 4 + n_channels)
@@ -121,10 +160,11 @@ function _fieldtrip_to_continuousdata(ft::AbstractDict, filepath::String, layout
 end
 
 function _fieldtrip_to_epochdata(ft::AbstractDict, filepath::String, layout::Layout, sample_rate::Int)
-    ch_names = [Symbol(c) for c in vec(ft["label"])]
+    ch_names = _extract_ft_channel_names(vec(ft["label"]))
     trials = ft["trial"]
     n_trials = length(trials)
-    n_channels, n_timepoints = size(trials[1])
+    n_channels = length(ch_names)
+    n_timepoints = size(trials[1], 2)
     @info "Data: $n_channels channels × $n_timepoints timepoints × $n_trials trials"
 
     times = _extract_time_vector(ft["time"])

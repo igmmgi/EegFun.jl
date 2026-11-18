@@ -235,6 +235,7 @@ Return the number of epochs (`1` for continuous/spectrum/TF-average, `dat.n_epoc
 """
 n_epochs(dat::SingleDataFrameEeg)::Int = 1
 n_epochs(dat::MultiDataFrameEeg)::Int = length(dat.data)
+n_epochs(dat::TimeFreqEpochData)::Int = length(dat.data_power)
 n_epochs(dat::ErpData)::Int = dat.n_epochs
 
 """
@@ -291,6 +292,14 @@ function _have_same_structure(dat1::EegData, dat2::EegData)::Bool
     if (isempty(time1) != isempty(time2)) || (!isempty(time1) && (length(time1) != length(time2) || !isapprox(time1, time2)))
         @minimal_error("Time vectors do not match: $desc1 vs. $desc2")
         return false
+    end
+    if dat1 isa Union{TimeFreqData,TimeFreqEpochData,SpectrumData} && dat2 isa Union{TimeFreqData,TimeFreqEpochData,SpectrumData}
+        freq1 = frequency_vector(dat1)
+        freq2 = frequency_vector(dat2)
+        if (isempty(freq1) != isempty(freq2)) || (!isempty(freq1) && (length(freq1) != length(freq2) || !isapprox(freq1, freq2)))
+            @minimal_error("Frequency vectors do not match: $desc1 vs. $desc2")
+            return false
+        end
     end
     return true
 end

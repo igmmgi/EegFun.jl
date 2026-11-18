@@ -103,6 +103,36 @@ get_rejected(info::AbstractVector{<:EpochRejectionInfo}) = get_rejected.(info)
     return mn, mx, ab, var(v), kurtosis(v)
 end
 
+function _finite_zscore(x::Vector{Float64})
+    n = length(x)
+    zs = zeros(Float64, n)
+    cnt = 0
+    s = 0.0
+    @inbounds for v in x
+        if isfinite(v)
+            s += v
+            cnt += 1
+        end
+    end
+    cnt < 2 && return zs
+    m = s / cnt
+    ssq = 0.0
+    @inbounds for v in x
+        if isfinite(v)
+            d = v - m
+            ssq += d * d
+        end
+    end
+    sd = sqrt(ssq / (cnt - 1))
+    sd <= eps(Float64) && return zs
+    inv_sd = 1.0 / sd
+    @inbounds for i = 1:n
+        v = x[i]
+        zs[i] = isfinite(v) ? (v - m) * inv_sd : 0.0
+    end
+    return zs
+end
+
 function _calculate_epoch_metrics(
     dat::EpochData,
     selected_channels::AbstractVector{Symbol},
@@ -156,7 +186,7 @@ function _calculate_epoch_metrics(
 
         if compute_z
             for (mi, stat_vec) in enumerate((variances, max_vals, min_vals, abs_vals, ranges, kurtoses))
-                zs = zscore(stat_vec)
+                zs = _finite_zscore(stat_vec)
                 out = z_viol[mi, ci]
                 @inbounds for e = 1:n_ep
                     abs(zs[e]) > z_criterion && push!(out, e)

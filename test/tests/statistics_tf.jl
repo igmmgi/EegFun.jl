@@ -902,6 +902,30 @@ end
         @test res_ind isa EegFun.TFClusterPermutationResult
         @test res_ind.test_info.alpha == 0.02
         @test res_ind.test_info.cluster_info.cluster_alpha == 0.05
+
+        # ITC baseline_method auto-defaults to :absolute (preserving zeros without NaN)
+        itc_tfs = _build_tf_test_data(
+            n_participants = 4,
+            n_channels = 2,
+            frequencies = [4.0, 8.0],
+            time_points = [-0.2, -0.1, 0.1, 0.2],
+            offset_cond1 = 0.4,
+            offset_cond2 = 0.1,
+            noise = 0.01,
+        )
+        for tf in itc_tfs
+            tf.method = :wavelet_itc
+            tf.data_power.Ch1[end] = 0.0
+        end
+        prep_itc = EegFun.prepare_stats(itc_tfs; design = :paired, baseline_interval = (-0.2, -0.1))
+        @test prep_itc.data[1].baseline.method == :absolute
+        @test all(isfinite, prep_itc.analysis.data[1])
+
+        # Frequency vector mismatch across TF objects is caught by _have_same_structure
+        tfs_bad_freq = _build_tf_test_data(n_participants = 3, frequencies = [4.0, 8.0])
+        tfs_bad_freq[end] =
+            EegFun.create_test_tf_data(file = "participant3", condition = 2, condition_name = "cond_2", frequencies = [10.0, 20.0])
+        @test_throws EegFun.EegFunError EegFun.prepare_stats(tfs_bad_freq; design = :paired)
     end
 
 

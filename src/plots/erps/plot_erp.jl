@@ -452,7 +452,7 @@ function _plot_erp_core(
             right_click_handler = (sel, mouse_x, data) -> _handle_erp_right_click!(sel, mouse_x, data, condition_checked_ref)
             _setup_unified_selection!(fig, axes, selection_state, dat_subset, right_click_handler)
 
-            if plot_layout.type in (:topo, :grid)
+            if plot_layout.type in (:topo, :grid, :custom)
                 channel_rc_handler = (selected_chs, data) -> _show_channel_average_menu!(selected_chs, data, condition_checked_ref)
                 _setup_channel_selection_events!(
                     fig,

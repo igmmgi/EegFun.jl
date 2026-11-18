@@ -241,6 +241,26 @@ using DataFrames
         # Test custom grid dimensions via grid_dims parameter
         fig, axes = EegFun.plot_erp(erp_data, layout = :grid, layout_kwargs = (; grid_dims = (2, 2)), display_plot = false)
         @test length(axes) == 3
+
+        # Test create_custom_layout in both integer (row, col) grid mode and float (x, y) canvas mode
+        custom_grid = EegFun.create_custom_layout([(1, 1), (1, 3), (2, 2)], [:Ch1, :Ch2, :Ch3])
+        @test custom_grid.type == :custom
+        @test custom_grid.dims == [2, 3]
+        res_cg = EegFun.plot_erp(erp_data, layout = custom_grid, display_plot = false)
+        @test length(res_cg.axes) == 3
+        @test res_cg.axes[1].ylabel[] != ""
+        @test res_cg.axes[2].ylabel[] == ""
+        @test res_cg.axes[1].xlabel[] == ""
+        @test res_cg.axes[3].xlabel[] != ""
+
+        custom_canvas = EegFun.create_custom_layout([(0.2, 0.8), (0.8, 0.8), (0.5, 0.2)], [:Ch1, :Ch2, :Ch3])
+        @test custom_canvas.type == :custom
+        res_cc = EegFun.plot_erp(erp_data, layout = custom_canvas, display_plot = false)
+        @test length(res_cc.axes) == 3
+
+        ep_data = EegFun.create_test_epoch_data(n = 50, n_epochs = 3, n_channels = 3)
+        res_ep_cg = EegFun.plot_epochs(ep_data; layout = custom_grid, display_plot = false)
+        @test length(res_ep_cg.axes) == 3
     end
 end
 

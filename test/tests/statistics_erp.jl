@@ -973,6 +973,23 @@ end
         # Bonferroni NaN p-values are never marked significant even when t > 0
         mask_nan = EegFun._apply_bonferroni_correction([NaN, 0.001], 0.05, [5.0, 5.0])
         @test mask_nan == [false, true]
+
+        # Named condition_selection, reversed order, out-of-order paired participants, and 1-participant guard
+        erps_named = _build_erp_test_data(n_participants = 4, offset_cond1 = 3.0, offset_cond2 = 0.0, noise = 0.01)
+        prep_rev =
+            EegFun.prepare_stats(erps_named; design = :paired, condition_selection = EegFun.conditions(["condition_2", "condition_1"]))
+        @test prep_rev.data[1].condition == 2
+        @test prep_rev.data[2].condition == 1
+
+        c1_only = filter(x -> x.condition == 1, erps_named)
+        c2_shuffled = reverse(filter(x -> x.condition == 2, erps_named))
+        prep_aligned = EegFun.prepare_stats(vcat(c1_only, c2_shuffled); design = :paired)
+        prep_orig = EegFun.prepare_stats(erps_named; design = :paired)
+        @test prep_aligned.analysis.data[1] ≈ prep_orig.analysis.data[1]
+        @test prep_aligned.analysis.data[2] ≈ prep_orig.analysis.data[2]
+
+        erps_1p = _build_erp_test_data(n_participants = 1)
+        @test_throws EegFun.EegFunError EegFun.prepare_stats(erps_1p; design = :paired)
     end
 
 end # @testset "ERP Statistics"

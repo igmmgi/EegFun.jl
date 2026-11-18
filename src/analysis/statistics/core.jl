@@ -2,11 +2,13 @@
 
 function _select_two_conditions(items::AbstractVector, design::Symbol, condition_selection, label::String)
     design ∈ (:paired, :independent) || @minimal_error "design must be :paired or :independent, got :$design"
+    isempty(items) && @minimal_error "Cannot prepare stats from empty $label"
 
     by_cond = group_by_condition(items)
     all_cond_nums = collect(keys(by_cond))
-    cond_func = _to_condition_func(condition_selection)
-    selected_cond_nums = all_cond_nums[cond_func(1:length(all_cond_nums))]
+    rep_items = [first(by_cond[num]) for num in all_cond_nums]
+    selected_indices = _select_conditions_by_field(rep_items, condition_selection)
+    selected_cond_nums = all_cond_nums[selected_indices]
 
     length(selected_cond_nums) == 2 ||
         @minimal_error "Statistical tests require exactly 2 conditions, got $(length(selected_cond_nums)): $selected_cond_nums. Use condition_selection to select exactly 2 conditions."
@@ -18,7 +20,16 @@ function _select_two_conditions(items::AbstractVector, design::Symbol, condition
     vps2 = [_extract_participant_id(basename(d.file)) for d in cond2]
 
     if design == :paired
-        vps1 == vps2 || @minimal_error "Paired design requires same participants in both conditions"
+        (length(cond1) >= 2 && length(cond2) >= 2) ||
+            @minimal_error "Paired design requires at least 2 participants per condition, got ($(length(cond1)), $(length(cond2)))"
+        if vps1 != vps2
+            if length(vps1) == length(vps2) && allunique(vps1) && allunique(vps2) && Set(vps1) == Set(vps2)
+                perm = Int[findfirst(==(vp), vps2) for vp in vps1]
+                cond2 = cond2[perm]
+            else
+                @minimal_error "Paired design requires same participants in both conditions"
+            end
+        end
     else
         (length(vps1) >= 2 && length(vps2) >= 2) || @minimal_error "Independent design requires at least 2 participants per group"
     end

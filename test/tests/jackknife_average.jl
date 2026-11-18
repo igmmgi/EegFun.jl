@@ -464,6 +464,47 @@ using DataFrames
         end
     end
 
+    @testset "In-memory multi-condition grouping and condition_selection" begin
+        p1_c1 = EegFun.create_test_erp_data(participant = 1, condition = 1, n_channels = 2)
+        p2_c1 = EegFun.create_test_erp_data(participant = 2, condition = 1, n_channels = 2)
+        p3_c1 = EegFun.create_test_erp_data(participant = 3, condition = 1, n_channels = 2)
+        p1_c2 = EegFun.create_test_erp_data(participant = 1, condition = 2, n_channels = 2)
+        p2_c2 = EegFun.create_test_erp_data(participant = 2, condition = 2, n_channels = 2)
+        p3_c2 = EegFun.create_test_erp_data(participant = 3, condition = 2, n_channels = 2)
+
+        p1_c1.condition_name = "cond_1"
+        p2_c1.condition_name = "cond_1"
+        p3_c1.condition_name = "cond_1"
+        p1_c2.condition_name = "cond_2"
+        p2_c2.condition_name = "cond_2"
+        p3_c2.condition_name = "cond_2"
+
+        p1_c1.data.Ch1 .= 10.0
+        p2_c1.data.Ch1 .= 20.0
+        p3_c1.data.Ch1 .= 30.0
+        p1_c2.data.Ch1 .= 1000.0
+        p2_c2.data.Ch1 .= 2000.0
+        p3_c2.data.Ch1 .= 3000.0
+
+        multi_erps = [p1_c1, p1_c2, p2_c1, p2_c2, p3_c1, p3_c2]
+        jk_all = EegFun.jackknife_average(multi_erps)
+        @test length(jk_all) == 6
+        jk_c1 = filter(x -> x.condition == 1, jk_all)
+        jk_c2 = filter(x -> x.condition == 2, jk_all)
+        @test length(jk_c1) == 3 && length(jk_c2) == 3
+        @test jk_c1[1].data.Ch1[1] ≈ 25.0 atol = 1e-10
+        @test jk_c2[1].data.Ch1[1] ≈ 2500.0 atol = 1e-10
+
+        jk_sel2 = EegFun.jackknife_average(multi_erps; condition_selection = EegFun.conditions(2))
+        @test length(jk_sel2) == 3
+        @test all(x -> x.condition == 2, jk_sel2)
+        @test jk_sel2[1].data.Ch1[1] ≈ 2500.0 atol = 1e-10
+
+        jk_named = EegFun.jackknife_average(multi_erps; condition_selection = EegFun.conditions("cond_2"))
+        @test length(jk_named) == 3
+        @test jk_named[2].data.Ch1[1] ≈ 2000.0 atol = 1e-10
+    end
+
     # Cleanup
     rm(test_dir, recursive = true)
 end

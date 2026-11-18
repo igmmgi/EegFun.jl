@@ -80,4 +80,11 @@ using DataFrames
     spec_rect = EegFun.freq_spectrum(ep_step; window_size = 128, window_function = ones)
     high_freq_bins = spec_rect.data.freq .>= 10.0
     @test maximum(spec_rect.data.Ch1[high_freq_bins]) < 1e-20
+
+    # 7. Type-domain restriction and max_freq > 0 validation
+    @test_throws EegFun.EegFunError EegFun.freq_spectrum(c_dat; max_freq = 0.0)
+    @test_throws EegFun.EegFunError EegFun.freq_spectrum(c_dat; max_freq = -5.0)
+    @test_throws MethodError EegFun.freq_spectrum(spec_rect)
+    tf_dummy = EegFun.create_test_tf_data()
+    @test_throws MethodError EegFun.freq_spectrum(tf_dummy)
 end
