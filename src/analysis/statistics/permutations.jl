@@ -16,7 +16,7 @@ function _draw_permutation_plan(rng::AbstractRNG, design::Symbol, n_A::Int, n_B:
         end
         return plan
     end
-    error("Unknown design: $design (expected :paired or :independent)")
+    @minimal_error("Unknown design: $design (expected :paired or :independent)")
 end
 
 _draw_permutation_plan(rng::AbstractRNG, prepared, n_permutations::Int) = _draw_permutation_plan(
@@ -649,9 +649,9 @@ function _permute_global!(perm_matrix::Matrix{Int}, n_perms::Int, rng::AbstractR
 end
 
 """
-    generate_permutation_matrix(df, block_col; sync_col = nothing, n_perms = 1000, type = :within, rng = Random.default_rng())
+    generate_permutation_matrix(df, block_col; sync_col = nothing, n_permutations = 1000, type = :within, rng = Random.default_rng())
 
-Generate an `N × n_perms` permutation matrix of integer row indices for Monte Carlo / permutation tests.
+Generate an `N × n_permutations` permutation matrix of integer row indices for Monte Carlo / permutation tests.
 
 # Arguments
 - `df`: A `DataFrame` containing the experimental design / trial metadata.
@@ -659,25 +659,27 @@ Generate an `N × n_perms` permutation matrix of integer row indices for Monte C
 
 # Keyword Arguments
 - `sync_col = nothing`: Column identifier to synchronize across for balanced crossed designs.
-- `n_perms = 1000`: Number of permutations to generate.
+- `n_permutations = 1000`: Number of permutations to generate.
 - `type = :within`: `:within` (shuffle within blocks), `:synchronized` (synchronized shuffle across `sync_col`), or `:global`.
 - `rng = Random.default_rng()`: Random number generator for reproducibility.
 
 # Returns
-- `Matrix{Int}`: An `N × n_perms` matrix where each column is a valid permutation of `1:N`.
+- `Matrix{Int}`: An `N × n_permutations` matrix where each column is a valid permutation of `1:N`.
 """
 function generate_permutation_matrix(
     df,
     block_col;
     sync_col = nothing,
-    n_perms = 1000,
+    n_permutations::Int = 1000,
+    n_perms::Union{Nothing,Int} = nothing,
     type = :within,
     rng::AbstractRNG = Random.default_rng(),
 )
+    eff_n_perms = isnothing(n_perms) ? n_permutations : n_perms
     N = nrow(df)
-    n_perms <= 0 && return zeros(Int, N, 0)
+    eff_n_perms <= 0 && return zeros(Int, N, 0)
 
-    perm_matrix = zeros(Int, N, n_perms)
+    perm_matrix = zeros(Int, N, eff_n_perms)
     b_col = Symbol(block_col)
     hasproperty(df, b_col) || @minimal_error("Column '$b_col' not found in DataFrame. Available columns: $(names(df))")
     blocks = df[!, b_col]
@@ -686,7 +688,7 @@ function generate_permutation_matrix(
 
     if type == :within
         block_idxs = [findall(==(b), blocks) for b in unique_blocks]
-        _permute_within!(perm_matrix, block_idxs, n_perms, rng)
+        _permute_within!(perm_matrix, block_idxs, eff_n_perms, rng)
     elseif type == :synchronized
         isnothing(sync_col) && @minimal_error("Synchronized shuffling requires `sync_col` (e.g. sync_col=:Subject, block_col=:Item).")
         s_col = Symbol(sync_col)
@@ -710,9 +712,9 @@ function generate_permutation_matrix(
             )
         end
 
-        _permute_synchronized!(perm_matrix, grid, cell_len, n_perms, rng)
+        _permute_synchronized!(perm_matrix, grid, cell_len, eff_n_perms, rng)
     elseif type == :global
-        _permute_global!(perm_matrix, n_perms, rng)
+        _permute_global!(perm_matrix, eff_n_perms, rng)
     else
         @minimal_error("Unknown permutation type: $type. Supported types: :within, :synchronized, :global")
     end

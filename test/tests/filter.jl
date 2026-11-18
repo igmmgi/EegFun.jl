@@ -575,6 +575,14 @@ end
             @test !isfile(joinpath(output_dir, "2_erps.jld2"))  # Participant 2 not processed
         end
 
+        @testset "Unwrapped phase_delay in get_filter_characteristics" begin
+            # High-order linear-phase FIR filter wraps phase multiple times across passband;
+            # unwrapped phase_delay in samples/rad must equal group_delay (~ (N-1)/2 samples)
+            fi_fir = EegFun.create_lowpass_filter(40.0, 1000.0; filter_method = :fir, order = 201)
+            chars = EegFun.get_filter_characteristics(fi_fir; filter_func = :filt)
+            @test isapprox(chars.phase_delay, chars.group_delay; rtol = 0.05)
+        end
+
     finally
         # Clean up
         rm(test_dir, recursive = true, force = true)

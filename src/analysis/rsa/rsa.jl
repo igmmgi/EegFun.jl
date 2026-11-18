@@ -748,7 +748,7 @@ end
         rsa_data::RsaData,
         model_rdms::AbstractVector;
         model_names::Union{Vector{String},Nothing} = nothing,
-        correlation_type::Symbol = :spearman,
+        correlation_method::Symbol = :spearman,
         n_permutations::Int = 1000,
         tail::Symbol = :right,
         rng::AbstractRNG = Random.default_rng(),
@@ -761,12 +761,14 @@ function compare_models!(
     rsa_data::RsaData,
     model_rdms::AbstractVector;
     model_names::Union{Vector{String},Nothing} = nothing,
-    correlation_type::Symbol = :spearman,
+    correlation_method::Symbol = :spearman,
+    correlation_type::Union{Nothing,Symbol} = nothing,
     n_permutations::Int = 1000,
     tail::Symbol = :right,
     rng::AbstractRNG = Random.default_rng(),
 )
-    correlation_type in (:spearman, :pearson) || @minimal_error("Unknown correlation type: $correlation_type. Use :spearman or :pearson")
+    corr_method = isnothing(correlation_type) ? correlation_method : correlation_type
+    corr_method in (:spearman, :pearson) || @minimal_error("Unknown correlation method: $corr_method. Use :spearman or :pearson")
     tail in (:right, :left, :both) || @minimal_error("Unknown tail: $tail. Use :right, :left, or :both")
     n_permutations < 0 && @minimal_error("n_permutations must be >= 0, got $n_permutations")
 
@@ -784,7 +786,7 @@ function compare_models!(
     end
 
     correlations, p_values =
-        _compute_model_correlations(rsa_data, model_rdms, is_temporal, correlation_type, n_permutations; tail = tail, rng = rng)
+        _compute_model_correlations(rsa_data, model_rdms, is_temporal, corr_method, n_permutations; tail = tail, rng = rng)
 
     rsa_data.model_correlations = correlations
     rsa_data.model_names = resolved_names
@@ -797,7 +799,7 @@ end
         rsa_data::RsaData,
         model_rdms::AbstractVector;
         model_names::Union{Vector{String},Nothing} = nothing,
-        correlation_type::Symbol = :spearman,
+        correlation_method::Symbol = :spearman,
         n_permutations::Int = 1000,
         tail::Symbol = :right,
         rng::AbstractRNG = Random.default_rng(),
@@ -811,7 +813,8 @@ function compare_models(
     rsa_data::RsaData,
     model_rdms::AbstractVector;
     model_names::Union{Vector{String},Nothing} = nothing,
-    correlation_type::Symbol = :spearman,
+    correlation_method::Symbol = :spearman,
+    correlation_type::Union{Nothing,Symbol} = nothing,
     n_permutations::Int = 1000,
     tail::Symbol = :right,
     rng::AbstractRNG = Random.default_rng(),
@@ -820,6 +823,7 @@ function compare_models(
         copy(rsa_data),
         model_rdms;
         model_names = model_names,
+        correlation_method = correlation_method,
         correlation_type = correlation_type,
         n_permutations = n_permutations,
         tail = tail,

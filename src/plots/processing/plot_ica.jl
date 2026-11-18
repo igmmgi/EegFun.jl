@@ -463,6 +463,7 @@ function plot_ica_component_activation(dat::ContinuousData, ica::InfoIca; artifa
 
     component_selection = pop!(plot_kwargs, :component_selection)
     selected_components = findall(component_selection(1:length(ica.ica_label)))
+    isempty(selected_components) && @minimal_error("No ICA components matched component_selection")
     n_visible_components = min(length(selected_components), 10)
     window_size = min(2000, n_samples(dat))
     method = pop!(plot_kwargs, :method)
@@ -601,7 +602,7 @@ end
 function _create_component_activation_plots!(fig, state::IcaComponentState)
     state.fig = fig
     n_total = size(state.component_data, 1)
-    num_plots = length(state.components) == n_total ? state.n_visible_components : length(state.components)
+    num_plots = state.n_visible_components
 
     valid_comps = Int[]
     comp_to_k = Dict{Int,Int}()
@@ -726,8 +727,8 @@ function _add_navigation_controls!(fig, state)
         _update_components!(state)
     end
     on(next_topo.clicks) do _
-        state.comp_start[] =
-            min(size(state.component_data, 1) - state.n_visible_components + 1, state.comp_start[] + state.n_visible_components)
+        max_start = max(1, length(state.components) - state.n_visible_components + 1)
+        state.comp_start[] = min(max_start, state.comp_start[] + state.n_visible_components)
         _update_components!(state)
     end
     on(apply_button.clicks) do _
@@ -914,8 +915,7 @@ function _setup_keyboard_interactions!(fig, state)
                         _yless!.(state.axs, zoom_step)
                     end
                     state.ylims[] = state.axs[1].yaxis.attributes.limits[]
-                    num_plots =
-                        length(state.components) == size(state.component_data, 1) ? state.n_visible_components : length(state.components)
+                    num_plots = state.n_visible_components
                     for i = 1:num_plots
                         comp_idx = _get_component_index(state, i)
                         if comp_idx <= size(state.component_data, 1)
@@ -927,11 +927,12 @@ function _setup_keyboard_interactions!(fig, state)
                     state.channel_yscale[] = event.key == Keyboard.up ? state.channel_yscale[] * 1.1 : state.channel_yscale[] / 1.1
                 end
             elseif event.key == Keyboard.page_up || event.key == Keyboard.page_down
-                if length(state.components) == size(state.component_data, 1)
+                if length(state.components) > state.n_visible_components
                     current_start = state.comp_start[]
+                    max_start = max(1, length(state.components) - state.n_visible_components + 1)
                     new_start =
                         event.key == Keyboard.page_up ? max(1, current_start - state.n_visible_components) :
-                        min(size(state.component_data, 1) - state.n_visible_components + 1, current_start + state.n_visible_components)
+                        min(max_start, current_start + state.n_visible_components)
                     if new_start != current_start
                         state.comp_start[] = new_start
                         _update_components!(state)
@@ -944,7 +945,7 @@ end
 
 function _update_components!(state)
     n_total = size(state.component_data, 1)
-    num_plots = length(state.components) == n_total ? state.n_visible_components : length(state.components)
+    num_plots = state.n_visible_components
 
     valid_comp_indices = Int[]
     plot_indices = Int[]
@@ -1001,8 +1002,10 @@ function _update_components!(state)
     end
 end
 
-_get_component_index(state, i::Int) =
-    length(state.components) == size(state.component_data, 1) ? (state.comp_start[] + i - 1) : state.components[i]
+function _get_component_index(state, i::Int)
+    idx = state.comp_start[] + i - 1
+    return idx <= length(state.components) ? state.components[idx] : typemax(Int)
+end
 
 const PLOT_ICA_QUALITY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :display_plot => (true, "Whether to display the plot"),

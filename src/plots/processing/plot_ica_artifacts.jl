@@ -226,41 +226,9 @@ function plot_ecg_component_features(identified_comps::AbstractVector{<:Integer}
     vlines!(ax2, [60, 100], color = (:green, 0.5), linestyle = thresh_style)
 
     min_peak_ratio = Float64(plot_kwargs[:min_peak_ratio])
-    max_std = 0.12
+    max_std = Float64(plot_kwargs[:max_ibi_std_s])
     min_hr = 40
     max_hr = 120
-
-    if !isempty(is_ecg)
-        pr_min = Inf
-        std_max = -Inf
-        hr_min = Inf
-        hr_max = -Inf
-        has_ecg_rows = false
-        has_hr = false
-        @inbounds for i = 1:n
-            if Int(comps_col[i]) in is_ecg
-                has_ecg_rows = true
-                pr = Float64(peak_ratio[i])
-                sd = Float64(std_ibi[i])
-                pr < pr_min && (pr_min = pr)
-                sd > std_max && (std_max = sd)
-                hr = hr_bpm[i]
-                if !isnan(hr)
-                    hr < hr_min && (hr_min = hr)
-                    hr > hr_max && (hr_max = hr)
-                    has_hr = true
-                end
-            end
-        end
-        if has_ecg_rows
-            min_peak_ratio = pr_min
-            max_std = std_max
-        end
-        if has_hr
-            min_hr = floor(Int, hr_min)
-            max_hr = ceil(Int, hr_max)
-        end
-    end
 
     hlines!(ax1, [min_peak_ratio], color = (thresh_color, 0.5), linestyle = thresh_style, label = "Min Peak Ratio")
     hlines!(ax2, [max_std], color = (thresh_color, 0.5), linestyle = thresh_style, label = "Max StdDev")

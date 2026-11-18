@@ -28,10 +28,8 @@ epochs = EegFun.read_data(EegFun.example_path("data/julia/epochs/example1_epochs
 # and drops epochs that do not contain any of these triggers.
 EegFun.realign!(epochs, [201, 202])
 
-# The time axis is now response-locked! Let's compute the ERP.
-# We will use condition 1.
-# Note that we use grand_average since we are taking the mean over epochs
-response_locked_erp = EegFun.grand_average([epochs[1]])
+# The time axis is now response-locked! Let's compute the ERP for condition 1.
+response_locked_erp = EegFun.average_epochs(epochs[1])
 
 # Plot the response-locked ERP
 EegFun.plot_erp(response_locked_erp)

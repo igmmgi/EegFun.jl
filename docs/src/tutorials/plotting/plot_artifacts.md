@@ -149,15 +149,15 @@ EegFun.plot_artifact_detection(epochs, artifacts)
 EegFun.plot_artifact_detection(epochs[1], artifacts[1])
 
 
-# Interactive artifact detection
-EegFun.detect_bad_epochs_interactive(epochs, dims = (4, 4))
+# Interactive artifact detection (operates on a single condition's EpochData)
+EegFun.detect_bad_epochs_interactive(epochs[1], dims = (4, 4))
 
 # Or combine with automatic artifact detection
 artifacts = EegFun.detect_bad_epochs_automatic(epochs)
-EegFun.detect_bad_epochs_interactive(epochs, artifact_info = artifacts, dims = (4, 4))
+EegFun.detect_bad_epochs_interactive(epochs[1], artifact_info = artifacts[1], dims = (4, 4))
 
-# Or combine with automatic artifact detection
-EegFun.detect_bad_epochs_interactive(epochs, artifact_info = artifacts, dims = (4, 4), colormap = :GnBu)
+# Or customize the colormap
+EegFun.detect_bad_epochs_interactive(epochs[1], artifact_info = artifacts[1], dims = (4, 4), colormap = :GnBu)
 ```
 
 :::

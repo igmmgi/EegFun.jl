@@ -41,6 +41,10 @@ using EegFun
         @test res_ep.fig isa Figure
         @test length(res_ep.axes) == 1
 
+        erp_conv = EegFun._convert_to_erp_for_plotting([ep1, ep2])
+        @test length(erp_conv) == 2
+        @test all(x -> x isa EegFun.ErpData, erp_conv)
+
         res_vec_ep = EegFun.plot_topography(
             [ep1, ep2],
             2;

@@ -19,11 +19,11 @@ function repair_channels_spherical!(data::ContinuousData, repair_info::Continuou
 end
 
 """
-    repair_channels!(data::ContinuousData, repair_info::ContinuousRepairInfo; method::Symbol = :neighbor_interpolation, kwargs...) -> ContinuousData
+    repair_channels!(data::ContinuousData, repair_info::ContinuousRepairInfo; method::Symbol = repair_info.method, kwargs...) -> ContinuousData
 
 Repair channels listed in `repair_info.repaired` (populated via [`channel_repairable!`](@ref)) in place using `:neighbor_interpolation` or `:spherical_spline`.
 """
-function repair_channels!(data::ContinuousData, repair_info::ContinuousRepairInfo; method::Symbol = :neighbor_interpolation, kwargs...)
+function repair_channels!(data::ContinuousData, repair_info::ContinuousRepairInfo; method::Symbol = repair_info.method, kwargs...)
     if method == :neighbor_interpolation
         repair_channels_neighbor!(data, repair_info; kwargs...)
     elseif method == :spherical_spline

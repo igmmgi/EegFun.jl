@@ -91,20 +91,23 @@ function _apply_rereference!(
     return nothing
 end
 
-function _get_reference_channels(dat::EegData, reference_channel::Symbol)
+function _get_reference_channels(dat::EegData, reference_channel::Symbol; avg_channels::Union{Nothing,Vector{Symbol}} = nothing)
     reference_channel == :none && return Symbol[]
-    reference_channel == :avg && return channel_labels(dat)
+    reference_channel == :avg && return isnothing(avg_channels) ? channel_labels(dat) : avg_channels
     reference_channel == :mastoid && return [:M1, :M2]
     return [reference_channel]
 end
 
-function _get_reference_channels(dat, reference_channel::AbstractVector{Symbol})
+function _get_reference_channels(dat, reference_channel::AbstractVector{Symbol}; avg_channels::Union{Nothing,Vector{Symbol}} = nothing)
     isempty(reference_channel) && return Symbol[]
-    return length(reference_channel) == 1 ? _get_reference_channels(dat, reference_channel[1]) : reference_channel
+    return length(reference_channel) == 1 ? _get_reference_channels(dat, reference_channel[1]; avg_channels = avg_channels) :
+           reference_channel
 end
 
-_get_reference_channels(dat, ref::AbstractString) = _get_reference_channels(dat, Symbol(ref))
-_get_reference_channels(dat, refs::AbstractVector{<:AbstractString}) = _get_reference_channels(dat, Symbol.(refs))
+_get_reference_channels(dat, ref::AbstractString; avg_channels::Union{Nothing,Vector{Symbol}} = nothing) =
+    _get_reference_channels(dat, Symbol(ref); avg_channels = avg_channels)
+_get_reference_channels(dat, refs::AbstractVector{<:AbstractString}; avg_channels::Union{Nothing,Vector{Symbol}} = nothing) =
+    _get_reference_channels(dat, Symbol.(refs); avg_channels = avg_channels)
 
 """
     rereference!(dat::EegData, reference_selection; channel_selection = channels())
@@ -114,13 +117,13 @@ Rereference EEG data in-place. `reference_selection` can be `:avg`, `:mastoid`, 
 or a channel name / vector of channel names.
 """
 function rereference!(dat::EegData, reference_selection; channel_selection = channels())
-    reference_channels = _get_reference_channels(dat, reference_selection)
+    selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
+    reference_channels = _get_reference_channels(dat, reference_selection; avg_channels = selected_channels)
     if isempty(reference_channels)
         @info "No rereferencing applied (reference: $(reference_selection))"
         return dat
     end
 
-    selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
     missing_channels = [ch for ch in reference_channels if ch ∉ dat]
     !isempty(missing_channels) && @minimal_error("Missing reference channels in data: $(missing_channels)")
 

@@ -221,6 +221,10 @@ using CSV
             ep_nonseq.data[2].epoch .= 5
             res_nonseq = EegFun.channel_summary(ep_nonseq)
             @test sort(unique(res_nonseq.epoch)) == [2, 5]
+
+            # Default samples() hits fast path and matches explicit sample predicate identically
+            res_pred = EegFun.channel_summary(ep_nonseq; sample_selection = df -> trues(nrow(df)))
+            @test res_nonseq == res_pred
         end
 
     end # channel_summary testset

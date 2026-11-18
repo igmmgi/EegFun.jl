@@ -109,7 +109,7 @@ function tf_multitaper(
         elseif raw_tapers isa AbstractVector
             reshape(Vector{Float64}(raw_tapers), length(raw_tapers), 1)
         else
-            error("DSP.dpss returned unexpected type: $(typeof(raw_tapers)) for freq=$freq Hz, NW=$NW, K=$K")
+            @minimal_error("DSP.dpss returned unexpected type: $(typeof(raw_tapers)) for freq=$freq Hz, NW=$NW, K=$K")
         end
 
         n_tapers_per_freq[fi] = K

@@ -37,7 +37,7 @@ evaluated against a t-distribution with Between-Within degrees of freedom).
 function StatsAPI.pvalue(res::LmmStatsResult; corrected::Bool = !isnothing(res.p_corrected))
     if corrected
         isnothing(res.p_corrected) &&
-            @minimal_error "No permutation-corrected p-values: run fit_mass_lmm with n_perms > 0, or use corrected = false."
+            @minimal_error "No permutation-corrected p-values: run fit_mass_lmm with n_permutations > 0, or use corrected = false."
         return res.p_corrected
     end
     return res.p_parametric
@@ -148,9 +148,10 @@ end
 """
     StatsAPI.stderror(res::StatsResult)
 
-Returns the standard error of the mean difference for standard ERP stats.
+Returns the standard error of the mean difference over the analysis interval for ERP stats.
 """
 StatsAPI.stderror(res::StatsResult) =
+    hasfield(typeof(res), :se) ? res.se :
     hasfield(typeof(res), :se_diff) ? res.se_diff : @minimal_error("Standard error not stored for this test type.")
 
 """
@@ -162,7 +163,7 @@ so this will return `nothing`. You should inspect `res.clusters` or `res.masks` 
 """
 function StatsAPI.pvalue(res::StatsResult)
     if isnothing(res.stat_matrix.p)
-        @warn "Cluster-based permutation tests do not produce true point-wise p-values (FWER is controlled at the cluster level). Use `res.masks` or `res.clusters` to determine significance."
+        @minimal_warning "Cluster-based permutation tests do not produce true point-wise p-values (FWER is controlled at the cluster level). Use `res.masks` or `res.clusters` to determine significance."
     end
     return res.stat_matrix.p
 end

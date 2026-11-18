@@ -44,6 +44,27 @@ _find_batch_files(pattern::String, dir::String, ::Nothing) = _find_batch_files(p
 const EEGFUN_FORMAT_VERSION = 1
 
 """
+    save_data(filepath::AbstractString, data::Union{EegFunData,AbstractVector{<:EegFunData}}; overwrite::Bool = true) -> String
+
+Save an `EegFunData` object (or vector of `EegFunData` objects) to a `.jld2` file under `"data"`
+with `"format_version" = EEGFUN_FORMAT_VERSION`, creating parent directories if needed.
+Appends `.jld2` when `filepath` has no file extension, and returns the saved file path.
+"""
+function save_data(filepath::AbstractString, data::Union{EegFunData,AbstractVector{<:EegFunData}}; overwrite::Bool = true)::String
+    out_path = String(filepath)
+    isempty(splitext(out_path)[2]) && (out_path *= ".jld2")
+    endswith(lowercase(out_path), ".jld2") || @minimal_error("save_data requires a .jld2 file path, got: $out_path")
+    if isfile(out_path) && !overwrite
+        @minimal_error("File already exists and overwrite = false: $out_path")
+    end
+    dir = dirname(out_path)
+    !isempty(dir) && mkpath(dir)
+    stored = data isa AbstractVector ? (data isa Vector ? data : collect(data)) : data
+    jldsave(out_path; data = stored, format_version = EEGFUN_FORMAT_VERSION)
+    return out_path
+end
+
+"""
     read_data(filepath::String)
 
 Read `EegFunData` (or a vector of `EegFunData`) from a JLD2 file, returning `nothing` if the file

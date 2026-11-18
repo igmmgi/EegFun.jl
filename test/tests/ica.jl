@@ -764,6 +764,27 @@ using LinearAlgebra
         eog_comps, eog_df = EegFun.identify_eog_components(dat_zv, ica_zv; z_threshold = 1.0)
         @test 1 in eog_comps[:vEOG]
         @test all(isfinite, eog_df.vEOG_zscore)
+
+        # 7. AMICA m > 1 zero dmu_denom guard does not produce NaN location updates
+        X_am = [0.9 0.3; -0.2 0.8] * randn(MersenneTwister(19), 2, 300)
+        lay_am = EegFun.Layout(DataFrame(label = [:C1, :C2], inc = zeros(2), azi = zeros(2)), nothing, nothing, nothing)
+        res_am2 = EegFun.amica_ica(
+            X_am,
+            lay_am,
+            "am2";
+            n_components = 2,
+            params = EegFun.IcaPrms(amica_m = 2, amica_max_iter = 6),
+            rng = MersenneTwister(19),
+        )
+        @test all(isfinite, res_am2.unmixing)
+
+        # 8. EegFun.components(artifacts::ArtifactComponents) selector works with subtract_ica_components!
+        art_obj = EegFun.ArtifactComponents(Dict(:vEOG => [1]), [3], Int[], Int[])
+        sel_art = EegFun.components(art_obj)
+        @test EegFun.get_selected_components(ica_zv, sel_art) == [1, 3]
+        dat_sub, ica_sub = EegFun.subtract_ica_components(dat_zv, ica_zv; component_selection = EegFun.components(art_obj))
+        @test dat_sub isa EegFun.ContinuousData
+        @test haskey(ica_sub.removed_activations, 1) && haskey(ica_sub.removed_activations, 3)
     end
 
 end

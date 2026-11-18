@@ -453,9 +453,11 @@ function plot_tf(
 
     if plot_layout.type == :grid
         rows, cols = plot_layout.dims
+        grid_positions = get(plot_layout.metadata, :grid_positions, nothing)
         for (idx, ax) in enumerate(axes)
-            row = fld(idx - 1, cols) + 1
-            col = mod(idx - 1, cols) + 1
+            row, col =
+                (!isnothing(grid_positions) && idx <= length(grid_positions)) ? grid_positions[idx] :
+                (fld(idx - 1, cols) + 1, mod(idx - 1, cols) + 1)
             col != 1 && (ax.ylabel = ""; ax.yticklabelsvisible = false)
             row != rows && (ax.xlabel = ""; ax.xticklabelsvisible = false)
         end

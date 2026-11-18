@@ -416,4 +416,54 @@ end
     tf_zero.data_power.Ch1 .= 0.0
     @test all(isnan, EegFun.tf_baseline(tf_zero, (0.0, 0.2); method = :db).data_power.Ch1)
     @test all(isnan, EegFun.tf_baseline(tf_zero, (0.0, 0.2); method = :relchange).data_power.Ch1)
+
+    @testset "detrend and detrend! on EegData and vectors" begin
+        # 1. ContinuousData linear detrending (non-mutating and mutating + channel_selection)
+        cdat = EegFun.create_test_continuous_data(n = 100, fs = 100)
+        t = cdat.data.time
+        cdat.data.Ch1 = 4.5 .* t .- 2.0
+        cdat.data.Ch2 = -3.0 .* t .+ 1.25
+        orig_ch2 = copy(cdat.data.Ch2)
+
+        cdat_dt = EegFun.detrend(cdat; channel_selection = EegFun.channels([:Ch1]))
+        @test maximum(abs, cdat_dt.data.Ch1) < 1e-12
+        @test cdat_dt.data.Ch2 == orig_ch2
+        @test maximum(abs, cdat.data.Ch1) > 1.0  # original untouched
+
+        EegFun.detrend!(cdat)
+        @test maximum(abs, cdat.data.Ch1) < 1e-12
+        @test maximum(abs, cdat.data.Ch2) < 1e-12
+
+        # 2. Interval-restricted linear detrending on ErpData (estimate pre-stimulus ramp, subtract across epoch)
+        erp = EegFun.create_test_erp_data()
+        t_erp = erp.data.time
+        step_resp = ifelse.(t_erp .>= 0.2, 5.0, 0.0)
+        erp.data.Ch1 = 2.0 .* t_erp .+ 1.0 .+ step_resp
+        EegFun.detrend!(erp; interval_selection = (first(t_erp), 0.1))
+        pre_mask = t_erp .<= 0.1
+        post_mask = t_erp .>= 0.25
+        @test maximum(abs, erp.data.Ch1[pre_mask]) < 1e-12
+        @test all(x -> isapprox(x, 5.0; atol = 1e-12), erp.data.Ch1[post_mask])
+
+        # 3. EpochData & Vector{EpochData} per-trial detrending + type = :constant + interval_selection = nothing
+        ep1 = EegFun.create_test_epoch_data(n = 50, fs = 100, n_epochs = 3, condition = 1)
+        ep2 = EegFun.create_test_epoch_data(n = 50, fs = 100, n_epochs = 2, condition = 2)
+        for (k, df) in enumerate(ep1.data)
+            df.Ch1 = (k * 3.0) .* df.time .+ k
+        end
+        ep_vec_dt = EegFun.detrend([ep1, ep2])
+        for df in ep_vec_dt[1].data
+            @test maximum(abs, df.Ch1) < 1e-12
+        end
+
+        ep_const = EegFun.detrend(ep1; type = :constant)
+        @test isapprox(mean(ep_const.data[1].Ch1), 0.0; atol = 1e-12)
+        @test EegFun.detrend!(copy(ep1); interval_selection = nothing).data[1].Ch1 == ep1.data[1].Ch1
+        @test_throws EegFun.EegFunError EegFun.detrend!(copy(ep1); type = :quadratic)
+
+        # 4. Numerical stability of detrend(x, y) for large x offsets
+        x_large = collect(1.0e6 .+ (0.0:0.01:1.0))
+        y_large = 2.5 .* (x_large .- 1.0e6) .- 0.75
+        @test maximum(abs, EegFun.detrend(x_large, y_large)) < 1e-9
+    end
 end

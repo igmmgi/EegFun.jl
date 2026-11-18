@@ -26,6 +26,9 @@ using EegFun
         result = EegFun.plot_erp_image(dat; layout = :topo, display_plot = false)
         @test result.fig isa Figure
         @test length(result.axes) >= 3
+        scale_ax = result.axes[end]
+        @test 0.0 <= scale_ax.halign[] <= 1.0
+        @test 0.0 <= scale_ax.valign[] <= 1.0
     end
 
     @testset "boxcar average" begin

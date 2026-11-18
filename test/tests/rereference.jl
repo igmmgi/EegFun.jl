@@ -434,4 +434,15 @@ end
 
     # Cleanup
     rm(test_dir, recursive = true)
+
+    @testset "In-memory :avg rereference respects channel_selection" begin
+        erp_sel = EegFun.create_test_erp_data(n_channels = 3)
+        erp_sel.data.Ch1 .= 10.0
+        erp_sel.data.Ch2 .= 20.0
+        erp_sel.data.Ch3 .= 1000.0
+        EegFun.rereference!(erp_sel, :avg; channel_selection = EegFun.channels([:Ch1, :Ch2]))
+        @test all(erp_sel.data.Ch1 .≈ -5.0)
+        @test all(erp_sel.data.Ch2 .≈ 5.0)
+        @test all(erp_sel.data.Ch3 .≈ 1000.0)
+    end
 end

@@ -5,17 +5,17 @@ Often in EEG analysis, we fall into the trap of thinking about a specific channe
 What you record at an electrode isn't a single "source" — it is a **mixture** of many sources added together.
 
 > [!TIP]
-> This is Part 2 of the ICA pedagogical sequence. It formally proves why we need an algorithm to separate our data.
+> This is Part 2 of the ICA pedagogical sequence. It illustrates why source separation is needed for scalp EEG.
 
 ## The Forward Problem
 
 This demonstration creates two distinct underlying components:
-1. **Source 1**: A healthy brain oscillation (alpha/spindle bursts).
-2. **Source 2**: A massive blink artifact.
+1. **Source 1**: A rhythmic brain oscillation (alpha/spindle bursts).
+2. **Source 2**: A large blink artifact.
 
-This minimalist demo serves as a sandbox to prove that **an electrode is not a brain signal; it is a mixture**.
+This demo illustrates that **an electrode recording is a linear mixture rather than an isolated brain signal**.
 
-You can adjust the **Mix Balance** slider to smoothly sweep from seeing 100% pure brain signal, to a 50/50 mix, all the way to 100% blink artifact. This proves exactly how a single scalp electrode physically crossfades and scales electrical potentials based on distances and conductivities. This creates the exact "forward-problem" that ICA aims to solve backward!
+Adjusting the **Mix Balance** slider sweeps continuously from 100% brain signal, through a 50/50 mixture, to 100% blink artifact. This shows how a single scalp electrode weights and sums electrical potentials according to source geometry and tissue conductivity — the forward mixing process that ICA inverts.
 
 ## Code
 

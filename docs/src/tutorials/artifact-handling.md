@@ -26,11 +26,11 @@ EegFun.is_extreme_value!(dat, 100, channel_selection = EegFun.channels([:Fp1, :F
 `is_step_value!` flags samples where the voltage jump between consecutive samples exceeds a threshold. This detects sudden discontinuities (cable pulls, electrode pops).
 
 ```julia
-# Flag jumps > 50 μV between consecutive samples (adds column :is_step_value_50.0)
-EegFun.is_step_value!(dat, 50.0)
+# Flag jumps > 50 μV between consecutive samples (adds column :is_step_value_50)
+EegFun.is_step_value!(dat, 50)
 
 # Check how many step artifacts were detected
-EegFun.n_values(dat, :is_step_value_50.0)
+EegFun.n_values(dat, :is_step_value_50)
 ```
 
 > [!TIP]

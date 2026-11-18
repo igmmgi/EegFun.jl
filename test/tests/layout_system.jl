@@ -261,6 +261,34 @@ using DataFrames
         ep_data = EegFun.create_test_epoch_data(n = 50, n_epochs = 3, n_channels = 3)
         res_ep_cg = EegFun.plot_epochs(ep_data; layout = custom_grid, display_plot = false)
         @test length(res_ep_cg.axes) == 3
+
+        # grid_skip_positions preserves true (row, col) label visibility on subsequent cells
+        res_skip = EegFun.plot_erp(
+            erp_data;
+            layout = :grid,
+            layout_kwargs = (; grid_dims = (2, 2), grid_skip_positions = [(1, 1)]),
+            display_plot = false,
+        )
+        @test length(res_skip.axes) == 3
+        # First plotted axis is at (1, 2) -> ylabel hidden; second is at (2, 1) -> ylabel & xlabel visible
+        @test res_skip.axes[1].ylabel[] == ""
+        @test res_skip.axes[2].ylabel[] != ""
+        @test res_skip.axes[2].xlabel[] != ""
+
+        # plot_erp_measurements places local-peak marker at local peak rather than global boundary extremum
+        erp_loc = EegFun.create_test_erp_data(participant = 1, condition = 1, n_channels = 1)
+        t_loc = erp_loc.data.time
+        # Rising ramp at window edge (global max at boundary) + genuine interior local peak around t = 0.2 s
+        erp_loc.data.Ch1 = 2.0 .* exp.(-((t_loc .- 0.20) ./ 0.02) .^ 2) .+ 5.0 .* max.(0.0, (t_loc .- 0.35) ./ 0.05)
+        res_meas = EegFun.plot_erp_measurements(
+            erp_loc,
+            "max_peak_amplitude";
+            analysis_interval = (0.10, 0.40),
+            local_interval = 3,
+            display_plot = false,
+        )
+        vls = filter(p -> p isa Makie.LineSegments || p isa Makie.Lines, res_meas.axes[1].scene.plots)
+        @test res_meas.fig isa Figure && !isempty(vls)
     end
 end
 

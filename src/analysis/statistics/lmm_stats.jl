@@ -1,9 +1,15 @@
 """
     fit_mass_lmm(epochs::EpochData, f::FormulaTerm; kwargs...)
+    fit_mass_lmm(epochs::AbstractVector{<:EpochData}, f::FormulaTerm; condition_selection = conditions(), kwargs...)
     fit_mass_lmm(eeg_data::AbstractArray{<:Real,3}, meta_df::DataFrame, f::FormulaTerm; kwargs...)
 
 Fit a linear mixed model at every channel × time point and (optionally) control the family-wise
 error rate with a whole-block sign-flip permutation test.
+
+When given an `AbstractVector{<:EpochData}` (e.g. from `extract_epochs` or `read_all_data("epochs")`),
+trials are stacked across datasets after applying `condition_selection`, automatically populating
+`:participant`, `:condition`, `:condition_num`, `:condition_name`, and `:file` metadata columns when
+not already present in the trial `DataFrame`s.
 
 # Inference
 Each point is fitted once with `MixedModels.jl`, storing the model-based fixed-effect estimates `beta`,
@@ -24,19 +30,19 @@ recommended in practice, especially when trial counts vary strongly across block
 
 All random-effects grouping factors must be nested within the flipping block (e.g. `(1 | subject)`,
 `(1 + condition | subject)`, `(1 | subject & session)`). Crossed designs (e.g. subject × item) have no
-single-factor block permutation scheme and raise an error when `n_perms > 0`; use `n_perms = 0` for
+single-factor block permutation scheme and raise an error when `n_permutations > 0`; use `n_permutations = 0` for
 parametric results.
 
 # Keyword Arguments
-- `n_perms::Int=1000`: Number of random sign flips (`0` = no permutation inference). If all
-  `2^(n_blocks-1)` distinct patterns fit within `n_perms`, they are enumerated exactly instead.
+- `n_permutations::Int=1000`: Number of random sign flips (`0` = no permutation inference). If all
+  `2^(n_blocks-1)` distinct patterns fit within `n_permutations`, they are enumerated exactly instead.
 - `tested_coefs=nothing`: Coefficients to permutation-test.
   - `nothing` or `:effects`: all non-intercept coefficients (default); `:all`: including the intercept.
   - `Symbol`, `String`, `Integer` or a `Vector` of these. An exact coefficient name selects that column;
     a term name (e.g. `:condition`) selects all of its contrast columns but not interactions.
 - `test_intercept::Bool=false`: Also test the intercept.
 - `flip_by=nothing`: Column defining the exchangeability blocks. Default: the outermost grouping factor.
-- `correction::Symbol=:maxt`: FWER correction: `:maxt` (max-|z|), `:cluster` (spatio-temporal
+- `correction_method::Symbol=:maxt`: FWER correction: `:maxt` (max-|z|), `:cluster` (spatio-temporal
   cluster mass) or `:tfce`.
 - `cluster_threshold::Real=2.0`: |z| threshold for cluster formation (`:cluster`).
 - `tfce_E=0.5`, `tfce_H=2.0`, `tfce_dh=0.1`: TFCE parameters (`:tfce`).
@@ -45,6 +51,7 @@ parametric results.
 - `contrasts=Dict{Symbol,Any}()`: Contrast coding of categorical predictors, passed to MixedModels as in
   `fit(MixedModel, f, df; contrasts = Dict(:condition => EffectsCoding(base = "A")))`. Default: treatment (dummy)
   coding. Coefficient names in `tested_coefs` refer to the resulting columns.
+- `show_progress::Bool=true`: Show progress bar and summary log messages.
 - `rng=Random.default_rng()`: Random number generator for the sign flips.
 - Array method only: `channel_names`, `time_points`, `dim_order=(:channels, :timepoints, :epochs)`.
 
@@ -72,17 +79,20 @@ Each channel × time point is fitted independently, and one bad point never abor
   `show(result)` summarises all outcomes.
 
 # Memory and permutation count
-`correction = :cluster` and `:tfce` store the z-map of every permutation (`n_channels × n_timepoints × n_perms ×
+`correction_method = :cluster` and `:tfce` store the z-map of every permutation (`n_channels × n_timepoints × n_permutations ×
 n_tested` single-precision values). A warning is issued when this exceeds half of the free memory, and an
-error before it would exceed ~90%; `:maxt` does not store the maps. With few random sign flips (`n_perms < 100`)
-the p-value resolution is `1/(n_perms+1)`, and a warning is issued; below 19 no point can reach p < 0.05.
+error before it would exceed ~90%; `:maxt` does not store the maps. With few random sign flips (`n_permutations < 100`)
+the p-value resolution is `1/(n_permutations+1)`, and a warning is issued; below 19 no point can reach p < 0.05.
 
 Returns an [`LmmStatsResult`](@ref).
 
 **Requires `MixedModels.jl` and `StatsModels.jl` to be loaded.**
 """
 function fit_mass_lmm(args...; kwargs...)
-    @minimal_error "To use Mass-Univariate Mixed Models, you must first load the packages: `using MixedModels, StatsModels`"
+    if isnothing(Base.get_extension(@__MODULE__, :EegFunMixedModelsExt))
+        @minimal_error "To use Mass-Univariate Mixed Models, you must first load the packages: `using MixedModels, StatsModels`"
+    end
+    throw(MethodError(fit_mass_lmm, args))
 end
 
 function _resolve_lmm_coef_idx(result::LmmStatsResult, coef)
@@ -150,7 +160,7 @@ Requires a result from the `EpochData` method of `fit_mass_lmm`.
 function extract_predictor_stats(result::LmmStatsResult, coef; alpha = 0.05)
     coef_idx = _resolve_lmm_coef_idx(result, coef)
     coef_str = result.coefficients[coef_idx]
-    isnothing(result.p_corrected) && @minimal_error "No permutation inference in this result: run fit_mass_lmm with n_perms > 0."
+    isnothing(result.p_corrected) && @minimal_error "No permutation inference in this result: run fit_mass_lmm with n_permutations > 0."
     coef_idx in result.tested || @minimal_error "Coefficient '$coef_str' was not permutation-tested. Include it in `tested_coefs` " *
                    "(or set `test_intercept = true`) when calling fit_mass_lmm."
     isnothing(result.epochs) && @minimal_error "extract_predictor_stats requires a result from the EpochData method of fit_mass_lmm."

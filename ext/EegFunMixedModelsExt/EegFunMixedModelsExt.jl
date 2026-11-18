@@ -11,7 +11,7 @@ using LinearAlgebra
 using Logging
 using SparseArrays
 
-import EegFun: fit_mass_lmm, @minimal_error
+import EegFun: fit_mass_lmm, @minimal_error, @minimal_warning
 
 # Relative objective tolerance for the (single) observed fit per pixel
 const OBSERVED_FTOL_REL = 1e-12
@@ -63,12 +63,12 @@ function _check_zperm_memory(n_channels, n_timepoints, n_flips, n_tested; free::
         "The cluster/TFCE null needs the z-map of every permutation ($n_channels channels × $n_timepoints time points × " *
         "$n_flips permutations × $n_tested tested coefficients = $(gb(bytes)) GB, $(gb(free)) GB currently free). "
     advice =
-        "Reduce `n_perms`, test fewer coefficients (`tested_coefs`), use a shorter time window or fewer channels, " *
-        "or use `correction = :maxt`, which does not store the null maps."
+        "Reduce `n_permutations`, test fewer coefficients (`tested_coefs`), use a shorter time window or fewer channels, " *
+        "or use `correction_method = :maxt`, which does not store the null maps."
     if bytes > ZPERM_ERROR_FRACTION * free
         @minimal_error detail * "This exceeds the available memory. " * advice
     elseif bytes > ZPERM_WARN_FRACTION * free
-        @warn detail * "This is a large share of the available memory. " * advice
+        @minimal_warning detail * "This is a large share of the available memory. " * advice
     end
     return bytes
 end
@@ -78,11 +78,11 @@ function _warn_small_n_perms(n_flips::Int, exhaustive::Bool)
     exhaustive && return
     pmin = 1 / (n_flips + 1)
     if pmin >= 0.05
-        @warn "Only $n_flips random sign flips: the smallest attainable corrected p-value is $(round(pmin; digits = 3)), " *
-              "so no point can reach p < 0.05. Use at least 1000 permutations."
+        @minimal_warning "Only $n_flips random sign flips: the smallest attainable corrected p-value is $(round(pmin; digits = 3)), " *
+                         "so no point can reach p < 0.05. Use at least 1000 permutations."
     elseif n_flips < SMALL_N_PERMS
-        @warn "Only $n_flips random sign flips: corrected p-values have a resolution of $(round(pmin; digits = 3)) and " *
-              "are noisy. Use at least 1000 permutations for reportable results."
+        @minimal_warning "Only $n_flips random sign flips: corrected p-values have a resolution of $(round(pmin; digits = 3)) and " *
+                         "are noisy. Use at least 1000 permutations for reportable results."
     end
     return
 end
@@ -116,7 +116,7 @@ function _report_fit_problems(status::AbstractMatrix{UInt8}, channel_names, firs
             "inference; see `fit_status` in the result.",
         )
     end
-    @warn join(msgs, "\n")
+    @minimal_warning join(msgs, "\n")
     return
 end
 
@@ -197,7 +197,15 @@ end
     end
 end
 
-function fit_mass_lmm(epochs::EegFun.EpochData, f::FormulaTerm; correction::Symbol = :maxt, spatial_connectivity = nothing, kwargs...)
+function fit_mass_lmm(
+    epochs::EegFun.EpochData,
+    f::FormulaTerm;
+    correction_method::Symbol = :maxt,
+    correction::Union{Nothing,Symbol} = nothing,
+    spatial_connectivity = nothing,
+    kwargs...,
+)
+    eff_corr = isnothing(correction) ? correction_method : correction
     isempty(epochs) && @minimal_error "EpochData is empty."
 
     dfs = epochs.data
@@ -221,7 +229,7 @@ function fit_mass_lmm(epochs::EegFun.EpochData, f::FormulaTerm; correction::Symb
     end
 
     if isnothing(spatial_connectivity) &&
-       correction in (:cluster, :tfce) &&
+       eff_corr in (:cluster, :tfce) &&
        !isnothing(epochs.layout) &&
        (!isnothing(epochs.layout.neighbors) || EegFun.has_valid_coordinates(epochs.layout))
         spatial_connectivity = EegFun._build_connectivity_matrix(all_channels, epochs.layout, :spatiotemporal)
@@ -237,7 +245,120 @@ function fit_mass_lmm(epochs::EegFun.EpochData, f::FormulaTerm; correction::Symb
         epochs;
         channel_names = all_channels,
         time_points = time_pts,
-        correction = correction,
+        correction_method = eff_corr,
+        spatial_connectivity = spatial_connectivity,
+        kwargs...,
+    )
+end
+
+function _resolve_epoch_participant_label(ep::EegFun.EpochData)::String
+    if !isempty(ep.data) && !isempty(ep.data[1]) && hasproperty(ep.data[1], :participant)
+        return string(ep.data[1][1, :participant])
+    end
+    stem, _ = splitext(basename(ep.file))
+    any(isdigit, stem) && return string(EegFun._extract_participant_id(basename(ep.file)))
+    return isempty(stem) ? "1" : stem
+end
+
+function fit_mass_lmm(
+    epochs_vec::AbstractVector{<:EegFun.EpochData},
+    f::FormulaTerm;
+    condition_selection = EegFun.conditions(),
+    correction_method::Symbol = :maxt,
+    correction::Union{Nothing,Symbol} = nothing,
+    spatial_connectivity = nothing,
+    kwargs...,
+)
+    eff_corr = isnothing(correction) ? correction_method : correction
+    isempty(epochs_vec) && @minimal_error "EpochData vector is empty."
+    :channel_names in keys(kwargs) && @minimal_error "Cannot pass `channel_names` when calling fit_mass_lmm with EpochData."
+    :time_points in keys(kwargs) && @minimal_error "Cannot pass `time_points` when calling fit_mass_lmm with EpochData."
+
+    grouped = EegFun.group_by_condition(epochs_vec)
+    reps = EegFun.EpochData[first(v) for v in values(grouped)]
+    sel_idx = EegFun._select_conditions_by_field(reps, condition_selection)
+    isempty(sel_idx) && @minimal_error "No EpochData conditions matched `condition_selection`."
+    keep_conds = Set{Int}(reps[i].condition for i in sel_idx)
+    selected_sets = EegFun.EpochData[ep for ep in epochs_vec if ep.condition in keep_conds]
+
+    nonempty_sets = EegFun.EpochData[ep for ep in selected_sets if !isempty(ep.data)]
+    isempty(nonempty_sets) && @minimal_error "All selected EpochData objects are empty (0 trials)."
+
+    ref_ep = first(nonempty_sets)
+    all_channels = EegFun.channel_labels(ref_ep)
+    n_channels = length(all_channels)
+    n_timepoints = EegFun.n_samples(ref_ep)
+
+    for (idx, ep) in enumerate(nonempty_sets)
+        EegFun._have_same_structure(ref_ep, ep) ||
+            @minimal_error "EpochData at index $idx (file='$(ep.file)', condition=$(ep.condition)) has inconsistent channel, sample-rate, or time structure."
+        all(nrow(df) == n_timepoints for df in ep.data) ||
+            @minimal_error "All epochs in '$(ep.file)' (condition $(ep.condition)) must have $n_timepoints time points."
+    end
+
+    all_dfs = DataFrame[df for ep in nonempty_sets for df in ep.data]
+    total_epochs = length(all_dfs)
+
+    common_meta = foldl(intersect, [setdiff(EegFun.all_labels(ep), all_channels) for ep in nonempty_sets])
+    meta_df = DataFrame([col => [df[1, col] for df in all_dfs] for col in common_meta])
+
+    distinct_conds = unique(ep.condition for ep in nonempty_sets)
+    raw_names = [isempty(ep.condition_name) ? string(ep.condition) : ep.condition_name for ep in nonempty_sets]
+    use_names = length(unique(raw_names)) >= length(distinct_conds)
+
+    if !hasproperty(meta_df, :participant)
+        meta_df[!, :participant] = String[_resolve_epoch_participant_label(ep) for ep in nonempty_sets for _ in ep.data]
+    end
+    if !hasproperty(meta_df, :condition)
+        meta_df[!, :condition] = String[
+            (use_names ? (isempty(ep.condition_name) ? string(ep.condition) : ep.condition_name) : string(ep.condition)) for
+            ep in nonempty_sets for _ in ep.data
+        ]
+    end
+    if !hasproperty(meta_df, :condition_num)
+        meta_df[!, :condition_num] = Int[ep.condition for ep in nonempty_sets for _ in ep.data]
+    end
+    if !hasproperty(meta_df, :condition_name)
+        meta_df[!, :condition_name] = String[ep.condition_name for ep in nonempty_sets for _ in ep.data]
+    end
+    if !hasproperty(meta_df, :file)
+        meta_df[!, :file] = String[ep.file for ep in nonempty_sets for _ in ep.data]
+    end
+
+    eeg_data = Array{Float64,3}(undef, n_channels, n_timepoints, total_epochs)
+    for (i, df) in enumerate(all_dfs)
+        for (c_idx, c_name) in enumerate(all_channels)
+            _fill_lmm_epoch_slice!(eeg_data, c_idx, i, df[!, c_name], n_timepoints)
+        end
+    end
+
+    if isnothing(spatial_connectivity) &&
+       eff_corr in (:cluster, :tfce) &&
+       !isnothing(ref_ep.layout) &&
+       (!isnothing(ref_ep.layout.neighbors) || EegFun.has_valid_coordinates(ref_ep.layout))
+        spatial_connectivity = EegFun._build_connectivity_matrix(all_channels, ref_ep.layout, :spatiotemporal)
+    end
+
+    tvec = EegFun.time_vector(ref_ep)
+    time_pts = isempty(tvec) ? Vector(1:n_timepoints) : tvec
+    combined_ep = EegFun.EpochData(
+        ref_ep.file,
+        ref_ep.condition,
+        ref_ep.condition_name,
+        all_dfs,
+        copy(ref_ep.layout),
+        ref_ep.sample_rate,
+        copy(ref_ep.analysis_info),
+    )
+
+    return _fit_mass_lmm(
+        eeg_data,
+        meta_df,
+        f,
+        combined_ep;
+        channel_names = all_channels,
+        time_points = time_pts,
+        correction_method = eff_corr,
         spatial_connectivity = spatial_connectivity,
         kwargs...,
     )
@@ -281,7 +402,7 @@ function _resolve_flip_by(m::LinearMixedModel, meta_df::DataFrame, flip_by)
         end
         @minimal_error "The random-effects grouping factors ($(join(MixedModels.fname.(m.reterms), ", "))) are crossed " *
                        "(e.g. subject × item): no single factor contains all others, so no exact permutation scheme exists. " *
-                       "Use `n_perms = 0` for Wald-only inference."
+                       "Use `n_permutations = 0` for Wald-only inference."
     end
     flip_by = Symbol(flip_by)
     flip_by in cols || @minimal_error "flip_by = :$flip_by is not a column of the metadata. Available: $(cols)"
@@ -441,12 +562,11 @@ function BlockDesign(m::LinearMixedModel, X::Matrix{Float64}, block_ids::Vector{
 end
 
 # Per-block GLS sufficient statistics at the model's current θ, with V_s = I + Z_s Λ_s Λ_s' Z_s':
-#   XtVX_s = X_s' V_s⁻¹ X_s,  XtVy_s = X_s' V_s⁻¹ y_s,  ytVy_s = y_s' V_s⁻¹ y_s   (Woodbury)
+#   XtVX_s = X_s' V_s⁻¹ X_s,  XtVy_s = X_s' V_s⁻¹ y_s   (Woodbury)
 function _block_gls_stats(design::BlockDesign, lams::Vector{Matrix{Float64}}, y::AbstractVector{Float64})
     n_blocks = length(design.rows)
     XtVX = Vector{Matrix{Float64}}(undef, n_blocks)
     XtVy = Vector{Vector{Float64}}(undef, n_blocks)
-    ytVy = Vector{Float64}(undef, n_blocks)
     for s = 1:n_blocks
         ys = view(y, design.rows[s])
         q = size(design.Z[s], 2)
@@ -463,9 +583,8 @@ function _block_gls_stats(design::BlockDesign, lams::Vector{Matrix{Float64}}, y:
         FGX = C \ GtX
         XtVX[s] = design.XtX[s] - GtX' * FGX
         XtVy[s] = Xty - FGX' * Gty
-        ytVy[s] = dot(ys, ys) - dot(Gty, C \ Gty)
     end
-    return XtVX, XtVy, ytVy
+    return XtVX, XtVy
 end
 
 # Closed-form Bell–McCaffrey / Pustejovsky–Tipton CR2 cluster-robust pivotal z-statistics
@@ -611,11 +730,11 @@ function _setup_lmm_design(f, meta_df, n_epochs, tested_coefs, test_intercept, c
     rank_X = m_initial.feterm.rank
     dropped_coefs = sort(MixedModels.pivot(m_initial)[(rank_X+1):end])
     if !isempty(dropped_coefs)
-        @warn "Fixed-effects design matrix is rank deficient (rank $rank_X of $n_coefs). " *
-              "Aliased coefficient(s) $(join(coef_names[dropped_coefs], ", ")) cannot be estimated: " *
-              "their beta, se, z and p values are NaN and they are excluded from permutation testing. " *
-              "Common causes: a predictor that is constant in the data, an empty design cell combined " *
-              "with an interaction, or exactly collinear predictors."
+        @minimal_warning "Fixed-effects design matrix is rank deficient (rank $rank_X of $n_coefs). " *
+                         "Aliased coefficient(s) $(join(coef_names[dropped_coefs], ", ")) cannot be estimated: " *
+                         "their beta, se, z and p values are NaN and they are excluded from permutation testing. " *
+                         "Common causes: a predictor that is constant in the data, an empty design cell combined " *
+                         "with an interaction, or exactly collinear predictors."
     end
 
     tested = setdiff(_resolve_tested_coefs(coef_names, tested_coefs, test_intercept), dropped_coefs)
@@ -694,7 +813,7 @@ function _compute_pixel!(scr::LmmScratch, ctx)
     ctx.n_flips == 0 && return status
 
     lams = Matrix{Float64}[Matrix(A.λ) for A in m.reterms]
-    XtVX_s, XtVy_s, _ = _block_gls_stats(scr.design, lams, scr.y)
+    XtVX_s, XtVy_s = _block_gls_stats(scr.design, lams, scr.y)
     p = length(ctx.est_cols)
     S = length(XtVy_s)
     XtVX = sum(XtVX_s)
@@ -946,11 +1065,13 @@ function _fit_mass_lmm(
     meta_df,
     f,
     epochs;
-    n_perms::Integer = 1000,
+    n_permutations::Integer = 1000,
+    n_perms::Union{Nothing,Integer} = nothing,
     tested_coefs = nothing,
     test_intercept::Bool = false,
     flip_by = nothing,
-    correction::Symbol = :maxt,
+    correction_method::Symbol = :maxt,
+    correction::Union{Nothing,Symbol} = nothing,
     cluster_threshold::Real = 2.0,
     tfce_E::Real = 0.5,
     tfce_H::Real = 2.0,
@@ -960,11 +1081,15 @@ function _fit_mass_lmm(
     time_points = nothing,
     REML::Bool = false,
     contrasts::AbstractDict = Dict{Symbol,Any}(),
-    progress::Bool = true,
+    show_progress::Bool = true,
+    progress::Union{Nothing,Bool} = nothing,
     rng::AbstractRNG = Random.default_rng(),
 )
-    correction in (:maxt, :cluster, :tfce) || @minimal_error "correction must be :maxt, :cluster or :tfce (got :$correction)"
-    n_perms >= 0 || @minimal_error "n_perms must be ≥ 0"
+    eff_n_perms = isnothing(n_perms) ? n_permutations : n_perms
+    eff_corr = isnothing(correction) ? correction_method : correction
+    eff_progress = isnothing(progress) ? show_progress : progress
+    eff_corr in (:maxt, :cluster, :tfce) || @minimal_error "correction_method must be :maxt, :cluster or :tfce (got :$eff_corr)"
+    eff_n_perms >= 0 || @minimal_error "n_permutations must be ≥ 0"
     n_channels, n_timepoints, n_epochs = size(eeg_data)
     nrow(meta_df) == n_epochs ||
         @minimal_error "Number of rows in meta_df ($(nrow(meta_df))) must match number of epochs in eeg_data ($n_epochs)."
@@ -991,12 +1116,12 @@ function _fit_mass_lmm(
         X0_est = Matrix{Float64}(modelmatrix(m0)[:, invperm(MixedModels.pivot(m0))][:, est_cols])
         df_bw = _compute_bw_dfs(m0, X0_est, est_cols, n_coefs)
 
-        do_perm = n_perms > 0 && !isempty(tested)
+        do_perm = eff_n_perms > 0 && !isempty(tested)
         do_perm &&
-            correction !== :maxt &&
+            eff_corr !== :maxt &&
             isnothing(spatial_connectivity) &&
             n_channels > 1 &&
-            @warn "No spatial connectivity or layout available: clusters/TFCE will form across time only."
+            @minimal_warning "No spatial connectivity or layout available: clusters/TFCE will form across time only."
 
         flip_col, block_ids, H, exhaustive = nothing, nothing, zeros(0, 0), false
         if do_perm
@@ -1005,7 +1130,7 @@ function _fit_mass_lmm(
             2.0^(n_blocks - 1) >= MIN_SIGN_FLIPS || @minimal_error "Only $n_blocks levels of :$flip_col: whole-block sign flipping " *
                            "has $(2^(n_blocks - 1)) distinct patterns, too few to reach p < 0.05. At least 6 blocks are required."
             n_blocks < 8 &&
-                @warn "Only $n_blocks levels of :$flip_col: the permutation distribution is coarse (≤ $(2^(n_blocks - 1)) distinct values)."
+                @minimal_warning "Only $n_blocks levels of :$flip_col: the permutation distribution is coarse (≤ $(2^(n_blocks - 1)) distinct values)."
 
             # Check OLS block leverage up front: any coefficient identified from a single block
             # (or with < 1 effective CR2 degree of freedom across blocks) cannot be block-permuted.
@@ -1042,9 +1167,9 @@ function _fit_mass_lmm(
                     end
                 end
                 if !isempty(untestable)
-                    @warn "Coefficient(s) $(join(coef_names[untestable], ", ")) have fewer than 2 effective across-block " *
-                          "degrees of freedom (e.g. identified from only one or two levels of :$flip_col) and are excluded from " *
-                          "permutation testing; their p_corrected is NaN."
+                    @minimal_warning "Coefficient(s) $(join(coef_names[untestable], ", ")) have fewer than 2 effective across-block " *
+                                     "degrees of freedom (e.g. identified from only one or two levels of :$flip_col) and are excluded from " *
+                                     "permutation testing; their p_corrected is NaN."
                     tested = setdiff(tested, untestable)
                 end
             end
@@ -1052,15 +1177,15 @@ function _fit_mass_lmm(
             if isempty(tested)
                 do_perm = false
             else
-                H, exhaustive = _sign_flip_matrix(n_blocks, n_perms, rng)
+                H, exhaustive = _sign_flip_matrix(n_blocks, eff_n_perms, rng)
                 _warn_small_n_perms(size(H, 2), exhaustive)
                 @info "Permutation inference: whole-block sign flipping by :$flip_col ($n_blocks blocks, " *
                       (exhaustive ? "all $(size(H, 2)) distinct patterns" : "$(size(H, 2)) random patterns") *
-                      "), correction = :$correction, testing $(join(coef_names[tested], ", "))"
+                      "), correction = :$eff_corr, testing $(join(coef_names[tested], ", "))"
             end
         end
         n_flips = size(H, 2)
-        store_maps = do_perm && correction !== :maxt
+        store_maps = do_perm && eff_corr !== :maxt
         store_maps && _check_zperm_memory(n_channels, n_timepoints, n_flips, length(tested))
         tested_pos = Int[findfirst(==(c), est_cols)::Int for c in tested]
 
@@ -1095,7 +1220,7 @@ function _fit_mass_lmm(
         )
 
         # 3. Mass-univariate fits across threads
-        if progress
+        if eff_progress
             if n_threads > 1
                 @info "Fitting $(length(tasks)) mixed models across $n_epochs epochs on $n_threads threads..."
             else
@@ -1105,10 +1230,10 @@ function _fit_mass_lmm(
 
         make_scratch() = _create_scratch(f, copy(meta_df_init; copycols = true), est_cols, block_ids, n_flips, length(tested), contrasts)
         scratches = [make_scratch() for _ = 1:n_slots]
-        prog = Progress(length(tasks); dt = 1, desc = "Fitting models...", enabled = progress)
+        prog = Progress(length(tasks); dt = 1, desc = "Fitting models...", enabled = eff_progress)
 
         Logging.with_logger(Logging.NullLogger()) do
-            _run_pixel_chunks!(scratches, task_chunks, eeg, out, base_ctx, prog, progress)
+            _run_pixel_chunks!(scratches, task_chunks, eeg, out, base_ctx, prog, eff_progress)
         end
         finish!(prog)
 
@@ -1144,7 +1269,7 @@ function _fit_mass_lmm(
                 SparseMatrixCSC{Bool}(spatial_connectivity)
             spatial_conn = issymmetric(spatial_conn) ? spatial_conn : (spatial_conn .| copy(transpose(spatial_conn)))
             ctx = (
-                correction = correction,
+                correction = eff_corr,
                 cluster_threshold = Float64(cluster_threshold),
                 tfce_E = tfce_E,
                 tfce_H = tfce_H,
@@ -1155,7 +1280,7 @@ function _fit_mass_lmm(
                 exhaustive = exhaustive,
             )
             if store_maps
-                @info correction === :tfce ? "Computing TFCE null distribution..." :
+                @info eff_corr === :tfce ? "Computing TFCE null distribution..." :
                       "Computing cluster-mass null distribution (threshold = $cluster_threshold)..."
                 _map_null!(null_max, out.zperm, tested, ctx)
             else
@@ -1167,7 +1292,7 @@ function _fit_mass_lmm(
         end
 
         inference = (
-            correction = do_perm ? correction : :none,
+            correction = do_perm ? eff_corr : :none,
             n_perms = n_flips,
             exhaustive = exhaustive,
             p_value_convention = exhaustive ? :exhaustive_hypercube : :monte_carlo_phipson_smyth,

@@ -1208,16 +1208,7 @@ function _convert_to_erp_for_plotting(datasets, time_interval::Interval = times(
                 1,
             )
         else
-            ErpData(
-                dat.file,
-                dat.condition,
-                dat.condition_name,
-                average_trials(dat),
-                dat.layout,
-                dat.sample_rate,
-                dat.analysis_info,
-                n_epochs(dat),
-            )
+            average_epochs(dat)
         end
     end
 end

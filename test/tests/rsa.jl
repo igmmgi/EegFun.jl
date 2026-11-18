@@ -629,6 +629,11 @@ using EegFun
         EegFun.compare_models!(ga, models_vec; model_names = ["M1"], n_permutations = 10, tail = :both)
         @test !isnothing(ga.model_correlations)
 
+        # Aligned `correlation_method` keyword and `correlation_type` legacy alias produce identical results
+        res_cm = EegFun.compare_models(ga, models_vec; correlation_method = :pearson, n_permutations = 0)
+        res_ct = EegFun.compare_models(ga, models_vec; correlation_type = :pearson, n_permutations = 0)
+        @test res_cm.model_correlations == res_ct.model_correlations
+
         # 7. Base.copy(::RsaData) and empty show guards
         ga_cp = copy(ga)
         ga_cp.rdm[1, 1, 2] = 999.0

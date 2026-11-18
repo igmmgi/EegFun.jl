@@ -326,6 +326,18 @@ using EegFun
         @test erp_sp isa EegFun.ErpData
         @test all(abs.(erp_sp.data.Ch2) .< 100.0)
         @test erp_sp.analysis_info.repaired_channels == [:Ch2]
+
+        # 4. repair_channels!(dat, repair_info::ContinuousRepairInfo) defaults to repair_info.method
+        cdat_sp = EegFun.create_test_continuous_data(n = 80, n_channels = 4, seed = 21)
+        cdat_sp.layout.data.x3 = [0.0, 0.1, 0.0, -0.1]
+        cdat_sp.layout.data.y3 = [0.1, 0.0, -0.1, 0.0]
+        cdat_sp.layout.data.z3 = [0.0, 0.0, 0.0, 0.0]
+        cdat_sp.data[!, :Ch2] .= 500.0
+        cdat_ref = EegFun.repair_channels(cdat_sp, [:Ch2]; method = :spherical_spline)
+        rinfo = EegFun.ContinuousRepairInfo("sp_test", :spherical_spline, [:Ch2], Symbol[])
+        EegFun.repair_channels!(cdat_sp, rinfo)
+        @test cdat_sp.analysis_info.repaired_channels == [:Ch2]
+        @test cdat_sp.data.Ch2 ≈ cdat_ref.data.Ch2
     end
 
 end

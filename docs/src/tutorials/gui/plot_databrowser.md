@@ -149,7 +149,6 @@ The databrowser is essential for interactive EEG exploration and quality control
 
 using EegFun
 using GLMakie
-using JLD2
 
 const DEMO_OUTPUT = "./tutorials/output/"
 mkpath(DEMO_OUTPUT)
@@ -203,7 +202,9 @@ dat = EegFun.create_eegfun_data(dat, layout)
 EegFun.rereference!(dat, :avg)
 EegFun.highpass_filter!(dat, 0.5)
 
-# Flag extreme values and epoch intervals (Boolean columns) + add a custom continuous trace
+# Flag extreme values, EOG channels/onsets, and epoch intervals (Boolean columns) + add a custom continuous trace
+EegFun.calculate_eog_channels!(dat, EegFun.EogConfig())
+EegFun.detect_eog_onsets!(dat, EegFun.EogConfig())
 EegFun.is_extreme_value!(dat, 100)
 EegFun.mark_epoch_intervals!(dat, [1, 2], [-0.2, 1.0])
 dat.data[:, :sinewave] = 50.0 .* sin.(2π .* 10.0 .* dat.data[:, :time])
@@ -218,7 +219,7 @@ EegFun.plot_databrowser(dat; channel_line_width = 2, selection_color = (:green, 
 # ICA OVERLAY & LIVE COMPONENT REMOVAL PREVIEW
 #######################################################################
 
-ica_result = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_100), percentage_of_data = 25)
+ica_result = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_100), percentage_of_data = 100)
 EegFun.plot_databrowser(dat, ica_result)
 
 #######################################################################
@@ -232,9 +233,9 @@ EegFun.plot_databrowser(epochs[1])
 EegFun.plot_databrowser(epochs[1], ica_result)
 
 # Save and browse directly from JLD2 files on disk
-jldsave(joinpath(DEMO_OUTPUT, "dat.jld2"), data = dat)
-jldsave(joinpath(DEMO_OUTPUT, "epochs.jld2"), data = epochs)
-jldsave(joinpath(DEMO_OUTPUT, "ica.jld2"), data = ica_result)
+EegFun.save_data(joinpath(DEMO_OUTPUT, "dat.jld2"), dat)
+EegFun.save_data(joinpath(DEMO_OUTPUT, "epochs.jld2"), epochs)
+EegFun.save_data(joinpath(DEMO_OUTPUT, "ica.jld2"), ica_result)
 
 EegFun.plot_databrowser(joinpath(DEMO_OUTPUT, "dat.jld2"))
 EegFun.plot_databrowser(joinpath(DEMO_OUTPUT, "epochs.jld2"))

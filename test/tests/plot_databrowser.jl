@@ -700,4 +700,19 @@ using DataFrames
         events(ep_prev.fig).window_open[] = false
         @test length(Makie.Observables.listeners(ep_state.data.current_epoch)) == n_ep_before
     end
+
+    @testset "filepath and pattern overloads accept in-memory InfoIca" begin
+        mktempdir() do tmpdir
+            cdat_f = EegFun.create_test_continuous_data(n = 400, n_channels = 3, seed = 31)
+            ica_mem = EegFun.run_ica(cdat_f; params = EegFun.IcaPrms(max_iter = 5))
+            fpath = joinpath(tmpdir, "1_cont.jld2")
+            EegFun.JLD2.jldsave(fpath; data = cdat_f, format_version = EegFun.EEGFUN_FORMAT_VERSION)
+
+            res_file = EegFun.plot_databrowser(fpath, ica_mem; display_plot = false)
+            @test res_file.fig isa Figure
+
+            res_pat = EegFun.plot_databrowser("cont", ica_mem; input_dir = tmpdir, display_plot = false)
+            @test length(res_pat) == 1 && res_pat[1].fig isa Figure
+        end
+    end
 end

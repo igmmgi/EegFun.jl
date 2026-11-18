@@ -51,9 +51,7 @@ function signal_example_eda_scr()
         end
     end
 
-    # =========================================================================
-    # LEFT PANEL: Eccrine Sweat Glands, Poral Valve & Parallel Conductance
-    # =========================================================================
+    # Left panel: Eccrine sweat glands, poral valve & parallel conductance
     ax_anatomy =
         Axis(fig[1, 1], title = "Eccrine Sweat Glands (Poral Valve) & Parallel Conductance", titlesize = title_font, aspect = DataAspect())
     hidedecorations!(ax_anatomy)
@@ -188,7 +186,7 @@ function signal_example_eda_scr()
         color = "#0369a1",
     )
 
-    # Parallel Conductance vs Resistance Readout Box (Slide 34 demonstration)
+    # Parallel conductance vs resistance readout box
     readout_text = lift(scl_base, scr_amp) do base_g, amp_g
         peak_g = base_g + amp_g
         r_base = 1000.0 / base_g
@@ -200,9 +198,7 @@ function signal_example_eda_scr()
     poly!(ax_anatomy, Rect2f(-5.05, -3.55, 10.1, 0.72), color = "#f8fafc", strokecolor = "#cbd5e1", strokewidth = 1.3)
     text!(ax_anatomy, 0.0, -3.19, text = readout_text, align = (:center, :center), font = :bold, fontsize = 12.0, color = "#0f172a")
 
-    # =========================================================================
-    # RIGHT PANEL: Single-Trial ER-SCR Morphology & Dawson Measures (Slide 32)
-    # =========================================================================
+    # Right panel: Single-trial ER-SCR morphology & Dawson measures
     ax_scr = Axis(
         fig[1:2, 2],
         title = "Single Event-Related Response — Skin Conductance G [µS]",
@@ -241,7 +237,7 @@ function signal_example_eda_scr()
         # Stimulus bar near bottom
         stim_rect = Rect2f(Float32(t_stim), Float32(ymin + 0.025 * (ymax - ymin)), 1.0f0, Float32(0.055 * (ymax - ymin)))
 
-        # Reference vertical & horizontal dashed segments (Slide 32 style)
+        # Reference vertical & horizontal dashed segments
         y_arrow_row = y_lo - 0.15 * span
         ref_segs = Point2f[
             # Baseline SCL horizontal line
@@ -346,7 +342,7 @@ function signal_example_eda_scr()
         markersize = 12,
     )
 
-    # Anatomical labels matching Slide 32
+    # Morphological landmark labels
     text!(
         ax_scr,
         0.35,
@@ -430,9 +426,7 @@ function signal_example_eda_scr()
         linestyle = :dash,
     )
 
-    # =========================================================================
-    # CONTROLS PANEL (Bottom-Left under Schematic)
-    # =========================================================================
+    # Controls panel (bottom-left under schematic)
     ctrl_layout = fig[2, 1] = GridLayout(tellwidth = false, halign = :center)
     sl_grid = ctrl_layout[1, 1] = GridLayout(tellwidth = false, halign = :center)
 

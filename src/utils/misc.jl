@@ -76,32 +76,35 @@ function detrend(x::AbstractVector, y::AbstractVector)::Vector{Float64}
     n == length(y) || @minimal_error "x and y must have the same length"
     n < 2 && @minimal_error "Need at least 2 points for detrending"
 
+    inv_n = 1.0 / n
     sum_x = 0.0
     sum_y = 0.0
-    sum_xy = 0.0
-    sum_x2 = 0.0
     @inbounds @simd for i in eachindex(x, y)
-        xi = Float64(x[i])
-        yi = Float64(y[i])
-        sum_x += xi
-        sum_y += yi
-        sum_xy = muladd(xi, yi, sum_xy)
-        sum_x2 = muladd(xi, xi, sum_x2)
+        sum_x += Float64(x[i])
+        sum_y += Float64(y[i])
+    end
+    mean_x = sum_x * inv_n
+    mean_y = sum_y * inv_n
+
+    sxx = 0.0
+    sxy = 0.0
+    @inbounds @simd for i in eachindex(x, y)
+        dx = Float64(x[i]) - mean_x
+        sxx = muladd(dx, dx, sxx)
+        sxy = muladd(dx, Float64(y[i]) - mean_y, sxy)
     end
 
-    denom = n * sum_x2 - sum_x * sum_x
     out = Vector{Float64}(undef, n)
-    if abs(denom) < 1e-15
-        mean_y = sum_y / n
-        @inbounds @simd for i = 1:n
+    if sxx < 1e-15
+        @inbounds @simd for i in eachindex(y)
             out[i] = Float64(y[i]) - mean_y
         end
         return out
     end
 
-    m = (n * sum_xy - sum_x * sum_y) / denom
-    b = (sum_y - m * sum_x) / n
-    @inbounds @simd for i = 1:n
+    m = sxy / sxx
+    b = mean_y - m * mean_x
+    @inbounds @simd for i in eachindex(x, y)
         out[i] = Float64(y[i]) - muladd(m, Float64(x[i]), b)
     end
     return out

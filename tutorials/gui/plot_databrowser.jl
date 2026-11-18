@@ -8,7 +8,6 @@
 
 using EegFun
 using GLMakie
-using JLD2
 
 const DEMO_OUTPUT = "./tutorials/output/"
 mkpath(DEMO_OUTPUT)
@@ -93,9 +92,9 @@ EegFun.plot_databrowser(epochs[1])
 EegFun.plot_databrowser(epochs[1], ica_result)
 
 # Save and browse directly from JLD2 files on disk
-jldsave(joinpath(DEMO_OUTPUT, "dat.jld2"), data = dat)
-jldsave(joinpath(DEMO_OUTPUT, "epochs.jld2"), data = epochs)
-jldsave(joinpath(DEMO_OUTPUT, "ica.jld2"), data = ica_result)
+EegFun.save_data(joinpath(DEMO_OUTPUT, "dat.jld2"), dat)
+EegFun.save_data(joinpath(DEMO_OUTPUT, "epochs.jld2"), epochs)
+EegFun.save_data(joinpath(DEMO_OUTPUT, "ica.jld2"), ica_result)
 
 EegFun.plot_databrowser(joinpath(DEMO_OUTPUT, "dat.jld2"))
 EegFun.plot_databrowser(joinpath(DEMO_OUTPUT, "epochs.jld2"))

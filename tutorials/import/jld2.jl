@@ -8,7 +8,6 @@
 
 using EegFun
 using GLMakie
-using JLD2
 
 const DEMO_OUTPUT = "./tutorials/output/"
 mkpath(DEMO_OUTPUT)
@@ -29,10 +28,10 @@ EegFun.rereference!(dat, :avg)
 EegFun.highpass_filter!(dat, 0.1)
 
 # Save continuous data
-jldsave(joinpath(DEMO_OUTPUT, "continuous_data.jld2"); data = dat)
+EegFun.save_data(joinpath(DEMO_OUTPUT, "continuous_data.jld2"), dat)
 
 # Load it back
-loaded_dat = load(joinpath(DEMO_OUTPUT, "continuous_data.jld2"), "data")
+loaded_dat = EegFun.read_data(joinpath(DEMO_OUTPUT, "continuous_data.jld2"))
 
 # Verify it's the same
 EegFun.all_data(loaded_dat) == EegFun.all_data(dat)
@@ -52,14 +51,14 @@ epoch_cfg = [
 epochs = EegFun.extract_epochs(dat, epoch_cfg, (-0.2, 1.0))
 
 # Save all conditions
-jldsave(joinpath(DEMO_OUTPUT, "epochs_all.jld2"); data = epochs)
+EegFun.save_data(joinpath(DEMO_OUTPUT, "epochs_all.jld2"), epochs)
 
 # Save individual conditions
-jldsave(joinpath(DEMO_OUTPUT, "epochs_condition1.jld2"); data = epochs[1])
-jldsave(joinpath(DEMO_OUTPUT, "epochs_condition2.jld2"); data = epochs[2])
+EegFun.save_data(joinpath(DEMO_OUTPUT, "epochs_condition1.jld2"), epochs[1])
+EegFun.save_data(joinpath(DEMO_OUTPUT, "epochs_condition2.jld2"), epochs[2])
 
 # Load epochs back
-loaded_epochs = load(joinpath(DEMO_OUTPUT, "epochs_all.jld2"), "data")
+loaded_epochs = EegFun.read_data(joinpath(DEMO_OUTPUT, "epochs_all.jld2"))
 
 
 #######################################################################
@@ -70,10 +69,10 @@ loaded_epochs = load(joinpath(DEMO_OUTPUT, "epochs_all.jld2"), "data")
 erps = EegFun.average_epochs(epochs)
 
 # Save ERPs
-jldsave(joinpath(DEMO_OUTPUT, "erps.jld2"); data = erps)
+EegFun.save_data(joinpath(DEMO_OUTPUT, "erps.jld2"), erps)
 
 # Load ERPs
-loaded_erps = load(joinpath(DEMO_OUTPUT, "erps.jld2"), "data")
+loaded_erps = EegFun.read_data(joinpath(DEMO_OUTPUT, "erps.jld2"))
 
 
 #######################################################################
@@ -85,20 +84,22 @@ EegFun.is_extreme_value!(dat, 100)
 ica_result = EegFun.run_ica(dat, sample_selection = EegFun.samples_not(:is_extreme_value_100))
 
 # Save ICA decomposition
-jldsave(joinpath(DEMO_OUTPUT, "ica_decomposition.jld2"); data = ica_result)
+EegFun.save_data(joinpath(DEMO_OUTPUT, "ica_decomposition.jld2"), ica_result)
 
 # Load ICA
-loaded_ica = load(joinpath(DEMO_OUTPUT, "ica_decomposition.jld2"), "data")
+loaded_ica = EegFun.read_data(joinpath(DEMO_OUTPUT, "ica_decomposition.jld2"))
 
 # Can use loaded ICA with databrowser
 EegFun.plot_databrowser(dat, loaded_ica)
 
 
 #######################################################################
-# SAVING MULTIPLE ITEMS IN ONE FILE
+# SAVING MULTIPLE CUSTOM KEYS IN ONE FILE (DIRECT JLD2)
 #######################################################################
 
-# Save multiple related objects together
+using JLD2
+
+# Save multiple related objects under custom named keys
 jldsave(joinpath(DEMO_OUTPUT, "analysis_results.jld2"); epochs = epochs, erps = erps, ica = ica_result)
 
 # Load specific items

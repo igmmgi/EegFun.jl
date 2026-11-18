@@ -20,11 +20,16 @@ Baseline correction removes the pre-stimulus mean from each trial, ensuring that
 
 ## Baseline Methods
 
-**Mean correction** (default):
+**Mean correction** (`baseline` / `baseline!`):
 
 - Subtract the mean voltage during baseline period
 - Standard approach in ERP research
 - Appropriate when baseline is stable
+
+**Linear detrending** (`detrend` / `detrend!`):
+
+- Subtract the least-squares linear trend (`type = :linear`) estimated over the entire epoch/recording or a pre-stimulus `interval_selection`
+- Useful when slow linear drifts distort single trials or ERPs
 
 ## Best Practices
 
@@ -159,6 +164,11 @@ EegFun.plot_erp(erps, channel_selection = EegFun.channels([:Fp1]))
 
 # We can see the influence of baseline interval interactively using the plot_erp_measurement_gui
 EegFun.plot_erp_measurement_gui(erps)
+
+# Linear detrending (removes slow linear voltage ramps per channel / per epoch)
+epochs_detrended = EegFun.detrend(epochs)                              # fit linear trend across full epoch
+epochs_pre_dt = EegFun.detrend(epochs; interval_selection = (-0.2, 0)) # fit pre-stimulus linear trend only
+EegFun.plot_epochs(epochs_detrended, channel_selection = EegFun.channels([:Fp1]))
 ```
 
 :::

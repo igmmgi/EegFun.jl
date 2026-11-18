@@ -1,6 +1,7 @@
 using Test
 using Random
 using Statistics
+using JLD2
 using EegFun
 
 @testset "Decoding Statistics" begin
@@ -183,6 +184,44 @@ using EegFun
         flat_stats = EegFun.test_against_chance(flat_list; correction_method = :bonferroni)
         @test all(isnan, flat_stats.t_statistics)
         @test !any(flat_stats.significant_mask)
+
+        # EegFunData subtyping, Base.show, and read_data JLD2 round-trip for DecodingStatisticsResult, StatisticalData, TFStatisticalData
+        @test r1 isa EegFun.EegFunData
+        @test contains(sprint(show, r1), "DecodingStatisticsResult")
+        mktempdir() do tmpd
+            dec_path = joinpath(tmpd, "dec_stats.jld2")
+            jldsave(dec_path; data = r1)
+            loaded_dec = EegFun.read_data(dec_path)
+            @test loaded_dec isa EegFun.DecodingStatisticsResult
+            @test loaded_dec.t_statistics == r1.t_statistics
+
+            erps_p1 =
+                [EegFun.create_test_erp_data(participant = 1, condition = 1), EegFun.create_test_erp_data(participant = 1, condition = 2)]
+            erps_p2 =
+                [EegFun.create_test_erp_data(participant = 2, condition = 1), EegFun.create_test_erp_data(participant = 2, condition = 2)]
+            p1_path = joinpath(tmpd, "1_erps.jld2")
+            p2_path = joinpath(tmpd, "2_erps.jld2")
+            jldsave(p1_path; data = erps_p1)
+            jldsave(p2_path; data = erps_p2)
+            prep_erp = EegFun.prepare_stats("erps", :paired; input_dir = tmpd)
+            @test prep_erp isa EegFun.EegFunData
+            stat_path = joinpath(tmpd, "prep_erp.jld2")
+            jldsave(stat_path; data = prep_erp)
+            @test EegFun.read_data(stat_path) isa EegFun.StatisticalData
+
+            tf_prep = EegFun.prepare_stats(
+                "tf_data",
+                :paired;
+                input_dir = EegFun.example_path("data/julia/tf"),
+                condition_selection = EegFun.conditions([1, 2]),
+                frequency_selection = (4.0, 12.0),
+                interval_selection = (0.0, 0.3),
+            )
+            @test tf_prep isa EegFun.EegFunData
+            tf_stat_path = joinpath(tmpd, "prep_tf.jld2")
+            jldsave(tf_stat_path; data = tf_prep)
+            @test EegFun.read_data(tf_stat_path) isa EegFun.TFStatisticalData
+        end
     end
 
 end # @testset "Decoding Statistics"

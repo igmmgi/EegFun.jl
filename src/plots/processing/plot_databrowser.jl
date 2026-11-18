@@ -2968,10 +2968,10 @@ function plot_databrowser(
     screen = nothing,
     kwargs...,
 )
+    ica_obj = ica isa AbstractString ? read_data(ica) : ica
     if endswith(filename, ".jld2")
         dat_eeg = read_data(filename)
-        !isnothing(ica) && (ica = read_data(ica))
-        return plot_databrowser(dat_eeg, ica; screen = screen, kwargs...)
+        return plot_databrowser(dat_eeg, ica_obj; screen = screen, kwargs...)
     end
     files = _require_batch_files(filename, input_dir, participant_selection)
     results = NamedTuple[]
@@ -2979,7 +2979,7 @@ function plot_databrowser(
         @info "Browsing: $file"
         dat_eeg = read_data(joinpath(input_dir, file))
         isnothing(dat_eeg) && continue
-        push!(results, plot_databrowser(dat_eeg, nothing; screen = screen, kwargs...))
+        push!(results, plot_databrowser(dat_eeg, ica_obj; screen = screen, kwargs...))
     end
     return results
 end

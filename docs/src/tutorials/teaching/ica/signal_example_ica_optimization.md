@@ -1,13 +1,13 @@
 # Signal Example — ICA 6: Inside the Black Box
 
-This interactive visualization demystifies the ICA algorithm by showing how it physically searches for independent sources by treating it as an optimization ("hill climbing") problem.
+This interactive visualization shows how ICA searches for independent sources by formulating unmixing as an optimization ("hill climbing") problem.
 
 > [!TIP]
-> This is Part 6 of the ICA series. Before attempting this, ensure you understand why the search space is purely rotational by looking at **Part 5: Sphering**.
+> This is Part 6 of the ICA series. See [Part 5: Sphering](signal_example_ica_sphering.md) first to see why the remaining search space is purely rotational.
 
-## What is the Black Box doing?
+## What is the Algorithm Doing?
 
-Earlier demos showed that ICA "magically" finds an unmixing matrix to recover the sources. Mathematically, it does this by making the projected data as **non-Gaussian** as possible.
+Earlier demos showed that ICA estimates an unmixing matrix to recover the underlying sources. It does this by finding projections that make the output distribution as **non-Gaussian** as possible.
 
 The "Central Limit Theorem in reverse" tells us:
 - Mixed signals are more Gaussian (like a standard bell curve).

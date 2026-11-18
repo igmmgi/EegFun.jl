@@ -10,31 +10,16 @@ using EegFun
 using GLMakie
 
 # ==============================================================================
-# Regenerate TF morlet data from epoch data 
+# Setup bundled example TF datasets (or regenerate from your own epochs via EegFun.tf_morlet)
 # ==============================================================================
-epoch_dir = joinpath(homedir(), "Documents", "Julia", "TestDataSets", "AttentionExp", "output_data")  # ← Update to your data path
-println("Regenerating TF morlet data from epochs...")
-
-EegFun.tf_morlet(
-    "epochs_final";
-    input_dir = epoch_dir,
-    condition_selection = EegFun.conditions([1, 2]),
-    frequencies = 1:2:40,
-    cycles = 7,
-    pad = :both,
-)
-
-# ==============================================================================
-# Setup
-# ==============================================================================
-input_dir = joinpath(epoch_dir, "tf_morlet_epochs_final")
-file_pattern = "epochs_final"
+input_dir = EegFun.example_path("data/julia/tf")
+file_pattern = "tf_data"
 
 # ==============================================================================
 # Load a single participant to test plot_topography for TF data
 # ==============================================================================
 println("Loading single participant TF data...")
-single_data = EegFun.read_data(joinpath(input_dir, "example1_epochs_final.jld2"))
+single_data = EegFun.read_data(joinpath(input_dir, "tf_data_1.jld2"))
 
 # Inspect conditions
 println("Number of datasets: ", length(single_data))

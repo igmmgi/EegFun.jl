@@ -18,11 +18,16 @@ Baseline correction removes the pre-stimulus mean from each trial, ensuring that
 
 ### Baseline Methods
 
-**Mean correction** (default):
+**Mean correction** (`baseline` / `baseline!`):
 
 - Subtract the mean voltage during baseline period
 - Standard approach in ERP research
 - Appropriate when baseline is stable
+
+**Linear detrending** (`detrend` / `detrend!`):
+
+- Subtract the least-squares linear trend (`type = :linear`) estimated over the entire epoch/recording or a pre-stimulus `interval_selection`
+- Useful when slow linear drifts distort single trials or ERPs
 
 ## Best Practices
 

@@ -1,43 +1,43 @@
 # Data Persistence (JLD2)
 
-This demo shows how to save and load processed EEG data using the JLD2 format and EegFun's built-in loading utilities.
+This demo shows how to save and load processed EEG data using `EegFun.save_data`, `EegFun.read_data`, and the JLD2 format.
 
 ## Why JLD2?
 
-JLD2 is the standard approach for persisting Julia objects. When used with EegFun.jl, it preserves all data types and metadata without conversion, so you can save and reload continuous data, epochs, ERPs, and ICA results exactly as they are.
+JLD2 is the standard approach for persisting Julia objects. When used with EegFun.jl, it preserves all data types and metadata without conversion, so you can save and reload continuous data, epochs, ERPs, ICA decompositions, and statistical results as-is.
 
 ## Key Functions
 
 | Function | Purpose |
 | --- | --- |
-| `jldsave` | Save one or more objects to a JLD2 file |
-| `load` | Load specific keys or all data from a JLD2 file |
-| `read_data` | Smart EegFun loader — auto-detects data types from JLD2 |
+| `save_data` | Save an `EegFunData` object (or vector) to a `.jld2` file with format metadata |
+| `read_data` | Smart EegFun loader — auto-detects data types from a `.jld2` file |
 | `read_all_data` | Batch load all matching files from a directory |
 | `group_by_condition` | Organise loaded data into an OrderedDict by condition |
+| `JLD2.jldsave` / `JLD2.load` | Lower-level JLD2 access for multi-key custom bundles |
 
 ## Key Patterns
 
-**Saving data** — use Julia's `jldsave` to store one or more objects:
+**Saving and loading EegFun data** — use `EegFun.save_data` and `EegFun.read_data` (no `using JLD2` needed):
 
 ```julia
-jldsave("epochs.jld2"; data = epochs)
+EegFun.save_data("epochs.jld2", epochs)
+loaded_epochs = EegFun.read_data("epochs.jld2")
+```
+
+**Batch loading** — load a cohort across participants and group by condition:
+
+```julia
+all_erps = EegFun.read_all_data("./derivatives/erps/erps_final")
+grouped = EegFun.group_by_condition(all_erps)
+```
+
+**Custom multi-key bundles** — use `JLD2.jldsave` and `JLD2.load` directly when storing several named keys in one file:
+
+```julia
+using JLD2
 jldsave("results.jld2"; epochs = epochs, erps = erps, ica = ica_result)
-```
-
-**Loading data** — use `load` to read specific keys:
-
-```julia
-epochs = load("epochs.jld2", "data")
 results = load("results.jld2")    # loads everything as a Dict
-```
-
-**EegFun utilities** — smart loading and batch operations:
-
-```julia
-loaded = EegFun.read_data("erps.jld2")                    # auto-detect types
-all_erps = EegFun.read_all_data("./derivatives/erps/erps_final")  # load all matching
-grouped = EegFun.group_by_condition(all_erps)               # organise by condition
 ```
 
 **Direct file paths** — many EegFun plot functions accept JLD2 file paths directly:
@@ -92,7 +92,6 @@ EegFun.plot_databrowser("continuous_data.jld2", "ica.jld2")
 
 using EegFun
 using GLMakie
-using JLD2
 
 const DEMO_OUTPUT = "./tutorials/output/"
 mkpath(DEMO_OUTPUT)
@@ -113,10 +112,10 @@ EegFun.rereference!(dat, :avg)
 EegFun.highpass_filter!(dat, 0.1)
 
 # Save continuous data
-jldsave(joinpath(DEMO_OUTPUT, "continuous_data.jld2"); data = dat)
+EegFun.save_data(joinpath(DEMO_OUTPUT, "continuous_data.jld2"), dat)
 
 # Load it back
-loaded_dat = load(joinpath(DEMO_OUTPUT, "continuous_data.jld2"), "data")
+loaded_dat = EegFun.read_data(joinpath(DEMO_OUTPUT, "continuous_data.jld2"))
 
 # Verify it's the same
 EegFun.all_data(loaded_dat) == EegFun.all_data(dat)
@@ -136,14 +135,14 @@ epoch_cfg = [
 epochs = EegFun.extract_epochs(dat, epoch_cfg, (-0.2, 1.0))
 
 # Save all conditions
-jldsave(joinpath(DEMO_OUTPUT, "epochs_all.jld2"); data = epochs)
+EegFun.save_data(joinpath(DEMO_OUTPUT, "epochs_all.jld2"), epochs)
 
 # Save individual conditions
-jldsave(joinpath(DEMO_OUTPUT, "epochs_condition1.jld2"); data = epochs[1])
-jldsave(joinpath(DEMO_OUTPUT, "epochs_condition2.jld2"); data = epochs[2])
+EegFun.save_data(joinpath(DEMO_OUTPUT, "epochs_condition1.jld2"), epochs[1])
+EegFun.save_data(joinpath(DEMO_OUTPUT, "epochs_condition2.jld2"), epochs[2])
 
 # Load epochs back
-loaded_epochs = load(joinpath(DEMO_OUTPUT, "epochs_all.jld2"), "data")
+loaded_epochs = EegFun.read_data(joinpath(DEMO_OUTPUT, "epochs_all.jld2"))
 
 
 #######################################################################
@@ -154,10 +153,10 @@ loaded_epochs = load(joinpath(DEMO_OUTPUT, "epochs_all.jld2"), "data")
 erps = EegFun.average_epochs(epochs)
 
 # Save ERPs
-jldsave(joinpath(DEMO_OUTPUT, "erps.jld2"); data = erps)
+EegFun.save_data(joinpath(DEMO_OUTPUT, "erps.jld2"), erps)
 
 # Load ERPs
-loaded_erps = load(joinpath(DEMO_OUTPUT, "erps.jld2"), "data")
+loaded_erps = EegFun.read_data(joinpath(DEMO_OUTPUT, "erps.jld2"))
 
 
 #######################################################################
@@ -169,20 +168,22 @@ EegFun.is_extreme_value!(dat, 100)
 ica_result = EegFun.run_ica(dat, sample_selection = EegFun.samples_not(:is_extreme_value_100))
 
 # Save ICA decomposition
-jldsave(joinpath(DEMO_OUTPUT, "ica_decomposition.jld2"); data = ica_result)
+EegFun.save_data(joinpath(DEMO_OUTPUT, "ica_decomposition.jld2"), ica_result)
 
 # Load ICA
-loaded_ica = load(joinpath(DEMO_OUTPUT, "ica_decomposition.jld2"), "data")
+loaded_ica = EegFun.read_data(joinpath(DEMO_OUTPUT, "ica_decomposition.jld2"))
 
 # Can use loaded ICA with databrowser
 EegFun.plot_databrowser(dat, loaded_ica)
 
 
 #######################################################################
-# SAVING MULTIPLE ITEMS IN ONE FILE
+# SAVING MULTIPLE CUSTOM KEYS IN ONE FILE (DIRECT JLD2)
 #######################################################################
 
-# Save multiple related objects together
+using JLD2
+
+# Save multiple related objects under custom named keys
 jldsave(joinpath(DEMO_OUTPUT, "analysis_results.jld2"); epochs = epochs, erps = erps, ica = ica_result)
 
 # Load specific items

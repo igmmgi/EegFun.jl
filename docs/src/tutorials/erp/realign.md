@@ -9,28 +9,28 @@ Stimulus-locked epochs are aligned to stimulus onset (t=0). Realignment shifts t
 Common use cases:
 
 - **Response-locked ERPs** — study motor preparation relative to button press
-- **Saccade-locked ERPs** — study activity relative to eye movement onset
-- **Any event-locked analysis** — realign to any column in the epoch data
+- **Saccade-locked ERPs** — study activity relative to eye movement trigger
+- **Any trigger-locked analysis** — realign to any trigger code(s) present within each epoch
 
 ## How it Works
 
-1. Each epoch's time vector is shifted so that the realignment value becomes t=0
-2. All epochs are cropped to the common time interval that is valid across all trials
-3. A uniform time vector is regenerated to ensure consistency
+1. Each epoch's time vector is shifted so that the first matching realignment trigger becomes `t = 0`
+2. Epochs that do not contain any of the requested realignment triggers are dropped
+3. Remaining epochs are cropped to the shared common time interval across trials
 
 ## Key Functions
 
 | Function | Purpose |
 | --- | --- |
-| `realign!(epochs, :rt)` | Realign in place (mutating) |
-| `realign(epochs, :rt)` | Return a realigned copy |
-| `realign(file_pattern, :rt)` | Batch realign across participants |
+| `realign!(epochs, [201, 202])` | Realign in place to matching trigger(s) |
+| `realign(epochs, [201, 202])` | Return a realigned copy |
+| `realign(file_pattern, [201, 202])` | Batch realign across participants |
 
 ## Workflow Summary
 
 ## Single-Participant Realignment
 
-- Realign epochs to response time column
+- Realign epochs to response trigger codes (e.g., `[201, 202]`)
 
 ## Batch Realignment
 
@@ -76,10 +76,8 @@ epochs = EegFun.read_data(EegFun.example_path("data/julia/epochs/example1_epochs
 # and drops epochs that do not contain any of these triggers.
 EegFun.realign!(epochs, [201, 202])
 
-# The time axis is now response-locked! Let's compute the ERP.
-# We will use condition 1.
-# Note that we use grand_average since we are taking the mean over epochs
-response_locked_erp = EegFun.grand_average([epochs[1]])
+# The time axis is now response-locked! Let's compute the ERP for condition 1.
+response_locked_erp = EegFun.average_epochs(epochs[1])
 
 # Plot the response-locked ERP
 EegFun.plot_erp(response_locked_erp)

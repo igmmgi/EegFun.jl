@@ -439,7 +439,7 @@ function update_amica_parameters!(
     if m > 1
         @inbounds for j = 1:m, i = 1:n
             denom = wa.dmu_denom[i, j]
-            denom_safe = abs(denom) < T(1e-15) ? sign(denom) * T(1e-15) : denom
+            denom_safe = abs(denom) < T(1e-15) ? (denom < zero(T) ? T(-1e-15) : T(1e-15)) : denom
             location[i, j] += clamp(wa.dmu_numer[i, j] / denom_safe, T(-10.0), T(10.0))
         end
     end
@@ -932,7 +932,7 @@ function _amica_optimize_gpu!(
         end
 
         if m > 1
-            dmu_denom_safe = ifelse.(abs.(dmu_denom_c) .< 1e-15, sign.(dmu_denom_c) .* 1e-15, dmu_denom_c)
+            dmu_denom_safe = ifelse.(abs.(dmu_denom_c) .< 1e-15, ifelse.(dmu_denom_c .< 0.0, -1e-15, 1e-15), dmu_denom_c)
             location_cpu .+= clamp.(dmu_numer_c ./ dmu_denom_safe, -10.0, 10.0)
         end
 

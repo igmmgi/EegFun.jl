@@ -117,3 +117,20 @@ EegFun.plot_erp_stats(
     show_progress = true,
     use_gpu = true,
 )
+
+# ----------------------------------------------------------------------------
+# Option: Mass-Univariate Linear Mixed Models (Single-Trial EpochData)
+# ----------------------------------------------------------------------------
+# Requires MixedModels and StatsModels to be loaded:
+using MixedModels, StatsModels
+
+all_epochs = EegFun.read_all_data(joinpath(EegFun.example_path("data/julia/epochs"), "epochs"))
+lmm_result = EegFun.fit_mass_lmm(
+    all_epochs,
+    @formula(y ~ 1 + condition + (1 | participant));
+    condition_selection = EegFun.conditions([1, 2]),
+    n_permutations = 1000,
+    correction_method = :cluster,
+)
+lmm_cond_stats = EegFun.extract_predictor_stats(lmm_result, 2)
+EegFun.plot_erp_stats(lmm_cond_stats, channel_selection = EegFun.channels(:PO8))

@@ -58,13 +58,13 @@ function _extract_trigger_cols(trig_col::AbstractVector, time_col::AbstractVecto
     ignore_set = has_ignore ? Set(ignore_triggers) : nothing
     has_info_col = !isnothing(info_col)
 
-    trigger_codes = Int16[]
+    trigger_codes = Int[]
     trigger_times = Float64[]
     trigger_info = String[]
     @inbounds for i in eachindex(trig_col, time_col)
         v = trig_col[i]
         if v != 0
-            c = Int16(v)
+            c = Int(v)
             if !has_ignore || !(c in ignore_set)
                 push!(trigger_codes, c)
                 push!(trigger_times, Float64(time_col[i]))
@@ -81,7 +81,7 @@ function _extract_trigger_data(dat::ContinuousData, ignore_triggers = Int[])
     return _extract_trigger_cols(dat.data[!, :trigger], dat.data[!, :time], info_col, ignore_triggers)
 end
 
-function _count_triggers(trigger_codes::Vector{Int16})
+function _count_triggers(trigger_codes::AbstractVector{<:Integer})
     counts = Dict{Int,Int}()
     for c in trigger_codes
         k = Int(c)
@@ -94,7 +94,7 @@ function _count_triggers(trigger_codes::Vector{Int16})
     return trigger_count
 end
 
-function _count_triggers(trigger_codes::Vector{Int16}, trigger_info::Vector{String})
+function _count_triggers(trigger_codes::AbstractVector{<:Integer}, trigger_info::Vector{String})
     counts = Dict{Int,Int}()
     first_info = Dict{Int,String}()
     n_info = length(trigger_info)
@@ -242,7 +242,7 @@ end
 function _plot_trigger_events!(
     ax::Axis,
     trigger_times::AbstractVector{Float64},
-    trigger_codes::AbstractVector{Int16},
+    trigger_codes::AbstractVector{<:Integer},
     trigger_info::Union{Nothing,AbstractVector{String}} = nothing;
     timeline_start::Float64 = trigger_times[1],
     timeline_end::Float64 = trigger_times[end],
@@ -325,7 +325,7 @@ function _plot_trigger_events!(
 end
 
 function _create_interactive_trigger_plot_impl(
-    trigger_codes::Vector{Int16},
+    trigger_codes::AbstractVector{<:Integer},
     trigger_times::Vector{Float64},
     trigger_info::Union{Nothing,Vector{String}},
     plot_kwargs::Dict{Symbol,Any},

@@ -234,12 +234,14 @@ function plot_erp_image(
 
     if plot_layout.type == :topo
         scale_pos = get(plot_kwargs, :layout_topo_scale_pos, get(plot_layout.metadata, :topo_scale_pos, (0.8, -0.8)))
+        scale_halign = 0.0 <= scale_pos[1] <= 1.0 ? scale_pos[1] : clamp((scale_pos[1] + 1) / 2, 0.0, 1.0)
+        scale_valign = 0.0 <= scale_pos[2] <= 1.0 ? scale_pos[2] : clamp((scale_pos[2] + 1) / 2, 0.0, 1.0)
         scale_ax = Axis(
             fig[1, 1],
             width = Relative(plot_layout.metadata[:topo_plot_width]),
             height = Relative(plot_layout.metadata[:topo_plot_height]),
-            halign = scale_pos[1],
-            valign = scale_pos[2],
+            halign = scale_halign,
+            valign = scale_valign,
         )
         push!(axes, scale_ax)
         scale_ax.title = ""

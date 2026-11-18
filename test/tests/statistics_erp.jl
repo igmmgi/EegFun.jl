@@ -915,7 +915,7 @@ end
         @test size(ind) == (7, 20)
         @test all(p -> sort(ind[:, p]) == 1:7, 1:20)
         @test ind == EegFun._draw_permutation_plan(Random.Xoshiro(1), :independent, 3, 4, 20)
-        @test_throws ErrorException EegFun._draw_permutation_plan(Random.Xoshiro(1), :bogus, 3, 4, 2)
+        @test_throws EegFun.EegFunError EegFun._draw_permutation_plan(Random.Xoshiro(1), :bogus, 3, 4, 2)
     end
 
     @testset "_foreach_chunk" begin
@@ -990,6 +990,18 @@ end
 
         erps_1p = _build_erp_test_data(n_participants = 1)
         @test_throws EegFun.EegFunError EegFun.prepare_stats(erps_1p; design = :paired)
+
+        # StatsAPI.stderror aligns with analysis_interval (matching StatsAPI.coef and stat_matrix.t)
+        prep_win = EegFun.prepare_stats(erps_named; design = :paired, analysis_interval = (0.1, 0.3))
+        for res_w in (
+            EegFun.analytic_test(prep_win),
+            EegFun.permutation_test(prep_win; n_permutations = 10, cluster_type = :temporal, rng = Random.Xoshiro(7)),
+        )
+            cf = EegFun.StatsAPI.coef(res_w)
+            se_w = EegFun.StatsAPI.stderror(res_w)
+            @test size(se_w) == size(cf) == size(res_w.stat_matrix.t)
+            @test isapprox(cf ./ se_w, res_w.stat_matrix.t; rtol = 1e-8)
+        end
     end
 
 end # @testset "ERP Statistics"

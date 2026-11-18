@@ -176,9 +176,7 @@ function signal_example_eda_habituation()
         halign = :center,
     )
 
-    # =========================================================================
-    # TOP STRIP: Continuous Multi-Trial EDA Recording (Slides 29, 30, 32, 36)
-    # =========================================================================
+    # Top strip: Continuous multi-trial EDA recording
     ax_eda = Axis(
         fig[2, 1:2],
         title = "Continuous Skin Conductance Recording — Tonic SCL, Phasic ER-SCRs & Spontaneous Fluctuations (SF)",
@@ -270,9 +268,7 @@ function signal_example_eda_habituation()
         framecolor = "#cbd5e1",
     )
 
-    # =========================================================================
-    # BOTTOM-LEFT: Phasic SCR Habituation across Trials (Barry & Sokolov, 1993)
-    # =========================================================================
+    # Bottom-left: Phasic SCR habituation across trials (Barry & Sokolov, 1993)
     ax_hab_scr = Axis(
         fig[3, 1],
         title = "Phasic Habituation — Relative √SCR across Trials (Barry & Sokolov, 1993)",
@@ -306,9 +302,7 @@ function signal_example_eda_habituation()
         framecolor = "#cbd5e1",
     )
 
-    # =========================================================================
-    # BOTTOM-RIGHT: Tonic SCL across Trials (Barry & Sokolov, 1993)
-    # =========================================================================
+    # Bottom-right: Tonic SCL across trials (Barry & Sokolov, 1993)
     ax_hab_scl = Axis(
         fig[3, 2],
         title = "Tonic Adaptation — Pre-Stimulus SCL across Trials",
@@ -337,9 +331,7 @@ function signal_example_eda_habituation()
         ylims!(ax_hab_scl, s_lo0 - 0.6, max(s_lo0 + 1.5, s_hi0 + 0.6))
     end
 
-    # =========================================================================
-    # CONTROLS PANEL (Row 4)
-    # =========================================================================
+    # Controls panel (row 4)
     ctrl_layout = fig[4, 1:2] = GridLayout(tellwidth = false, halign = :center)
     sl_grid = ctrl_layout[1, 1] = GridLayout(tellwidth = false, halign = :center)
 

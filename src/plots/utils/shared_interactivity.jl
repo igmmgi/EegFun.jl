@@ -141,7 +141,7 @@ function _norm_screen_rect(fig::Figure, p1, p2; clamp_unit::Bool = false)
 end
 
 function _start_figure_channel_selection!(fig::Figure, selection_state::SharedSelectionState, plot_layout, channel_selection_active)
-    plot_layout.type in (:topo, :grid) || return
+    plot_layout.type in (:topo, :grid, :custom) || return
     selection_start = events(fig).mouseposition[]
     selection_state.bounds[] = (selection_start[1], selection_start[2])
     channel_selection_active[] = true
@@ -149,7 +149,7 @@ function _start_figure_channel_selection!(fig::Figure, selection_state::SharedSe
 end
 
 function _update_figure_channel_selection!(fig::Figure, selection_state::SharedSelectionState, plot_layout)
-    plot_layout.type in (:topo, :grid) || return
+    plot_layout.type in (:topo, :grid, :custom) || return
     x1, y1, x2, y2 = _norm_screen_rect(fig, selection_state.bounds[], events(fig).mouseposition[])
     rect_points = [Point2f(x1, y1), Point2f(x2, y1), Point2f(x2, y2), Point2f(x1, y2)]
     current_idx = selection_state.current_selection_idx
@@ -179,7 +179,7 @@ function _finish_figure_channel_selection!(
     channel_selection_active,
     axes::Vector{Axis},
 )
-    (plot_layout.type in (:topo, :grid) && channel_selection_active[]) || return
+    (plot_layout.type in (:topo, :grid, :custom) && channel_selection_active[]) || return
     current_bounds = _norm_screen_rect(fig, selection_state.bounds[], events(fig).mouseposition[]; clamp_unit = true)
     current_idx = selection_state.current_selection_idx
     if isnothing(current_idx) || current_idx > length(selection_state.selection_bounds)
@@ -229,6 +229,11 @@ function _finish_figure_channel_selection!(
 end
 
 function _clear_all_shared_channel_selections!(fig::Figure, selection_state::SharedSelectionState)
+    had_selection =
+        !isempty(selection_state.selection_rectangles) ||
+        !isempty(selection_state.channel_rectangles) ||
+        !isempty(selection_state.selection_bounds)
+    had_selection || return
     for rect in selection_state.selection_rectangles
         delete!(rect.parent, rect)
     end

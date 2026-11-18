@@ -12,7 +12,7 @@ Quick reference for common EEG processing tasks in EegFun.jl.
 | Load a Neuromag/MNE .fif file | `EegFun.read_raw_data("file.fif")` |
 | Load an XDF file | `EegFun.read_xdf("file.xdf")` |
 | Load an EEGLAB file | `EegFun.read_eeglab("file.set")` |
-| Load a FieldTrip .mat file | `EegFun.read_fieldtrip("file.mat")` |
+| Load a FieldTrip .mat file | `EegFun.read_fieldtrip("file.mat", layout)` |
 | Load a BIDS run | `EegFun.read_bids("bids_root", subject="01", task="posner")` |
 | Load a channel layout | `EegFun.read_layout("layout.csv")` |
 | Create EegFun data structure | `EegFun.create_eegfun_data(raw, layout)` |
@@ -21,8 +21,7 @@ Quick reference for common EEG processing tasks in EegFun.jl.
 
 | I want to... | Function |
 | --- | --- |
-| Save data to JLD2 | `jldsave("file.jld2"; data = dat)` |
-| Load data from JLD2 | `load("file.jld2", "data")` |
+| Save data to JLD2 | `EegFun.save_data("file.jld2", dat)` |
 | Smart-load EegFun data | `EegFun.read_data("file.jld2")` |
 | Batch load all matching files | `EegFun.read_all_data("dir/pattern")` |
 | Group loaded data by condition | `EegFun.group_by_condition(data)` |
@@ -38,6 +37,7 @@ Quick reference for common EEG processing tasks in EegFun.jl.
 | Bandpass filter (sequential) | `EegFun.highpass_filter!(dat, 0.1); EegFun.lowpass_filter!(dat, 30.0)` |
 | Resample data | `EegFun.resample!(dat, 256)` |
 | Apply baseline correction | `EegFun.baseline!(dat, (-0.2, 0.0))` |
+| Remove linear drift (detrend) | `EegFun.detrend!(dat)` |
 | Create channel difference | `EegFun.channel_difference!(dat, channel_selection1=EegFun.channels([:C3]), channel_selection2=EegFun.channels([:C4]), channel_out=:laterality)` |
 | Average channels into ROI | `EegFun.channel_average!(dat, channel_selections=[EegFun.channels([:Fz, :Cz, :Pz])], output_labels=[:midline])` |
 | Delete channels | `EegFun.channel_delete!(dat, EegFun.channels([:M1, :M2]))` |
@@ -65,25 +65,25 @@ Quick reference for common EEG processing tasks in EegFun.jl.
 | Extract epochs | `EegFun.extract_epochs(dat, cfg, (-0.2, 1.0))` |
 | Print epoch count table | `EegFun.epochs_table(epochs)` |
 | Baseline correct epochs | `EegFun.baseline!(epochs, (-0.2, 0.0))` |
-| Detect bad epochs automatically | `EegFun.detect_bad_epochs_automatic(epochs)` |
-| Detect bad epochs interactively | `EegFun.detect_bad_epochs_interactive(epochs)` |
-| Reject marked epochs | `EegFun.reject_epochs(epochs)` |
+| Detect bad epochs automatically | `artifacts = EegFun.detect_bad_epochs_automatic(epochs)` |
+| Detect bad epochs interactively | `EegFun.detect_bad_epochs_interactive(epochs[1])` |
+| Reject marked epochs | `EegFun.reject_epochs(epochs, artifacts)` |
 | Log before/after rejection table | `EegFun.log_epochs_table(before, after)` |
-| Repair artifacts (interpolation) | `EegFun.repair_artifacts(epochs)` |
+| Repair artifacts (interpolation) | `EegFun.repair_artifacts(epochs, artifacts)` |
 
 ## ERP Operations
 
 | I want to... | Function |
 | --- | --- |
 | Average epochs into ERPs | `EegFun.average_epochs(epochs)` |
-| Combine conditions | `EegFun.condition_combine(erps, [[1, 2]])` |
+| Combine epoch conditions | `EegFun.condition_combine(epochs, [[1, 2]])` |
 | Subtract conditions | `EegFun.condition_difference(erps, [(1, 2)])` |
 | Average conditions | `EegFun.condition_average(erps, [[1, 2]])` |
 | Compute grand average | `EegFun.grand_average(all_erps)` |
 | Jackknife average | `EegFun.jackknife_average(all_erps)` |
 | Compute GFP | `EegFun.gfp(erps)` |
 | Realign epochs to response trigger | `EegFun.realign!(epochs, [201])` |
-| Compute LRP | `EegFun.lrp(erps, channel_selection1=EegFun.channels([:C3]), channel_selection2=EegFun.channels([:C4]))` |
+| Compute LRP | `EegFun.lrp(erps, [(1, 2)], channel_selection=EegFun.channels([:C3]))` |
 
 ## ERP Measurements & Export
 
@@ -117,7 +117,7 @@ Quick reference for common EEG processing tasks in EegFun.jl.
 | Prepare group data for stats | `EegFun.prepare_stats("erps", :paired, condition_selection=EegFun.conditions([1, 2]))` |
 | Run analytic t-test | `EegFun.analytic_test(stat_data)` |
 | Run permutation test | `EegFun.permutation_test(stat_data, n_permutations=1000, alpha=0.05, cluster_alpha=0.05)` |
-| Fit mass-univariate mixed model | `EegFun.fit_mass_lmm(epochs, @formula(amp ~ 1 + condition + (1 | subject)))` |
+| Fit mass-univariate mixed model | `EegFun.fit_mass_lmm(all_epochs, @formula(y ~ 1 + condition + (1 | participant)))` |
 | Test decoding against chance | `EegFun.test_against_chance(decoded_list)` |
 | Cluster permutation (decoding) | `EegFun.test_against_chance_cluster(decoded_list)` |
 
@@ -134,13 +134,13 @@ Quick reference for common EEG processing tasks in EegFun.jl.
 | Plot TF statistics | `EegFun.plot_tf_stats(result, channel_selection=EegFun.channels(:Cz))` |
 | Plot TF topography stats | `EegFun.plot_topography_stats(result, freq_range=(8.0, 12.0))` |
 | Plot ICA components | `EegFun.plot_topography(ica)` |
-| Plot epochs grid | `EegFun.plot_epochs(epochs)` |
+| Plot epochs grid | `EegFun.plot_epochs(epochs, layout=:grid)` |
 | Plot ERP image | `EegFun.plot_erp_image(epochs, channel_selection=EegFun.channels(:Pz))` |
 | Plot GFP | `EegFun.plot_gfp(erps)` |
 | Plot channel layout | `EegFun.plot_layout_2d(layout)` |
-| Plot artifact detection | `EegFun.plot_artifact_detection(epochs)` |
+| Plot artifact detection | `EegFun.plot_artifact_detection(epochs, artifacts)` |
 | Plot frequency spectrum | `EegFun.plot_channel_spectrum(dat)` |
-| Plot filter response | `EegFun.plot_filter_response(dat)` |
+| Plot filter response | `EegFun.plot_filter_response(filter_info)` |
 | Plot decoding results | `EegFun.plot_decoding(decoded)` |
 | Plot RSA results | `EegFun.plot_rdm_heatmap(rsa_result)` |
 

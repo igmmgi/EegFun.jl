@@ -112,7 +112,7 @@ end
         p = size(X, 2)
         ids = LMM_EXT._block_ids(meta.subject)
         design = LMM_EXT.BlockDesign(m, X, ids)
-        XtVX_s, XtVy_s, _ = LMM_EXT._block_gls_stats(design, [Matrix(A.λ) for A in m.reterms], m.y)
+        XtVX_s, XtVy_s = LMM_EXT._block_gls_stats(design, [Matrix(A.λ) for A in m.reterms], m.y)
         S = maximum(ids)
         H = hcat(ones(S), rand(rng, [-1.0, 1.0], S, 30))
 
@@ -851,4 +851,76 @@ end
         progress = false,
     )
     @test all(0.0 .< res_nc.p_corrected[:, :, 2] .<= 1.0)
+
+    # Aligned primary keywords (`n_permutations`, `correction_method`, `show_progress`) and MethodError fallback
+    res_aligned = EegFun.fit_mass_lmm(
+        epochs_nocoord,
+        @formula(amplitude ~ condition + (1 | subject));
+        n_permutations = 15,
+        correction_method = :maxt,
+        rng = MersenneTwister(12),
+        show_progress = false,
+    )
+    @test res_aligned.inference.n_perms == 15
+    @test res_aligned.inference.correction === :maxt
+    @test_throws MethodError EegFun.fit_mass_lmm("invalid_epochs_arg", @formula(amplitude ~ 1 + (1 | subject)))
+
+    # Aligned `n_permutations` keyword in `generate_permutation_matrix` across :within, :synchronized, and :global
+    sync_df = DataFrame(Subject = repeat(["S1", "S2"], inner = 4), Item = repeat(["I1", "I2", "I1", "I2"], outer = 2))
+    @test size(EegFun.generate_permutation_matrix(sync_df, :Subject; n_permutations = 7, type = :within, rng = MersenneTwister(1))) ==
+          (8, 7)
+    @test size(
+        EegFun.generate_permutation_matrix(
+            sync_df,
+            :Item;
+            sync_col = :Subject,
+            n_permutations = 7,
+            type = :synchronized,
+            rng = MersenneTwister(1),
+        ),
+    ) == (8, 7)
+    @test size(EegFun.generate_permutation_matrix(sync_df, :Subject; n_permutations = 7, type = :global, rng = MersenneTwister(1))) ==
+          (8, 7)
+
+    # fit_mass_lmm on AbstractVector{<:EpochData}: auto-populates :participant & :condition, honors condition_selection, and supports extract_predictor_stats
+    rng_vec = MersenneTwister(404)
+    lay_vec = copy(epochs_nocoord.layout)
+    lay_vec.data.inc = [35.0, 35.0, 55.0]
+    lay_vec.data.azi = [-45.0, 45.0, 0.0]
+    EegFun._ensure_coordinates_2d!(lay_vec)
+    EegFun._ensure_coordinates_3d!(lay_vec)
+    EegFun.get_neighbors_xy!(lay_vec, 1.5)
+
+    vec_epochs = EegFun.EpochData[]
+    for s = 1:6
+        b_s = randn(rng_vec)
+        for (c_num, c_name, eff) in ((1, "cars", 0.0), (2, "faces", 2.0), (3, "houses", -1.0))
+            dfs_sc = DataFrame[]
+            for tr = 1:4
+                mat = randn(rng_vec, 5, 3) .+ b_s .+ eff
+                df = DataFrame(mat, [:Ch1, :Ch2, :Ch3])
+                df.time = collect(range(0.0, 0.4, length = 5))
+                push!(dfs_sc, df)
+            end
+            push!(vec_epochs, EegFun.EpochData("sub-0$(s)_epochs.jld2", c_num, c_name, dfs_sc, copy(lay_vec), 100, EegFun.AnalysisInfo()))
+        end
+    end
+
+    res_vec = EegFun.fit_mass_lmm(
+        vec_epochs,
+        @formula(y ~ 1 + condition + (1 | participant));
+        condition_selection = EegFun.conditions(["cars", "faces"]),
+        n_permutations = 31,
+        correction_method = :cluster,
+        rng = MersenneTwister(99),
+        show_progress = false,
+    )
+    @test EegFun.StatsAPI.nobs(res_vec) == 6 * 2 * 4
+    @test res_vec.coefficients == ["(Intercept)", "condition: faces"]
+    @test res_vec.inference.n_blocks == 6
+    @test all(res_vec.beta[:, :, 2] .> 0.5)
+
+    perm_pred = EegFun.extract_predictor_stats(res_vec, "condition: faces")
+    @test perm_pred isa EegFun.PermutationResult
+    @test size(perm_pred.stat_matrix.t) == (3, 5)
 end

@@ -1,28 +1,26 @@
 # Signal Example — ICA 5: Sphering (Whitening)
 
-This interactive visualization reveals the hidden mathematical shortcut that makes ICA possible: **Sphering**. 
+This interactive visualization illustrates a key preprocessing step in ICA: **sphering (whitening)**.
 
 > [!TIP]
-> This is Part 5 of the ICA series. It bridges the gap between the correlated mixtures of Part 4 and the optimization search space of Part 6.
+> This is Part 5 of the ICA series. It connects the correlated mixtures of Part 4 to the rotational optimization space of Part 6.
 
 ## The Problem
-If you look at raw EEG mixtures, they form skewed, stretched, off-center blobs. If an algorithm blindly tried to untangle that, it would have to calculate huge mathematical matrices involving stretching, skewing, shifting, and rotating all simultaneously. 
-
-That is too difficult for a fast optimization algorithm.
+Raw EEG mixtures form correlated, unequally scaled, off-center distributions. Estimating an unconstrained unmixing matrix directly requires solving for centering, scaling, decorrelation, and rotation all at once.
 
 ## The Solution: Sphering
-Instead of doing everything at once, all modern ICA algorithms apply a standard "Preprocessing" pipeline first called Sphering (or Whitening). 
+Instead of estimating everything simultaneously, ICA algorithms first apply **sphering** (whitening).
 
-This demo lets you physically drag the data through these three exact mathematical steps:
+This demo steps the data through the three stages of sphering:
 
-1. **Centering**: Subtract the mean value so the data block is physically anchored exactly precisely on `(0,0)`.
-2. **PCA Rotation**: Run Principal Component Analysis to find the longest arms of the blob, and physically rotate the blob so it aligns securely with the X and Y axes. This removes any cross-correlation.
-3. **Variance Scaling (Sphering)**: Shrink or stretch the X and Y axes depending on their variance until the entire blob is a perfect mathematical sphere.
+1. **Centering**: Subtract the mean of each channel so the distribution is centered at `(0, 0)`.
+2. **PCA Rotation**: Rotate the principal axes of covariance to align with the coordinate axes, removing pairwise correlation.
+3. **Variance Scaling (Sphering)**: Rescale each axis to unit variance so the covariance matrix becomes the identity matrix.
 
 ## Why Do We Do This?
-Because once the data is transformed into a perfect sphere, the algorithm's job is over functionally: the only property left to search is **Rotation**. 
+Once the data are sphered (uncorrelated with unit variance in every direction), any remaining linear unmixing transformation is an **orthogonal rotation**.
 
-By dragging the "Morph" slider all the way to 3.0 (Sphered), you are setting up the perfect circular search space. This directly leads into [Part 6: Inside the Black Box](signal_example_ica_optimization.md), where we will simply rotate a line through this sphered data to locate the independent components!
+Dragging the **Morph** slider to `3.0` (Sphered) produces this isotropic search space, which leads directly into [Part 6: Inside the Black Box](signal_example_ica_optimization.md), where rotating a projection vector through the sphered data locates the independent components.
 
 ## Code
 

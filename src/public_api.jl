@@ -7,6 +7,7 @@
 # Alphabetically sorted within each category.
 
 # === Types — User-facing data, result, and config types ===
+public AllSelection
 public AnalysisInfo
 public AnalysisSettings
 public AnalyticResult
@@ -71,6 +72,7 @@ public TFStatisticalData
 public TFStatsResult
 public TimeFreqData
 public TimeFreqEpochData
+public TimeSelection
 public TriggerInfo
 public ValidationResult
 public ZScoreRejectionInfo
@@ -120,6 +122,7 @@ public samples_or_not
 public section
 public subset
 public subset_bad_data
+public subsection
 public tail
 public time_vector
 public times
@@ -141,6 +144,7 @@ public read_fieldtrip
 public read_layout
 public read_raw_data
 public read_xdf
+public save_data
 
 # === Layout ===
 public average_number_of_neighbors
@@ -176,6 +180,7 @@ public cleanline!
 public create_highpass_filter
 public create_lowpass_filter
 public detrend
+public detrend!
 public epochs_count
 public epochs_table
 public extract_epochs

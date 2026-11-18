@@ -9,6 +9,8 @@ This demo shows permutation-based statistical testing for ERP data, with multipl
 | `prepare_stats` | Load multi-participant ERPs and prepare for statistical comparison |
 | `analytic_test` | Parametric t-test (uncorrected or Bonferroni) |
 | `permutation_test` | Cluster-based permutation test with multiple thresholding options |
+| `fit_mass_lmm` | Single-trial mass-univariate linear mixed model with sign-flip FWER correction |
+| `extract_predictor_stats` | Extract predictor results from `LmmStatsResult` for ERP/topography plotting |
 | `plot_erp_stats` | Visualise results with significance shading and critical t-values |
 
 ## Thresholding Methods
@@ -174,6 +176,23 @@ EegFun.plot_erp_stats(
     show_progress = true,
     use_gpu = true,
 )
+
+# ----------------------------------------------------------------------------
+# Option: Mass-Univariate Linear Mixed Models (Single-Trial EpochData)
+# ----------------------------------------------------------------------------
+# Requires MixedModels and StatsModels to be loaded:
+using MixedModels, StatsModels
+
+all_epochs = EegFun.read_all_data(joinpath(EegFun.example_path("data/julia/epochs"), "epochs"))
+lmm_result = EegFun.fit_mass_lmm(
+    all_epochs,
+    @formula(y ~ 1 + condition + (1 | participant));
+    condition_selection = EegFun.conditions([1, 2]),
+    n_permutations = 1000,
+    correction_method = :cluster,
+)
+lmm_cond_stats = EegFun.extract_predictor_stats(lmm_result, 2)
+EegFun.plot_erp_stats(lmm_cond_stats, channel_selection = EegFun.channels(:PO8))
 ```
 
 :::

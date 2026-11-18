@@ -570,6 +570,37 @@ using Logging
             @test res_parallel.errors == 0
             @test isfile(joinpath(bp_parallel_out, "subj1_epochs.jld2"))
         end
+
+        @testset "save_data JLD2 helper" begin
+            erp1 = EegFun.create_test_erp_data(participant = 1, condition = 1)
+            erp2 = EegFun.create_test_erp_data(participant = 1, condition = 2)
+
+            # Single EegFunData + automatic parent directory creation + omitted extension
+            nested_path = joinpath(test_dir, "nested_save", "sub1_erp")
+            saved_path = EegFun.save_data(nested_path, erp1)
+            @test saved_path == nested_path * ".jld2"
+            @test isfile(saved_path)
+            @test load(saved_path, "format_version") == EegFun.EEGFUN_FORMAT_VERSION
+            loaded_single = EegFun.read_data(saved_path)
+            @test loaded_single isa EegFun.ErpData
+            @test loaded_single.data.Ch1 == erp1.data.Ch1
+
+            # overwrite = false guard vs overwrite = true
+            @test_throws EegFun.EegFunError EegFun.save_data(saved_path, erp2; overwrite = false)
+            EegFun.save_data(saved_path, erp2; overwrite = true)
+            @test EegFun.read_data(saved_path).condition == 2
+
+            # AbstractVector (including SubArray view) round-trips as Vector{ErpData}
+            vec_path = joinpath(test_dir, "nested_save", "sub1_vec.jld2")
+            erps_all = [erp1, erp2]
+            EegFun.save_data(vec_path, @view erps_all[1:2])
+            loaded_vec = EegFun.read_data(vec_path)
+            @test loaded_vec isa Vector{EegFun.ErpData}
+            @test length(loaded_vec) == 2
+
+            # Invalid non-JLD2 extension throws EegFunError
+            @test_throws EegFun.EegFunError EegFun.save_data(joinpath(test_dir, "bad.csv"), erp1)
+        end
     end
 
     # Cleanup: restore state and remove temporary files

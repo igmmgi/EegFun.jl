@@ -79,4 +79,42 @@ using EegFun
         y_shift = [pt[2] for pt in line_shift[1][]]
         @test y_orig ≈ y_shift
     end
+
+    @testset "empty component_selection, >10 subset pagination, and ECG threshold line preservation" begin
+        @test_throws EegFun.EegFunError EegFun.plot_ica_component_activation(
+            dat,
+            ica_res;
+            component_selection = EegFun.components(Int[]),
+            display_plot = false,
+        )
+
+        dat15 = EegFun.create_test_continuous_data(n = 300, n_channels = 15, seed = 9)
+        ica15 = EegFun.run_ica(dat15; params = EegFun.IcaPrms(max_iter = 5))
+        res_sub12 = EegFun.plot_ica_component_activation(dat15, ica15; component_selection = EegFun.components(1:12), display_plot = false)
+        @test length(res_sub12.axes) == 10
+
+        metrics_df = DataFrame(Component = [1, 2], mean_ibi_s = [0.8, 0.9], std_ibi_s = [0.03, 0.25], peak_ratio = [0.95, 0.40])
+        res_ecg = EegFun.plot_ecg_component_features([1], metrics_df; min_peak_ratio = 0.72, max_ibi_std_s = 0.18, display_plot = false)
+        lbls = filter(b -> b isa Label, res_ecg.fig.content)
+        @test any(l -> occursin("0.72", l.text[]) && occursin("0.18", l.text[]), lbls)
+    end
+
+    @testset "empty component_selection, >10 subset pagination, and ECG threshold line preservation" begin
+        @test_throws EegFun.EegFunError EegFun.plot_ica_component_activation(
+            dat,
+            ica_res;
+            component_selection = EegFun.components(Int[]),
+            display_plot = false,
+        )
+
+        dat15 = EegFun.create_test_continuous_data(n = 300, n_channels = 15, seed = 9)
+        ica15 = EegFun.run_ica(dat15; params = EegFun.IcaPrms(max_iter = 5))
+        res_sub12 = EegFun.plot_ica_component_activation(dat15, ica15; component_selection = EegFun.components(1:12), display_plot = false)
+        @test length(res_sub12.axes) == 10
+
+        metrics_df = DataFrame(Component = [1, 2], mean_ibi_s = [0.8, 0.9], std_ibi_s = [0.03, 0.25], peak_ratio = [0.95, 0.40])
+        res_ecg = EegFun.plot_ecg_component_features([1], metrics_df; min_peak_ratio = 0.72, max_ibi_std_s = 0.18, display_plot = false)
+        lbls = filter(b -> b isa Label, res_ecg.fig.content)
+        @test any(l -> occursin("0.72", l.text[]) && occursin("0.18", l.text[]), lbls)
+    end
 end

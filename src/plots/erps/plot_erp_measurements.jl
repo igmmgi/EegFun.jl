@@ -234,7 +234,7 @@ function _draw_measurement_overlay!(
     marker_color,
 )
     if analysis_type in ("max_peak_amplitude", "min_peak_amplitude")
-        peak_idx = analysis_type == "max_peak_amplitude" ? argmax(selected_data) : argmin(selected_data)
+        peak_idx = argmin(abs.(selected_data .- value))
         peak_time = selected_times[peak_idx]
         vlines!(ax, peak_time, color = marker_color, linewidth = 1, linestyle = :solid, visible = marker_visible)
         text!(

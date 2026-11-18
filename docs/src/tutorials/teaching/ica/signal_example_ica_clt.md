@@ -10,23 +10,23 @@ The Central Limit Theorem (CLT) states that if you take multiple independent var
 
 Brain sources (like a blink artifact, a heart beat, or a rigid alpha burst) are usually highly structured, repeating events. Statistically, they are very "pointy" (Super-Gaussian) or very "flat" (Sub-Gaussian). They do not look like perfect bell curves.
 
-However, because a scalp electrode records a huge volume-conducted mixture of hundreds of these independent brain, muscle, and eye sources, it effectively sums them all up. Because of the CLT, the resulting EEG signal on your screen looks incredibly Gaussian! 
+However, because a scalp electrode records a volume-conducted mixture of many independent brain, muscle, and eye sources, it sums them together. By the CLT, the resulting scalp EEG distribution becomes much closer to Gaussian.
 
 ## The Core Logic of ICA
-Because of the Central Limit Theorem, ICA algorithms operate on one beautifully simple reverse rule:
-**Mixtures are Gaussian. True sources are not.**
+Because of the Central Limit Theorem, ICA applies this relationship in reverse:
+**Mixtures tend toward Gaussianity; underlying sources are typically non-Gaussian.**
 
-If an algorithm wants to find a pure brain source, all it has to do is computationally rotate the data backwards until the resulting distribution stops looking like a bell curve! This is why you will hear the phrase "ICA maximizes Non-Gaussianity" or "ICA maximizes Kurtosis". 
+To isolate an independent source, the algorithm searches for linear projections whose distributions depart maximally from a Gaussian bell curve. This is why ICA is often described as maximizing non-Gaussianity (or kurtosis/negentropy).
 
 ## The Interactive Sandbox
-This demonstration is the purest possible physical proof of the Central Limit Theorem.
+This demonstration illustrates the Central Limit Theorem directly:
 
-- It initializes a single flat distribution (Sub-Gaussian, Kurtosis = -1.20).
-- The slider lets you physically add more independent flat distributions together.
-- Adding just 2 shapes forms a triangle.
-- Adding 5+ shapes instantly forces the histogram perfectly into a mathematically smooth Gaussian Bell Curve (kurtosis dropping to 0.0).
+- It starts from a single uniform distribution (sub-Gaussian, excess kurtosis = -1.20).
+- The slider adds further independent uniform distributions together.
+- Summing 2 uniform variables produces a triangular distribution.
+- Summing 5 or more rapidly approaches a smooth Gaussian bell curve (excess kurtosis approaching 0.0).
 
-This conclusively proves the statistical behavior that makes Blind Source Separation possible. 
+This illustrates the statistical property that makes blind source separation possible.
 
 ## Code
 

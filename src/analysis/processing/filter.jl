@@ -564,7 +564,7 @@ function get_filter_characteristics(filter_info::FilterInfo; npoints::Int = 1000
     @inbounds for i = 1:(npoints-1)
         group_delay[i] = -(unwrapped[i+1] - unwrapped[i]) / (w[i+1] - w[i])
     end
-    phase_delay = -phase ./ w
+    phase_delay = -unwrapped ./ w
     length(phase_delay) >= 2 && (phase_delay[1] = phase_delay[2])
     gd_mask = @view passband_mask[1:(end-1)]
 

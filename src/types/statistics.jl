@@ -29,7 +29,7 @@ Prepared ERP data for permutation or analytic statistical testing (`prepare_stat
 - `se_cond2::Array{Float64,2}`: Condition 2 standard error `[electrodes × time]`
 - `se_diff::Array{Float64,2}`: Mean-difference standard error `[electrodes × time]`
 """
-struct StatisticalData
+struct StatisticalData <: EegFunData
     data::Vector{ErpData}
     analysis::AnalysisData
     se_cond1::Array{Float64,2}

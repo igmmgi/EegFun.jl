@@ -232,18 +232,21 @@ function _apply_layout!(fig::Figure, plot_layout::PlotLayout; kwargs...)
     elseif plot_layout.type == :grid
         rows, cols = plot_layout.dims
         skip_positions = get(plot_layout.metadata, :grid_skip_positions, nothing)
+        grid_positions = Tuple{Int,Int}[]
         channel_idx = 1
         for row = 1:rows, col = 1:cols
             is_skipped = !isnothing(skip_positions) && (row, col) in skip_positions
             ax = _create_axis(fig, fig[row, col]; kwargs...)
             if channel_idx <= length(plot_layout.channels) && !is_skipped
                 _add_axis_and_channel!(axes, channels, ax, plot_layout.channels[channel_idx])
+                push!(grid_positions, (row, col))
                 channel_idx += 1
             else
                 hidespines!(ax)
                 hidedecorations!(ax)
             end
         end
+        plot_layout.metadata[:grid_positions] = grid_positions
         _apply_grid_spacing!(fig, plot_layout)
     elseif plot_layout.type == :topo
         plot_width = plot_layout.metadata[:topo_plot_width]
@@ -310,8 +313,12 @@ end
 function _apply_layout_axis_properties!(axes::Vector{Axis}, plot_layout::PlotLayout; kwargs...)
     if plot_layout.type == :grid
         rows, cols = plot_layout.dims
+        grid_positions = get(plot_layout.metadata, :grid_positions, nothing)
         for (idx, ax) in enumerate(axes)
-            _set_grid_axis_properties!(ax, plot_layout.channels[idx], fld(idx - 1, cols) + 1, mod(idx - 1, cols) + 1, rows, cols; kwargs...)
+            row, col =
+                (!isnothing(grid_positions) && idx <= length(grid_positions)) ? grid_positions[idx] :
+                (fld(idx - 1, cols) + 1, mod(idx - 1, cols) + 1)
+            _set_grid_axis_properties!(ax, plot_layout.channels[idx], row, col, rows, cols; kwargs...)
         end
     elseif plot_layout.type == :topo
         for (idx, ax) in enumerate(axes)

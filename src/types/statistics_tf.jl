@@ -21,7 +21,7 @@ Prepared time-frequency data for permutation or analytic statistical testing (`p
 - `data::Vector{TimeFreqData}`: Grand-average TF data for conditions 1 and 2
 - `analysis::TFAnalysisData`: Design, 4D participant arrays `[participants × electrodes × frequencies × time]`, frequencies, and time points
 """
-struct TFStatisticalData
+struct TFStatisticalData <: EegFunData
     data::Vector{TimeFreqData}
     analysis::TFAnalysisData
 end

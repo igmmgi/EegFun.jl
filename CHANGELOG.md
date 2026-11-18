@@ -10,7 +10,14 @@ and this project adheres to (well, attempts to :-)) [Semantic Versioning](https:
 ### Added
 
 - Inter-trial phase coherence (ITC): `output = :itc` in `tf_morlet` / `tf_stft`, and `tf_itc` for single-trial `TimeFreqEpochData`. ITC results are `TimeFreqData`, so `plot_tf`, topographies, averaging, and TF statistics work on them directly.
-- Mass-univariate linear mixed models (`fit_mass_lmm`, `LmmStatsResult`, `extract_predictor_stats`) via a `MixedModels` / `StatsModels` package extension, with whole-block sign-flip permutation FWER correction (`:maxt`, `:cluster`, `:tfce`), `StatsAPI` methods, and ERP/heatmap/topography plotting.
+- Mass-univariate linear mixed models (`fit_mass_lmm`, `LmmStatsResult`, `extract_predictor_stats`) via a `MixedModels` / `StatsModels` package extension, with whole-block sign-flip permutation FWER correction (`:maxt`, `:cluster`, `:tfce`), `StatsAPI` methods, ERP/heatmap/topography plotting, and direct `AbstractVector{<:EpochData}` stacking with `condition_selection`.
+- `save_data(filepath, data; overwrite = true)` as the JLD2 persistence counterpart to `read_data` / `read_all_data`.
+- `detrend` and `detrend!` methods on `ContinuousData`, `ErpData`, `EpochData`, and vectors of EEG datasets (`type = :linear` or `:constant`, supporting `channel_selection` and `interval_selection`).
+
+### Changed
+
+- Standardized statistical keyword names (`n_permutations`, `correction_method`, `show_progress` in `fit_mass_lmm` and `generate_permutation_matrix`; `correlation_method` in `compare_models(!)`), keeping previous keyword names as fallback aliases.
+- Added `components(::ArtifactComponents)`, positional `show_parameter_info(::AbstractString)`, `EegFunData` subtyping (enabling `read_data` on `.jld2` files) for `StatisticalData`, `TFStatisticalData`, and `DecodingStatisticsResult`, and `public` declarations for `AllSelection`, `TimeSelection`, and `subsection`.
 
 ### Fixed
 
@@ -23,6 +30,8 @@ and this project adheres to (well, attempts to :-)) [Semantic Versioning](https:
 - Fixed `EegFunMetalExt` to declare `supports_fft = false` so `tf_morlet`, `tf_stft`, and `tf_multitaper` fall back cleanly to CPU instead of calling unsupported `MtlArray` FFT plans.
 - Added multi-condition structure, frequency-vector, and non-empty trial validation in `decode_libsvm`, `libsvm_classifier`, `rsa`, and `n_epochs(::TimeFreqEpochData)`.
 - Restricted time-domain `baseline(!)` and `freq_spectrum` to `Union{ContinuousData,ErpData,EpochData}`, added `Nothing` and `Function` interval support to TF `baseline(!)`, defaulted ITC baseline normalization to `:absolute`, and fixed zero-power sample handling in `tf_itc`.
+- Fixed `StatsAPI.stderror(::StatsResult)` to return the analysis-window standard error (`res.se`), unwrapped `phase_delay` in `get_filter_characteristics`, AMICA zero-denominator guards, `:avg` rereferencing channel selection, `repair_channels!(dat, ::ContinuousRepairInfo)` default method, `subset` channel reordering sync, `channel_summary` multithreaded fast path, and targeted plotting/GUI edge cases (`plot_triggers`, `plot_ica_component_activation`, `plot_databrowser`, `plot_topography`, `grid_skip_positions`, `plot_erp_measurements`, `plot_erp_image`, `plot_ecg_component_features`).
+- Fixed broken cheatsheet and tutorial calls (`realign.jl`, `plot_artifacts.jl`, `tf_stats_test.jl`, `artifact-handling.md`) and removed duplicate sidebar mounts and stale tutorial files in `docs/make.jl`.
 
 ## [0.9.0] - 2026-11-15
 

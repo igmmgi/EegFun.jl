@@ -16,14 +16,9 @@ pages = [
     ],
     "Tutorials" => [
         "Overview" => "tutorials/index.md",
-        "Data Structures" => "explanations/data-structures.md",
-        "Layouts" => "explanations/layouts.md",
-        "Manual Preprocessing" => "tutorials/manual-preprocessing.md",
         "Epoch Selection" => "tutorials/epoch-selection.md",
-        "Artifact Handling" => "tutorials/artifact-handling.md",
         "Layouts and Neighbors" => "tutorials/layouts-neighbors.md",
         "Import" => [
-            "Data Import" => "tutorials/import/data_import.md",
             "BioSemi Import" => "tutorials/import/biosemi_import.md",
             "BrainVision Import" => "tutorials/import/brainvision_import.md",
             "EDF Import" => "tutorials/import/edf_import.md",
@@ -31,7 +26,6 @@ pages = [
             "XDF Import" => "tutorials/import/xdf_import.md",
             "EEGLAB Import" => "tutorials/import/eeglab_import.md",
             "FieldTrip Import" => "tutorials/import/fieldtrip_import.md",
-            "Data" => "tutorials/import/data.md",
             "Data Persistence (JLD2)" => "tutorials/import/jld2.md",
             "BIDS Export" => "tutorials/import/bids_export.md",
         ],
@@ -56,10 +50,7 @@ pages = [
             "Layouts & Neighbors" => "tutorials/preprocessing/layouts.md",
             "Analysis Settings" => "tutorials/preprocessing/analysis_settings.md",
         ],
-        "Artifacts" => [
-            "Artifacts" => "tutorials/artifacts/artifacts.md",
-            "Artifact Detection" => "tutorials/artifacts/artifact_detection.md",
-        ],
+        "Artifacts" => ["Artifact Detection" => "tutorials/artifacts/artifact_detection.md"],
         "ERP Analysis" => [
             "ERP Measurements" => "tutorials/erp/erp_measurements.md",
             "Global Field Power" => "tutorials/erp/gfp.md",

@@ -19,7 +19,7 @@ end
 Stores statistical test results on multi-participant decoding accuracy (`times`, `t_statistics`,
 `p_values`, `significant_mask`, `df`, `alpha`, `correction_method`, `clusters`).
 """
-struct DecodingStatisticsResult
+struct DecodingStatisticsResult <: EegFunData
     times::Vector{Float64}
     t_statistics::Vector{Float64}
     p_values::Vector{Float64}
@@ -28,6 +28,16 @@ struct DecodingStatisticsResult
     alpha::Float64
     correction_method::Symbol
     clusters::Union{Vector{TemporalCluster},Nothing}
+end
+
+function Base.show(io::IO, res::DecodingStatisticsResult)
+    t_str = isempty(res.times) ? "N/A" : "$(first(res.times)) to $(last(res.times)) s"
+    n_sig = count(res.significant_mask)
+    print(
+        io,
+        "DecodingStatisticsResult($(length(res.times)) time points [$t_str], df=$(round(Int, res.df)), " *
+        "alpha=$(res.alpha), correction=:$(res.correction_method), $n_sig significant)",
+    )
 end
 
 function _validate_and_extract_diffs(decoded_list::AbstractVector{<:DecodedData}, fn_name::AbstractString, alpha::Real)

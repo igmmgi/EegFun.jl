@@ -272,6 +272,7 @@ function _validate_parameter(value, parameter_spec::ConfigParameter{T}, paramete
 end
 
 """
+    show_parameter_info(parameter_name::AbstractString)
     show_parameter_info(; parameter_name::String = "")
 
 Display documentation for all configuration parameters, a section prefix, or a single parameter.
@@ -279,6 +280,7 @@ Display documentation for all configuration parameters, a section prefix, or a s
 function show_parameter_info(; parameter_name::String = "")
     isempty(parameter_name) ? _show_all_parameters() : _show_specific_parameter(parameter_name)
 end
+show_parameter_info(parameter_name::AbstractString) = show_parameter_info(; parameter_name = String(parameter_name))
 
 function _show_all_parameters()
     @info "Available Configuration Parameters:"

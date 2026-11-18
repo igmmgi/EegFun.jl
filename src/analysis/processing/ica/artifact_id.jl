@@ -692,6 +692,8 @@ function get_all_ica_components(artifacts::ArtifactComponents)
     return sort!(collect(all_comps))
 end
 
+components(artifacts::ArtifactComponents) = components(get_all_ica_components(artifacts))
+
 function Base.show(io::IO, artifacts::ArtifactComponents)
     all_comps = get_all_ica_components(artifacts)
     print(io, "ArtifactComponents($(length(all_comps)) components: $(all_comps))")

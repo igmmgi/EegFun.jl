@@ -4,13 +4,11 @@ on:
   pull_request:
     branches:
       - main
-      - dev
   push:
     tags:
       - '*'
     branches:
       - main
-      - dev
   workflow_dispatch:
 
 concurrency:
@@ -40,7 +38,6 @@ jobs:
       - name: Build PDF Docs
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GKSwstype: nul
           CI: true
           BUILD_PDF: "true"
         run: >
@@ -61,7 +58,6 @@ jobs:
       - name: Build and deploy docs
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GKSwstype: nul
           CI: true
           BUILD_PDF: "false"
         run: >

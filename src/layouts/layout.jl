@@ -524,8 +524,19 @@ Return channel labels in `layout` matching `channel_selection`.
 get_selected_channels(layout::Layout, ::Colon) = get_selected_channels(layout, channels())
 get_selected_channels(layout::Layout, channel_selection) = get_selected_channels(layout, _to_channel_func(channel_selection))
 function get_selected_channels(layout::Layout, channel_selection::Function)
+    channel_selection === Colon() && (channel_selection = channels())
     all_channels = layout.data.label
-    return all_channels[channel_selection(all_channels)]
+    selected = all_channels[channel_selection(all_channels)]
+
+    selection_type = typeof(channel_selection)
+    if hasfield(selection_type, :channel_names)
+        ordered = _handle_channel_names_order(getfield(channel_selection, :channel_names), all_channels, selected)
+        !isnothing(ordered) && (selected = ordered)
+    elseif hasfield(selection_type, :channel_numbers)
+        ordered = _handle_channel_numbers_order(getfield(channel_selection, :channel_numbers), all_channels, selected)
+        !isnothing(ordered) && (selected = ordered)
+    end
+    return selected
 end
 
 """
@@ -539,12 +550,13 @@ function subset_layout!(layout::Layout; channel_selection = channels())
     selected_channels = get_selected_channels(layout, channel_selection)
     n_channels_after = length(selected_channels)
 
-    if n_channels_after < n_channels_before
-        remaining = Set{Symbol}(selected_channels)
-        keep_rows = findall(in(remaining), labels)
+    if selected_channels != labels
+        label_to_row = Dict{Symbol,Int}(ch => i for (i, ch) in enumerate(labels))
+        keep_rows = Int[label_to_row[ch] for ch in selected_channels if haskey(label_to_row, ch)]
         layout.data = layout.data[keep_rows, :]
 
-        if has_neighbors(layout)
+        if has_neighbors(layout) && n_channels_after < n_channels_before
+            remaining = Set{Symbol}(selected_channels)
             old_nb = layout.neighbors
             new_nb = Dict{Symbol,Neighbors}()
             sizehint!(new_nb, n_channels_after)

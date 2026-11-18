@@ -228,7 +228,9 @@ function channel_summary(
     isempty(selected_channels) && @minimal_error("No channels selected for channel summary")
     col_indices = Int[columnindex(first_df, ch) for ch in selected_channels]
 
-    all_samples_fast = sample_selection isa AllSelection && interval_selection isa AllSelection
+    all_samples_fast =
+        (sample_selection isa AllSelection || sample_selection isa _AllSamples) &&
+        (isnothing(interval_selection) || interval_selection isa AllSelection)
     combined_sel = all_samples_fast ? nothing : _combine_interval_sample(interval_selection, sample_selection)
 
     n_valid = length(valid_epochs)

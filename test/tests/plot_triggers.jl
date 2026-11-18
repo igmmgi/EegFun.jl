@@ -255,6 +255,16 @@ using EegFun
             @test result.fig isa Figure
             @test first(result.axes) isa Axis
         end
+
+        @testset "16-bit unsigned BioSemi trigger codes >= 32768" begin
+            dat_hi = EegFun.create_test_continuous_data_with_triggers()
+            dat_hi.data.trigger[10] = 65281
+            dat_hi.data.trigger[20] = 32768
+            res_ov = EegFun.plot_trigger_overview(dat_hi; display_plot = false)
+            res_tm = EegFun.plot_trigger_timing(dat_hi; display_plot = false)
+            @test res_ov.fig isa Figure
+            @test res_tm.fig isa Figure
+        end
     end
 
 end

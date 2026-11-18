@@ -1169,6 +1169,11 @@ neighbour_criterion = 0.44
         rt_loaded = EegFun.read_config(rt_toml)
         @test haskey(rt_loaded, "metadata")
         @test EegFun.PipelineConfig(rt_loaded) isa EegFun.PipelineConfig
+
+        # 8. Positional show_parameter_info("section") matches help prompt
+        redirect_stdout(devnull) do
+            @test EegFun.show_parameter_info("filter") === nothing
+        end
     end
 
     # Cleanup

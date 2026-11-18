@@ -474,5 +474,14 @@ using DataFrames
             @test length(loaded_erps) == 2
             @test EegFun.channel_labels(loaded_erps[1]) == [:Ch1]
         end
+
+        # Channel reordering keeps data columns and layout.data.label synchronized
+        erp_ord = EegFun.create_test_erp_data(n_channels = 3)
+        sub_ord = EegFun.subset(erp_ord; channel_selection = EegFun.channels([:Ch3, :Ch1]))
+        @test sub_ord.layout.data.label == [:Ch3, :Ch1]
+        @test [c for c in propertynames(sub_ord.data) if c ∉ EegFun.meta_labels(sub_ord)] == [:Ch3, :Ch1]
+
+        sub_perm = EegFun.subset(erp_ord; channel_selection = EegFun.channels([3, 2, 1]))
+        @test sub_perm.layout.data.label == [:Ch3, :Ch2, :Ch1]
     end
 end

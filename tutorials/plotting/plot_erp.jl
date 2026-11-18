@@ -7,7 +7,6 @@
 
 using EegFun
 using GLMakie
-using JLD2
 
 # read raw data
 dat = EegFun.read_raw_data(EegFun.example_path("data/bdf/example1.bdf"));

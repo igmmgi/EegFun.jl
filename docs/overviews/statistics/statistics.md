@@ -7,6 +7,8 @@ This demo shows permutation-based statistical testing for ERP data, with multipl
 | `prepare_stats` | Load multi-participant ERPs and prepare for statistical comparison |
 | `analytic_test` | Parametric t-test (uncorrected or Bonferroni) |
 | `permutation_test` | Cluster-based permutation test with multiple thresholding options |
+| `fit_mass_lmm` | Single-trial mass-univariate linear mixed model with sign-flip FWER correction |
+| `extract_predictor_stats` | Extract predictor results from `LmmStatsResult` for ERP/topography plotting |
 | `plot_erp_stats` | Visualise results with significance shading and critical t-values |
 
 ### Thresholding Methods
