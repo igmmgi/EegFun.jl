@@ -170,7 +170,7 @@ function plot_erp_filter_gui(
             kw = color === :black ? (;) : (; color = color)
             plot_erp!(fig, ax, [dat]; channel_selection = channels(ch_sym), legend = false, kw...)
         else
-            t = (0:(size(dat.data, 1)-1)) ./ dat.sample_rate
+            t = hasproperty(dat.data, :time) ? dat.data[!, :time] : (0:(size(dat.data, 1)-1)) ./ dat.sample_rate
             lines!(ax, t, dat.data[!, ch_sym], color = color)
         end
     end

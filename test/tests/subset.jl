@@ -483,5 +483,24 @@ using DataFrames
 
         sub_perm = EegFun.subset(erp_ord; channel_selection = EegFun.channels([3, 2, 1]))
         @test sub_perm.layout.data.label == [:Ch3, :Ch2, :Ch1]
+
+        # Multi-participant & non-1-based condition_selection via get_selected_conditions / subset / _condition_select
+        mp_p1_c2 = EegFun.create_test_erp_data(participant = 1, condition = 2)
+        mp_p1_c2.condition_name = "cars"
+        mp_p1_c5 = EegFun.create_test_erp_data(participant = 1, condition = 5)
+        mp_p1_c5.condition_name = "faces"
+        mp_p2_c2 = EegFun.create_test_erp_data(participant = 2, condition = 2)
+        mp_p2_c2.condition_name = "cars"
+        mp_p2_c5 = EegFun.create_test_erp_data(participant = 2, condition = 5)
+        mp_p2_c5.condition_name = "faces"
+        mp_erps = [mp_p1_c2, mp_p1_c5, mp_p2_c2, mp_p2_c5]
+
+        @test EegFun.get_selected_conditions(mp_erps, EegFun.conditions(5)) == [2, 4]
+        @test EegFun.get_selected_conditions(mp_erps, EegFun.conditions("faces")) == [2, 4]
+        @test EegFun.get_selected_conditions(mp_erps, EegFun.conditions_not("faces")) == [1, 3]
+        @test EegFun.get_selected_conditions(mp_erps, EegFun.conditions([5, 2])) == [2, 4, 1, 3]
+        @test length(EegFun.subset(mp_erps; condition_selection = EegFun.conditions("faces"))) == 2
+        @test length(EegFun._condition_select(mp_erps, EegFun.conditions("faces"))) == 2
+        @test length(EegFun._condition_select(mp_erps, EegFun.conditions(5))) == 2
     end
 end

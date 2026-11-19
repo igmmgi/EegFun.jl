@@ -124,6 +124,40 @@ function _copy_tf_trial_features!(
     return nothing
 end
 
+function _resolve_tf_grid_rows(
+    first_df::DataFrame,
+    selected_rows::AbstractVector{Int},
+    unique_freqs::Vector{Float64},
+    unique_times::Vector{Float64},
+)
+    n_freqs = length(unique_freqs)
+    n_times = length(unique_times)
+    n_expected = n_freqs * n_times
+    n_df = nrow(first_df)
+
+    f_to_idx = Dict{Float64,Int}(f => i for (i, f) in enumerate(unique_freqs))
+    t_to_idx = Dict{Float64,Int}(t => i for (i, t) in enumerate(unique_times))
+    grid_rows = zeros(Int, n_freqs, n_times)
+
+    for r in selected_rows
+        (1 <= r <= n_df) || @minimal_error("Selected row index $r out of bounds (1:$n_df)")
+        fi = get(f_to_idx, Float64(first_df[r, :freq]), 0)
+        ti = get(t_to_idx, Float64(first_df[r, :time]), 0)
+        (fi > 0 && ti > 0) || continue
+        grid_rows[fi, ti] = r
+    end
+
+    if any(==(0), grid_rows) || length(selected_rows) != n_expected
+        @minimal_error(
+            "Selected time-frequency rows do not form a complete frequency × time grid " *
+            "($n_freqs frequencies × $n_times time points = $n_expected rows, got $(length(selected_rows)) rows)"
+        )
+    end
+
+    flat_rows = vec(grid_rows)
+    return _as_contiguous_range(flat_rows, n_df)
+end
+
 function _extract_tf_epoch_arrays(
     epochs::AbstractVector{<:TimeFreqEpochData},
     selected_channels::Vector{Symbol},
@@ -137,7 +171,8 @@ function _extract_tf_epoch_arrays(
     n_freqs = length(unique_freqs)
     n_features = n_ch * n_freqs
 
-    row_idx_spec = _as_contiguous_range(selected_rows, nrow(first_df))
+    row_idx_spec = (n_times > 0 && n_freqs > 0) ? _resolve_tf_grid_rows(first_df, selected_rows, unique_freqs, unique_times) : (1:0)
+    max_req_row = isempty(row_idx_spec) ? 0 : maximum(row_idx_spec)
     n_conds = length(epochs)
     data_arrays = Vector{Array{Float64,3}}(undef, n_conds)
     n_trials_per_condition = Vector{Int}(undef, n_conds)
@@ -152,6 +187,8 @@ function _extract_tf_epoch_arrays(
             first_df_cond = epoch_data.data_power[1]
             ch_indices = Int[columnindex(first_df_cond, ch) for ch in selected_channels]
             for (trial_idx, trial_df) in enumerate(epoch_data.data_power)
+                nrow(trial_df) >= max_req_row ||
+                    @minimal_error("Condition $cond_idx trial $trial_idx has $(nrow(trial_df)) rows, expected at least $max_req_row")
                 for (ch_idx, col_idx) in enumerate(ch_indices)
                     col = trial_df[!, col_idx]
                     cols[ch_idx] = col isa Vector{Float64} ? col : Vector{Float64}(col)

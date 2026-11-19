@@ -621,9 +621,27 @@ end
         combined = EegFun.condition_combine([ep_c2, ep_c5], [[2, 5]])
         @test length(combined) == 1
         @test length(combined[1].data) == 5
+        @test [df.epoch[1] for df in combined[1].data] == [1, 2, 3, 4, 5]
 
         # Mutating combined DataFrame does not modify ep_c2 DataFrame
         combined[1].data[1].Ch1[1] = orig_val + 999.0
         @test ep_c2.data[1].Ch1[1] == orig_val
+
+        # Inconsistent structure throws EegFunError
+        ep_mismatch = EegFun.create_test_epoch_data(condition = 6, n_epochs = 2, n = 40)
+        @test_throws EegFun.EegFunError EegFun.condition_combine([ep_c2, ep_mismatch], [[2, 6]])
+
+        # Multi-participant in-memory Vector{EpochData} combines per participant
+        mp1_c1 = EegFun.create_test_epoch_data(condition = 1, n_epochs = 2, n = 20)
+        mp1_c1.file = "1_epochs.jld2"
+        mp1_c2 = EegFun.create_test_epoch_data(condition = 2, n_epochs = 3, n = 20)
+        mp1_c2.file = "1_epochs.jld2"
+        mp2_c1 = EegFun.create_test_epoch_data(condition = 1, n_epochs = 4, n = 20)
+        mp2_c1.file = "2_epochs.jld2"
+        mp2_c2 = EegFun.create_test_epoch_data(condition = 2, n_epochs = 2, n = 20)
+        mp2_c2.file = "2_epochs.jld2"
+        mp_comb = EegFun.condition_combine([mp1_c1, mp1_c2, mp2_c1, mp2_c2], [[1, 2]])
+        @test length(mp_comb) == 2
+        @test [EegFun.n_epochs(d) for d in mp_comb] == [5, 6]
     end
 end

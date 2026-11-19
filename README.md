@@ -1,3 +1,4 @@
+# EegFun.jl
 
 [![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://igmmgi.github.io/EegFun.jl/dev/)
 [![CI](https://github.com/igmmgi/EegFun.jl/actions/workflows/ci.yml/badge.svg)](https://github.com/igmmgi/EegFun.jl/actions/workflows/ci.yml)
@@ -6,25 +7,23 @@
 ![Julia 1.13+](https://img.shields.io/badge/julia-v1.13+-blue.svg)
 ![Status: Beta](https://img.shields.io/badge/Status-Beta-blue.svg)
 
-# EegFun.jl
-
 <img src="images/readme/EegFunLogo.png" alt="EegFun Logo" width="150"/>
 
 A Julia package for EEG/ERP data analysis and visualization. Currently under active development.
 
 ## Documentation
 
-**[View the full documentation →](https://igmmgi.github.io/EegFun.jl/dev/)**
+[**View the full documentation →**](https://igmmgi.github.io/EegFun.jl/dev/)
 
 The documentation includes:
 
-* Installation instructions and getting started guide
-* Tutorials and Demos
-* Complete API reference
+- Installation instructions and getting started guide
+- Tutorials and Demos
+- Complete API reference
 
 ## Installation
 
-You can install EegFun.jl through the standard Julia package manager. 
+You can install EegFun.jl through the standard Julia package manager.
 
 ### Standard Installation
 
@@ -42,8 +41,9 @@ Pkg.add("EegFun")
 ```
 
 **Note for plotting:** `EegFun.jl` uses [Makie.jl](https://docs.makie.org/) for visualizations. To display plots or use the interactive GUIs, you must also install a Makie backend of your choice:
-*   `add GLMakie` (Recommended for interactive GUIs and the Data Browser)
-*   `add CairoMakie` (Recommended for static, publication-quality plots or headless servers)
+
+- `add GLMakie` (Recommended for interactive GUIs and the Data Browser)
+- `add CairoMakie` (Recommended for static, publication-quality plots or headless servers)
 
 ### Development Version (via GitHub)
 
@@ -56,10 +56,10 @@ Pkg.add(url="https://github.com/igmmgi/EegFun.jl")
 
 ## Features
 
-* **EEG/ERP Analysis**
-* **EEG/ERP Interactive Plots (via Makie.jl)**
-* **Time-Frequency Analysis**
-* **Raw data to full ERP batch preprocessing pipelines**
+- **EEG/ERP Analysis**
+- **EEG/ERP Interactive Plots (via Makie.jl)**
+- **Time-Frequency Analysis**
+- **Raw data to full ERP batch preprocessing pipelines**
 
 ## Showcase
 
@@ -84,7 +84,7 @@ EegFun.plot_databrowser(dat);
 
 </details>
 
-<img src="images/readme/data_browser.png" alt="Data Browser" width="800"/>
+![Data Browser](images/readme/data_browser.png)
 
 ### ICA Data Browser
 
@@ -124,90 +124,58 @@ EegFun.channel_difference!(
 EegFun.is_extreme_value!(dat, 200);
 
 # ICA on continuous data without extreme values
-ica_result = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_200)) 
+ica_result = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_200))
 
 EegFun.plot_ica_component_activation(dat, ica_result)
 ```
 
 </details>
 
-<img src="images/readme/ica_components_activation.png" alt="ICA Component Activation" width="800"/>
+![ICA Component Activation](images/readme/ica_components_activation.png)
 
 ### Plot Gallery
 
-<table>
-  <tr>
-    <td align="center"><b>Epochs (Grid Layout)</b></td>
-    <td align="center"><b>ERP (Topo Layout)</b></td>
-  </tr>
-  <tr>
-    <td><img src="images/readme/epochs_grid_layout.png" alt="Epochs Grid Layout" width="400"/></td>
-    <td><img src="images/readme/erp_topo_layout.png" alt="ERP Topo Layout" width="400"/></td>
-  </tr>
-  <tr>
-    <td align="center"><b>ICA Component Topographies</b></td>
-    <td align="center"><b>ICA Component Spectra</b></td>
-  </tr>
-  <tr>
-    <td><img src="images/readme/ica_components_topography.png" alt="ICA Component Topographies" width="400"/></td>
-    <td><img src="images/readme/ica_components_spectrum.png" alt="ICA Component Spectra" width="400"/></td>
-  </tr>
-  <tr>
-    <td align="center"><b>ERP Measurement GUI</b></td>
-    <td align="center"><b>ERP Filter GUI</b></td>
-  </tr>
-  <tr>
-    <td><img src="images/readme/erp_measurement_gui.png" alt="ERP Measurement GUI" width="400"/></td>
-    <td><img src="images/readme/erp_filter.png" alt="ERP Filter GUI" width="400"/></td>
-  </tr>
-  <tr>
-    <td align="center"><b>Time-Frequency Analysis</b></td>
-    <td align="center"><b>Triggers</b></td>
-  </tr>
-  <tr>
-    <td><img src="images/readme/tf.png" alt="Time-Frequency Analysis" width="400"/></td>
-    <td><img src="images/readme/triggers.png" alt="Triggers" width="400"/></td>
-  </tr>
-  <tr>
-    <td align="center"><b>Plot GUI</b></td>
-    <td align="center"><b>Artifact Detection</b></td>
-  </tr>
-  <tr>
-    <td><img src="images/readme/plot_gui.png" alt="Plot GUI" width="400"/></td>
-    <td><img src="images/readme/artifact_detection.png" alt="Artifact Detection" width="400"/></td>
-  </tr>
-</table>
+| **Epochs (Grid Layout)** | **ERP (Topo Layout)** |
+| :---: | :---: |
+| ![Epochs Grid Layout](images/readme/epochs_grid_layout.png) | ![ERP Topo Layout](images/readme/erp_topo_layout.png) |
+| **ICA Component Topographies** | **ICA Component Spectra** |
+| ![ICA Component Topographies](images/readme/ica_components_topography.png) | ![ICA Component Spectra](images/readme/ica_components_spectrum.png) |
+| **ERP Measurement GUI** | **ERP Filter GUI** |
+| ![ERP Measurement GUI](images/readme/erp_measurement_gui.png) | ![ERP Filter GUI](images/readme/erp_filter.png) |
+| **Time-Frequency Analysis** | **Triggers** |
+| ![Time-Frequency Analysis](images/readme/tf.png) | ![Triggers](images/readme/triggers.png) |
+| **Plot GUI** | **Artifact Detection** |
+| ![Plot GUI](images/readme/plot_gui.png) | ![Artifact Detection](images/readme/artifact_detection.png) |
 
 <details>
-<summary><b>More Plot Examples</b></summary>
+<summary>More Plot Examples</summary>
 
 <details>
 <summary>Artifact Detection</summary>
 
-<img src="images/readme/artifact_detection.png" alt="Artifact Detection" width="600"/>
+![Artifact Detection](images/readme/artifact_detection.png)
 
 </details>
 
 <details>
 <summary>ERP Image (Topo Layout)</summary>
 
-<img src="images/readme/erp_image_topo_layout.png" alt="ERP Image Topo Layout" width="600"/>
+![ERP Image Topo Layout](images/readme/erp_image_topo_layout.png)
 
 </details>
 
 <details>
 <summary>Epoch Plots (Grid Layout)</summary>
 
-<img src="images/readme/epochs_grid_layout.png" alt="Epochs Grid Layout" width="800"/>
+![Epochs Grid Layout](images/readme/epochs_grid_layout.png)
 
 </details>
 
 <details>
 <summary>ERP (Topo Layout)</summary>
 
-<img src="images/readme/erp_topo_layout.png" alt="ERP Topo Layout" width="600"/>
+![ERP Topo Layout](images/readme/erp_topo_layout.png)
 
 </details>
 
 </details>
-

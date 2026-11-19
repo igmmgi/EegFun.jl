@@ -299,6 +299,21 @@ const RESP_TRIGGERS = [201]
         EegFun.realign!(vec_data, 201; global_interval = [-0.2, 0.3])
         @test isapprox(minimum(vec_data[1].data[1].time), -0.2, atol = 0.01)
         @test isapprox(maximum(vec_data[1].data[1].time), 0.3, atol = 0.01)
+
+        # Out-of-bounds global_interval or non-overlapping conditions throw EegFunError rather than clamping t=0
+        dat_oob1 =
+            _make_epoch_data([_make_epoch_with_response(rt_seconds = 0.1, epoch_start = 0.0, epoch_end = 1.0, response_trigger = 201)])
+        dat_oob2 =
+            _make_epoch_data([_make_epoch_with_response(rt_seconds = 0.5, epoch_start = 0.0, epoch_end = 1.0, response_trigger = 201)])
+        @test_throws EegFun.EegFunError EegFun.realign([dat_oob1, dat_oob2], 201; global_interval = (-0.4, 0.3))
+        @test_throws EegFun.EegFunError EegFun.realign([dat_oob1, dat_oob2], 201; global_interval = (0.3, -0.1))
+
+        # Degenerate cross-condition overlap (Cond 1 starts at 0.0, Cond 2 ends at 0.0) throws EegFunError
+        dat_edge1 =
+            _make_epoch_data([_make_epoch_with_response(rt_seconds = 0.0, epoch_start = 0.0, epoch_end = 0.5, response_trigger = 201)])
+        dat_edge2 =
+            _make_epoch_data([_make_epoch_with_response(rt_seconds = 0.5, epoch_start = 0.0, epoch_end = 0.5, response_trigger = 201)])
+        @test_throws EegFun.EegFunError EegFun.realign([dat_edge1, dat_edge2], 201)
     end
 
     @testset "calculate_trigger_interval (scalar, vector, String column)" begin

@@ -30,14 +30,21 @@ function prepare_decoding(
     end
 
     selected_conditions = [epochs_by_condition[c] for c in selected_cond_nums]
-    pids_per_cond = [Int[_extract_participant_id(basename(ep.file)) for ep in cond_eps] for cond_eps in selected_conditions]
+    pids_per_cond = [_condition_participant_ids(cond_eps) for cond_eps in selected_conditions]
+    first_pids = pids_per_cond[1]
+    n_participants = length(first_pids)
 
-    sorted_first_pids = sort(pids_per_cond[1])
     for c = 2:length(selected_conditions)
-        sort(pids_per_cond[c]) != sorted_first_pids && @minimal_error(
-            "Condition $(selected_cond_nums[c]) has different participants than condition $(selected_cond_nums[1]). " *
-            "Decoding requires the same participants across all conditions."
-        )
+        if length(pids_per_cond[c]) != n_participants || Set(pids_per_cond[c]) != Set(first_pids)
+            @minimal_error(
+                "Condition $(selected_cond_nums[c]) has different participants than condition $(selected_cond_nums[1]). " *
+                "Decoding requires the same participants across all conditions."
+            )
+        end
+    end
+
+    if any(pids -> !allunique(pids) && length(unique(pids)) > 1, pids_per_cond)
+        @minimal_error("Duplicate participant IDs found within a condition. Each participant must appear once per selected condition.")
     end
 
     for (c, cond_eps) in enumerate(selected_conditions)
@@ -60,21 +67,24 @@ function prepare_decoding(
         isempty(time_vector(cond_eps[1])) && @minimal_error("Interval selection produced no time points")
     end
 
-    unique_pids = unique(sorted_first_pids)
-    participant_epochs = Vector{Vector{T}}(undef, length(unique_pids))
-    for (p_idx, pid) in enumerate(unique_pids)
-        p_data = Vector{T}(undef, length(selected_conditions))
-        for (c, cond_eps) in enumerate(selected_conditions)
-            ep_idx = findfirst(==(pid), pids_per_cond[c])
-            isnothing(ep_idx) && @minimal_error(
-                "Participant $pid is missing data for condition. All participants must have data for all selected conditions."
-            )
-            p_data[c] = cond_eps[ep_idx]
+    if all(allunique, pids_per_cond)
+        ordered_pids = eltype(first_pids) <: Union{Real,AbstractString,Symbol} ? sort(first_pids) : first_pids
+        participant_epochs = Vector{Vector{T}}(undef, n_participants)
+        for (p_idx, pid) in enumerate(ordered_pids)
+            p_data = Vector{T}(undef, length(selected_conditions))
+            for (c, cond_eps) in enumerate(selected_conditions)
+                ep_idx = findfirst(==(pid), pids_per_cond[c])
+                isnothing(ep_idx) && @minimal_error(
+                    "Participant $pid is missing data for condition. All participants must have data for all selected conditions."
+                )
+                p_data[c] = cond_eps[ep_idx]
+            end
+            participant_epochs[p_idx] = p_data
         end
-        participant_epochs[p_idx] = p_data
+        return participant_epochs
+    else
+        return [T[cond_eps[p_idx] for cond_eps in selected_conditions] for p_idx = 1:n_participants]
     end
-
-    return participant_epochs
 end
 
 function prepare_decoding(

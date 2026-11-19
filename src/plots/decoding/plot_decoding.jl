@@ -195,8 +195,9 @@ plot_decoding("decoded")
 """
 function plot_decoding(filepath::String; input_dir::String = pwd(), participant_selection = participants(), kwargs...)
     if endswith(filepath, ".jld2")
-        data = read_data(filepath)
-        isnothing(data) && @minimal_error "No data found in file: $filepath"
+        resolved = _resolve_input_filepath(filepath, input_dir)
+        data = read_data(resolved)
+        isnothing(data) && @minimal_error "No data found in file: $resolved"
         return plot_decoding(data; kwargs...)
     end
 

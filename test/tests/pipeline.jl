@@ -492,6 +492,47 @@ apply = false
         infos = EegFun._to_rejection_info([state])
         @test length(infos) == 1 && infos[1] isa EegFun.EpochRejectionInfo
         @test unique([r.epoch for r in infos[1].rejected]) == [2]
+
+        # 5. _ica_reference_rank_deficit accounts for layout reference electrodes without penalizing external references
+        c_ref = EegFun.create_test_continuous_data(n = 600, fs = 250, n_channels = 4, seed = 11)
+        c_ref.data.ExtRef = randn(600)
+        @test EegFun._ica_reference_rank_deficit(c_ref, :none) == 0
+        @test EegFun._ica_reference_rank_deficit(c_ref, :avg) == 1
+        @test EegFun._ica_reference_rank_deficit(c_ref, :Ch1) == 1
+        @test EegFun._ica_reference_rank_deficit(c_ref, [:Ch1, :Ch2]) == 1
+        @test EegFun._ica_reference_rank_deficit(c_ref, :ExtRef) == 0
+        @test EegFun._ica_reference_rank_deficit(c_ref, [:Ch1, :ExtRef]) == 0
+
+        # _pipeline_ica! succeeds on layout-referenced data (rank = n_channels - 1)
+        EegFun.rereference!(c_ref, :Ch1)
+        c_ref.data.vEOG = randn(600)
+        c_ref.data.hEOG = randn(600)
+        c_ref.data.is_vEOG = falses(600)
+        c_ref.data.is_hEOG = falses(600)
+        mktempdir() do ica_dir
+            cfg_path = joinpath(ica_dir, "ref_ica.toml")
+            write(
+                cfg_path,
+                """
+[files.output]
+save_ica_data = true
+
+[preprocess]
+reference_channel = "Ch1"
+
+[preprocess.ica]
+apply = true
+""",
+            )
+            cfg_dict = EegFun.read_config(cfg_path)
+            pipeline_cfg = EegFun.PipelineConfig(cfg_dict)
+            ext_col = EegFun._flag_symbol("is_extreme_value", pipeline_cfg.preprocess.eeg.extreme_value_abs_criterion)
+            EegFun.is_extreme_value!(c_ref, pipeline_cfg.preprocess.eeg.extreme_value_abs_criterion; channel_out = ext_col)
+            comp_art = EegFun._pipeline_ica!(c_ref, pipeline_cfg.preprocess, nothing, ica_dir, "subj1.bdf", pipeline_cfg.files)
+            @test comp_art isa EegFun.ArtifactComponents
+            ica_saved = EegFun.read_data(joinpath(ica_dir, "subj1_ica.jld2"))
+            @test size(ica_saved.unmixing, 1) == 3
+        end
     end
 
     # ────────────────────────────────────────────────────────────

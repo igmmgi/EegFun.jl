@@ -115,6 +115,7 @@ function _unit_to_microvolt_scale(unit_str::AbstractString)::Float64
     ul = lowercase(u)
     (u == "V" || ul in ("v", "volt", "volts")) && return 1e6
     (u == "mV" || ul in ("mv", "millivolt", "millivolts")) && return 1e3
+    (u == "nV" || ul in ("nv", "nanovolt", "nanovolts")) && return 1e-3
     return 1.0
 end
 
@@ -204,6 +205,8 @@ function _create_eegfun_dataframe(dat::BrainVisionDataFormat.BrainVisionData)::D
     time = Float64[(i - 1) * inv_sr for i = 1:n_samples]
     ch_labels = Symbol.(dat.header.label[1:n_ch])
     length(ch_labels) == n_ch || @minimal_error "Number of channel labels ($(length(ch_labels))) does not match number of channels ($n_ch)"
+    hdr_units = dat.header.unit
+    scales = Float64[i <= length(hdr_units) ? _unit_to_microvolt_scale(hdr_units[i]) : 1.0 for i = 1:n_ch]
 
     if isnothing(dat.markers) || isempty(dat.markers)
         trigger = zeros(Int, n_samples)
@@ -218,6 +221,7 @@ function _create_eegfun_dataframe(dat::BrainVisionDataFormat.BrainVisionData)::D
         dat.data,
         1:n_ch,
         ch_labels,
+        scales,
     )
 end
 
@@ -365,6 +369,36 @@ function _xdf_channel_metadata(eeg_stream)
     return Symbol.(ch_labels[1:n_channels]), ch_scales[1:n_channels]
 end
 
+function _extract_xdf_triggers(eeg_stream, marker_streams, n_samples::Int, inv_sr::Float64)::Tuple{Vector{Int},Vector{String}}
+    trigger = zeros(Int, n_samples)
+    trigger_info = fill("", n_samples)
+    if !isempty(marker_streams) && !isempty(eeg_stream.timestamps)
+        marker_stream = marker_streams[1]
+        eeg_ts = eeg_stream.timestamps
+        ts_min, ts_max = extrema(eeg_ts)
+        ts_tol = max(inv_sr, 1e-3)
+        valid_markers = Tuple{Int,String,Int}[]
+        for (i, t) in enumerate(marker_stream.timestamps)
+            (t < ts_min - ts_tol || t > ts_max + ts_tol) && continue
+            idx = find_closest_time_index(eeg_ts, t)
+            raw_str = string(marker_stream.time_series[i, 1])
+            isempty(strip(raw_str)) && continue
+            push!(valid_markers, (idx, raw_str, _parse_marker_code(raw_str)))
+        end
+        if !isempty(valid_markers)
+            max_num = max(0, maximum((c for (_, _, c) in valid_markers); init = 0))
+            non_numeric = sort!(unique!(String[s for (_, s, c) in valid_markers if c == 0 && lowercase(strip(s)) != "boundary"]))
+            label_to_int = Dict{String,Int}(lbl => (max_num + k) for (k, lbl) in enumerate(non_numeric))
+            for (idx, raw_str, c) in valid_markers
+                code = lowercase(strip(raw_str)) == "boundary" ? 0 : (c != 0 ? c : get(label_to_int, raw_str, 0))
+                (code != 0 || trigger[idx] == 0) && (trigger[idx] = code)
+                (code != 0 || isempty(trigger_info[idx])) && (trigger_info[idx] = raw_str)
+            end
+        end
+    end
+    return trigger, trigger_info
+end
+
 function _create_eegfun_dataframe(dat::ExtensibleDataFormat.XdfData)::DataFrame
     eeg_streams = [s for s in values(dat.streams) if s.header.type == "EEG"]
     isempty(eeg_streams) && @minimal_error "No EEG stream found in XDF data"
@@ -374,21 +408,8 @@ function _create_eegfun_dataframe(dat::ExtensibleDataFormat.XdfData)::DataFrame
     inv_sr = 1.0 / _xdf_srate(eeg_stream)
     time = Float64[(i - 1) * inv_sr for i = 1:n_samples]
     ch_labels, ch_scales = _xdf_channel_metadata(eeg_stream)
-
-    trigger = zeros(Int, n_samples)
-    trigger_info = fill("", n_samples)
-
     marker_streams = [s for s in values(dat.streams) if s.header.type == "Markers"]
-    if !isempty(marker_streams) && !isempty(eeg_stream.timestamps)
-        marker_stream = marker_streams[1]
-        for (i, t) in enumerate(marker_stream.timestamps)
-            idx = find_closest_time_index(eeg_stream.timestamps, t)
-            marker_val = marker_stream.time_series[i, 1]
-            int_val = _parse_marker_code(string(marker_val))
-            trigger[idx] = int_val != 0 ? int_val : 1
-            trigger_info[idx] = string(marker_val)
-        end
-    end
+    trigger, trigger_info = _extract_xdf_triggers(eeg_stream, marker_streams, n_samples, inv_sr)
 
     return _build_samples_x_channels_df(
         Any[time, collect(1:n_samples), trigger, trigger_info],

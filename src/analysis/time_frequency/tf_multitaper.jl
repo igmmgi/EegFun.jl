@@ -117,9 +117,9 @@ function tf_multitaper(
         tapered_wavelet_ffts[fi] = Vector{Vector{ComplexF64}}(undef, K)
 
         step_angle = 2π * freq / sdat.sample_rate
-        half = (n_win - 1) * 0.5
+        center = n_win ÷ 2
         @inbounds @simd for i = 1:n_win
-            carrier[i] = cis(((i - 1) - half) * step_angle)
+            carrier[i] = cis(((i - 1) - center) * step_angle)
         end
 
         tapered_view = @view tapered_buf[1:n_win]

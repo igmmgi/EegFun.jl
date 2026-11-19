@@ -145,21 +145,9 @@ function trigger_count(dat::ExtensibleDataFormat.XdfData)::TriggerInfo
     isempty(eeg_streams) && return _trigger_count_impl([Int[]], ["count"])
     eeg_stream = eeg_streams[1]
     n_samp = size(eeg_stream.time_series, 1)
-    trigger = zeros(Int, n_samp)
-    t_info = fill("", n_samp)
-
+    inv_sr = 1.0 / _xdf_srate(eeg_stream)
     marker_streams = [s for s in values(dat.streams) if s.header.type == "Markers"]
-    if !isempty(marker_streams)
-        marker_stream = marker_streams[1]
-        for (i, t) in enumerate(marker_stream.timestamps)
-            idx = find_closest_time_index(eeg_stream.timestamps, t)
-            marker_val = marker_stream.time_series[i, 1]
-            marker_str = string(marker_val)
-            int_val = tryparse(Int, marker_str)
-            trigger[idx] = !isnothing(int_val) ? int_val : 1
-            t_info[idx] = marker_str
-        end
-    end
+    trigger, t_info = _extract_xdf_triggers(eeg_stream, marker_streams, n_samp, inv_sr)
     return _trigger_count_impl([trigger], ["count"]; trigger_info = t_info)
 end
 

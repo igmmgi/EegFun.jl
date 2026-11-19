@@ -70,6 +70,28 @@ function _condition_difference_process_file(
     return BatchResult(false, filename, "Invalid data type: expected Vector{ErpData} or Vector{TimeFreqData}, got $(typeof(file_data))")
 end
 
+function _condition_difference_single!(difference_waves::Vector{T}, data::AbstractVector{T}, pairs) where {T<:ConditionAverageData}
+    cond_nums = Int[d.condition for d in data]
+    use_cond_field = allunique(cond_nums) && all(>(0), cond_nums)
+    for (pair_idx, pair) in enumerate(pairs)
+        cond1, cond2 = pair[1], pair[2]
+        idx1 = use_cond_field ? findfirst(d -> d.condition == cond1, data) : ((1 <= cond1 <= length(data)) ? cond1 : nothing)
+        idx2 = use_cond_field ? findfirst(d -> d.condition == cond2, data) : ((1 <= cond2 <= length(data)) ? cond2 : nothing)
+
+        if isnothing(idx1)
+            @minimal_warning "Condition $cond1 not found. Skipping pair ($cond1, $cond2)."
+            continue
+        end
+        if isnothing(idx2)
+            @minimal_warning "Condition $cond2 not found. Skipping pair ($cond1, $cond2)."
+            continue
+        end
+
+        push!(difference_waves, _create_difference_wave(data[idx1], data[idx2], cond1, cond2, pair_idx))
+    end
+    return difference_waves
+end
+
 """
     condition_difference(data::AbstractVector{<:Union{ErpData, TimeFreqData}}, condition_pairs) -> Vector
     condition_difference(file_pattern::String, condition_pairs; input_dir = pwd(),
@@ -90,25 +112,14 @@ function condition_difference(data::AbstractVector{T}, condition_pairs) where {T
     tag = _kind_tag(T)
     @info "Creating $(tag)condition difference waves..."
 
-    cond_nums = Int[d.condition for d in data]
-    use_cond_field = allunique(cond_nums) && all(>(0), cond_nums)
     difference_waves = T[]
-
-    for (pair_idx, pair) in enumerate(pairs)
-        cond1, cond2 = pair[1], pair[2]
-        idx1 = use_cond_field ? findfirst(d -> d.condition == cond1, data) : ((1 <= cond1 <= length(data)) ? cond1 : nothing)
-        idx2 = use_cond_field ? findfirst(d -> d.condition == cond2, data) : ((1 <= cond2 <= length(data)) ? cond2 : nothing)
-
-        if isnothing(idx1)
-            @minimal_warning "Condition $cond1 not found. Skipping pair ($cond1, $cond2)."
-            continue
+    part_groups = _group_by_participant_file(data)
+    if !isnothing(part_groups)
+        for pg in part_groups
+            _condition_difference_single!(difference_waves, pg, pairs)
         end
-        if isnothing(idx2)
-            @minimal_warning "Condition $cond2 not found. Skipping pair ($cond1, $cond2)."
-            continue
-        end
-
-        push!(difference_waves, _create_difference_wave(data[idx1], data[idx2], cond1, cond2, pair_idx))
+    else
+        _condition_difference_single!(difference_waves, data, pairs)
     end
 
     isempty(difference_waves) && @minimal_error("No valid condition pairs found")

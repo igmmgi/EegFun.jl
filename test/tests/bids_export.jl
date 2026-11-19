@@ -363,4 +363,38 @@ using DataFrames
         end
     end
 
+    @testset "Non-zero time origin events.tsv & fiducial layout alignment" begin
+        mktempdir() do tmpdir
+            dat = _make_test_continuous_data("shifted_file"; n_samples = 100, sample_rate = 100)
+            dat.data.time .+= 12.5 # simulate cropped/non-zero start recording
+            EegFun._bids_write_events_tsv(tmpdir, "sub-01_task-test", dat)
+
+            events_text = readlines(joinpath(tmpdir, "sub-01_task-test_events.tsv"))
+            # Sample 10 at 100 Hz -> 9/100 = 0.09 s relative to sample 1 (NOT 12.59 s)
+            @test startswith(events_text[2], "0.09\t0\t")
+
+            # Round-trip back into a fresh 100-sample ContinuousData via _inject_bids_events!
+            dat_rt = _make_test_continuous_data("rt_file"; n_samples = 100, sample_rate = 100)
+            dat_rt.data.trigger .= 0
+            events_df = DataFrame(
+                onset = [parse(Float64, split(line, '\t')[1]) for line in events_text[2:end]],
+                duration = zeros(length(events_text) - 1),
+                trial_type = [split(line, '\t')[3] for line in events_text[2:end]],
+                value = [parse(Int, split(line, '\t')[4]) for line in events_text[2:end]],
+            )
+            EegFun._inject_bids_events!(dat_rt, events_df)
+            @test dat_rt.data.trigger == dat.data.trigger
+
+            # Fiducials in layout are stripped when aligning to ContinuousData
+            fid_df = DataFrame(
+                label = [:NAS, :LPA, :RPA, :Fp1, :Fp2, :Cz, :Pz, :O1, :O2],
+                inc = [90.0, 90.0, 90.0, 20.0, 20.0, 0.0, 45.0, 80.0, 80.0],
+                azi = [0.0, -90.0, 90.0, -45.0, 45.0, 0.0, 180.0, -60.0, 60.0],
+            )
+            fid_layout = EegFun.Layout(fid_df, nothing, nothing, nothing)
+            EegFun._align_bids_layout!(dat_rt, fid_layout)
+            @test dat_rt.layout.data.label == [:Fp1, :Fp2, :Cz, :Pz, :O1, :O2]
+        end
+    end
+
 end

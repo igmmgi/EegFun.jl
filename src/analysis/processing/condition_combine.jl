@@ -41,6 +41,9 @@ function condition_combine(
     isempty(condition_groups) && @minimal_error("Condition groups cannot be empty")
     isempty(data) && @minimal_error("Cannot combine conditions: input data is empty")
 
+    part_groups = _group_by_participant_file(data)
+    !isnothing(part_groups) && return reduce(vcat, [condition_combine(pg, condition_groups) for pg in part_groups])
+
     @info "Combining conditions..."
 
     cond_nums = Int[d.condition for d in data]
@@ -75,6 +78,17 @@ function condition_combine(
             @minimal_error("Condition(s) $missing_conditions not found ($avail_str)")
         end
 
+        for ed in @view condition_data[2:end]
+            ed.sample_rate != condition_data[1].sample_rate && @minimal_error(
+                "Cannot combine EpochData with different sample rates ($(condition_data[1].sample_rate) vs $(ed.sample_rate))"
+            )
+            channel_labels(ed) != channel_labels(condition_data[1]) &&
+                @minimal_error("Cannot combine EpochData with different channel labels")
+        end
+        nonempty_conds = EpochData[ed for ed in condition_data if !isempty(ed.data)]
+        length(nonempty_conds) > 1 &&
+            (_have_same_structure(nonempty_conds) || @minimal_error("Cannot combine EpochData with inconsistent structure"))
+
         total_eps = sum(length(ed.data) for ed in condition_data)
         src_dfs = Vector{DataFrame}(undef, total_eps)
         pos = 0
@@ -86,11 +100,19 @@ function condition_combine(
         combined_data_frames = Vector{DataFrame}(undef, total_eps)
         if total_eps >= 16 && Threads.nthreads() > 1
             Threads.@threads :static for i = 1:total_eps
-                combined_data_frames[i] = copy(src_dfs[i])
+                df_copy = copy(src_dfs[i])
+                if hasproperty(df_copy, :epoch)
+                    df_copy.epoch isa Vector{Int} ? fill!(df_copy.epoch, i) : (df_copy[!, :epoch] = fill(i, nrow(df_copy)))
+                end
+                combined_data_frames[i] = df_copy
             end
         else
             for i = 1:total_eps
-                combined_data_frames[i] = copy(src_dfs[i])
+                df_copy = copy(src_dfs[i])
+                if hasproperty(df_copy, :epoch)
+                    df_copy.epoch isa Vector{Int} ? fill!(df_copy.epoch, i) : (df_copy[!, :epoch] = fill(i, nrow(df_copy)))
+                end
+                combined_data_frames[i] = df_copy
             end
         end
 

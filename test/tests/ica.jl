@@ -785,6 +785,83 @@ using LinearAlgebra
         dat_sub, ica_sub = EegFun.subtract_ica_components(dat_zv, ica_zv; component_selection = EegFun.components(art_obj))
         @test dat_sub isa EegFun.ContinuousData
         @test haskey(ica_sub.removed_activations, 1) && haskey(ica_sub.removed_activations, 3)
+
+        # 9. run_ica on EpochData with per-epoch 1:n_pts sample numbering retains all trials
+        #    (e.g. imported EEGLAB/FieldTrip/FifEpochs or resampled epochs)
+        #    Construct 40 trials of 2 samples each: trial 1 alone has n_samples=2 (rank <= 1 after centering!),
+        #    whereas all 40 trials together have 80 samples (full rank 2).
+        rng_ep = MersenneTwister(101)
+        ep_local_dfs = [
+            DataFrame(time = [0.0, 0.01], sample = [1, 2], epoch = [k, k], trigger = [1, 0], C1 = randn(rng_ep, 2), C2 = randn(rng_ep, 2)) for k = 1:40
+        ]
+        lay_ep2 = EegFun.Layout(DataFrame(label = [:C1, :C2], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing, nothing)
+        ep_local = EegFun.EpochData("imported_epochs", 1, "cond1", ep_local_dfs, lay_ep2, 100, EegFun.AnalysisInfo())
+        ica_ep_local = @test_logs (:warn, r"duplicate samples") match_mode = :any begin
+            # Verify NO duplicate-sample warning is emitted for local 1:n_pts numbering by testing _has_local_epoch_samples directly
+            @test EegFun._has_local_epoch_samples([ep_local], [:C1, :C2]) == true
+            # And verify continuous overlapping epochs DO return false and trigger warning:
+            ep_ov_dfs = [
+                DataFrame(time = [0.0, 0.01, 0.02], sample = [10, 11, 12], epoch = [1, 1, 1], C1 = [1.0, 2.0, 3.0], C2 = [0.5, -0.5, 1.5]),
+                DataFrame(time = [0.0, 0.01, 0.02], sample = [11, 12, 13], epoch = [2, 2, 2], C1 = [2.0, 3.0, 4.0], C2 = [-0.5, 1.5, 0.2]),
+            ]
+            ep_ov = EegFun.EpochData("cont_ov", 1, "cond1", ep_ov_dfs, lay_ep2, 100, EegFun.AnalysisInfo())
+            @test EegFun._has_local_epoch_samples([ep_ov], [:C1, :C2]) == false
+            EegFun.run_ica(ep_ov; params = EegFun.IcaPrms(max_iter = 5), rng = MersenneTwister(1))
+            EegFun.run_ica(ep_local; params = EegFun.IcaPrms(max_iter = 10), rng = MersenneTwister(1))
+        end
+        # If trials 2..40 had been dropped, 2 centered samples would have rank 1 (< 2 components)!
+        @test size(ica_ep_local.unmixing) == (2, 2)
+
+        # 10. _ica_preprocess canonicalizes PCA eigenvector dominant-entry signs in both eigen and SVD branches
+        X_sign_eig = [-5.0 .* randn(MersenneTwister(77), 1, 50); 0.2 .* randn(MersenneTwister(78), 3, 50)]
+        prep_eig = EegFun._ica_preprocess(X_sign_eig, 3, EegFun.IcaPrms())
+        for j = 1:3
+            col = @view prep_eig.pca_components[:, j]
+            @test col[findmax(abs, col)[2]] >= 0.0
+        end
+        X_sign_svd = X_sign_eig[:, 1:6] # n_samples <= 2 * n_channels triggers SVD path
+        prep_svd = EegFun._ica_preprocess(X_sign_svd, 3, EegFun.IcaPrms())
+        for j = 1:3
+            col = @view prep_svd.pca_components[:, j]
+            @test col[findmax(abs, col)[2]] >= 0.0
+        end
+        # Verify SVD dat_sphered matches sphere * pca_components' * ((X - mean) / scale) including signs
+        X_centered_scaled = (X_sign_svd .- prep_svd.original_mean) ./ prep_svd.scale
+        @test isapprox(prep_svd.dat_sphered, prep_svd.sphere * transpose(prep_svd.pca_components) * X_centered_scaled; atol = 1e-12)
+
+        # 11. identify_ecg_components adapts min_peaks using length(selected_samples), not extrema(selected_samples)
+        fs_span = 250
+        n_span = 75_000 # 300s recording
+        ecg_span = zeros(n_span)
+        for beat = 200:250:74_800 # 60 bpm across entire recording
+            ecg_span[beat] = 10.0
+        end
+        keep_ends = falses(n_span)
+        keep_ends[1:5_000] .= true        # first 20s (~20 beats)
+        keep_ends[70_001:75_000] .= true  # last 20s (~20 beats) -> 40s kept total (< 100 default min_peaks!)
+        df_span = DataFrame(
+            time = (0:(n_span-1)) ./ fs_span,
+            sample = 1:n_span,
+            keep = keep_ends,
+            C1 = ecg_span,
+            C2 = 0.01 .* randn(MersenneTwister(33), n_span),
+        )
+        cont_span = EegFun.ContinuousData("ecg_span", df_span, lay_ep2, fs_span, EegFun.AnalysisInfo())
+        ica_span = EegFun.InfoIca(
+            "ecg_span",
+            [1.0 0.0; 0.0 1.0],
+            [1.0 0.0; 0.0 1.0],
+            [1.0 0.0; 0.0 1.0],
+            [0.9, 0.1],
+            1.0,
+            [0.0, 0.0],
+            [:IC1, :IC2],
+            Dict{Int,Matrix{Float64}}(),
+            lay_ep2,
+            falses(2),
+        )
+        ecg_span_det, _ = EegFun.identify_ecg_components(cont_span, ica_span; sample_selection = EegFun.samples(:keep))
+        @test 1 in ecg_span_det
     end
 
 end

@@ -59,7 +59,15 @@ function _ica_preprocess(dat_ica::Matrix{Float64}, n_components::Int, params::Ic
 
         dat_sphered = Matrix{Float64}(undef, n_components, n_samples)
         whiten_scale = sqrt(n_samples - 1)
-        @views @. dat_sphered = whiten_scale * F.Vt[1:n_components, :]
+        @inbounds for j = 1:n_components
+            col = @view pca_components[:, j]
+            row_vt = @view F.Vt[j, :]
+            s_sign = argmax(abs, col) < 0.0 ? -whiten_scale : whiten_scale
+            s_sign < 0.0 && (col .*= -1.0)
+            @simd for t = 1:n_samples
+                dat_sphered[j, t] = s_sign * row_vt[t]
+            end
+        end
     end
 
     cpu_block = min(nextpow(2, max(Int(floor(sqrt(n_samples / 3.0))), 1)), 512)

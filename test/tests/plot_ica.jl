@@ -99,22 +99,49 @@ using EegFun
         @test any(l -> occursin("0.72", l.text[]) && occursin("0.18", l.text[]), lbls)
     end
 
-    @testset "empty component_selection, >10 subset pagination, and ECG threshold line preservation" begin
-        @test_throws EegFun.EegFunError EegFun.plot_ica_component_activation(
-            dat,
-            ica_res;
-            component_selection = EegFun.components(Int[]),
+    @testset "use_global_scale shares contour levels across ICA topographies" begin
+        ica_scaled = deepcopy(ica_res)
+        ica_scaled.mixing[:, 1] .*= 100.0
+        ica_scaled.mixing[:, 2] .*= 0.1
+
+        res_ind = EegFun.plot_topography(
+            ica_scaled;
+            component_selection = EegFun.components([1, 2]),
+            use_global_scale = false,
+            gridscale = 15,
             display_plot = false,
         )
+        res_glob = EegFun.plot_topography(
+            ica_scaled;
+            component_selection = EegFun.components([1, 2]),
+            use_global_scale = true,
+            gridscale = 15,
+            display_plot = false,
+        )
+        cf_ind1 = only(filter(p -> p isa Makie.Contourf, res_ind.axes[1].scene.plots))
+        cf_ind2 = only(filter(p -> p isa Makie.Contourf, res_ind.axes[2].scene.plots))
+        cf_glob1 = only(filter(p -> p isa Makie.Contourf, res_glob.axes[1].scene.plots))
+        cf_glob2 = only(filter(p -> p isa Makie.Contourf, res_glob.axes[2].scene.plots))
+        @test collect(cf_ind1.levels[]) != collect(cf_ind2.levels[])
+        @test collect(cf_glob1.levels[]) == collect(cf_glob2.levels[])
 
-        dat15 = EegFun.create_test_continuous_data(n = 300, n_channels = 15, seed = 9)
-        ica15 = EegFun.run_ica(dat15; params = EegFun.IcaPrms(max_iter = 5))
-        res_sub12 = EegFun.plot_ica_component_activation(dat15, ica15; component_selection = EegFun.components(1:12), display_plot = false)
-        @test length(res_sub12.axes) == 10
+        artifacts_gs = EegFun.ArtifactComponents(Dict(:vEOG => [1], :hEOG => [2]), Int[], Int[], Int[])
+        art_glob = EegFun.plot_artifact_components(ica_scaled, artifacts_gs; use_global_scale = true, gridscale = 15, display_plot = false)
+        acf1 = only(filter(p -> p isa Makie.Contourf, art_glob.axes[1].scene.plots))
+        acf2 = only(filter(p -> p isa Makie.Contourf, art_glob.axes[2].scene.plots))
+        @test collect(acf1.levels[]) == collect(acf2.levels[])
 
-        metrics_df = DataFrame(Component = [1, 2], mean_ibi_s = [0.8, 0.9], std_ibi_s = [0.03, 0.25], peak_ratio = [0.95, 0.40])
-        res_ecg = EegFun.plot_ecg_component_features([1], metrics_df; min_peak_ratio = 0.72, max_ibi_std_s = 0.18, display_plot = false)
-        lbls = filter(b -> b isa Label, res_ecg.fig.content)
-        @test any(l -> occursin("0.72", l.text[]) && occursin("0.18", l.text[]), lbls)
+        act_glob = EegFun.plot_ica_component_activation(
+            dat,
+            ica_scaled;
+            component_selection = EegFun.components([1, 2]),
+            use_global_scale = true,
+            gridscale = 15,
+            display_plot = false,
+        )
+        topo_axes = filter(a -> a isa Axis && a ∉ act_glob.axes, act_glob.fig.content)
+        vcf1 = only(filter(p -> p isa Makie.Contourf, topo_axes[1].scene.plots))
+        vcf2 = only(filter(p -> p isa Makie.Contourf, topo_axes[2].scene.plots))
+        @test collect(vcf1.levels[]) == collect(vcf2.levels[])
     end
 end

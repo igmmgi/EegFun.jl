@@ -124,24 +124,9 @@ function _condition_average_process_file(
     return BatchResult(false, filename, "Invalid data type: expected Vector{ErpData} or Vector{TimeFreqData}, got $(typeof(file_data))")
 end
 
-"""
-    condition_average(data::AbstractVector{<:Union{ErpData, TimeFreqData}}, condition_groups) -> Vector
-    condition_average(file_pattern::String, condition_groups; input_dir = pwd(),
-                      participant_selection = participants(), output_dir = nothing)
-
-Average ERP waveforms or time-frequency representations (linear power, circular phase) across each
-group of condition indices in `condition_groups`, or batch-process matching JLD2 files.
-"""
-function condition_average(data::AbstractVector{T}, condition_groups) where {T<:ConditionAverageData}
-    groups = isempty(condition_groups) ? condition_groups : (first(condition_groups) isa Integer ? [condition_groups] : condition_groups)
-
-    tag = _kind_tag(T)
-    @info "Creating $(tag)condition average waves..."
-
+function _condition_average_single!(average_waves::Vector{T}, data::AbstractVector{T}, groups) where {T<:ConditionAverageData}
     cond_nums = Int[d.condition for d in data]
     use_cond_field = allunique(cond_nums) && all(>(0), cond_nums)
-    average_waves = T[]
-
     for (group_idx, conditions) in enumerate(groups)
         group_data = T[]
         all_found = true
@@ -156,6 +141,32 @@ function condition_average(data::AbstractVector{T}, condition_groups) where {T<:
         end
         all_found || continue
         push!(average_waves, _create_average_wave(group_data, conditions, group_idx))
+    end
+    return average_waves
+end
+
+"""
+    condition_average(data::AbstractVector{<:Union{ErpData, TimeFreqData}}, condition_groups) -> Vector
+    condition_average(file_pattern::String, condition_groups; input_dir = pwd(),
+                      participant_selection = participants(), output_dir = nothing)
+
+Average ERP waveforms or time-frequency representations (linear power, circular phase) across each
+group of condition indices in `condition_groups`, or batch-process matching JLD2 files.
+"""
+function condition_average(data::AbstractVector{T}, condition_groups) where {T<:ConditionAverageData}
+    groups = isempty(condition_groups) ? condition_groups : (first(condition_groups) isa Integer ? [condition_groups] : condition_groups)
+
+    tag = _kind_tag(T)
+    @info "Creating $(tag)condition average waves..."
+
+    average_waves = T[]
+    part_groups = _group_by_participant_file(data)
+    if !isnothing(part_groups)
+        for pg in part_groups
+            _condition_average_single!(average_waves, pg, groups)
+        end
+    else
+        _condition_average_single!(average_waves, data, groups)
     end
 
     isempty(average_waves) && @minimal_error("No valid condition groups found")

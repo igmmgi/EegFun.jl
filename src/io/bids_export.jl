@@ -1,3 +1,18 @@
+function _align_bids_layout!(dat::EegData, layout::Layout)
+    df = _first_df(dat)
+    if isnothing(df)
+        dat.layout = copy(layout)
+        return dat
+    end
+    present = _channel_cols(layout.data[!, :label], df)
+    if !isempty(present)
+        dat.layout = present == layout.data[!, :label] ? copy(layout) : subset_layout(layout; channel_selection = channels(present))
+    end
+    return dat
+end
+
+_align_bids_layout!(dats::AbstractVector{<:EegData}, layout::Layout) = (foreach(d -> _align_bids_layout!(d, layout), dats); dats)
+
 """
     export_bids(; task, raw_dir = ".", raw_pattern = "\\\\.bdf", derivatives_dir = "",
                   output_dir = "./bids_dataset", layout_file = "", participant_map = nothing,
@@ -111,11 +126,13 @@ function export_bids(;
             dat = if raw_ext == ".set"
                 loaded = read_eeglab(raw_src)
                 eeg_dat = loaded isa Tuple ? loaded[1] : loaded
-                !isnothing(layout) && (eeg_dat.layout = copy(layout))
+                !isnothing(layout) && _align_bids_layout!(eeg_dat, layout)
                 eeg_dat
             else
                 raw_data = read_raw_data(raw_src)
-                isnothing(layout) ? create_eegfun_data(raw_data) : create_eegfun_data(raw_data, layout)
+                d = create_eegfun_data(raw_data)
+                !isnothing(layout) && _align_bids_layout!(d, layout)
+                d
             end
 
             if dat isa ContinuousData
@@ -187,7 +204,7 @@ function _bids_copy_raw_recording(raw_src::String, sub_eeg_dir::String, bids_pre
             for companion_ext in (".fdt", ".dat")
                 companion_src = joinpath(dirname(raw_src), "$(basename_without_ext(raw_src))$(companion_ext)")
                 if isfile(companion_src)
-                    cp(companion_src, joinpath(sub_eeg_dir, basename(companion_src)); force = overwrite)
+                    cp(companion_src, joinpath(sub_eeg_dir, "$(bids_prefix)_eeg$(companion_ext)"); force = overwrite)
                 end
             end
         end
@@ -314,10 +331,11 @@ function _bids_write_channels_tsv(dir::String, prefix::String, dat::ContinuousDa
 end
 
 function _write_events_rows(io::IO, triggers::AbstractVector, time_col::AbstractVector, trig_info)
+    t0 = isempty(time_col) ? 0.0 : Float64(first(time_col))
     @inbounds for i in eachindex(triggers)
         trig = triggers[i]
         trig == 0 && continue
-        onset = round(time_col[i]; digits = 6)
+        onset = round(Float64(time_col[i]) - t0; digits = 6)
         tt = if !isnothing(trig_info) && !ismissing(trig_info[i])
             s = strip(string(trig_info[i]))
             isempty(s) ? "n/a" : replace(s, '\t' => ' ', '\n' => ' ', '\r' => ' ')

@@ -338,4 +338,44 @@ end
     itc_from_trials_z = EegFun.tf_itc(trials_z)
     @test all(==(0.0), itc_direct_z.data_power.Ch1)
     @test all(==(0.0), itc_from_trials_z.data_power.Ch1)
+
+    # tf_itc after single-trial tf_baseline! does not drop below-baseline (pw <= 0) trials
+    ep_lock = EegFun.create_test_epoch_data(n = 200, fs = 200, n_epochs = 12, n_channels = 1)
+    t_lock = collect(range(-0.4, 0.595; length = 200))
+    for (tr_i, df) in enumerate(ep_lock.data)
+        df.time = copy(t_lock)
+        amp_post = isodd(tr_i) ? 0.4 : 4.0  # half of trials drop below pre-stimulus baseline amplitude 2.0 -> negative dB
+        env = ifelse.(t_lock .< 0.0, 2.0, amp_post)
+        df.Ch1 = env .* cos.(2π .* 10.0 .* t_lock)
+    end
+    tf_lock_raw =
+        EegFun.tf_morlet(ep_lock; frequencies = [10.0], cycles = 3, return_trials = true, return_phase = true, filter_edges = false)
+    tf_lock_bl = EegFun.tf_baseline(tf_lock_raw, (-0.35, -0.15); method = :db)
+    itc_raw_lock = EegFun.tf_itc(tf_lock_raw)
+    itc_bl_lock = EegFun.tf_itc(tf_lock_bl)
+    post_idx = findfirst(t -> t >= 0.25, itc_bl_lock.data_power.time)
+    @test itc_raw_lock.data_power.Ch1[post_idx] ≈ 1.0 atol = 1e-6
+    @test itc_bl_lock.data_power.Ch1[post_idx] ≈ 1.0 atol = 1e-6
+
+    # Even-window phase alignment in tf_stft and tf_multitaper (n_win = 40 at fs = 200, f = 25 Hz)
+    ep_phase = EegFun.create_test_epoch_data(n = 201, fs = 200, n_epochs = 4, n_channels = 1)
+    t_phase = collect((-0.5):(1/200):0.5)
+    for df in ep_phase.data
+        df.time = copy(t_phase)
+        df.Ch1 = cos.(2π .* 25.0 .* t_phase)
+    end
+    stft_even =
+        EegFun.tf_stft(ep_phase; frequencies = [25.0], window_length = 0.20, time_steps = 0.05, return_phase = true, filter_edges = false)
+    mt_even = EegFun.tf_multitaper(ep_phase; frequencies = [25.0], cycles = 5, time_steps = 0.05, return_phase = true, filter_edges = false)
+    t0_stft = findfirst(t -> abs(t) < 1e-9, stft_even.data_phase.time)
+    t0_mt = findfirst(t -> abs(t) < 1e-9, mt_even.data_phase.time)
+    @test abs(stft_even.data_phase.Ch1[t0_stft]) < 1e-3
+    @test abs(mt_even.data_phase.Ch1[t0_mt]) < 1e-3
+
+    # freq_spectrum subsets .layout to match selected_channels
+    ep_spec = EegFun.create_test_epoch_data(n = 256, fs = 256, n_epochs = 3, n_channels = 4)
+    spec_sub = EegFun.freq_spectrum(ep_spec; channel_selection = EegFun.channels([:Ch2, :Ch4]))
+    @test EegFun.channel_labels(spec_sub) == [:Ch2, :Ch4]
+    @test spec_sub.layout.data.label == [:Ch2, :Ch4]
+    @test EegFun.n_channels(spec_sub) == 2
 end

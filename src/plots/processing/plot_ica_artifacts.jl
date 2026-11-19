@@ -300,6 +300,8 @@ function plot_artifact_components(ica::InfoIca, artifacts::ArtifactComponents; k
     unique_comps = unique([c for (_, c) in entries])
     all_topo_data, x_bounds, y_bounds = _prepare_ica_topo_data(ica, unique_comps, method, gridscale)
     comp_to_data = Dict{Int,Matrix{Float64}}(unique_comps[k] => all_topo_data[k] for k in eachindex(unique_comps))
+    use_global = Bool(plot_kwargs[:use_global_scale])
+    global_levels = (isnothing(colorrange) && use_global) ? _calculate_ica_topo_levels(all_topo_data, true, num_levels) : nothing
 
     axes = Vector{Axis}(undef, total_comps)
     for (plot_idx, (comp_type, comp_idx)) in enumerate(entries)
@@ -308,15 +310,19 @@ function plot_artifact_components(ica::InfoIca, artifacts::ArtifactComponents; k
         axes[plot_idx] = ax
 
         topo_data = comp_to_data[comp_idx]
-        levels =
-            !isnothing(colorrange) ?
+        levels = if !isnothing(colorrange)
             _calculate_topo_levels(
                 topo_data;
                 use_global_scale = true,
                 global_min = colorrange[1],
                 global_max = colorrange[2],
                 num_levels = num_levels,
-            ) : _calculate_topo_levels(topo_data; num_levels = num_levels)
+            )
+        elseif !isnothing(global_levels)
+            global_levels
+        else
+            _calculate_topo_levels(topo_data; num_levels = num_levels)
+        end
 
         _plot_topo_on_axis!(
             ax,

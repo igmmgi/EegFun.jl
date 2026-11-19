@@ -211,8 +211,9 @@ $(_generate_kwargs_doc(PLOT_TOPOGRAPHY_KWARGS))
 """
 function plot_topography(filepath::String; input_dir::String = pwd(), participant_selection = participants(), kwargs...)
     if endswith(filepath, ".jld2")
-        data = read_data(filepath)
-        isnothing(data) && @minimal_error "No data found in file: $filepath"
+        resolved = _resolve_input_filepath(filepath, input_dir)
+        data = read_data(resolved)
+        isnothing(data) && @minimal_error "No data found in file: $resolved"
         return plot_topography(data; kwargs...)
     end
     files = _require_batch_files(filepath, input_dir, participant_selection)
@@ -491,7 +492,7 @@ function plot_topography(
     end
 
     if colorbar_enabled && (isnothing(user_colorbar_position) || user_colorbar_position[1] <= 1)
-        for col = 1:total_cols
+        for col = 1:min(total_cols, size(fig.layout)[2])
             colsize!(fig.layout, col, isodd(col) ? Auto() : Fixed(50))
         end
     end

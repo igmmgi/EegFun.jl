@@ -53,24 +53,52 @@ function _circular_colmeans_idx(df::DataFrame, idxs::Vector{Int})::Vector{Float6
     return sin_sum
 end
 
-function _assign_group_mean!(df::DataFrame, grp::Vector{Symbol}, lbl::Symbol, circular::Bool)
-    idxs = Int[columnindex(df, c) for c in grp]
-    df[!, lbl] = circular ? _circular_colmeans_idx(df, idxs) : _linear_colmeans_idx(df, idxs)
+function _set_or_insert_col!(df::DataFrame, lbl::Symbol, col::Vector{Float64}, insert_before::Union{Symbol,Nothing})
+    if hasproperty(df, lbl) || isnothing(insert_before)
+        df[!, lbl] = col
+    else
+        pos = columnindex(df, insert_before)
+        pos > 0 ? insertcols!(df, pos, lbl => col; copycols = false) : (df[!, lbl] = col)
+    end
     return nothing
 end
 
-function _assign_group_mean!(dfs::AbstractVector{<:DataFrame}, grp::Vector{Symbol}, lbl::Symbol, circular::Bool)
+function _assign_group_mean!(
+    df::DataFrame,
+    grp::Vector{Symbol},
+    lbl::Symbol,
+    circular::Bool,
+    insert_before::Union{Symbol,Nothing} = nothing,
+)
+    idxs = Int[columnindex(df, c) for c in grp]
+    vals = circular ? _circular_colmeans_idx(df, idxs) : _linear_colmeans_idx(df, idxs)
+    _set_or_insert_col!(df, lbl, vals, insert_before)
+    return nothing
+end
+
+function _assign_group_mean!(
+    dfs::AbstractVector{<:DataFrame},
+    grp::Vector{Symbol},
+    lbl::Symbol,
+    circular::Bool,
+    insert_before::Union{Symbol,Nothing} = nothing,
+)
     isempty(dfs) && return nothing
     idxs = Int[columnindex(dfs[1], c) for c in grp]
     work = length(dfs) * nrow(dfs[1]) * max(1, length(idxs))
     min_work = circular ? 65_536 : 1_000_000
     if length(dfs) >= 8 && Threads.nthreads() > 1 && work >= min_work
+        new_cols = Vector{Vector{Float64}}(undef, length(dfs))
         Threads.@threads :static for e in eachindex(dfs)
-            dfs[e][!, lbl] = circular ? _circular_colmeans_idx(dfs[e], idxs) : _linear_colmeans_idx(dfs[e], idxs)
+            new_cols[e] = circular ? _circular_colmeans_idx(dfs[e], idxs) : _linear_colmeans_idx(dfs[e], idxs)
+        end
+        for e in eachindex(dfs)
+            _set_or_insert_col!(dfs[e], lbl, new_cols[e], insert_before)
         end
     else
         for df in dfs
-            df[!, lbl] = circular ? _circular_colmeans_idx(df, idxs) : _linear_colmeans_idx(df, idxs)
+            vals = circular ? _circular_colmeans_idx(df, idxs) : _linear_colmeans_idx(df, idxs)
+            _set_or_insert_col!(df, lbl, vals, insert_before)
         end
     end
     return nothing
@@ -131,22 +159,27 @@ function channel_average!(
 
     frames = _data_frames(dat)
     is_tf = dat isa Union{TimeFreqData,TimeFreqEpochData}
+    orig_extra = reduce ? Symbol[] : extra_labels(dat)
+    first_extra = isempty(orig_extra) ? nothing : orig_extra[1]
+    avg_layout = _layout_from_groups(dat.layout, selected_channel_groups, labels; reduce = reduce)
+    layout_new_set = hasproperty(avg_layout.data, :label) ? Set{Symbol}(avg_layout.data.label) : Set{Symbol}()
+
     existing = Set(all_labels(dat))
     for (grp, lbl) in zip(selected_channel_groups, labels)
         lbl in existing && @minimal_warning "Overwriting existing channel '$(lbl)'"
         push!(existing, lbl)
         @info "channel_average!: $(_print_vector(grp)) → :$(lbl)"
+        ins_before = (!reduce && lbl in layout_new_set) ? first_extra : nothing
         if is_tf
-            _assign_group_mean!(frames[1], grp, lbl, false)
-            _assign_group_mean!(frames[2], grp, lbl, true)
+            _assign_group_mean!(frames[1], grp, lbl, false, ins_before)
+            _assign_group_mean!(frames[2], grp, lbl, true, ins_before)
         else
             for container in frames
-                _assign_group_mean!(container, grp, lbl, false)
+                _assign_group_mean!(container, grp, lbl, false, ins_before)
             end
         end
     end
 
-    avg_layout = _layout_from_groups(dat.layout, selected_channel_groups, labels)
     if reduce
         meta_cols = meta_labels(dat)
         _set_data_frames!(dat, map(container -> _map_df(df -> _reduced_df(df, meta_cols, labels), container), frames))
@@ -244,7 +277,7 @@ function _reduced_df(df::DataFrame, meta_cols::AbstractVector{Symbol}, labels::A
     return DataFrame(out_cols, col_names; copycols = false)
 end
 
-function _layout_from_groups(layout::Layout, channel_groups::Vector{Vector{Symbol}}, labels::Vector{Symbol})::Layout
+function _layout_from_groups(layout::Layout, channel_groups::Vector{Vector{Symbol}}, labels::Vector{Symbol}; reduce::Bool = false)::Layout
     df = layout.data
     isempty(df) && return Layout(DataFrame(), nothing, nothing, nothing)
 
@@ -272,17 +305,28 @@ function _layout_from_groups(layout::Layout, channel_groups::Vector{Vector{Symbo
                 cnt += 1
             end
         end
-        cnt == 0 && continue
+        if cnt == 0
+            if reduce
+                push!(out_labels, lbl)
+                push!(out_incs, 0.0)
+                push!(out_azis, 0.0)
+            end
+            continue
+        end
         inv_cnt = 1.0 / cnt
         mx *= inv_cnt
         my *= inv_cnt
         mz *= inv_cnt
         norm_m = sqrt(mx^2 + my^2 + mz^2)
-        norm_m == 0 && continue
 
         push!(out_labels, lbl)
-        push!(out_incs, acos(clamp(mz / norm_m, -1.0, 1.0)) * (180 / pi))
-        push!(out_azis, atan(my, mx) * (180 / pi))
+        if norm_m == 0.0
+            push!(out_incs, 0.0)
+            push!(out_azis, 0.0)
+        else
+            push!(out_incs, acos(clamp(mz / norm_m, -1.0, 1.0)) * (180 / pi))
+            push!(out_azis, atan(my, mx) * (180 / pi))
+        end
     end
 
     if isempty(out_labels)

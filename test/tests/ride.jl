@@ -56,6 +56,13 @@ using Random
         _, found_flat = EegFun.find_nearest_peak(flat, 2)
         @test !found_flat
 
+        # positive_only rejects strictly negative local peaks
+        neg_sig = [-5.0, -2.0, -4.0]
+        _, found_neg_default = EegFun.find_nearest_peak(neg_sig, 2)
+        @test found_neg_default
+        _, found_neg_pos = EegFun.find_nearest_peak(neg_sig, 2; positive_only = true)
+        @test !found_neg_pos
+
         # Woody filter on synthetic single-channel tensor
         n_samples = 60
         n_trials = 8
@@ -72,6 +79,25 @@ using Random
         @test length(lats) == n_trials
         # Latencies should correlate with trial shift
         @test cor(Float64.(lats), Float64.(1:n_trials)) > 0.9
+
+        # Initial Woody filter picks global xcov peak despite tiny ripple near lag 0
+        true_shifts = [-7, -5, -2, 0, 2, 5, 7]
+        data_ripple = zeros(Float64, 80, 1, length(true_shifts))
+        t_grid = collect(1:80)
+        tmpl_ripple = reshape(10.0 .* exp.(-0.5 .* ((t_grid .- 40) ./ 3.0) .^ 2), :, 1)
+        for (ti, sh) in enumerate(true_shifts)
+            # Strong Gaussian peak at 40 + sh plus tiny high-frequency ripple everywhere
+            data_ripple[:, 1, ti] .= 10.0 .* exp.(-0.5 .* ((t_grid .- (40 + sh)) ./ 3.0) .^ 2) .+ 0.05 .* sin.(1.7 .* t_grid .+ ti)
+        end
+        lats_ripple_tmpl = EegFun.woody_filter(data_ripple, 10; template = tmpl_ripple, rng = MersenneTwister(1))
+        @test lats_ripple_tmpl == true_shifts
+        lats_ripple_loo = EegFun.woody_filter(data_ripple, 10; rng = MersenneTwister(1))
+        @test maximum(abs, lats_ripple_loo .- true_shifts) <= 2
+
+        # RIDE outer iterations stay bounded within ±window_radius
+        comp_bounded = EegFun.RideComponent(:C, 4)
+        res_bounded = EegFun.ride_decompose(data_ripple, [comp_bounded]; outer_iters = 5, inner_iters = 8, rng = MersenneTwister(2))
+        @test maximum(abs, res_bounded.latencies[:, 1]) <= 4
     end
 
     # 3. Iteration and Decomposition

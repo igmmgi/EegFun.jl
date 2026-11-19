@@ -138,6 +138,9 @@ function _eeglab_to_epochdata(eeg::AbstractDict, filepath::String, preserve_radi
 end
 
 function _eeglab_event_code(typ, pos)::Int
+    if !(typ isa AbstractArray && isempty(typ)) && lowercase(strip(string(typ))) == "boundary"
+        return 0
+    end
     if typ isa Integer && !(typ isa Bool)
         return Int(typ)
     elseif typ isa Real && !(typ isa Bool) && !isnan(typ)
@@ -156,51 +159,51 @@ end
 
 @inline _unwrap_mat_scalar(v, default) = v isa AbstractArray ? (isempty(v) ? default : first(v)) : v
 
-function _record_eeglab_event!(trigger_vec::Vector{Int}, trigger_info_vec::Vector{String}, lat_val, typ_val, pos_val, n_timepoints::Int)
+function _push_eeglab_raw_event!(parsed_events::Vector{Tuple{Int,Int,String}}, lat_val, typ_val, pos_val, n_timepoints::Int)
     (lat_val isa Number && !isnan(lat_val)) || return
     latency = round(Int, lat_val)
     (1 <= latency <= n_timepoints) || return
-
     code = _eeglab_event_code(typ_val, pos_val)
-    if code != 0 || trigger_vec[latency] == 0
-        trigger_vec[latency] = code
-    end
     info_str = (typ_val isa AbstractArray && isempty(typ_val)) ? "" : string(typ_val)
-    if code != 0 || isempty(trigger_info_vec[latency])
-        trigger_info_vec[latency] = info_str
-    end
-end
-
-function _record_eeglab_struct_events!(
-    trigger_vec::Vector{Int},
-    trigger_info_vec::Vector{String},
-    latencies::AbstractVector,
-    types,
-    positions,
-    n_timepoints::Int,
-)
-    for i in eachindex(latencies)
-        typ_val = (!isnothing(types) && i <= length(types)) ? types[i] : ""
-        pos_val = (!isnothing(positions) && i <= length(positions)) ? positions[i] : nothing
-        _record_eeglab_event!(trigger_vec, trigger_info_vec, latencies[i], typ_val, pos_val, n_timepoints)
-    end
+    push!(parsed_events, (latency, code, info_str))
 end
 
 function _eeglab_extract_continuous_events!(trigger_vec::Vector{Int}, trigger_info_vec::Vector{String}, events, n_timepoints::Int)
+    parsed_events = Tuple{Int,Int,String}[]
     if events isa AbstractArray
         for ev in events
             (ev isa AbstractDict && haskey(ev, "latency")) || continue
             lat_val = _unwrap_mat_scalar(ev["latency"], nothing)
             typ_val = _unwrap_mat_scalar(get(ev, "type", ""), "")
             pos_val = _unwrap_mat_scalar(get(ev, "position", nothing), nothing)
-            _record_eeglab_event!(trigger_vec, trigger_info_vec, lat_val, typ_val, pos_val, n_timepoints)
+            _push_eeglab_raw_event!(parsed_events, lat_val, typ_val, pos_val, n_timepoints)
         end
     elseif haskey(events, "latency") && (haskey(events, "type") || haskey(events, "position"))
         latencies = _as_eeglab_vec(events["latency"])
         types = haskey(events, "type") ? _as_eeglab_vec(events["type"]) : nothing
         positions = haskey(events, "position") ? _as_eeglab_vec(events["position"]) : nothing
         @info "Extracted $(length(latencies)) events"
-        _record_eeglab_struct_events!(trigger_vec, trigger_info_vec, latencies, types, positions, n_timepoints)
+        for i in eachindex(latencies)
+            typ_val = (!isnothing(types) && i <= length(types)) ? types[i] : ""
+            pos_val = (!isnothing(positions) && i <= length(positions)) ? positions[i] : nothing
+            _push_eeglab_raw_event!(parsed_events, latencies[i], typ_val, pos_val, n_timepoints)
+        end
+    end
+
+    isempty(parsed_events) && return
+    max_num = max(0, maximum((c for (_, c, _) in parsed_events); init = 0))
+    non_numeric =
+        sort!(unique!(String[s for (_, c, s) in parsed_events if c == 0 && !isempty(strip(s)) && lowercase(strip(s)) != "boundary"]))
+    label_to_int = Dict{String,Int}(lbl => (max_num + idx) for (idx, lbl) in enumerate(non_numeric))
+
+    for (latency, raw_code, info_str) in parsed_events
+        code = raw_code != 0 ? raw_code : get(label_to_int, info_str, 0)
+        if code != 0 || trigger_vec[latency] == 0
+            trigger_vec[latency] = code
+        end
+        if code != 0 || isempty(trigger_info_vec[latency])
+            trigger_info_vec[latency] = info_str
+        end
     end
 end
 
@@ -251,8 +254,12 @@ function _read_eeglab_data(eeg_dict::AbstractDict, filepath::String)
 
     if data_field isa AbstractString && (endswith(lowercase(data_field), ".fdt") || endswith(lowercase(data_field), ".dat"))
         fdt_path = joinpath(dirname(filepath), data_field)
+        if !isfile(fdt_path)
+            fallback_path = string(splitext(filepath)[1], splitext(data_field)[2])
+            isfile(fallback_path) && (fdt_path = fallback_path)
+        end
         !isfile(fdt_path) && @minimal_error("External data file not found: $fdt_path")
-        @info "Loading external data from: $data_field"
+        @info "Loading external data from: $(basename(fdt_path))"
 
         n_channels = Int(eeg_dict["nbchan"])
         n_timepoints = Int(eeg_dict["pnts"])
@@ -316,15 +323,18 @@ function _extract_triggers(epochs, n_trials::Int)
         end
     end
 
-    parsed_codes = [_parse_marker_code(s) for s in trigger_strings]
+    parsed_codes = [lowercase(strip(s)) == "boundary" ? 0 : _parse_marker_code(s) for s in trigger_strings]
     max_num = isempty(parsed_codes) ? 0 : max(0, maximum(parsed_codes))
-    non_numeric = sort!(unique!([s for (s, c) in zip(trigger_strings, parsed_codes) if !isempty(strip(s)) && c == 0]))
+    non_numeric = sort!(
+        unique!([s for (s, c) in zip(trigger_strings, parsed_codes) if !isempty(strip(s)) && lowercase(strip(s)) != "boundary" && c == 0]),
+    )
     label_to_int = Dict{String,Int}(lbl => (max_num + idx) for (idx, lbl) in enumerate(non_numeric))
 
     trigger_codes = Vector{Int}(undef, n_trials)
     for i = 1:n_trials
         s = trigger_strings[i]
-        trigger_codes[i] = isempty(strip(s)) ? 0 : (parsed_codes[i] != 0 ? parsed_codes[i] : label_to_int[s])
+        is_empty_or_boundary = isempty(strip(s)) || lowercase(strip(s)) == "boundary"
+        trigger_codes[i] = is_empty_or_boundary ? 0 : (parsed_codes[i] != 0 ? parsed_codes[i] : label_to_int[s])
     end
 
     unique_vals = sort!(unique(trigger_strings))

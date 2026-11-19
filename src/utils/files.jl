@@ -58,3 +58,11 @@ function get_file_extension(filename::String)
     endswith(lowercase(filename), ".xdf.gz") && return ".xdf.gz"
     return lowercase(splitext(filename)[2])
 end
+
+function _resolve_input_filepath(filepath::AbstractString, input_dir::AbstractString)
+    isabspath(filepath) && return String(filepath)
+    candidate = joinpath(input_dir, filepath)
+    isfile(candidate) && return candidate
+    isfile(filepath) && return String(filepath)
+    return candidate
+end

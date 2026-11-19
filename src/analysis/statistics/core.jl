@@ -7,7 +7,7 @@ function _select_two_conditions(items::AbstractVector, design::Symbol, condition
     by_cond = group_by_condition(items)
     all_cond_nums = collect(keys(by_cond))
     rep_items = [first(by_cond[num]) for num in all_cond_nums]
-    selected_indices = _select_conditions_by_field(rep_items, condition_selection)
+    selected_indices = get_selected_conditions(rep_items, condition_selection)
     selected_cond_nums = all_cond_nums[selected_indices]
 
     length(selected_cond_nums) == 2 ||
@@ -16,8 +16,8 @@ function _select_two_conditions(items::AbstractVector, design::Symbol, condition
     cond1 = by_cond[selected_cond_nums[1]]
     cond2 = by_cond[selected_cond_nums[2]]
 
-    vps1 = [_extract_participant_id(basename(d.file)) for d in cond1]
-    vps2 = [_extract_participant_id(basename(d.file)) for d in cond2]
+    vps1 = _condition_participant_ids(cond1)
+    vps2 = _condition_participant_ids(cond2)
 
     if design == :paired
         (length(cond1) >= 2 && length(cond2) >= 2) ||
@@ -29,6 +29,8 @@ function _select_two_conditions(items::AbstractVector, design::Symbol, condition
             else
                 @minimal_error "Paired design requires same participants in both conditions"
             end
+        elseif !allunique(vps1) && length(unique(vps1)) > 1
+            @minimal_error "Duplicate participant IDs found within condition"
         end
     else
         (length(vps1) >= 2 && length(vps2) >= 2) || @minimal_error "Independent design requires at least 2 participants per group"

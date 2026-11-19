@@ -31,7 +31,8 @@ and this project adheres to (well, attempts to :-)) [Semantic Versioning](https:
 - Added multi-condition structure, frequency-vector, and non-empty trial validation in `decode_libsvm`, `libsvm_classifier`, `rsa`, and `n_epochs(::TimeFreqEpochData)`.
 - Restricted time-domain `baseline(!)` and `freq_spectrum` to `Union{ContinuousData,ErpData,EpochData}`, added `Nothing` and `Function` interval support to TF `baseline(!)`, defaulted ITC baseline normalization to `:absolute`, and fixed zero-power sample handling in `tf_itc`.
 - Fixed `StatsAPI.stderror(::StatsResult)` to return the analysis-window standard error (`res.se`), unwrapped `phase_delay` in `get_filter_characteristics`, AMICA zero-denominator guards, `:avg` rereferencing channel selection, `repair_channels!(dat, ::ContinuousRepairInfo)` default method, `subset` channel reordering sync, `channel_summary` multithreaded fast path, and targeted plotting/GUI edge cases (`plot_triggers`, `plot_ica_component_activation`, `plot_databrowser`, `plot_topography`, `grid_skip_positions`, `plot_erp_measurements`, `plot_erp_image`, `plot_ecg_component_features`).
-- Fixed broken cheatsheet and tutorial calls (`realign.jl`, `plot_artifacts.jl`, `tf_stats_test.jl`, `artifact-handling.md`) and removed duplicate sidebar mounts and stale tutorial files in `docs/make.jl`.
+- Fixed broken cheatsheet and tutorial calls (`realign.jl`, `plot_artifacts.jl`, `tf_stats_test.jl`, `artifact-handling.md`), restored `"Explanations"` in PDF documentation builds (`docs/make.jl`), and removed duplicate sidebar mounts and stale tutorial files.
+- Fixed `autoreject` bad-channel masking during middle-band epoch repair, `tf_itc` trial retention after `tf_baseline!`, unified multi-participant and named `condition_selection` matching in `conditions()` / `get_selected_conditions`, multi-participant in-memory `condition_combine`/`condition_average`/`condition_difference`/`lrp` and `:epoch` renumbering in `condition_combine`, equatorial ROI layout preservation and `extra_labels` ordering in `channel_average!`, `:trigger_info` preservation in `resample!`, even-window carrier centering in `tf_stft` and `tf_multitaper`, RIDE `woody_filter` peak selection and outer-loop latency bounds, `realign!` interval validation, layout-electrode ICA rank reduction in `preprocess`, continuous EEGLAB string events and BIDS `.fdt` companion naming, BrainVision `V`/`mV` unit scaling, XDF categorical/out-of-bounds markers in `create_eegfun_data` and `trigger_count`, and TF decoding grid validation.
 
 ## [0.9.0] - 2026-11-15
 
@@ -132,8 +133,6 @@ and this project adheres to (well, attempts to :-)) [Semantic Versioning](https:
 - Refactored `interval_selection` predicate logic to use type-stable `AbstractSelection` types (`AllSelection`, `TimeSelection`) instead of returning implicit `nothing` or `Tuple` values via `times()`.
 - Decoupled `baseline_interval` parameters from the `times()` default across all plotting functions (`plot_erp`, `plot_topography`, `plot_tf`, etc.), standardizing `nothing` as the explicit default for "no baseline correction."
 - `resample` API has transitioned to using an explicit `target_rate` argument (e.g., target sample rate in Hz) instead of a downsampling `factor`.
-
-### Deprecated
 
 ### Removed
 

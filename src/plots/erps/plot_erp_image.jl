@@ -88,8 +88,9 @@ $(_generate_kwargs_doc(PLOT_ERP_IMAGE_KWARGS))
 """
 function plot_erp_image(filepath::String; input_dir::String = pwd(), participant_selection = participants(), kwargs...)
     if endswith(filepath, ".jld2")
-        data = read_data(filepath)
-        isnothing(data) && @minimal_error "No data found in file: $filepath"
+        resolved = _resolve_input_filepath(filepath, input_dir)
+        data = read_data(resolved)
+        isnothing(data) && @minimal_error "No data found in file: $resolved"
         return plot_erp_image(data; kwargs...)
     end
 
@@ -119,7 +120,13 @@ function plot_erp_image(
     dat_subset = if _combine_interval_sample(interval_selection, sample_selection) isa _AllSamples
         dat
     else
-        subset(dat; channel_selection = channel_selection, sample_selection = sample_selection, interval_selection = interval_selection)
+        subset(
+            dat;
+            channel_selection = channel_selection,
+            sample_selection = sample_selection,
+            interval_selection = interval_selection,
+            include_extra = true,
+        )
     end
 
     _set_window_title(_generate_window_title(dat_subset))

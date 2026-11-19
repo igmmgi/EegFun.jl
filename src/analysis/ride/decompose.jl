@@ -177,7 +177,13 @@ function ride_decompose(
     if has_estimated && n_trials > 1 && n_samples > 2
         for k = 1:n_components
             if needs_estimation[k]
-                latencies[:, k] .= woody_filter(view(data, comp_windows[k], :, :), comps[k].window_radius; template = nothing, rng = rng)
+                latencies[:, k] .= woody_filter(
+                    view(data, comp_windows[k], :, :),
+                    comps[k].window_radius;
+                    template = nothing,
+                    max_lag = comps[k].window_radius,
+                    rng = rng,
+                )
             end
         end
     end
@@ -219,6 +225,7 @@ function ride_decompose(
                     comps[k].window_radius;
                     template = view(templates, win_k, :, k),
                     initial_latencies = @view(latencies[:, k]),
+                    max_lag = comps[k].window_radius,
                     rng = rng,
                 )
             end

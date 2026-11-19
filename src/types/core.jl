@@ -63,6 +63,7 @@ Interactive preprocessing settings recorded from the databrowser.
 - `repair_method::Symbol = :none`: Channel repair method
 - `selected_regions::Vector{Tuple{Float64,Float64}} = Tuple{Float64,Float64}[]`: Selected time intervals in seconds
 - `removed_ica_components::Vector{Int} = Int[]`: Removed ICA component indices
+- `reference_channels::Vector{Symbol} = Symbol[]`: Custom reference channel labels when `reference == :custom`
 """
 @kwdef struct AnalysisSettings
     hp_filter::Float64 = 0.0
@@ -72,7 +73,27 @@ Interactive preprocessing settings recorded from the databrowser.
     repair_method::Symbol = :none
     selected_regions::Vector{Tuple{Float64,Float64}} = Tuple{Float64,Float64}[]
     removed_ica_components::Vector{Int} = Int[]
+    reference_channels::Vector{Symbol} = Symbol[]
 end
+
+AnalysisSettings(
+    hp_filter::Real,
+    lp_filter::Real,
+    reference::Symbol,
+    repaired_channels::Vector{Symbol},
+    repair_method::Symbol,
+    selected_regions::Vector{Tuple{Float64,Float64}},
+    removed_ica_components::Vector{Int},
+) = AnalysisSettings(
+    Float64(hp_filter),
+    Float64(lp_filter),
+    reference,
+    repaired_channels,
+    repair_method,
+    selected_regions,
+    removed_ica_components,
+    Symbol[],
+)
 
 """
     Neighbors

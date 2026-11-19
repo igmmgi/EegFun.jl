@@ -117,7 +117,8 @@ _single_or_vector(v::Vector) = length(v) == 1 ? v[1] : v
 
 function _condition_select(data, condition_selection::Function = conditions())
     isempty(data) && return data
-    return data[condition_selection(1:length(data))]
+    return data isa AbstractVector{<:EegFunData} ? data[get_selected_conditions(data, condition_selection)] :
+           data[condition_selection(1:length(data))]
 end
 _condition_select(data, condition_selection::Vector{Int}) = isempty(data) ? data : data[condition_selection]
 _condition_select(data, condition_selection::Int) = _condition_select(data, [condition_selection])
@@ -180,6 +181,39 @@ function group_by_condition(items::AbstractVector{T}) where {T}
         push!(get!(() -> T[], grouped, item.condition), item)
     end
     return OrderedDict(sort!(collect(grouped), by = first))
+end
+
+function _participant_group_key(d)
+    d.file in ("grand_avg", "grand_average") && return (d.file, nothing)
+    df = _first_df(d)
+    if !isnothing(df) && !isempty(df) && hasproperty(df, :participant)
+        return (d.file, df[1, :participant])
+    end
+    return (d.file, nothing)
+end
+
+function _condition_participant_ids(items::AbstractVector)
+    isempty(items) && return Int[]
+    file_ids = Int[_extract_participant_id(basename(d.file)) for d in items]
+    if length(items) > 1 ? allunique(file_ids) : any(isdigit, splitext(basename(items[1].file))[1])
+        return file_ids
+    end
+    if all(d -> (df = _first_df(d); !isnothing(df) && !isempty(df) && hasproperty(df, :participant)), items)
+        return [_first_df(d)[1, :participant] for d in items]
+    end
+    return file_ids
+end
+
+function _group_by_participant_file(items::AbstractVector{T})::Union{Nothing,Vector{Vector{T}}} where {T}
+    length(items) <= 1 && return nothing
+    cond_nums = Int[d.condition for d in items]
+    allunique(cond_nums) && return nothing
+    by_part = OrderedDict{Any,Vector{T}}()
+    for item in items
+        push!(get!(() -> T[], by_part, _participant_group_key(item)), item)
+    end
+    length(by_part) > 1 || return nothing
+    return collect(values(by_part))
 end
 
 _validate_input_dir(dir::String) = isdir(dir) ? nothing : "Input directory does not exist: $dir"

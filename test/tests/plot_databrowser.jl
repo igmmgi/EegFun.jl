@@ -715,4 +715,50 @@ using DataFrames
             @test length(res_pat) == 1 && res_pat[1].fig isa Figure
         end
     end
+
+    @testset "ICA rebuild uses repaired/referenced pre_ica and keeps filtered ghost lines consistent" begin
+        cdat_r = EegFun.create_test_continuous_data(n = 800, fs = 250, n_channels = 4, seed = 88)
+        # Fit ICA on clean average-referenced data, then inject a huge DC offset + bad-channel spike into Ch1
+        cdat_clean = EegFun.rereference(cdat_r, :avg)
+        ica_clean = EegFun.run_ica(cdat_clean; params = EegFun.IcaPrms(max_iter = 10))
+
+        cdat_dirty = copy(cdat_r)
+        for ch in (:Ch1, :Ch2, :Ch3, :Ch4)
+            cdat_dirty.data[!, ch] .+= 2000.0
+        end
+        cdat_dirty.data[!, :Ch1] .+= 50_000.0
+        cdat_dirty.layout.neighbors = Dict(
+            :Ch1 => EegFun.Neighbors([:Ch2, :Ch3], [1.0, 1.0], [0.5, 0.5]),
+            :Ch2 => EegFun.Neighbors([:Ch1, :Ch3], [1.0, 1.0], [0.5, 0.5]),
+            :Ch3 => EegFun.Neighbors([:Ch1, :Ch4], [1.0, 1.0], [0.5, 0.5]),
+            :Ch4 => EegFun.Neighbors([:Ch2, :Ch3], [1.0, 1.0], [0.5, 0.5]),
+        )
+
+        pkw = EegFun._merge_plot_kwargs(EegFun.PLOT_DATABROWSER_KWARGS, Dict{Symbol,Any}())
+        fig = Figure()
+        ax = Axis(fig[1, 1])
+        st = EegFun._create_browser_state(cdat_dirty, cdat_dirty.layout.data.label, ax, ica_clean, pkw)
+        push!(st.channel_repair_history, ([:Ch1], :neighbor_interpolation, nothing))
+        st.reference_state = :avg
+        push!(st.ica.removed_components, 1)
+        st.data.filter_state.hp_active[] = true
+        st.data.filter_state.hp_freq[] = 0.5
+        st.data.filter_state.hp_func[] = "filt"  # causal 1-pass filter
+        EegFun._rebuild_current!(st)
+
+        st.view.show_original_ica[] = true
+        st.view.show_subtracted_ica[] = true
+        st.plot_kwargs[:show_cleaned_ica][] = true
+        EegFun._clear_and_save_limits!(ax, st)
+        EegFun._draw(ax, st)
+
+        ch2 = :Ch2
+        clean_y = [p[2] for p in st.channels.data_lines[ch2][1][]]
+        orig_y = [p[2] for p in st.channels.original_lines[ch2][1][]]
+        sub_y = [p[2] for p in st.channels.subtracted_lines[ch2][1][]]
+        off2 = st.view.offset[2]
+        # (Data - ICA) + (ICA Activation) == Data at every sample (including t = 0 under causal filt), without 50_000 uV leakage
+        @test maximum(abs, orig_y .- off2) < 100.0
+        @test ((clean_y .- off2) .+ (sub_y .- off2)) ≈ (orig_y .- off2) atol = 1e-10
+    end
 end

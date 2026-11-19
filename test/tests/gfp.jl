@@ -372,5 +372,13 @@ end
         comb_1tp = EegFun.gfp_and_dissimilarity(erp_1tp)
         @test nrow(gd_1tp) == 1 && gd_1tp.dissimilarity == [0.0]
         @test nrow(comb_1tp) == 1 && comb_1tp.dissimilarity == [0.0]
+
+        # Multi-participant Vector{ErpData} condition_selection matches .condition field (not positional index)
+        erp_p1_c2 = copy(erp_dc1)
+        erp_p1_c2.condition = 2
+        erp_p2_c2 = copy(erp_opp)
+        erp_p2_c2.condition = 2
+        gfp_c2 = EegFun.gfp([erp_dc1, erp_dc2, erp_p1_c2, erp_p2_c2]; condition_selection = EegFun.conditions(2))
+        @test length(gfp_c2) == 2
     end
 end

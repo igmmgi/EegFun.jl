@@ -338,6 +338,48 @@ using EegFun
         EegFun.repair_channels!(cdat_sp, rinfo)
         @test cdat_sp.analysis_info.repaired_channels == [:Ch2]
         @test cdat_sp.data.Ch2 ≈ cdat_ref.data.Ch2
+
+        # 5. ContinuousRepairInfo preserves .skipped and excludes skipped bad channels from spherical-spline donors
+        lay_df6 = DataFrame(
+            label = [:Ch1, :Ch2, :Ch3, :Ch4, :Ch5, :Ch6],
+            inc = [60.0, 60.0, 60.0, 60.0, 60.0, 0.0],
+            azi = [0.0, 20.0, 120.0, 180.0, 250.0, 0.0],
+            x3 = [0.866, 0.814, -0.433, -0.866, -0.296, 0.0],
+            y3 = [0.0, 0.296, 0.75, 0.0, -0.814, 0.0],
+            z3 = [0.5, 0.5, 0.5, 0.5, 0.5, 1.0],
+        )
+        lay6 = EegFun.Layout(lay_df6, nothing, nothing, nothing)
+        EegFun.get_neighbors_xyz!(lay6, 1.1)
+        df6 = DataFrame(
+            time = collect(0:49) ./ 100.0,
+            sample = 1:50,
+            Ch1 = fill(1.0e6, 50),  # adjacent bad pair (Ch1, Ch2) -> skipped by channel_repairable!
+            Ch2 = fill(1.0e6, 50),
+            Ch3 = sin.(range(0, 2π; length = 50)),
+            Ch4 = cos.(range(0, 2π; length = 50)),
+            Ch5 = fill(-1.0e6, 50), # isolated bad channel -> repairable
+            Ch6 = 0.5 .* sin.(range(0, 4π; length = 50)),
+        )
+
+        # Neighbor interpolation preserves skipped
+        cdat6_nb = EegFun.ContinuousData("c6_nb", copy(df6), copy(lay6), 100, EegFun.AnalysisInfo())
+        rinfo6_nb = EegFun.create_continuous_repair_info(:neighbor_interpolation)
+        EegFun.channel_repairable!(rinfo6_nb, [:Ch1, :Ch2, :Ch5], cdat6_nb.layout)
+        @test rinfo6_nb.repaired == [:Ch5]
+        @test sort(rinfo6_nb.skipped) == [:Ch1, :Ch2]
+        EegFun.repair_channels!(cdat6_nb, rinfo6_nb)
+        @test rinfo6_nb.repaired == [:Ch5]
+        @test sort(rinfo6_nb.skipped) == [:Ch1, :Ch2]
+        @test maximum(abs, cdat6_nb.data.Ch5) < 5.0
+
+        # Spherical spline preserves skipped AND excludes skipped bad channels (1e6 uV) from clean donors
+        cdat6_sp = EegFun.ContinuousData("c6_sp", copy(df6), copy(lay6), 100, EegFun.AnalysisInfo())
+        rinfo6_sp = EegFun.create_continuous_repair_info(:spherical_spline)
+        EegFun.channel_repairable!(rinfo6_sp, [:Ch1, :Ch2, :Ch5], cdat6_sp.layout)
+        EegFun.repair_channels!(cdat6_sp, rinfo6_sp)
+        @test rinfo6_sp.repaired == [:Ch5]
+        @test sort(rinfo6_sp.skipped) == [:Ch1, :Ch2]
+        @test maximum(abs, cdat6_sp.data.Ch5) < 5.0
     end
 
 end

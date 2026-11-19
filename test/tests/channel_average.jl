@@ -985,6 +985,16 @@ end
         cont_ext = EegFun.ContinuousData("ext_test", df_ext, lay_ext, 100, EegFun.AnalysisInfo())
         avg_ext = EegFun.channel_average(cont_ext)
         @test avg_ext.data.avg ≈ [3.0, 3.0, 3.0] # mean of Ch1 (2) and Fp1_bip (4), excluding vEOG
+        @test EegFun.extra_labels(avg_ext) == [:vEOG, :interval]
+        @test EegFun.channel_labels(avg_ext) == [:Ch1, :Fp1_bip, :avg]
+
+        # Symmetric equatorial ROI (T7/T8 centroid = (0, 0, 0)) stays in layout for reduce = false and reduce = true
+        df_eq = DataFrame(time = [0.0, 0.01], sample = [1, 2], T7 = [2.0, 4.0], T8 = [6.0, 8.0])
+        lay_eq = EegFun.Layout(DataFrame(label = [:T7, :T8], inc = [90.0, 90.0], azi = [180.0, 0.0]), nothing, nothing, nothing)
+        erp_eq = EegFun.ErpData("eq", 1, "c1", df_eq, lay_eq, 100, EegFun.AnalysisInfo(), 10)
+        erp_eq_red = EegFun.channel_average(erp_eq; channel_selections = [EegFun.channels([:T7, :T8])], reduce = true)
+        @test EegFun.channel_labels(erp_eq_red) == [:avg]
+        @test erp_eq_red.data.avg ≈ [4.0, 6.0]
 
         # 2. Circular mean on TimeFreqData.data_phase and TimeFreqEpochData.data_phase across ±π branch cut
         tf_circ = EegFun.create_test_tf_data(n_channels = 2, power_offset = 4.0, noise = 0.0)

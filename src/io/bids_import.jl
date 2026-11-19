@@ -270,11 +270,13 @@ function read_bids(dataset_dir::String; subject::String, task::String, session::
     dat = if matched_ext == ".set"
         loaded = read_eeglab(binary_path)
         eeg_dat = loaded isa Tuple ? loaded[1] : loaded
-        !isnothing(layout) && (eeg_dat.layout = copy(layout))
+        !isnothing(layout) && _align_bids_layout!(eeg_dat, layout)
         eeg_dat
     else
         raw_data = read_raw_data(binary_path)
-        isnothing(layout) ? create_eegfun_data(raw_data) : create_eegfun_data(raw_data, layout)
+        d = create_eegfun_data(raw_data)
+        !isnothing(layout) && _align_bids_layout!(d, layout)
+        d
     end
 
     events_file = joinpath(eeg_dir, "$(recording_prefix)_events.tsv")

@@ -129,15 +129,9 @@ function freq_spectrum(
     end
     spectrum_df = DataFrame(cols, vcat([:freq], selected_channels); copycols = false)
 
+    sub_layout =
+        selected_channels == dat.layout.data.label ? copy(dat.layout) :
+        subset_layout(dat.layout; channel_selection = channels(selected_channels))
     cond_num = hasproperty(dat, :condition) ? dat.condition : 0
-    return SpectrumData(
-        dat.file,
-        cond_num,
-        condition_name(dat),
-        spectrum_df,
-        copy(dat.layout),
-        dat.sample_rate,
-        :welch,
-        copy(dat.analysis_info),
-    )
+    return SpectrumData(dat.file, cond_num, condition_name(dat), spectrum_df, sub_layout, dat.sample_rate, :welch, copy(dat.analysis_info))
 end

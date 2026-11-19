@@ -155,16 +155,18 @@ end
 mutable struct ContinuousDataState <: AbstractDataState
     current::Observable{EegData}
     original::EegData
+    pre_ica::EegData
     filter_state::FilterState
-    ContinuousDataState(data::EegData, plot_kwargs) = new(Observable(copy(data)), data, FilterState(plot_kwargs))
+    ContinuousDataState(data::EegData, plot_kwargs) = new(Observable(copy(data)), data, data, FilterState(plot_kwargs))
 end
 
 mutable struct EpochedDataState <: AbstractDataState
     current::Observable{EegData}
     original::EegData
+    pre_ica::EegData
     filter_state::FilterState
     current_epoch::Observable{Int}
-    EpochedDataState(data::EegData, plot_kwargs) = new(Observable(copy(data)), data, FilterState(plot_kwargs), Observable(1))
+    EpochedDataState(data::EegData, plot_kwargs) = new(Observable(copy(data)), data, data, FilterState(plot_kwargs), Observable(1))
 end
 
 mutable struct ExtraChannelInfo
@@ -185,7 +187,9 @@ mutable struct IcaVisualState
     is_active::Bool
     activation_cache::Dict{Int,Tuple{UnitRange{Int},Matrix{Float64}}}
     activation_key::Vector{Int}
-    IcaVisualState(ica::Union{Nothing,InfoIca}) = new(ica, Int[], !isnothing(ica), Dict{Int,Tuple{UnitRange{Int},Matrix{Float64}}}(), Int[])
+    rebuilt_components::Vector{Int}
+    IcaVisualState(ica::Union{Nothing,InfoIca}) =
+        new(ica, Int[], !isnothing(ica), Dict{Int,Tuple{UnitRange{Int},Matrix{Float64}}}(), Int[], Int[])
 end
 
 mutable struct DataBrowserState{T<:AbstractDataState}
@@ -254,6 +258,7 @@ function _update_analysis_settings!(state::DataBrowserState)
         repair_method,
         copy(state.selection.selected_regions[]),
         copy(state.ica.removed_components),
+        copy(state.custom_reference_channels),
     )
 end
 
@@ -624,31 +629,33 @@ function _apply_single_ica_removal!(cur::EpochData, orig::EpochData, ica::InfoIc
     return nothing
 end
 
-function _apply_all_ica_removals!(cur::SingleDataFrameEeg, state)
+function _apply_all_ica_removals!(cur::SingleDataFrameEeg, src::SingleDataFrameEeg, state)
     if state.ica.is_active && !isempty(state.ica.removed_components)
         ica = state.ica.original::InfoIca
-        orig_df = state.data.original.data
+        src_df = src.data
         act = Vector{Float64}(undef, nrow(cur.data))
         for comp in state.ica.removed_components
-            _apply_df_ica_removal!(cur.data, orig_df, ica, comp, act)
+            _apply_df_ica_removal!(cur.data, src_df, ica, comp, act)
         end
     end
     return cur
 end
 
-function _apply_all_ica_removals!(cur::EpochData, state)
+function _apply_all_ica_removals!(cur::EpochData, src::EpochData, state)
     if state.ica.is_active && !isempty(state.ica.removed_components) && !isempty(cur.data)
         ica = state.ica.original::InfoIca
-        orig_eps = state.data.original.data
+        src_eps = src.data
         act = Vector{Float64}(undef, nrow(cur.data[1]))
         for comp in state.ica.removed_components
             for ep in eachindex(cur.data)
-                _apply_df_ica_removal!(cur.data[ep], orig_eps[ep], ica, comp, act)
+                _apply_df_ica_removal!(cur.data[ep], src_eps[ep], ica, comp, act)
             end
         end
     end
     return cur
 end
+
+_apply_all_ica_removals!(cur::EegData, state) = _apply_all_ica_removals!(cur, state.data.original, state)
 
 function _apply_active_filters!(cur::EegData, state)
     fs = state.data.filter_state
@@ -667,13 +674,25 @@ end
 
 # Canonical rebuild order: repairs -> reference -> ICA removals -> active filters.
 function _rebuild_current!(state)
+    empty!(state.ica.activation_cache)
+    empty!(state.ica.activation_key)
     cur = copy(state.data.original)
     for (chs, method, _) in state.channel_repair_history
         repair_channels!(cur, chs; method = method)
     end
     _apply_reference!(cur, state.reference_state, state.custom_reference_channels)
-    _apply_all_ica_removals!(cur, state)
-    _apply_active_filters!(cur, state)
+    if state.ica.is_active && !isempty(state.ica.removed_components)
+        pre = copy(cur)
+        _apply_all_ica_removals!(cur, pre, state)
+        _apply_active_filters!(cur, state)
+        _apply_active_filters!(pre, state)
+        state.data.pre_ica = pre
+        state.ica.rebuilt_components = copy(state.ica.removed_components)
+    else
+        _apply_active_filters!(cur, state)
+        state.data.pre_ica = cur
+        empty!(state.ica.rebuilt_components)
+    end
     state.data.current[] = cur
     _update_analysis_settings!(state)
     return cur
@@ -2159,8 +2178,8 @@ function _points_observable(fill_points!::F, tracker::Vector{Any}, xrange::Obser
     return obs
 end
 
-_ica_original_series(data::ContinuousDataState, ep, col) = data.original.data[!, col]
-_ica_original_series(data::EpochedDataState, ep, col) = data.original.data[ep][!, col]
+_ica_original_series(data::ContinuousDataState, ep, col) = data.pre_ica.data[!, col]
+_ica_original_series(data::EpochedDataState, ep, col) = data.pre_ica.data[ep][!, col]
 
 function _accumulate_activation!(
     acts::Matrix{Float64},
@@ -2229,6 +2248,23 @@ function _fill_ica_points!(
         end
         return buf
     end
+    if state.ica.rebuilt_components == comps
+        ica = state.ica.original::InfoIca
+        pre_col = _ica_original_series(state.data, ep, ica.layout.data.label[ch_row])
+        val_sum = 0.0
+        @inbounds for j in eachindex(buf)
+            p_val = Float64(pre_col[win[j]])
+            val = subtract_raw ? (p_val - Float64(raw[j])) : p_val
+            val_sum += val
+            buf[j] = Point2{Float64}(x[j], val)
+        end
+        dc = (remove_dc && !subtract_raw && !isempty(buf)) ? (val_sum / length(buf)) : 0.0
+        @inbounds for j in eachindex(buf)
+            p = buf[j]
+            buf[j] = Point2{Float64}(p[1], (p[2] - dc) * scale + offset)
+        end
+        return buf
+    end
     rng, acts = _ica_activations!(state, ep, win)
     ica = state.ica.original::InfoIca
     win_off = first(win) - first(rng)
@@ -2278,13 +2314,31 @@ function _color_mask_observable(state, epoch_obs, get_data, col::Symbol, ch_row:
                !state.plot_kwargs[:show_cleaned_ica][] &&
                state.view.show_original_ica[] &&
                !isempty(state.ica.removed_components)
-                rng, acts = _ica_activations!(state, ep, win)
                 ica = state.ica.original::InfoIca
                 comps = state.ica.removed_components
-                win_off = first(win) - first(rng)
-                dc = 0.0
-                if rem_dc && n > 0
-                    s = 0.0
+                if state.ica.rebuilt_components == comps
+                    pre_view = @view _ica_original_series(state.data, ep, ica.layout.data.label[ch_row])[win]
+                    dc = (rem_dc && !isempty(pre_view)) ? mean(pre_view) : 0.0
+                    @inbounds for j = 1:n
+                        buf[j] = abs(pre_view[j] - dc) >= crit
+                    end
+                else
+                    rng, acts = _ica_activations!(state, ep, win)
+                    win_off = first(win) - first(rng)
+                    dc = 0.0
+                    if rem_dc && n > 0
+                        s = 0.0
+                        @inbounds for j = 1:n
+                            val = Float64(raw[j])
+                            r = j + win_off
+                            for k in eachindex(comps)
+                                comp = comps[k]
+                                val += (ica.mixing[ch_row, comp] * ica.scale) * acts[r, k]
+                            end
+                            s += val
+                        end
+                        dc = s / n
+                    end
                     @inbounds for j = 1:n
                         val = Float64(raw[j])
                         r = j + win_off
@@ -2292,18 +2346,8 @@ function _color_mask_observable(state, epoch_obs, get_data, col::Symbol, ch_row:
                             comp = comps[k]
                             val += (ica.mixing[ch_row, comp] * ica.scale) * acts[r, k]
                         end
-                        s += val
+                        buf[j] = abs(val - dc) >= crit
                     end
-                    dc = s / n
-                end
-                @inbounds for j = 1:n
-                    val = Float64(raw[j])
-                    r = j + win_off
-                    for k in eachindex(comps)
-                        comp = comps[k]
-                        val += (ica.mixing[ch_row, comp] * ica.scale) * acts[r, k]
-                    end
-                    buf[j] = abs(val - dc) >= crit
                 end
             else
                 dc = (rem_dc && !isempty(raw)) ? mean(raw) : 0.0
@@ -2968,9 +3012,11 @@ function plot_databrowser(
     screen = nothing,
     kwargs...,
 )
-    ica_obj = ica isa AbstractString ? read_data(ica) : ica
+    ica_obj = ica isa AbstractString ? read_data(_resolve_input_filepath(ica, input_dir)) : ica
     if endswith(filename, ".jld2")
-        dat_eeg = read_data(filename)
+        resolved = _resolve_input_filepath(filename, input_dir)
+        dat_eeg = read_data(resolved)
+        isnothing(dat_eeg) && @minimal_error "No data found in file: $resolved"
         return plot_databrowser(dat_eeg, ica_obj; screen = screen, kwargs...)
     end
     files = _require_batch_files(filename, input_dir, participant_selection)

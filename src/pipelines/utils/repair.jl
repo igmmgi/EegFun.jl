@@ -1,10 +1,19 @@
+function _merge_prior_skipped!(repair_info::ContinuousRepairInfo, prior_skipped::Vector{Symbol})
+    for ch in prior_skipped
+        ch ∉ repair_info.repaired && ch ∉ repair_info.skipped && push!(repair_info.skipped, ch)
+    end
+    return nothing
+end
+
 function repair_channels_neighbor!(data::ContinuousData, repair_info::ContinuousRepairInfo)
     if isempty(repair_info.repaired)
         @info "No channels to repair (all bad channels were skipped)"
         return data
     end
+    prior_skipped = copy(repair_info.skipped)
     @info "Repairing $(length(repair_info.repaired)) channels: $(repair_info.repaired) using neighbor interpolation"
-    repair_channels!(data, repair_info.repaired; method = :neighbor_interpolation, repair_info = repair_info)
+    repair_channels!(data, repair_info.repaired; method = :neighbor_interpolation, repair_info = repair_info, bad_channels = prior_skipped)
+    _merge_prior_skipped!(repair_info, prior_skipped)
     return data
 end
 
@@ -13,8 +22,18 @@ function repair_channels_spherical!(data::ContinuousData, repair_info::Continuou
         @info "No channels to repair (all bad channels were skipped)"
         return data
     end
+    prior_skipped = copy(repair_info.skipped)
     @info "Repairing $(length(repair_info.repaired)) channels: $(repair_info.repaired) using spherical spline interpolation"
-    repair_channels!(data, repair_info.repaired; method = :spherical_spline, repair_info = repair_info, m = m, lambda = lambda)
+    repair_channels!(
+        data,
+        repair_info.repaired;
+        method = :spherical_spline,
+        repair_info = repair_info,
+        m = m,
+        lambda = lambda,
+        bad_channels = prior_skipped,
+    )
+    _merge_prior_skipped!(repair_info, prior_skipped)
     return data
 end
 

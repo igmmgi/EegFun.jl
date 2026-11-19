@@ -105,10 +105,10 @@ function tf_stft(
         n_win = n_window_samples_per_freq[fi]
         hann = is_fixed ? fixed_hann : (w = DSP.hanning(n_win); w ./ norm(w, 2))
         step_angle = 2π * freqs[fi] / sdat.sample_rate
-        half = (n_win - 1) * 0.5
+        center = n_win ÷ 2
         sqrt2 = sqrt(2.0)
         @inbounds @simd for i = 1:n_win
-            wavelet_padded[i] = (hann[i] * sqrt2) * cis(((i - 1) - half) * step_angle)
+            wavelet_padded[i] = (hann[i] * sqrt2) * cis(((i - 1) - center) * step_angle)
         end
         @inbounds @simd for i = (n_win+1):n_samples_padded
             wavelet_padded[i] = zero(ComplexF64)

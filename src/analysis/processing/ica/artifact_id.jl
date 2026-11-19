@@ -447,8 +447,7 @@ function identify_ecg_components(
     min_ibi_s = 60.0 / max_bpm
     max_ibi_s = 60.0 / min_bpm
 
-    min_s, max_s = extrema(selected_samples)
-    duration_s = (max_s - min_s + 1) / Float64(dat.sample_rate)
+    duration_s = length(selected_samples) / Float64(dat.sample_rate)
     expected_peaks = (duration_s * min_bpm) / 60.0
     effective_min_peaks = min(min_peaks, max(3, round(Int, expected_peaks * 0.5)))
     if effective_min_peaks < min_peaks

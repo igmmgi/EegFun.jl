@@ -1,5 +1,6 @@
 _is_pattern(fname) = lowercase(splitext(fname)[2]) != ".jld2"
 _gui_dir(gui_state) = isempty(gui_state.directory[]) ? pwd() : gui_state.directory[]
+_gui_filepath(gui_state) = _resolve_input_filepath(gui_state.filename[], _gui_dir(gui_state))
 _gui_selected_channels(gui_state) = isempty(gui_state.electrodes[]) ? channels() : channels(Symbol.(gui_state.electrodes[]))
 _gui_lim(tup) = (!isnothing(tup[1]) && !isnothing(tup[2])) ? (tup[1], tup[2]) : nothing
 
@@ -41,7 +42,7 @@ end
 
 function _simple_jld2_plot(gui_state, plot_fn, plot_type::String)
     isnothing(_validate_file(gui_state, ".jld2")) && return
-    fname = gui_state.filename[]
+    fname = _gui_filepath(gui_state)
     _guarded_async(plot_type) do
         data = read_data(fname)
         isnothing(data) ? @minimal_warning("Requested plot settings incompatible: recheck!") : plot_fn(data)
@@ -183,7 +184,7 @@ function _plot_erp_image(gui_state)
                 extra_kwargs...,
             )
         else
-            dat = read_data(fname)
+            dat = read_data(_gui_filepath(gui_state))
             isnothing(dat) && return
             dat = _apply_gui_filters(dat, gui_state)
             isnothing(dat) && return
@@ -255,7 +256,7 @@ function _plot_time_frequency(gui_state)
     end
 
     _guarded_async("Time-Frequency") do
-        data = read_data(fname)
+        data = read_data(_gui_filepath(gui_state))
         isnothing(data) ? @minimal_warning("Requested plot settings incompatible: recheck!") : _run_tf_plot(data)
     end
 end
@@ -292,11 +293,12 @@ function _plot_ica(gui_state)
         end
     else
         isnothing(_validate_file(gui_state, ".jld2")) && return
+        resolved = _gui_filepath(gui_state)
         _guarded_async("ICA Components") do
-            data = read_data(fname)
+            data = read_data(resolved)
             isnothing(data) && (@minimal_warning "Requested plot settings incompatible: recheck!"; return)
             data isa InfoIca || (@minimal_warning "ICA Components requires an InfoIca file. Select a file produced by run_ica()."; return)
-            _set_window_title("ICA Components — " * basename(fname))
+            _set_window_title("ICA Components — " * basename(resolved))
             plot_topography(data; component_selection = comp_sel)
         end
     end
@@ -371,7 +373,7 @@ function _plot_ica_activation(gui_state)
         end
     else
         isnothing(_validate_file(gui_state, ".jld2")) && return
-        @async _plot_one_ica_activation(fname, comp_sel, layout, input_dir)
+        @async _plot_one_ica_activation(_gui_filepath(gui_state), comp_sel, layout, input_dir)
     end
 end
 
@@ -381,11 +383,12 @@ function _plot_channel_summary(gui_state)
         @minimal_warning "No file selected — use 'Select File' to choose one."
         return
     end
-    file_ext = lowercase(splitext(fname)[2])
+    resolved = _gui_filepath(gui_state)
+    file_ext = lowercase(splitext(resolved)[2])
     layout = gui_state.layout_object[]
 
     _guarded_async("Channel Summary") do
-        dat = file_ext ∈ (".bdf", ".set", ".vhdr") ? _load_or_preprocess_raw(fname, layout) : read_data(fname)
+        dat = file_ext ∈ (".bdf", ".set", ".vhdr") ? _load_or_preprocess_raw(resolved, layout) : read_data(resolved)
         isnothing(dat) && return
         df = channel_summary(dat)
         df_ref = df isa AbstractVector ? first(df) : df

@@ -462,6 +462,7 @@ function _pipeline_continuous_artifacts!(dat::ContinuousData, preprocess_cfg::Pr
     channels_to_repair = copy(bad_non_eog)
     repair_info_name = "continuous_repair"
 
+    interactive_settings = nothing
     if preprocess_cfg.interactive_continuous
         @info section("Interactive Continuous Data Review")
         @info "Reviewing continuous data before ICA. Close the window to continue."
@@ -469,19 +470,7 @@ function _pipeline_continuous_artifacts!(dat::ContinuousData, preprocess_cfg::Pr
         _wait_interactive_figure(res.fig, res.screen)
 
         settings = res.analysis_settings[]
-        apply_analysis_settings!(
-            dat,
-            AnalysisSettings(
-                hp_filter = settings.hp_filter,
-                lp_filter = settings.lp_filter,
-                reference = settings.reference,
-                repaired_channels = Symbol[],
-                repair_method = :none,
-                selected_regions = settings.selected_regions,
-                removed_ica_components = settings.removed_ica_components,
-            ),
-        )
-
+        interactive_settings = settings
         if !isempty(settings.repaired_channels)
             @info "Manually marked channels for repair: $(settings.repaired_channels)"
             isempty(channels_to_repair) && (repair_info_name = "continuous_repair_manual")
@@ -492,15 +481,40 @@ function _pipeline_continuous_artifacts!(dat::ContinuousData, preprocess_cfg::Pr
         @info "Continuous data review complete."
     end
 
-    isempty(channels_to_repair) && return nothing
+    continuous_repair_info = nothing
+    if !isempty(channels_to_repair)
+        continuous_repair_info = create_continuous_repair_info(repair_method; name = repair_info_name)
+        channel_repairable!(continuous_repair_info, channels_to_repair, dat.layout)
 
-    continuous_repair_info = create_continuous_repair_info(repair_method; name = repair_info_name)
-    channel_repairable!(continuous_repair_info, channels_to_repair, dat.layout)
+        @info section("Channel Repair")
+        repair_channels!(dat, continuous_repair_info; method = repair_method)
+        @info continuous_repair_info
+    end
 
-    @info section("Channel Repair")
-    repair_channels!(dat, continuous_repair_info; method = repair_method)
-    @info continuous_repair_info
+    if !isnothing(interactive_settings)
+        apply_analysis_settings!(
+            dat,
+            AnalysisSettings(
+                hp_filter = interactive_settings.hp_filter,
+                lp_filter = interactive_settings.lp_filter,
+                reference = preprocess_cfg.reference_channel == :none ? interactive_settings.reference : :none,
+                repaired_channels = Symbol[],
+                repair_method = :none,
+                selected_regions = interactive_settings.selected_regions,
+                removed_ica_components = interactive_settings.removed_ica_components,
+                reference_channels = interactive_settings.reference_channels,
+            ),
+        )
+    end
+
     return continuous_repair_info
+end
+
+function _ica_reference_rank_deficit(dat::EegData, reference_selection)::Int
+    ref_channels = _get_reference_channels(dat, reference_selection)
+    isempty(ref_channels) && return 0
+    layout_set = Set(channel_labels(dat))
+    return all(in(layout_set), ref_channels) ? 1 : 0
 end
 
 function _pipeline_ica!(
@@ -524,7 +538,7 @@ function _pipeline_ica!(
 
     @info subsection("Running ICA")
     n_repaired = isnothing(continuous_repair_info) ? 0 : length(continuous_repair_info.repaired)
-    n_ref = preprocess_cfg.reference_channel == :avg ? 1 : 0
+    n_ref = _ica_reference_rank_deficit(dat_ica, preprocess_cfg.reference_channel)
     n_comps = max(1, n_channels(dat_ica) - n_repaired - n_ref)
 
     ica = run_ica(

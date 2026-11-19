@@ -66,5 +66,16 @@ using EegFun
         hm_yhi = hm_ylo + res_multi.axes[1].finallimits[].widths[2]
         @test hm_ylo <= 1.0
         @test hm_yhi >= 12.0
+
+        # Extra/ROI channel is preserved when interval_selection subsets EpochData
+        dat_roi = copy(dat)
+        EegFun.channel_average!(dat_roi; channel_selections = [EegFun.channels([:Ch1, :Ch2])], output_labels = [:ROI], reduce = false)
+        res_roi = EegFun.plot_erp_image(
+            dat_roi;
+            channel_selection = EegFun.channels(:ROI),
+            interval_selection = EegFun.times(0.1, 0.5),
+            display_plot = false,
+        )
+        @test res_roi.fig isa Figure
     end
 end

@@ -44,8 +44,9 @@ function plot_erp_measurements(
     kwargs...,
 )
     if endswith(filepath, ".jld2")
-        data = read_data(filepath)
-        isnothing(data) && @minimal_error "No data found in file: $filepath"
+        resolved = _resolve_input_filepath(filepath, input_dir)
+        data = read_data(resolved)
+        isnothing(data) && @minimal_error "No data found in file: $resolved"
         return plot_erp_measurements(data, analysis_type; kwargs...)
     end
 
@@ -71,6 +72,23 @@ function plot_erp_measurements(
     average_channels::Bool = false,
     kwargs...,
 )
+    part_keys = unique(_participant_group_key(d) for d in erp_datasets)
+    if length(part_keys) > 1
+        return NamedTuple[
+            plot_erp_measurements(
+                filter(d -> _participant_group_key(d) == part_key, erp_datasets),
+                analysis_type;
+                analysis_interval = analysis_interval,
+                baseline_interval = baseline_interval,
+                layout = layout,
+                channel_selection = channel_selection,
+                condition_selection = condition_selection,
+                average_channels = average_channels,
+                kwargs...,
+            ) for part_key in part_keys
+        ]
+    end
+
     selected_indices = get_selected_conditions(erp_datasets, condition_selection)
     erp_datasets = erp_datasets[selected_indices]
     isempty(erp_datasets) && @minimal_error "No conditions selected"
@@ -102,10 +120,18 @@ function plot_erp_measurements(
     plot_lines = _build_plot_line_lookup(result.line_refs, axes)
 
     first_data = erp_datasets[1]
-    all_channels = setdiff(propertynames(first_data.data), meta_labels(first_data))
-    chan_func = _to_channel_func(channel_selection)
-    selected_channels = all_channels[chan_func(all_channels)]
-    plot_channels = average_channels ? [:avg] : selected_channels
+    avail_channels = vcat(channel_labels(first_data), extra_labels(first_data))
+    sel_raw = get_selected_channels(first_data, channel_selection; include_meta = false, include_extra = true)
+    channel_plot_order = get(kwargs_dict, :channel_plot_order, nothing)
+    selected_channels = _order_plot_channels([ch for ch in sel_raw if ch in avail_channels], avail_channels, channel_plot_order)
+    plot_channels = if average_channels
+        [:avg]
+    elseif layout isa PlotLayout
+        layout.channels
+    else
+        selected_channels
+    end
+    is_single_layout = layout === :single || (layout isa PlotLayout && layout.type === :single)
 
     n_ds = length(erp_datasets)
     cached_erps = Vector{ErpData}(undef, n_ds)
@@ -118,7 +144,7 @@ function plot_erp_measurements(
         cached_times[idx] = time_vector(erp_data)
     end
 
-    if layout == :single
+    if is_single_layout
         for dataset_idx = 1:n_ds, channel in plot_channels
             _compute_and_overlay!(
                 axes[1],

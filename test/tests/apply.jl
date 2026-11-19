@@ -222,5 +222,38 @@ using EegFun
         settings = EegFun.AnalysisSettings(0.0, 0.0, :none, Symbol[], :none, Tuple{Float64,Float64}[], Int[])
         EegFun.apply_analysis_settings!(dat, ica_result, settings)
         # Should complete without error
+
+        # Custom multi-channel reference_channels, repair-before-rereference order, and non-mutating ICA replay
+        dat_cr = EegFun.create_test_continuous_data(n = 400, fs = 1000, n_channels = 4, seed = 77)
+        neighbors_cr = OrderedCollections.OrderedDict(
+            :Ch1 => EegFun.Neighbors([:Ch2, :Ch3], [1.0, 1.0], [0.5, 0.5]),
+            :Ch2 => EegFun.Neighbors([:Ch1, :Ch3, :Ch4], [1.0, 1.0, 1.0], [1 / 3, 1 / 3, 1 / 3]),
+            :Ch3 => EegFun.Neighbors([:Ch1, :Ch2, :Ch4], [1.0, 1.0, 1.0], [1 / 3, 1 / 3, 1 / 3]),
+            :Ch4 => EegFun.Neighbors([:Ch2, :Ch3], [1.0, 1.0], [0.5, 0.5]),
+        )
+        dat_cr.layout.neighbors = neighbors_cr
+
+        # Corrupt Ch4 with a massive spike; repairing before custom rereference prevents spike contamination
+        dat_cr.data[!, :Ch4] .= 1e6
+        settings_custom = EegFun.AnalysisSettings(
+            hp_filter = 0.0,
+            lp_filter = 0.0,
+            reference = :custom,
+            repaired_channels = [:Ch4],
+            repair_method = :neighbor_interpolation,
+            reference_channels = [:Ch1, :Ch2],
+        )
+        EegFun.apply_analysis_settings!(dat_cr, settings_custom)
+        @test maximum(abs, dat_cr.data.Ch3) < 10.0
+
+        # Calling mutating apply_analysis_settings!(dat, ica, settings) twice does not mutate ica or skip 2nd dataset
+        d1 = copy(dat)
+        d2 = copy(dat)
+        settings_ica = EegFun.AnalysisSettings(0.0, 0.0, :none, Symbol[], :none, Tuple{Float64,Float64}[], [1])
+        EegFun.apply_analysis_settings!(d1, ica_result, settings_ica)
+        EegFun.apply_analysis_settings!(d2, ica_result, settings_ica)
+        @test isempty(ica_result.removed_activations)
+        @test d1.data.Ch1 ≈ d2.data.Ch1
+        @test !(d1.data.Ch1 ≈ dat.data.Ch1)
     end
 end

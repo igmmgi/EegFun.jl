@@ -189,8 +189,9 @@ $(_generate_kwargs_doc(PLOT_GFP_KWARGS))
 """
 function plot_gfp(filepath::String; input_dir::String = pwd(), participant_selection = participants(), kwargs...)
     if endswith(filepath, ".jld2")
-        data = read_data(filepath)
-        isnothing(data) && @minimal_error "No data found in file: $filepath"
+        resolved = _resolve_input_filepath(filepath, input_dir)
+        data = read_data(resolved)
+        isnothing(data) && @minimal_error "No data found in file: $resolved"
         return plot_gfp(data; kwargs...)
     end
     files = _require_batch_files(filepath, input_dir, participant_selection)

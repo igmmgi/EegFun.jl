@@ -102,7 +102,7 @@ function _load_and_group_for_jackknife(files::Vector{String}, input_dir::String,
         end
 
         data_vec = data isa ErpData ? [data] : data
-        for idx in _select_conditions_by_field(data_vec, condition_selection)
+        for idx in get_selected_conditions(data_vec, condition_selection)
             erp = data_vec[idx]
             push!(get!(() -> Tuple{Int,String,ErpData}[], entries_by_condition, erp.condition), (participant_id, file, erp))
         end
@@ -147,7 +147,7 @@ function jackknife_average(erps::AbstractVector{<:ErpData}; condition_selection 
     data_by_condition = group_by_condition(erps)
     all_cond_nums = collect(keys(data_by_condition))
     rep_items = ErpData[first(data_by_condition[num]) for num in all_cond_nums]
-    selected_indices = _select_conditions_by_field(rep_items, condition_selection)
+    selected_indices = get_selected_conditions(rep_items, condition_selection)
     selected_cond_nums = all_cond_nums[selected_indices]
 
     if isempty(selected_cond_nums)

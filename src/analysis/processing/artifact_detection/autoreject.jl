@@ -194,6 +194,7 @@ function _repair_epochs_cached!(
     repair_matrix::BitMatrix,
     target_channels::Vector{Symbol},
     layout::Layout;
+    bad_matrix::BitMatrix = repair_matrix,
     repair_method::Symbol = :spherical_spline,
     m::Int = 4,
     lambda::Real = 1e-5,
@@ -232,30 +233,33 @@ function _repair_epochs_cached!(
         end
     end
 
-    spline_cache = Dict{Vector{Symbol},Tuple{Vector{Int},Vector{Int},Matrix{Float64}}}()
+    spline_cache = Dict{Tuple{Vector{Symbol},Vector{Symbol}},Tuple{Vector{Int},Vector{Int},Matrix{Float64}}}()
 
     for ep_idx in epochs_to_repair
         bad_idx = findall(@view repair_matrix[ep_idx, :])
         isempty(bad_idx) && continue
+        all_bad_idx = findall(@view bad_matrix[ep_idx, :])
 
         pattern = sort(target_channels[bad_idx])
+        all_bad_pattern = sort(target_channels[all_bad_idx])
+        cache_key = (all_bad_pattern, pattern)
         epoch_df = epochs_data[ep_idx]
         n_tp = nrow(epoch_df)
 
         if repair_method == :spherical_spline && has_spline_coords
-            good_idx = setdiff(1:n_channels, bad_idx)
+            good_idx = setdiff(1:n_channels, all_bad_idx)
             if length(good_idx) >= 4
-                if !haskey(spline_cache, pattern)
+                if !haskey(spline_cache, cache_key)
                     try
                         op_T = collect(transpose(_spline_good_to_bad(U_all[good_idx, :], U_all[bad_idx, :], f_legendre, lambda)))
-                        spline_cache[pattern] = (good_idx, bad_idx, op_T)
+                        spline_cache[cache_key] = (good_idx, bad_idx, op_T)
                     catch e
                         @minimal_warning "Spherical spline operator generation failed for bad channels $pattern: $e. Falling back to neighbor interpolation."
                     end
                 end
 
-                if haskey(spline_cache, pattern)
-                    g_idx, b_idx, op_T = spline_cache[pattern]
+                if haskey(spline_cache, cache_key)
+                    g_idx, b_idx, op_T = spline_cache[cache_key]
                     good_data = Matrix{Float64}(undef, n_tp, length(g_idx))
                     for (col_i, g_i) in enumerate(g_idx)
                         copyto!(view(good_data, :, col_i), epoch_df[!, target_channels[g_i]])
@@ -275,7 +279,7 @@ function _repair_epochs_cached!(
             get_neighbors_xyz!(layout, 0.5)
         end
         if !isnothing(layout.neighbors)
-            plans = _resolve_neighbor_plans(target_channels, pattern, layout.neighbors; bad_channels = pattern, log_repairs = false)
+            plans = _resolve_neighbor_plans(target_channels, pattern, layout.neighbors; bad_channels = all_bad_pattern, log_repairs = false)
             if !isempty(plans)
                 _apply_neighbor_plans!(epoch_df, plans)
                 repaired_channels[ep_idx] = [bad_ch for (_, bad_ch, _, _, _) in plans]
@@ -500,6 +504,7 @@ function autoreject!(
             repair_matrix,
             selected_channels,
             layout;
+            bad_matrix = bad_matrix,
             repair_method = repair_method,
             m = m,
             lambda = lambda,

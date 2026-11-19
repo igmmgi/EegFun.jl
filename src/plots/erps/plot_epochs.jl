@@ -127,8 +127,9 @@ function plot_epochs(
     kwargs...,
 )
     if endswith(filename, ".jld2")
-        data = read_data(filename)
-        isnothing(data) && @minimal_error "No data found in file: $filename"
+        resolved = _resolve_input_filepath(filename, input_dir)
+        data = read_data(resolved)
+        isnothing(data) && @minimal_error "No data found in file: $resolved"
         return plot_epochs(
             data;
             channel_selection = channel_selection,

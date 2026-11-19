@@ -472,5 +472,17 @@ end
         @test isnothing(result)
     end
 
+    @testset "Multi-participant in-memory Vector{ErpData}" begin
+        mp = [
+            EegFun.create_test_erp_data(participant = 1, condition = 1),
+            EegFun.create_test_erp_data(participant = 1, condition = 2),
+            EegFun.create_test_erp_data(participant = 2, condition = 1),
+            EegFun.create_test_erp_data(participant = 2, condition = 2),
+        ]
+        diffs = EegFun.condition_difference(mp, [(1, 2)])
+        @test length(diffs) == 2
+        @test [d.file for d in diffs] == [mp[1].file, mp[3].file]
+    end
+
     rm(test_dir, recursive = true)
 end

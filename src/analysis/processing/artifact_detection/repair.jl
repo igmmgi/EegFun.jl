@@ -91,6 +91,7 @@ function repair_artifacts_neighbor!(dat::EpochData, artifacts::EpochRejectionInf
             method = :neighbor_interpolation,
             epoch_selection = epochs([epoch_idx]),
             neighbors_dict = dat.layout.neighbors,
+            bad_channels = isnothing(artifacts.skipped) ? nothing : get(artifacts.skipped, epoch_idx, nothing),
         )
         @info ""
     end

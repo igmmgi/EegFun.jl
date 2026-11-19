@@ -1002,6 +1002,15 @@ end
             @test size(se_w) == size(cf) == size(res_w.stat_matrix.t)
             @test isapprox(cf ./ se_w, res_w.stat_matrix.t; rtol = 1e-8)
         end
+
+        # In-memory ERPs sharing placeholder .file ("test_data") resolve participant identity via :participant column
+        inmem_c1 = [EegFun.create_test_erp_data(participant = p, condition = 1, fs = 100, seed = 10 + p) for p = 1:3]
+        inmem_c2 = [EegFun.create_test_erp_data(participant = p, condition = 2, fs = 100, seed = 20 + p) for p = 1:3]
+        prep_inmem_ord = EegFun.prepare_stats(vcat(inmem_c1, inmem_c2); design = :paired)
+        prep_inmem_shuf = EegFun.prepare_stats(vcat(inmem_c1, reverse(inmem_c2)); design = :paired)
+        @test prep_inmem_shuf.analysis.data[2] ≈ prep_inmem_ord.analysis.data[2]
+        inmem_c2_mismatch = [inmem_c2[1], inmem_c2[2], EegFun.create_test_erp_data(participant = 99, condition = 2, fs = 100, seed = 99)]
+        @test_throws EegFun.EegFunError EegFun.prepare_stats(vcat(inmem_c1, inmem_c2_mismatch); design = :paired)
     end
 
 end # @testset "ERP Statistics"

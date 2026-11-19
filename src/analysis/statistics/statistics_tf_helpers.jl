@@ -241,13 +241,16 @@ function _create_tf_grand_average(
         phase_df[!, elec] = fill(NaN, n_rows)
     end
 
+    sub_layout =
+        electrodes == ref_tf.layout.data.label ? copy(ref_tf.layout) :
+        subset_layout(ref_tf.layout; channel_selection = channels(electrodes))
     return TimeFreqData(
         "grand_average",
         cond_num,
         ref_tf.condition_name,
         power_df,
         phase_df,
-        copy(ref_tf.layout),
+        sub_layout,
         ref_tf.sample_rate,
         ref_tf.method,
         baseline,

@@ -45,6 +45,7 @@ function tf_itc(tf::TimeFreqEpochData)::TimeFreqData
     phase_df = DataFrame(time = copy(ref.time), freq = copy(ref.freq))
     phasor_sum = Vector{ComplexF64}(undef, n_rows)
     inv_n = 1.0 / n_trials
+    raw_unbaselined = isnothing(tf.baseline)
 
     for ch in channel_labels(tf)
         all(isnan, ref[!, ch]) &&
@@ -59,7 +60,7 @@ function tf_itc(tf::TimeFreqEpochData)::TimeFreqData
                     pw = pwcol[i]
                     if isnan(ph) || isnan(pw)
                         phasor_sum[i] = NaN + NaN * im
-                    elseif isfinite(ph) && isfinite(pw) && pw > 0.0
+                    elseif isfinite(ph) && isfinite(pw) && (!raw_unbaselined || pw > 0.0)
                         phasor_sum[i] += cis(ph)
                     end
                 end

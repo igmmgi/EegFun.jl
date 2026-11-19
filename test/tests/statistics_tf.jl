@@ -926,6 +926,13 @@ end
         tfs_bad_freq[end] =
             EegFun.create_test_tf_data(file = "participant3", condition = 2, condition_name = "cond_2", frequencies = [10.0, 20.0])
         @test_throws EegFun.EegFunError EegFun.prepare_stats(tfs_bad_freq; design = :paired)
+
+        # Channel subsetting in TF prepare_stats subsets grand-average layout to match power/phase columns
+        tfs_4ch = _build_tf_test_data(n_participants = 3, n_channels = 4, frequencies = [4.0, 8.0])
+        prep_ch_sub = EegFun.prepare_stats(tfs_4ch; design = :paired, channel_selection = EegFun.channels([:Ch1, :Ch3]))
+        @test EegFun.channel_labels(prep_ch_sub.data[1]) == [:Ch1, :Ch3]
+        @test prep_ch_sub.data[1].layout.data.label == [:Ch1, :Ch3]
+        @test prep_ch_sub.data[2].layout.data.label == [:Ch1, :Ch3]
     end
 
 

@@ -168,8 +168,13 @@ function lrp(
 )::Vector{ErpData}
     _validate_lrp_pairs(condition_pairs)
 
-    erps_filtered = erps[_select_conditions_by_field(erps, condition_selection)]
+    erps_filtered = erps[get_selected_conditions(erps, condition_selection)]
     isempty(erps_filtered) && @minimal_error("No ERP conditions available after applying condition_selection")
+
+    part_groups = _group_by_participant_file(erps_filtered)
+    if !isnothing(part_groups)
+        return reduce(vcat, [lrp(pg, condition_pairs; channel_selection = channel_selection) for pg in part_groups])
+    end
 
     @info "Calculating LRP for $(length(condition_pairs)) condition pair(s) from $(length(erps_filtered)) condition(s)"
     cond_nums = Int[d.condition for d in erps_filtered]

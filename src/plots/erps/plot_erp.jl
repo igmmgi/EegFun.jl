@@ -141,8 +141,9 @@ function plot_erp(
     kwargs...,
 )
     if endswith(filepath, ".jld2")
-        data = read_data(filepath)
-        isnothing(data) && @minimal_error "No data found in file: $filepath"
+        resolved = _resolve_input_filepath(filepath, input_dir)
+        data = read_data(resolved)
+        isnothing(data) && @minimal_error "No data found in file: $resolved"
         return plot_erp(
             data;
             layout = layout,
@@ -214,11 +215,11 @@ function plot_erp(
     baseline_interval::Interval = nothing,
     kwargs...,
 )
-    file_ids = unique(d.file for d in datasets)
-    if length(file_ids) > 1
+    part_keys = unique(_participant_group_key(d) for d in datasets)
+    if length(part_keys) > 1
         return NamedTuple[
             plot_erp(
-                filter(d -> d.file == file_id, datasets);
+                filter(d -> _participant_group_key(d) == part_key, datasets);
                 layout = layout,
                 condition_selection = condition_selection,
                 channel_selection = channel_selection,
@@ -227,7 +228,7 @@ function plot_erp(
                 interval_selection = interval_selection,
                 baseline_interval = baseline_interval,
                 kwargs...,
-            ) for file_id in file_ids
+            ) for part_key in part_keys
         ]
     end
 
@@ -276,6 +277,24 @@ function plot_erp_errorbar(
     baseline_interval::Interval = nothing,
     kwargs...,
 )
+    if endswith(filepath, ".jld2")
+        resolved = _resolve_input_filepath(filepath, input_dir)
+        data = read_data(resolved)
+        isnothing(data) && @minimal_error "No data found in file: $resolved"
+        datasets = data isa ErpData ? [data] : data
+        return plot_erp_errorbar(
+            datasets;
+            layout = layout,
+            condition_selection = condition_selection,
+            channel_selection = channel_selection,
+            channel_plot_order = channel_plot_order,
+            sample_selection = sample_selection,
+            interval_selection = interval_selection,
+            baseline_interval = baseline_interval,
+            kwargs...,
+        )
+    end
+
     files = _require_batch_files(filepath, input_dir, participant_selection; kind = "ERP")
     datasets = ErpData[]
     for file in files
@@ -477,32 +496,36 @@ function _plot_erp_core(
 end
 
 function _plot_erp_on_existing_axis!(ax::Axis, datasets::AbstractVector{<:ErpData}; dynamic_grand_avg::Bool = false, kwargs...)
-    baseline_interval = get(kwargs, :baseline_interval, nothing)
+    condition_selection = get(kwargs, :condition_selection, conditions())
     channel_selection_func = get(kwargs, :channel_selection, channels())
     channel_plot_order = get(kwargs, :channel_plot_order, nothing)
+    sample_selection = get(kwargs, :sample_selection, samples())
+    interval_selection = get(kwargs, :interval_selection, times())
+    baseline_interval = get(kwargs, :baseline_interval, nothing)
 
-    filtered_kwargs = pairs(NamedTuple(filter(p -> p[1] ∉ (:baseline_interval, :channel_selection, :channel_plot_order), pairs(kwargs))))
+    stripped_keys =
+        (:condition_selection, :channel_selection, :channel_plot_order, :sample_selection, :interval_selection, :baseline_interval)
+    filtered_kwargs = pairs(NamedTuple(filter(p -> p[1] ∉ stripped_keys, pairs(kwargs))))
     plot_kwargs, user_provided_color = _prepare_plot_kwargs(filtered_kwargs)
 
     dat_subset, all_channels, updated_channel_selection, _ = _prepare_erp_data(
         datasets,
         plot_kwargs;
-        condition_selection = conditions(),
+        condition_selection = condition_selection,
         channel_selection = channel_selection_func,
-        sample_selection = get(plot_kwargs, :sample_selection, samples()),
+        sample_selection = sample_selection,
+        interval_selection = interval_selection,
         baseline_interval = baseline_interval,
     )
 
     if dynamic_grand_avg
         @info "Averaging across participants dynamically..."
         dat_subset, variances_dict = _compute_dynamic_grand_averages(dat_subset, plot_kwargs[:error_bars])
-        sel_func = channel_selection_func
     else
         variances_dict = Dict{Int,Tuple{DataFrames.DataFrame,Int}}()
-        sel_func = updated_channel_selection
     end
 
-    selected_channels = get_selected_channels(first(dat_subset), sel_func; include_meta = false, include_extra = true)
+    selected_channels = get_selected_channels(first(dat_subset), updated_channel_selection; include_meta = false, include_extra = true)
     all_plot_channels = _order_plot_channels(selected_channels, all_channels, channel_plot_order)
 
     _plot_erp!(ax, dat_subset, all_plot_channels, plot_kwargs; user_provided_color = user_provided_color, variances_dict = variances_dict)
@@ -726,12 +749,21 @@ function _compute_dynamic_grand_averages(datasets::Vector{ErpData}, error_bars::
     grand_averages = ErpData[]
     variances_dict = Dict{Int,Tuple{DataFrames.DataFrame,Int}}()
 
-    participant_global_means = Dict{String,DataFrames.DataFrame}()
+    participant_global_means = Dict{Any,DataFrames.DataFrame}()
     grand_global_mean = DataFrames.DataFrame()
+    use_positional_within = false
     if error_bars == :within_sem
-        participant_erps = Dict{String,Vector{ErpData}}()
+        participant_erps = Dict{Any,Vector{ErpData}}()
         for erp in datasets
-            push!(get!(participant_erps, erp.file, ErpData[]), erp)
+            push!(get!(participant_erps, _participant_group_key(erp), ErpData[]), erp)
+        end
+        cond_lengths = [length(v) for v in values(erps_by_condition)]
+        if length(participant_erps) == 1 && !isempty(cond_lengths) && first(cond_lengths) > 1 && allequal(cond_lengths)
+            use_positional_within = true
+            empty!(participant_erps)
+            for erps in values(erps_by_condition), (p_idx, erp) in enumerate(erps)
+                push!(get!(participant_erps, p_idx, ErpData[]), erp)
+            end
         end
 
         first_erp = datasets[1]
@@ -799,11 +831,12 @@ function _compute_dynamic_grand_averages(datasets::Vector{ErpData}, error_bars::
                 var_buf = zeros(Float64, n_points)
                 if error_bars == :within_sem
                     g_mean = grand_global_mean[!, ch]::Vector{Float64}
-                    for erp in erps
+                    for (p_idx, erp) in enumerate(erps)
+                        pkey = use_positional_within ? p_idx : _participant_group_key(erp)
                         _accum_within_sqdiff!(
                             var_buf,
                             erp.data[!, ch],
-                            participant_global_means[erp.file][!, ch]::Vector{Float64},
+                            participant_global_means[pkey][!, ch]::Vector{Float64},
                             g_mean,
                             avg_buf,
                         )

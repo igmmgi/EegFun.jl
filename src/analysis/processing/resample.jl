@@ -87,6 +87,9 @@ function _resample_dataframe_prepared(
             push!(sig_positions, pos)
         elseif col == :time
             out_cols[pos] = collect(range(df.time[1], step = 1 / target_rate, length = N_new))
+        elseif col == :sample && eltype(df[!, col]) <: Integer
+            first_sample = isempty(df) ? 1 : max(1, round(Int, (df[1, col] - 1) * rate) + 1)
+            out_cols[pos] = collect(first_sample:(first_sample+N_new-1))
         elseif col == trigger_col
             trig_src = df[!, trigger_col]
             trig_out = zeros(eltype(trig_src), N_new)
@@ -98,6 +101,21 @@ function _resample_dataframe_prepared(
                 end
             end
             out_cols[pos] = trig_out
+        elseif col == :trigger_info && eltype(df[!, col]) <: AbstractString
+            info_src = df[!, col]
+            info_out = fill("", N_new)
+            has_trig = hasproperty(df, trigger_col)
+            trig_vec = has_trig ? df[!, trigger_col] : nothing
+            @inbounds for orig_idx = 1:N_old
+                s = info_src[orig_idx]
+                if !isempty(s) || (has_trig && trig_vec[orig_idx] != 0)
+                    new_idx = clamp(round(Int, (orig_idx - 1) * rate) + 1, 1, N_new)
+                    if !isempty(s)
+                        info_out[new_idx] = s
+                    end
+                end
+            end
+            out_cols[pos] = info_out
         elseif col in extra_set && eltype(df[!, col]) <: AbstractFloat
             col_data = df[!, col]
             if allequal(col_data)

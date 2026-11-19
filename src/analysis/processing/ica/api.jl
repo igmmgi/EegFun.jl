@@ -89,7 +89,9 @@ function run_ica(
     isempty(selected_channels) && @minimal_error("No channels available after applying channel filter")
 
     concatenated_df = all_data(epoched_data)
-    _check_epoched_data_uniqueness!(concatenated_df; remove_duplicates = remove_duplicates)
+    if !_has_local_epoch_samples(epoched_data, selected_channels)
+        _check_epoched_data_uniqueness!(concatenated_df; remove_duplicates = remove_duplicates)
+    end
 
     combined_sel = _combine_interval_sample(interval_selection, sample_selection)
     sample_indices = get_selected_samples(concatenated_df, combined_sel)
@@ -115,6 +117,43 @@ function run_ica(
 end
 
 run_ica(epoched_data::EpochData; kwargs...) = run_ica([epoched_data]; kwargs...)
+
+function _has_local_epoch_samples(epoched_data::AbstractVector{<:EpochData}, selected_channels::Vector{Symbol})
+    n_ep_total = 0
+    has_multi_trial_cond = false
+    first_df = nothing
+    for ed in epoched_data
+        n_ed = 0
+        for df in ed.data
+            n = nrow(df)
+            n == 0 && continue
+            hasproperty(df, :sample) || return false
+            s = df.sample
+            (length(s) == n && @inbounds(s[1]) == 1 && @inbounds(s[n]) == n) || return false
+            @inbounds for i = 1:n
+                s[i] == i || return false
+            end
+            isnothing(first_df) && (first_df = df)
+            n_ed += 1
+            n_ep_total += 1
+        end
+        n_ed >= 2 && (has_multi_trial_cond = true)
+    end
+    n_ep_total <= 1 && return false
+    has_multi_trial_cond && return true
+
+    df1 = first_df::DataFrame
+    common_chs = intersect(propertynames(df1), selected_channels)
+    isempty(common_chs) && return true
+    ch = first(common_chs)
+    for ed in epoched_data, df in ed.data
+        nrow(df) == 0 && continue
+        df === df1 && continue
+        n_cmp = min(nrow(df1), nrow(df))
+        view(df1[!, ch], 1:n_cmp) == view(df[!, ch], 1:n_cmp) || return true
+    end
+    return false
+end
 
 function _check_epoched_data_uniqueness!(concatenated_df::DataFrame; remove_duplicates::Bool = false)
     if !hasproperty(concatenated_df, :sample)

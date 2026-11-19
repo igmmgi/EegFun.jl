@@ -156,6 +156,27 @@ using CSV
                 dat_bv = EegFun.read_bids(bids_bv; subject = "01", task = "oddball")
                 @test dat_bv isa EegFun.ContinuousData
                 @test EegFun.n_samples(dat_bv) > 0
+
+                # Injecting fiducials (NAS/LPA/RPA) into electrodes.tsv does not pollute dat.layout or break repair_channels
+                bv_eeg_dir = joinpath(bids_bv, "sub-01", "eeg")
+                bv_chs = String.(EegFun.channel_labels(dat_bv))
+                elec_names = vcat(["NAS", "LPA", "RPA"], bv_chs)
+                n_el = length(elec_names)
+                angles = range(0.1, 2π - 0.1, length = n_el)
+                elec_df = DataFrame(name = elec_names, x = 0.5 .* cos.(angles), y = 0.5 .* sin.(angles), z = fill(0.8, n_el))
+                CSV.write(joinpath(bv_eeg_dir, "sub-01_electrodes.tsv"), elec_df; delim = '\t')
+
+                dat_bv_fid = EegFun.read_bids(bids_bv; subject = "01", task = "oddball")
+                @test :NAS ∉ dat_bv_fid.layout.data.label
+                @test dat_bv_fid.layout.data.label == Symbol.(bv_chs)
+
+                # Even if a layout manually contains phantom fiducials, spherical & neighbor repair skip non-DataFrame rows
+                dat_bv_fid.layout = EegFun._bids_electrodes_to_layout(elec_df)
+                EegFun.get_neighbors_xyz!(dat_bv_fid.layout, 2.0)
+                rep_sph = EegFun.repair_channels(dat_bv_fid, [Symbol(bv_chs[1])]; method = :spherical_spline)
+                @test rep_sph isa EegFun.ContinuousData
+                rep_nb = EegFun.repair_channels(dat_bv_fid, [Symbol(bv_chs[1])]; method = :neighbor_interpolation)
+                @test rep_nb isa EegFun.ContinuousData
             end
         end
     end

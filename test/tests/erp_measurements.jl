@@ -1408,6 +1408,21 @@ using EegFun
             @test nrow(res_ep.data) == 2 && :epoch in propertynames(res_ep.data)
             res_vec_erps = EegFun.erp_measurements([erp_inmem, erp_asym], "mean_amplitude"; analysis_interval = (0.1, 0.3))
             @test nrow(res_vec_erps.data) == 2
+
+            # 6. Multi-participant Vector{ErpData} condition_selection matches .condition field (not positional index)
+            p1_c1 = create_known_signal_erp(1, 1, t -> 1.0, t_start = 0.0, t_end = 0.5)
+            p2_c1 = create_known_signal_erp(2, 1, t -> 2.0, t_start = 0.0, t_end = 0.5)
+            p1_c2 = create_known_signal_erp(1, 2, t -> 10.0, t_start = 0.0, t_end = 0.5)
+            p2_c2 = create_known_signal_erp(2, 2, t -> 20.0, t_start = 0.0, t_end = 0.5)
+            res_c2 = EegFun.erp_measurements(
+                [p1_c1, p2_c1, p1_c2, p2_c2],
+                "mean_amplitude";
+                analysis_interval = (0.1, 0.4),
+                condition_selection = EegFun.conditions(2),
+            )
+            @test nrow(res_c2.data) == 2
+            @test all(==(2), res_c2.data.condition)
+            @test sort(res_c2.data.participant) == [1, 2]
         end
 
         # Cleanup

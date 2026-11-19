@@ -44,10 +44,32 @@ using EegFun
     end
 
     @testset "plot_erp_measurements and plot_erp_measurement_gui" begin
-        res_meas = EegFun.plot_erp_measurements(all_dat, "mean_amplitude"; analysis_interval = (0.0, 0.2), display_plot = false)
-        @test res_meas isa NamedTuple
-        @test res_meas.fig isa Figure
-        @test res_meas.axes isa Vector{Axis}
+        # Multi-participant vector returns one figure NamedTuple per participant
+        res_meas_multi = EegFun.plot_erp_measurements(all_dat, "mean_amplitude"; analysis_interval = (0.0, 0.2), display_plot = false)
+        @test res_meas_multi isa Vector{NamedTuple}
+        @test length(res_meas_multi) == 2
+        @test res_meas_multi[1].fig isa Figure
+        @test res_meas_multi[1].axes isa Vector{Axis}
+
+        # Single-participant condition overlay aligns overlays with channel_plot_order
+        p1_c1 = copy(dat1)
+        p1_c1.data[!, :Ch1] .= 10.0
+        p1_c1.data[!, :Ch2] .= -20.0
+        res_ord = EegFun.plot_erp_measurements(
+            [p1_c1],
+            "mean_amplitude";
+            layout = :grid,
+            channel_selection = EegFun.channels([:Ch1, :Ch2]),
+            channel_plot_order = [:Ch2, :Ch1],
+            analysis_interval = (0.0, 0.2),
+            display_plot = false,
+        )
+        @test res_ord.axes[1].title[] == "Ch2"
+        @test res_ord.axes[2].title[] == "Ch1"
+        txt_ax1 = only(filter(p -> p isa Makie.Text, res_ord.axes[1].scene.plots))
+        txt_ax2 = only(filter(p -> p isa Makie.Text, res_ord.axes[2].scene.plots))
+        @test occursin("-20.00", string(txt_ax1.text[]))
+        @test occursin("10.00", string(txt_ax2.text[]))
 
         gui_res = EegFun.plot_erp_measurement_gui(dat1; analysis_type = "max_peak_latency", display_plot = false)
         @test gui_res.fig isa Figure

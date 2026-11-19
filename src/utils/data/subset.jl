@@ -247,7 +247,6 @@ channels(channel_numbers::UnitRange{Int}) = channels(collect(Int, channel_number
 channels(channel_ranges::Vector{UnitRange{Int}}) = channels(collect(Int, union(channel_ranges...)))
 channels(predicate::Function) = predicate
 
-# Note: keep captured variable named `f` (inspected by grand_average condition checking).
 _negate_selector(f::Function) = x -> begin
     res = f(x)
     if res isa AbstractVector{Bool}
@@ -431,22 +430,51 @@ Create a participant ID selection predicate excluding the specified IDs (inverse
 """
 participants_not(args...) = _negate_selector(participants(args...))
 
+function _match_condition_indices(x, condition_indices::AbstractVector{Int})::Vector{Int}
+    isempty(x) && return Int[]
+    if all(d -> hasfield(typeof(d), :condition) && d.condition isa Integer && d.condition > 0, x)
+        cond_nums = Int[Int(d.condition) for d in x]
+        req = unique(condition_indices)
+        present_req = Int[c for c in req if c in cond_nums]
+        isempty(present_req) && return Int[]
+        first_pos = Int[findfirst(==(c), cond_nums)::Int for c in present_req]
+        if issorted(first_pos)
+            keep = Set{Int}(present_req)
+            return Int[i for (i, cn) in enumerate(cond_nums) if cn in keep]
+        end
+        return Int[i for c in present_req for (i, cn) in enumerate(cond_nums) if cn == c]
+    end
+    return intersect(condition_indices, 1:length(x))
+end
+
+function _match_condition_names(x, condition_names::Vector{String})::Vector{Int}
+    isempty(x) && return Int[]
+    names_in_x = String[condition_name(dat) for dat in x]
+    req = unique(condition_names)
+    present_req = String[n for n in req if n in names_in_x]
+    isempty(present_req) && return Int[]
+    first_pos = Int[findfirst(==(n), names_in_x)::Int for n in present_req]
+    if issorted(first_pos)
+        keep = Set{String}(present_req)
+        return Int[i for (i, nm) in enumerate(names_in_x) if nm in keep]
+    end
+    return Int[i for n in present_req for (i, nm) in enumerate(names_in_x) if nm == n]
+end
+
 """
     conditions()
     conditions(indices_or_names...)
     conditions(predicate::Function)
 
-Create a condition selection predicate by index, name, or custom function.
+Create a condition selection predicate by condition number, condition name, or custom function.
 """
 conditions() = x -> fill(true, length(x))
-# Note: keep captured variable named `condition_indices` (inspected by grand_average).
-conditions(condition_indices::AbstractVector{Int}) = x -> intersect(condition_indices, 1:length(x))
+conditions(condition_indices::AbstractVector{Int}) = x -> _match_condition_indices(x, condition_indices)
 conditions(condition_indices::UnitRange{Int}) = conditions(collect(Int, condition_indices))
 conditions(condition_index::Int) = conditions([condition_index])
 conditions(condition_ranges::Vector{UnitRange{Int}}) = conditions(collect(Int, union(condition_ranges...)))
-conditions(condition_indices::Int...) = conditions(collect(Int, condition_indices))
-conditions(condition_names::Vector{String}) =
-    x -> Int[idx for n in condition_names for idx in (findfirst(dat -> condition_name(dat) == n, x),) if !isnothing(idx)]
+conditions(condition_indices::Int...) = conditions(collect(condition_indices))
+conditions(condition_names::Vector{String}) = x -> _match_condition_names(x, condition_names)
 conditions(cond_name::String) = conditions([cond_name])
 conditions(cond_names::String...) = conditions(collect(cond_names))
 conditions(predicate::Function) = predicate
@@ -496,7 +524,10 @@ _to_epoch_func(idx) = epochs(idx)
 _to_condition_func(::Nothing) = conditions()
 _to_condition_func(::Colon) = conditions()
 _to_condition_func(f::Function) = f === Colon() ? conditions() : f
-_to_condition_func(mask::AbstractVector{Bool}) = conditions(findall(mask))
+_to_condition_func(mask::AbstractVector{Bool}) =
+    x ->
+        length(mask) == length(x) ? collect(Bool, mask) :
+        @minimal_error("Boolean condition mask length ($(length(mask))) must match number of datasets ($(length(x)))")
 _to_condition_func(idx::Integer) = conditions(Int(idx))
 _to_condition_func(idx::AbstractVector{<:Integer}) = conditions(collect(Int, idx))
 _to_condition_func(idx::AbstractRange) = conditions(collect(Int, idx))

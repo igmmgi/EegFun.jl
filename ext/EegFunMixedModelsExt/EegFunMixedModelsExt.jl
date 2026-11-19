@@ -276,7 +276,7 @@ function fit_mass_lmm(
 
     grouped = EegFun.group_by_condition(epochs_vec)
     reps = EegFun.EpochData[first(v) for v in values(grouped)]
-    sel_idx = EegFun._select_conditions_by_field(reps, condition_selection)
+    sel_idx = EegFun.get_selected_conditions(reps, condition_selection)
     isempty(sel_idx) && @minimal_error "No EpochData conditions matched `condition_selection`."
     keep_conds = Set{Int}(reps[i].condition for i in sel_idx)
     selected_sets = EegFun.EpochData[ep for ep in epochs_vec if ep.condition in keep_conds]

@@ -518,6 +518,55 @@ max_repair_perc = 0.1
         )
         @test 2 in res_pnb.epochs_repaired
         @test maximum(abs.(cleaned_pnb.data[2].Ch1)) < 100.0
+
+        # Middle-band epochs (r_max < n_bad <= k_max): skipped bad channels must NOT be used as donor electrodes
+        lay_10 = EegFun.Layout(
+            DataFrame(
+                label = [Symbol("Ch$i") for i = 1:10],
+                inc = [35.0, 36.0, 55.0, 55.0, 60.0, 60.0, 75.0, 75.0, 85.0, 85.0],
+                azi = [0.0, 4.0, 72.0, 144.0, 216.0, 288.0, 36.0, 108.0, 180.0, 252.0],
+            ),
+            nothing,
+            nothing,
+            nothing,
+        )
+        ep_mid = EegFun.create_test_epoch_data(n = 50, fs = 100, n_epochs = 8, n_channels = 10, seed = 99)
+        ep_mid.layout = copy(lay_10)
+        for ep_i = 1:8, ch_i = 1:10
+            ep_mid.data[ep_i][!, Symbol("Ch$ch_i")] .= 0.5 .* sin.(range(0, 2π, length = 50) .+ ch_i)
+        end
+        # Adjacent Ch1 (900 μV -> skipped) and Ch2 (1000 μV -> repaired): r_max = 1, k_max = 2
+        ep_mid.data[1][15:25, :Ch1] .+= 900.0
+        ep_mid.data[1][15:25, :Ch2] .+= 1000.0
+
+        cleaned_mid_sp, res_mid_sp = EegFun.autoreject(
+            copy(ep_mid);
+            mode = :local,
+            repair_method = :spherical_spline,
+            n_folds = 2,
+            consensus_perc = 0.25,
+            max_repair_perc = 0.1,
+            seed = 7,
+            verbose = false,
+        )
+        @test 1 in res_mid_sp.epochs_repaired
+        @test res_mid_sp.repaired_channels[1] == [:Ch2]
+        @test res_mid_sp.skipped_channels[1] == [:Ch1]
+        @test maximum(abs.(cleaned_mid_sp.data[1].Ch2)) < 15.0
+
+        ep_mid_nb = copy(ep_mid)
+        EegFun.get_neighbors_xyz!(ep_mid_nb.layout, 1.5)
+        cleaned_mid_nb, res_mid_nb = EegFun.autoreject(
+            ep_mid_nb;
+            mode = :local,
+            repair_method = :neighbor_interpolation,
+            n_folds = 2,
+            consensus_perc = 0.25,
+            max_repair_perc = 0.1,
+            seed = 7,
+            verbose = false,
+        )
+        @test maximum(abs.(cleaned_mid_nb.data[1].Ch2)) < 15.0
     end
 
 end

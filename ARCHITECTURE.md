@@ -5,7 +5,7 @@
 All core structures inherit from `EegData` and wrap signal data (via a `DataFrame` in the `.data` field), spatial layouts, and metadata.
 
 - **`ContinuousData`**: Continuous time-series data.
-- **`EpochData`**: Trial-segmented data grouped by condition. 
+- **`EpochData`**: Trial-segmented data grouped by condition.
 - **`ErpData`**: Averaged trials (Event-Related Potentials).
 - **`TimeFreqData` / `SpectrumData`**: Frequency-domain data.
 - **`Layout`**: Sensor array coordinates and meshes (2D/3D).

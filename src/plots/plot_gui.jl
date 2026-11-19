@@ -361,10 +361,11 @@ function _plot_databrowser(gui_state)
         return
     end
 
+    resolved = _gui_filepath(gui_state)
     _guarded("Data Browser") do
         if file_ext == ".jld2"
             _guarded_async("Data Browser") do
-                dat = read_data(fname)
+                dat = read_data(resolved)
                 isnothing(dat) && return
                 dat = _apply_gui_filters(dat, gui_state)
                 isnothing(dat) && return
@@ -380,7 +381,7 @@ function _plot_databrowser(gui_state)
                 layout = read_layout(gui_state.layout_file[])
                 polar_to_cartesian_xy!(layout)
             end
-            raw = read_raw_data(fname)
+            raw = read_raw_data(resolved)
             dat = isnothing(layout) ? create_eegfun_data(raw) : create_eegfun_data(raw, layout)
             gui_state.channel_menu.options = vcat(["Select"], string.(channel_labels(dat)))
             _guarded_async("Data Browser") do
@@ -433,6 +434,7 @@ function _plot_epochs(gui_state)
     _guarded_async("Epochs") do
         plot_epochs(
             fname;
+            input_dir = _gui_dir(gui_state),
             channel_selection = selected_channels,
             condition_selection = cond_sel,
             epoch_selection = epoch_sel,
@@ -483,6 +485,7 @@ function _plot_erp(gui_state)
     _guarded_async("ERP") do
         plot_erp(
             fname;
+            input_dir = _gui_dir(gui_state),
             layout = Symbol(gui_state.layout_type[]),
             condition_selection = cond_sel,
             channel_selection = selected_channels,
@@ -545,7 +548,7 @@ function _plot_topography(gui_state)
     end
 
     _guarded_async("Topography") do
-        data = read_data(fname)
+        data = read_data(_gui_filepath(gui_state))
         isnothing(data) ? @minimal_warning("Requested plot settings incompatible: recheck!") : _do_topo_plot(data)
     end
 end

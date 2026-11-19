@@ -352,8 +352,7 @@ function plot_channel_spectrum(
 
     plot_kwargs = _merge_plot_kwargs(PLOT_POWER_SPECTRUM_KWARGS, kwargs)
 
-    chan_fn = _to_channel_func(channel_selection)
-    channels_to_plot = get_selected_channels(dat.layout, chan_fn)
+    channels_to_plot = get_selected_channels(dat, channel_selection; include_meta = false, include_extra = false)
 
     combined_sel = _combine_interval_sample(interval_selection, sample_selection)
     n_rows = nrow(dat.data)

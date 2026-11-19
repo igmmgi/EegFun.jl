@@ -411,5 +411,14 @@ using DataFrames
         lrp_nc = EegFun.lrp([e_l, e_r], [(10, 20)])
         @test length(lrp_nc) == 1
         @test lrp_nc[1].condition_name == "lrp_10_20"
+
+        # 3. Multi-participant in-memory Vector{ErpData} computes LRP per participant
+        e_l_p2 = copy(e_l)
+        e_l_p2.file = "lr_p2"
+        e_r_p2 = copy(e_r)
+        e_r_p2.file = "lr_p2"
+        lrp_mp = EegFun.lrp([e_l, e_r, e_l_p2, e_r_p2], [(10, 20)])
+        @test length(lrp_mp) == 2
+        @test [d.file for d in lrp_mp] == ["lr", "lr_p2"]
     end
 end

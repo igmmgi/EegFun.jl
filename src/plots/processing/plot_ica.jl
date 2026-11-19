@@ -198,6 +198,7 @@ function _plot_ica_topography_impl!(
     plot_kwargs::Dict{Symbol,Any},
     colorbar_plot::Bool;
     precomputed_topo = nothing,
+    pre_calculated_levels = nothing,
 )
     method = plot_kwargs[:method]
     gridscale = plot_kwargs[:gridscale]
@@ -206,15 +207,13 @@ function _plot_ica_topography_impl!(
 
     data, x_bounds, y_bounds = isnothing(precomputed_topo) ? _prepare_ica_topo_data(ica, component, method, gridscale) : precomputed_topo
 
-    levels =
-        !isnothing(colorrange) ?
-        _calculate_topo_levels(
-            data;
-            use_global_scale = true,
-            global_min = colorrange[1],
-            global_max = colorrange[2],
-            num_levels = num_levels,
-        ) : _calculate_topo_levels(data; num_levels = num_levels)
+    levels = if !isnothing(pre_calculated_levels)
+        pre_calculated_levels
+    elseif !isnothing(colorrange)
+        _calculate_topo_levels(data; use_global_scale = true, global_min = colorrange[1], global_max = colorrange[2], num_levels = num_levels)
+    else
+        _calculate_topo_levels(data; num_levels = num_levels)
+    end
 
     actual_cmap = _resolve_theme_colormap(ax, plot_kwargs[:colormap])
     co = contourf!(
@@ -302,6 +301,9 @@ function plot_topography(ica::InfoIca; component_selection = components(), kwarg
     total_cells < length(comps) && @minimal_error "Grid dimensions $dims provide $total_cells cells but need $(length(comps))."
 
     all_data, x_bounds, y_bounds = _prepare_ica_topo_data(ica, comps, plot_kwargs[:method], plot_kwargs[:gridscale])
+    use_global = Bool(plot_kwargs[:use_global_scale])
+    levels_result =
+        isnothing(plot_kwargs[:colorrange]) ? _calculate_ica_topo_levels(all_data, use_global, plot_kwargs[:num_levels]) : nothing
 
     axes = Vector{Axis}(undef, length(comps))
     for i in eachindex(comps)
@@ -323,7 +325,17 @@ function plot_topography(ica::InfoIca; component_selection = components(), kwarg
         end
         axes[i] = ax
 
-        _plot_ica_topography_impl!(fig, ax, ica, comps[i], plot_kwargs, colorbar_plot; precomputed_topo = (all_data[i], x_bounds, y_bounds))
+        comp_levels = isnothing(levels_result) ? nothing : (use_global ? levels_result : levels_result[i])
+        _plot_ica_topography_impl!(
+            fig,
+            ax,
+            ica,
+            comps[i],
+            plot_kwargs,
+            colorbar_plot;
+            precomputed_topo = (all_data[i], x_bounds, y_bounds),
+            pre_calculated_levels = comp_levels,
+        )
     end
 
     zoom_step = plot_kwargs[:zoom_step]
@@ -391,7 +403,7 @@ mutable struct IcaComponentState
         total_components, n_samps = size(component_data)
 
         comp_start = Observable(1)
-        use_global_scale = Observable(false)
+        use_global_scale = Observable(Bool(get(kwargs, :use_global_scale, false)))
         invert_scale = Observable(false)
 
         time_zero_idx = clamp(searchsortedfirst(dat.data.time, 0.0), 1, length(dat.data.time))
@@ -417,6 +429,7 @@ mutable struct IcaComponentState
         channel_yscale = Observable(1.0)
 
         plot_kwargs = Dict{Symbol,Any}(pairs(kwargs))
+        delete!(plot_kwargs, :use_global_scale)
         plot_kwargs[:method] = method
         plot_kwargs[:gridscale] = gridscale
 
@@ -541,9 +554,14 @@ function _plot_ica_topo_in_viewer!(
 )
     topo_data, x_bounds, y_bounds =
         isnothing(precomputed_topo) ? _prepare_ica_topo_data(ica, comp_idx, method, gridscale) : precomputed_topo
-    levels =
-        isnothing(pre_calculated_levels) ? _calculate_topo_levels(topo_data; use_global_scale = use_global_scale, num_levels = num_levels) :
+    cr = get(kwargs, :colorrange, nothing)
+    levels = if !isnothing(pre_calculated_levels)
         pre_calculated_levels
+    elseif !isnothing(cr)
+        _calculate_topo_levels(topo_data; use_global_scale = true, global_min = cr[1], global_max = cr[2], num_levels = num_levels)
+    else
+        _calculate_topo_levels(topo_data; use_global_scale = use_global_scale, num_levels = num_levels)
+    end
 
     return _plot_topo_on_axis!(
         topo_ax,
@@ -615,6 +633,10 @@ function _create_component_activation_plots!(fig, state::IcaComponentState)
     end
     all_topo_data, x_bounds, y_bounds =
         _prepare_ica_topo_data(state.ica, valid_comps, state.plot_kwargs[:method], state.plot_kwargs[:gridscale])
+    has_explicit_cr = !isnothing(get(state.plot_kwargs, :colorrange, nothing))
+    levels_result =
+        (!isempty(all_topo_data) && !has_explicit_cr) ?
+        _calculate_ica_topo_levels(all_topo_data, state.use_global_scale[], get(state.plot_kwargs, :num_levels, 20)) : nothing
 
     init_xlims = (state.dat.data.time[first(state.xrange[])], state.dat.data.time[last(state.xrange[])])
 
@@ -660,12 +682,14 @@ function _create_component_activation_plots!(fig, state::IcaComponentState)
 
         if comp_idx <= n_total
             k = comp_to_k[comp_idx]
+            level_to_use = isnothing(levels_result) ? nothing : (state.use_global_scale[] ? levels_result : levels_result[k])
             _plot_ica_topo_in_viewer!(
                 fig,
                 topo_ax,
                 state.ica,
                 comp_idx;
                 use_global_scale = state.use_global_scale[],
+                pre_calculated_levels = level_to_use,
                 precomputed_topo = (all_topo_data[k], x_bounds, y_bounds),
                 state.plot_kwargs...,
             )

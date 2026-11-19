@@ -199,7 +199,7 @@ function _repair_channels_neighbor!(
     repair_info = nothing,
     bad_channels::Union{Nothing,AbstractVector{Symbol}} = nothing,
 )
-    channels = Symbol.(data.layout.data.label)
+    channels = channel_labels(data)
     plans = _resolve_neighbor_plans(channels, channels_to_repair, neighbors_dict; repair_info = repair_info, bad_channels = bad_channels)
     _apply_neighbor_plans!(data.data, plans)
     return [bad_ch for (_, bad_ch, _, _, _) in plans]
@@ -214,7 +214,7 @@ function _repair_channels_neighbor!(
 )
     selected_epochs = get_selected_epochs(data, epoch_selection)
     isempty(selected_epochs) && return Symbol[]
-    channels = Symbol.(data.layout.data.label)
+    channels = channel_labels(data)
     plans = _resolve_neighbor_plans(channels, channels_to_repair, neighbors_dict; bad_channels = bad_channels)
     for epoch_idx in selected_epochs
         _apply_neighbor_plans!(data.data[epoch_idx], plans)
@@ -292,6 +292,7 @@ function _repair_dfs_spherical!(
     lambda::Real = 1e-5,
     n_legendre_terms::Int = 50,
     repair_info = nothing,
+    bad_channels::Union{Nothing,AbstractVector{Symbol}} = nothing,
 )
     if !isnothing(repair_info)
         repair_info.repaired = Symbol[]
@@ -300,7 +301,7 @@ function _repair_dfs_spherical!(
     isempty(dfs) && return Symbol[]
 
     _ensure_coordinates_3d!(layout)
-    channels = Symbol.(layout.data.label)
+    channels = _channel_cols(layout.data.label, dfs[1])
     unique_to_repair = unique(channels_to_repair)
     isempty(unique_to_repair) && return Symbol[]
 
@@ -319,7 +320,14 @@ function _repair_dfs_spherical!(
     end
     isempty(bad_indices) && return Symbol[]
 
-    good_indices = setdiff(1:length(channels), bad_indices)
+    excluded_indices = copy(bad_indices)
+    if !isnothing(bad_channels)
+        for bch in bad_channels
+            bidx = get(ch_map, bch, nothing)
+            !isnothing(bidx) && push!(excluded_indices, bidx)
+        end
+    end
+    good_indices = setdiff(1:length(channels), excluded_indices)
     if isempty(good_indices)
         @minimal_warning "Cannot repair channels via spherical spline: no clean channels remain, skipping"
         !isnothing(repair_info) && append!(repair_info.skipped, found_bad)
@@ -364,7 +372,16 @@ _repair_channels_spherical!(
     m::Int = 4,
     lambda::Real = 1e-5,
     repair_info = nothing,
-) = _repair_dfs_spherical!([data.data], data.layout, channels_to_repair; m = m, lambda = lambda, repair_info = repair_info)
+    bad_channels::Union{Nothing,AbstractVector{Symbol}} = nothing,
+) = _repair_dfs_spherical!(
+    [data.data],
+    data.layout,
+    channels_to_repair;
+    m = m,
+    lambda = lambda,
+    repair_info = repair_info,
+    bad_channels = bad_channels,
+)
 
 function _repair_channels_spherical!(
     data::EpochData,
@@ -372,8 +389,16 @@ function _repair_channels_spherical!(
     epoch_selection = epochs(),
     m::Int = 4,
     lambda::Real = 1e-5,
+    bad_channels::Union{Nothing,AbstractVector{Symbol}} = nothing,
 )
     selected_epochs = get_selected_epochs(data, epoch_selection)
     isempty(selected_epochs) && return Symbol[]
-    return _repair_dfs_spherical!(view(data.data, selected_epochs), data.layout, channels_to_repair; m = m, lambda = lambda)
+    return _repair_dfs_spherical!(
+        view(data.data, selected_epochs),
+        data.layout,
+        channels_to_repair;
+        m = m,
+        lambda = lambda,
+        bad_channels = bad_channels,
+    )
 end

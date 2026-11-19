@@ -206,4 +206,39 @@ end
     tiv = fill("", 10)
     EegFun._eeglab_extract_continuous_events!(tv, tiv, Dict{String,Any}("latency" => 4.0, "type" => "S 9"), 10)
     @test tv[4] == 9
+
+    # 5. Categorical string events in continuous .set assign distinct codes while keeping "boundary" at 0
+    tv_cat = zeros(Int, 15)
+    tiv_cat = fill("", 15)
+    cat_events = [
+        Dict{String,Any}("latency" => 2, "type" => "boundary", "position" => 99),
+        Dict{String,Any}("latency" => 5, "type" => "target"),
+        Dict{String,Any}("latency" => 9, "type" => "standard"),
+        Dict{String,Any}("latency" => 13, "type" => "target"),
+    ]
+    EegFun._eeglab_extract_continuous_events!(tv_cat, tiv_cat, cat_events, 15)
+    @test tv_cat[2] == 0 && tiv_cat[2] == "boundary"
+    @test tv_cat[5] > 0 && tv_cat[9] > 0 && tv_cat[5] != tv_cat[9]
+    @test tv_cat[13] == tv_cat[5]
+
+    # 6. External .fdt companion BIDS copy naming and renamed .fdt fallback in _read_eeglab_data
+    mktempdir() do fdt_dir
+        raw_fdt = joinpath(fdt_dir, "orig_subj.fdt")
+        raw_set = joinpath(fdt_dir, "orig_subj.set")
+        samples_f32 = Float32[1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+        write(raw_fdt, samples_f32)
+        write(raw_set, "placeholder")
+
+        bids_sub_dir = joinpath(fdt_dir, "sub-01", "eeg")
+        mkpath(bids_sub_dir)
+        EegFun._bids_copy_raw_recording(raw_set, bids_sub_dir, "sub-01_task-rest", ".set", true)
+        @test isfile(joinpath(bids_sub_dir, "sub-01_task-rest_eeg.set"))
+        @test isfile(joinpath(bids_sub_dir, "sub-01_task-rest_eeg.fdt"))
+        @test !isfile(joinpath(bids_sub_dir, "orig_subj.fdt"))
+
+        eeg_ext_dict = Dict{String,Any}("data" => "orig_subj.fdt", "nbchan" => 2, "pnts" => 3, "trials" => 1)
+        loaded_mat = EegFun._read_eeglab_data(eeg_ext_dict, joinpath(bids_sub_dir, "sub-01_task-rest_eeg.set"))
+        @test size(loaded_mat) == (2, 3)
+        @test vec(loaded_mat) == samples_f32
+    end
 end

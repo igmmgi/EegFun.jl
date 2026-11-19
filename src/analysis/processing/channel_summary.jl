@@ -334,7 +334,7 @@ function _process_channel_summary_file(
     )
 
     items = data_var isa AbstractVector ? data_var : [data_var]
-    selected_indices = _select_conditions_by_field(items, condition_selection)
+    selected_indices = get_selected_conditions(items, condition_selection)
     selected_items = items[selected_indices]
 
     summary_dfs = DataFrame[]

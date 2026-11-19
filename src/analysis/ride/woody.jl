@@ -1,16 +1,17 @@
 """
-    find_nearest_peak(signal::AbstractVector, center::Int)
+    find_nearest_peak(signal::AbstractVector, center::Int; positive_only::Bool = false)
 
 Find the strict local maximum in `signal` closest to index `center`, returning `(peak_index, found_peak)`.
+When `positive_only = true`, only peaks with `signal[i] > 0` are considered.
 """
-function find_nearest_peak(signal::AbstractVector, center::Int)
+function find_nearest_peak(signal::AbstractVector, center::Int; positive_only::Bool = false)
     n = length(signal)
     best_dist = typemax(Int)
     best_idx = clamp(center, 1, max(1, n))
     found_peak = false
 
     @inbounds for i = 2:(n-1)
-        if signal[i] > signal[i-1] && signal[i] > signal[i+1]
+        if (!positive_only || signal[i] > 0) && signal[i] > signal[i-1] && signal[i] > signal[i+1]
             found_peak = true
             dist = abs(i - center)
             if dist < best_dist
@@ -135,6 +136,7 @@ function woody_filter(
 
     inv_loo = (!has_fixed_template && n_trials > 1) ? 1.0 / (n_trials - 1) : 1.0
     n_win = 2 * eff_radius + 1
+    has_init_lats = !isnothing(initial_latencies)
 
     _foreach_chunk(n_trials) do trial_range
         x_cent = Vector{Float64}(undef, n_samples)
@@ -165,7 +167,24 @@ function woody_filter(
                 end
             end
 
-            peak_idx, found = find_nearest_peak(win_xcov, eff_radius + 1)
+            min_xcov, max_xcov = extrema(win_xcov)
+            has_pos_peak = max_xcov > 0.0 && max_xcov > min_xcov
+            if !has_init_lats
+                if has_pos_peak
+                    peak_idx = argmax(win_xcov)
+                    found = true
+                else
+                    peak_idx = eff_radius + 1
+                    found = false
+                end
+            else
+                idx_init = clamp(init_lats[t] - lag_min + 1, 1, n_win)
+                peak_idx, found = find_nearest_peak(win_xcov, idx_init; positive_only = true)
+                if !found && has_pos_peak
+                    peak_idx = argmax(win_xcov)
+                    found = true
+                end
+            end
             found_peaks[t] = found
             latencies[t] = found ? (search_start + peak_idx - 1 - center_idx) : init_lats[t]
         end
@@ -194,5 +213,6 @@ function woody_filter(
 
     lat_median = round(Int, median(latencies))
     latencies .-= lat_median
+    !isnothing(max_lag) && clamp!(latencies, -maxlag, maxlag)
     return latencies
 end

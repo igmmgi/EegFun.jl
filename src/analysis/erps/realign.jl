@@ -152,10 +152,28 @@ function _build_cropped_epochs(
     global_n_samples::Union{Int,Nothing} = nothing,
 )::Vector{DataFrame}
     isempty(kept_indices) && return DataFrame[]
-    start_idxs, local_n_samples = _crop_start_indices(shifted_times, window)
-    n_samples = isnothing(global_n_samples) ? local_n_samples : global_n_samples
+    if window[1] >= window[2]
+        @minimal_error("Invalid realignment window [$(window[1]), $(window[2])] s: start must be strictly less than end.")
+    end
 
     fs = Float64(sample_rate)
+    half_dt = 0.5 / fs + 1e-9
+    for k in eachindex(kept_indices)
+        st = shifted_times[k]
+        if isempty(st) || window[1] < first(st) - half_dt || window[2] > last(st) + half_dt
+            @minimal_error(
+                "Epoch $(kept_indices[k]) shifted time range [$(isempty(st) ? NaN : first(st)), $(isempty(st) ? NaN : last(st))] s " *
+                "does not cover requested realignment window [$(window[1]), $(window[2])] s."
+            )
+        end
+    end
+
+    start_idxs, local_n_samples = _crop_start_indices(shifted_times, window)
+    n_samples = isnothing(global_n_samples) ? local_n_samples : global_n_samples
+    if n_samples < 1
+        @minimal_error("Realignment window [$(window[1]), $(window[2])] s produced $n_samples samples.")
+    end
+
     k_start = round(Int, shifted_times[1][start_idxs[1]] * fs)
     uniform_time = Float64[(k_start + j - 1) / fs for j = 1:n_samples]
 
@@ -215,6 +233,13 @@ function _realign_multi_cropped(
         end
         isempty(common_starts) && return [DataFrame[] for _ in dat_vec]
         norm_interval = (maximum(common_starts), minimum(common_ends))
+    end
+
+    if norm_interval[1] >= norm_interval[2]
+        @minimal_error(
+            "No common time interval found across conditions after realignment. " *
+            "Common start: $(norm_interval[1]) s, Common end: $(norm_interval[2]) s."
+        )
     end
 
     if isnothing(global_n_samples)
@@ -379,6 +404,12 @@ function realign(
         isempty(grand_starts) && @minimal_error("No valid realigned data found across any file! (All trials likely missing the trigger)")
 
         global_interval = (maximum(grand_starts), minimum(grand_ends))
+        if global_interval[1] >= global_interval[2]
+            @minimal_error(
+                "No common time interval found across files after realignment. " *
+                "Common start: $(global_interval[1]) s, Common end: $(global_interval[2]) s."
+            )
+        end
         global_n_samples = minimum(last(_crop_start_indices(st, global_interval)) for st in all_shifted_sets)
         @info "Grand Global Interval: $(global_interval[1]) to $(global_interval[2]) (Strict: $global_n_samples samples)"
 

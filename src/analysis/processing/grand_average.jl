@@ -110,31 +110,6 @@ function _create_all_grand_averages(data_by_condition::AbstractDict{<:Integer,<:
     return grand_averages
 end
 
-function _select_conditions_by_field(items::AbstractVector, condition_selection)
-    isempty(items) && return Int[]
-    (isnothing(condition_selection) || condition_selection === Colon()) && return collect(1:length(items))
-
-    cond_func = _to_condition_func(condition_selection)
-    cond_func === Colon() && return collect(1:length(items))
-
-    if all(x -> hasfield(typeof(x), :condition), items)
-        cond_nums = Int[x.condition for x in items]
-        if allunique(cond_nums) && all(>(0), cond_nums)
-            if hasfield(typeof(cond_func), :condition_indices)
-                req_ids = getfield(cond_func, :condition_indices)
-                return Int[idx for r in unique(req_ids) for idx in (findfirst(==(r), cond_nums),) if !isnothing(idx)]
-            elseif hasfield(typeof(cond_func), :f) && hasfield(typeof(getfield(cond_func, :f)), :condition_indices)
-                req_ids = getfield(getfield(cond_func, :f), :condition_indices)
-                return Int[i for (i, c) in enumerate(cond_nums) if !(c in req_ids)]
-            end
-        end
-    end
-
-    items isa AbstractVector{<:EegFunData} && return get_selected_conditions(items, cond_func)
-    res = cond_func(1:length(items))
-    return res isa AbstractVector{Bool} ? findall(res) : collect(Int, res)
-end
-
 """
     grand_average(data::AbstractVector{<:Union{ErpData, TimeFreqData}}; condition_selection = conditions()) -> Vector
     grand_average(rsa_data_list::AbstractVector{RsaData}; compute_noise_ceiling::Bool = true) -> RsaData
@@ -151,7 +126,7 @@ function grand_average(data::AbstractVector{T}; condition_selection = conditions
     data_by_condition = group_by_condition(data)
     all_cond_nums = collect(keys(data_by_condition))
     rep_items = T[first(data_by_condition[num]) for num in all_cond_nums]
-    selected_indices = _select_conditions_by_field(rep_items, condition_selection)
+    selected_indices = get_selected_conditions(rep_items, condition_selection)
     selected_cond_nums = all_cond_nums[selected_indices]
 
     filtered_groups = OrderedDict(num => data_by_condition[num] for num in selected_cond_nums)

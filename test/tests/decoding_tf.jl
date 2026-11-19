@@ -128,5 +128,42 @@ using EegFun
         @test results[1].times == results[2].times
     end
 
+    @testset "TF grid validation and sub-band interval_selection" begin
+        c1 = EegFun.create_test_tf_epoch_data(
+            condition = 1,
+            n_channels = 2,
+            n_epochs = 8,
+            frequencies = [4.0, 8.0, 12.0],
+            time_points = [0.0, 0.1, 0.2],
+            power_offset = 6.0,
+        )
+        c2 = EegFun.create_test_tf_epoch_data(
+            condition = 2,
+            n_channels = 2,
+            n_epochs = 8,
+            frequencies = [4.0, 8.0, 12.0],
+            time_points = [0.0, 0.1, 0.2],
+            power_offset = 1.0,
+        )
+
+        # Ragged row selection (not a complete freq × time grid) throws EegFunError instead of out-of-bounds read
+        @test_throws EegFun.EegFunError EegFun.decode_libsvm(
+            [c1, c2];
+            interval_selection = df -> collect(1:nrow(df)) .<= 4,
+            n_iterations = 2,
+            n_folds = 2,
+            show_progress = false,
+        )
+
+        # Valid sub-grid predicate (2 frequencies × 2 time points) decodes cleanly
+        res_sub = EegFun.decode_libsvm(
+            [c1, c2];
+            interval_selection = df -> (df.freq .>= 8.0) .& (df.time .>= 0.1),
+            n_iterations = 2,
+            n_folds = 2,
+            show_progress = false,
+        )
+        @test res_sub.times == [0.1, 0.2]
+    end
 
 end # @testset "TF Decoding"

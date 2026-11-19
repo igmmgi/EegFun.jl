@@ -448,6 +448,22 @@ end
         # Fractional target_rate throws EegFunError cleanly (no InexactError)
         @test_throws EegFun.EegFunError EegFun.resample(cont, 125.5)
 
+        # :trigger_info annotations at off-grid samples and sequential :sample indices are preserved
+        cont_ti = copy(cont)
+        cont_ti.data.sample = collect(1:nrow(cont_ti.data))
+        cont_ti.data.trigger .= 0
+        cont_ti.data.trigger_info = fill("", nrow(cont_ti.data))
+        cont_ti.data.trigger[3] = 101
+        cont_ti.data.trigger_info[3] = "StimulusA"
+        cont_ti.data.trigger[203] = 202
+        cont_ti.data.trigger_info[203] = "ResponseB"
+        res_ti = EegFun.resample(cont_ti, 200)
+        idx_101 = findfirst(==(101), res_ti.data.trigger)
+        idx_202 = findfirst(==(202), res_ti.data.trigger)
+        @test !isnothing(idx_101) && res_ti.data.trigger_info[idx_101] == "StimulusA"
+        @test !isnothing(idx_202) && res_ti.data.trigger_info[idx_202] == "ResponseB"
+        @test res_ti.data.sample == collect(1:nrow(res_ti.data))
+
         # SingleDataFrameEeg restriction: unsupported SingleDataFrameEeg subtype cannot hit Continuous/Erp method
         tf_dat = EegFun.create_test_tf_data()
         @test_throws MethodError EegFun.resample!(tf_dat, 100)
