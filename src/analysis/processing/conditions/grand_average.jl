@@ -1,4 +1,81 @@
-_default_grand_average_output_dir(input_dir::String, pattern::String) = joinpath(input_dir, "grand_average_$(clean_pattern(pattern))")
+# Across-participant grand averaging for ERP and time-frequency datasets.
+
+######################################
+########### User Functions ###########
+######################################
+
+"""
+    grand_average(data::AbstractVector{<:Union{ErpData, TimeFreqData}}; condition_selection = conditions()) -> Vector
+    grand_average(rsa_data_list::AbstractVector{RsaData}; compute_noise_ceiling::Bool = true) -> RsaData
+    grand_average(decoded_list::AbstractVector{DecodedData}) -> DecodedData
+    grand_average(file_pattern::String; input_dir = pwd(), participant_selection = participants(),
+                  condition_selection = conditions(), output_dir = nothing)
+
+Average ERP, time-frequency, RSA, or decoding results across participants (per condition where
+applicable), or batch-process matching JLD2 files into `output_dir`.
+"""
+function grand_average(data::AbstractVector{T}; condition_selection = conditions()) where {T<:Union{ErpData,TimeFreqData}}
+    isempty(data) && @minimal_error("Cannot create grand average from empty $(T <: ErpData ? "ERP" : "TF") list")
+
+    data_by_condition = group_by_condition(data)
+    all_cond_nums = collect(keys(data_by_condition))
+    rep_items = T[first(data_by_condition[num]) for num in all_cond_nums]
+    selected_indices = get_selected_conditions(rep_items, condition_selection)
+    selected_cond_nums = all_cond_nums[selected_indices]
+
+    filtered_groups = OrderedDict(num => data_by_condition[num] for num in selected_cond_nums)
+    if isempty(filtered_groups)
+        @minimal_warning "No conditions selected or found for grand averaging"
+        return T[]
+    end
+    return _create_all_grand_averages(filtered_groups)
+end
+
+function grand_average(
+    file_pattern::String;
+    input_dir::String = pwd(),
+    participant_selection = participants(),
+    condition_selection = conditions(),
+    output_dir::Union{String,Nothing} = nothing,
+)
+    _with_batch_logging("grand averaging", "grand_average.log", input_dir, output_dir) do ctx
+        @log_call "grand_average"
+        output_dir = _prepare_output_dir!(ctx, _default_grand_average_output_dir(input_dir, file_pattern))
+
+        files = _find_batch_files(file_pattern, input_dir, participant_selection)
+        if isempty(files)
+            @minimal_warning "No JLD2 files found matching pattern '$file_pattern' in $input_dir"
+            return nothing
+        end
+        @info "Found $(length(files)) JLD2 files matching pattern '$file_pattern'"
+
+        all_data = _read_all_data_core(EegData, files, input_dir)
+        if isempty(all_data)
+            @minimal_warning "No valid data found in any files"
+            return nothing
+        end
+
+        T = typeof(all_data[1])
+        typed_data = T[x for x in all_data]
+        grand_averages = grand_average(typed_data; condition_selection = condition_selection)
+        if isempty(grand_averages)
+            @minimal_warning "No grand averages created"
+            return nothing
+        end
+
+        output_path = joinpath(output_dir, "grand_average_$(_clean_pattern(file_pattern)).jld2")
+        jldsave(output_path; data = grand_averages, format_version = EEGFUN_FORMAT_VERSION)
+
+        @info "Grand averaging complete! Created $(length(grand_averages)) grand averages"
+        @info "Output saved to: $output_path"
+    end
+end
+
+######################################
+######### Internal Functions #########
+######################################
+
+_default_grand_average_output_dir(input_dir::String, pattern::String) = joinpath(input_dir, "grand_average_$(_clean_pattern(pattern))")
 
 function _create_grand_average(erps::AbstractVector{<:ErpData}, cond_num::Int)
     isempty(erps) && @minimal_error("Cannot create grand average from empty ERP list")
@@ -85,9 +162,12 @@ end
 
 _log_creating_grand_average(::Type{<:ErpData}, cond_num::Int, n::Int) =
     @info "Creating grand average for condition $cond_num (n=$n participants)"
+
 _log_creating_grand_average(::Type{<:TimeFreqData}, cond_num::Int, n::Int) =
     @info "Creating TF grand average for condition $cond_num (n=$n participants)"
+
 _log_created_grand_average(ga::ErpData) = @info "  ✓ Created grand average with $(nrow(ga.data)) time points"
+
 function _log_created_grand_average(ga::TimeFreqData)
     n_freqs = length(unique(ga.data_power.freq))
     n_times = length(unique(ga.data_power.time))
@@ -108,71 +188,4 @@ function _create_all_grand_averages(data_by_condition::AbstractDict{<:Integer,<:
         _log_created_grand_average(grand_avg)
     end
     return grand_averages
-end
-
-"""
-    grand_average(data::AbstractVector{<:Union{ErpData, TimeFreqData}}; condition_selection = conditions()) -> Vector
-    grand_average(rsa_data_list::AbstractVector{RsaData}; compute_noise_ceiling::Bool = true) -> RsaData
-    grand_average(decoded_list::AbstractVector{DecodedData}) -> DecodedData
-    grand_average(file_pattern::String; input_dir = pwd(), participant_selection = participants(),
-                  condition_selection = conditions(), output_dir = nothing)
-
-Average ERP, time-frequency, RSA, or decoding results across participants (per condition where
-applicable), or batch-process matching JLD2 files into `output_dir`.
-"""
-function grand_average(data::AbstractVector{T}; condition_selection = conditions()) where {T<:Union{ErpData,TimeFreqData}}
-    isempty(data) && @minimal_error("Cannot create grand average from empty $(T <: ErpData ? "ERP" : "TF") list")
-
-    data_by_condition = group_by_condition(data)
-    all_cond_nums = collect(keys(data_by_condition))
-    rep_items = T[first(data_by_condition[num]) for num in all_cond_nums]
-    selected_indices = get_selected_conditions(rep_items, condition_selection)
-    selected_cond_nums = all_cond_nums[selected_indices]
-
-    filtered_groups = OrderedDict(num => data_by_condition[num] for num in selected_cond_nums)
-    if isempty(filtered_groups)
-        @minimal_warning "No conditions selected or found for grand averaging"
-        return T[]
-    end
-    return _create_all_grand_averages(filtered_groups)
-end
-
-function grand_average(
-    file_pattern::String;
-    input_dir::String = pwd(),
-    participant_selection = participants(),
-    condition_selection = conditions(),
-    output_dir::Union{String,Nothing} = nothing,
-)
-    _with_batch_logging("grand averaging", "grand_average.log", input_dir, output_dir) do ctx
-        @log_call "grand_average"
-        output_dir = _prepare_output_dir!(ctx, _default_grand_average_output_dir(input_dir, file_pattern))
-
-        files = _find_batch_files(file_pattern, input_dir, participant_selection)
-        if isempty(files)
-            @minimal_warning "No JLD2 files found matching pattern '$file_pattern' in $input_dir"
-            return nothing
-        end
-        @info "Found $(length(files)) JLD2 files matching pattern '$file_pattern'"
-
-        all_data = _read_all_data_core(EegData, files, input_dir)
-        if isempty(all_data)
-            @minimal_warning "No valid data found in any files"
-            return nothing
-        end
-
-        T = typeof(all_data[1])
-        typed_data = T[x for x in all_data]
-        grand_averages = grand_average(typed_data; condition_selection = condition_selection)
-        if isempty(grand_averages)
-            @minimal_warning "No grand averages created"
-            return nothing
-        end
-
-        output_path = joinpath(output_dir, "grand_average_$(clean_pattern(file_pattern)).jld2")
-        jldsave(output_path; data = grand_averages, format_version = EEGFUN_FORMAT_VERSION)
-
-        @info "Grand averaging complete! Created $(length(grand_averages)) grand averages"
-        @info "Output saved to: $output_path"
-    end
 end

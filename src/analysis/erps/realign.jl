@@ -1,26 +1,48 @@
+# Single-trial epoch realignment to response or secondary trigger events.
+
+######################################
+######### Types & Constants ##########
+######################################
+
 const TriggerSpec = Union{Integer,AbstractVector{<:Integer}}
 
-_as_triggers(t::Integer) = (t,)
-_as_triggers(t::AbstractVector{<:Integer}) = t
+######################################
+########### User Functions ###########
+######################################
 
-# === CALCULATING TRIGGER INTERVALS ===
+"""
+    calculate_trigger_interval(dat::EpochData, start_triggers, end_triggers; column_name = :interval) -> EpochData
+    calculate_trigger_interval(dat_vec::AbstractVector{<:EpochData}, start_triggers, end_triggers; column_name = :interval) -> Vector{EpochData}
+    calculate_trigger_interval(file_pattern::String, start_triggers, end_triggers; input_dir = pwd(), participant_selection = participants(), output_dir = nothing, column_name = :interval)
 
-function _epoch_trigger_interval(trigs::AbstractVector, times::AbstractVector, starts, ends)::Tuple{Float64,Bool}
-    start_idx = findfirst(in(starts), trigs)
-    isnothing(start_idx) && return (NaN, true)
-    rel_idx = findfirst(in(ends), @view trigs[start_idx:end])
-    isnothing(rel_idx) && return (NaN, true)
-    end_idx = start_idx + rel_idx - 1
-    return (Float64(times[end_idx] - times[start_idx]), false)
+Calculate the time interval (`end - start`, in seconds) between the first occurrence of `start_triggers`
+and the subsequent first occurrence of `end_triggers` within each epoch without modifying `dat`
+(or batch-process matching `.jld2` files when given `file_pattern::String`), storing the result as a
+constant column `column_name` (`NaN` if either trigger is missing). Accepts integer or vector trigger specs.
+"""
+function calculate_trigger_interval(
+    dat::EpochData,
+    start_triggers::TriggerSpec,
+    end_triggers::TriggerSpec;
+    column_name::Union{Symbol,AbstractString} = :interval,
+)::EpochData
+    return calculate_trigger_interval!(copy(dat), start_triggers, end_triggers; column_name = column_name)
+end
+
+function calculate_trigger_interval(
+    dat_vec::AbstractVector{<:EpochData},
+    start_triggers::TriggerSpec,
+    end_triggers::TriggerSpec;
+    column_name::Union{Symbol,AbstractString} = :interval,
+)::Vector{EpochData}
+    return EpochData[calculate_trigger_interval(dat, start_triggers, end_triggers; column_name = column_name) for dat in dat_vec]
 end
 
 """
     calculate_trigger_interval!(dat::EpochData, start_triggers, end_triggers; column_name = :interval) -> EpochData
     calculate_trigger_interval!(dat_vec::AbstractVector{<:EpochData}, start_triggers, end_triggers; column_name = :interval) -> AbstractVector{<:EpochData}
 
-Calculate the time interval (`end - start`, in seconds) between the first occurrence of `start_triggers`
-and the subsequent first occurrence of `end_triggers` within each epoch, storing the result as a
-constant column `column_name` (`NaN` if either trigger is missing). Accepts integer or vector trigger specs.
+In-place mutating version of [`calculate_trigger_interval`](@ref).
 """
 function calculate_trigger_interval!(
     dat::EpochData,
@@ -62,32 +84,161 @@ function calculate_trigger_interval!(
     return dat_vec
 end
 
-"""
-    calculate_trigger_interval(dat::EpochData, start_triggers, end_triggers; column_name = :interval) -> EpochData
-    calculate_trigger_interval(dat_vec::AbstractVector{<:EpochData}, start_triggers, end_triggers; column_name = :interval) -> Vector{EpochData}
-    calculate_trigger_interval(file_pattern::String, start_triggers, end_triggers; input_dir = pwd(), participant_selection = participants(), output_dir = nothing, column_name = :interval)
-
-Non-mutating and batch file versions of [`calculate_trigger_interval!`](@ref).
-"""
 function calculate_trigger_interval(
-    dat::EpochData,
+    file_pattern::String,
     start_triggers::TriggerSpec,
     end_triggers::TriggerSpec;
+    input_dir::String = pwd(),
+    participant_selection = participants(),
+    output_dir::Union{String,Nothing} = nothing,
     column_name::Union{Symbol,AbstractString} = :interval,
-)::EpochData
-    return calculate_trigger_interval!(copy(dat), start_triggers, end_triggers; column_name = column_name)
+)
+    col_sym = Symbol(column_name)
+    _with_batch_logging("calculate_trigger_interval", "calculate_trigger_interval.log", input_dir, output_dir) do ctx
+        @log_call "calculate_trigger_interval"
+        output_dir = _prepare_output_dir!(ctx, _default_calculate_trigger_interval_output_dir(input_dir))
+        process_fn =
+            (input_path, output_path) ->
+                _process_calculate_trigger_interval_file(input_path, output_path, start_triggers, end_triggers, col_sym)
+        batch_process(process_fn, file_pattern, input_dir, output_dir, participant_selection, "Calculating trigger intervals")
+    end
 end
 
-function calculate_trigger_interval(
+"""
+    realign(dat::EpochData, realignment_triggers) -> EpochData
+    realign(dat_vec::AbstractVector{<:EpochData}, realignment_triggers; global_interval = nothing, global_n_samples = nothing) -> Vector{EpochData}
+    realign(file_pattern::String, realignment_triggers; input_dir = pwd(), participant_selection = participants(), output_dir = nothing)
+
+Realign epoched data so the first matching trigger in `realignment_triggers` becomes `t = 0` without modifying `dat`
+(or batch-process matching `.jld2` files when given `file_pattern::String`), dropping epochs without a matching
+trigger and cropping all remaining epochs to a shared common time window. Accepts an integer trigger or vector of triggers.
+"""
+function realign(dat::EpochData, realignment_triggers::TriggerSpec)::EpochData
+    cropped = _realign_single_cropped(dat, realignment_triggers)
+    return EpochData(dat.file, dat.condition, dat.condition_name, cropped, copy(dat.layout), dat.sample_rate, copy(dat.analysis_info))
+end
+
+function realign(
     dat_vec::AbstractVector{<:EpochData},
-    start_triggers::TriggerSpec,
-    end_triggers::TriggerSpec;
-    column_name::Union{Symbol,AbstractString} = :interval,
+    realignment_triggers::TriggerSpec;
+    global_interval::Interval = nothing,
+    global_n_samples::Union{Int,Nothing} = nothing,
 )::Vector{EpochData}
-    return EpochData[calculate_trigger_interval(dat, start_triggers, end_triggers; column_name = column_name) for dat in dat_vec]
+    cropped_sets =
+        _realign_multi_cropped(dat_vec, realignment_triggers; global_interval = global_interval, global_n_samples = global_n_samples)
+    return EpochData[
+        EpochData(
+            dat_vec[i].file,
+            dat_vec[i].condition,
+            dat_vec[i].condition_name,
+            cropped_sets[i],
+            copy(dat_vec[i].layout),
+            dat_vec[i].sample_rate,
+            copy(dat_vec[i].analysis_info),
+        ) for i in eachindex(dat_vec)
+    ]
 end
 
-# === REALIGNMENT HELPERS ===
+"""
+    realign!(dat::EpochData, realignment_triggers) -> EpochData
+    realign!(dat_vec::AbstractVector{<:EpochData}, realignment_triggers; global_interval = nothing, global_n_samples = nothing) -> AbstractVector{<:EpochData}
+
+In-place mutating version of [`realign`](@ref).
+"""
+function realign!(dat::EpochData, realignment_triggers::TriggerSpec)
+    dat.data = _realign_single_cropped(dat, realignment_triggers)
+    return dat
+end
+
+function realign!(
+    dat_vec::AbstractVector{<:EpochData},
+    realignment_triggers::TriggerSpec;
+    global_interval::Interval = nothing,
+    global_n_samples::Union{Int,Nothing} = nothing,
+)
+    cropped_sets =
+        _realign_multi_cropped(dat_vec, realignment_triggers; global_interval = global_interval, global_n_samples = global_n_samples)
+    for i in eachindex(dat_vec)
+        dat_vec[i].data = cropped_sets[i]
+    end
+    return dat_vec
+end
+
+function realign(
+    file_pattern::String,
+    realignment_triggers::TriggerSpec;
+    input_dir::String = pwd(),
+    participant_selection = participants(),
+    output_dir::Union{String,Nothing} = nothing,
+)
+    _with_batch_logging("realignment", "realign.log", input_dir, output_dir) do ctx
+        @log_call "realign"
+        output_dir = _prepare_output_dir!(ctx, _default_realign_output_dir(input_dir, file_pattern))
+
+        files = _find_batch_files(file_pattern, input_dir, participant_selection)
+        if isempty(files)
+            @minimal_warning "No JLD2 files found matching pattern '$file_pattern' in $input_dir"
+            return nothing
+        end
+        @info "Found $(length(files)) JLD2 files matching pattern '$file_pattern'"
+
+        triggers = _as_triggers(realignment_triggers)
+        @info "Pass 1/2: Global timeline scanning across $(length(files)) files..."
+        grand_starts = Float64[]
+        grand_ends = Float64[]
+        all_shifted_sets = Vector{Vector{Float64}}[]
+
+        for file in files
+            epochs_data = read_data(joinpath(input_dir, file))
+            isnothing(epochs_data) && continue
+            vec_data = epochs_data isa Vector ? epochs_data : [epochs_data]
+            for dat in vec_data
+                isempty(dat.data) && continue
+                _, shifted_times = _scan_realigned_epochs(dat, triggers; warn_dropped = false)
+                isempty(shifted_times) && continue
+                s, e = _common_window_from_times(shifted_times)
+                push!(grand_starts, s)
+                push!(grand_ends, e)
+                push!(all_shifted_sets, shifted_times)
+            end
+        end
+
+        isempty(grand_starts) && @minimal_error("No valid realigned data found across any file! (All trials likely missing the trigger)")
+
+        global_interval = (maximum(grand_starts), minimum(grand_ends))
+        if global_interval[1] >= global_interval[2]
+            @minimal_error(
+                "No common time interval found across files after realignment. " *
+                "Common start: $(global_interval[1]) s, Common end: $(global_interval[2]) s."
+            )
+        end
+        global_n_samples = minimum(last(_crop_start_indices(st, global_interval)) for st in all_shifted_sets)
+        @info "Grand Global Interval: $(global_interval[1]) to $(global_interval[2]) (Strict: $global_n_samples samples)"
+
+        @info "Pass 2/2: Realigning to disk..."
+        process_fn =
+            (input_path, output_path) -> _process_realign_file(input_path, output_path, triggers, global_interval, global_n_samples)
+        results = _run_batch_operation(process_fn, files, input_dir, output_dir; operation_name = "Realigning epochs")
+        _log_batch_summary(results, output_dir)
+    end
+end
+
+######################################
+######### Internal Functions #########
+######################################
+
+_as_triggers(t::Integer) = (t,)
+
+_as_triggers(t::AbstractVector{<:Integer}) = t
+
+function _epoch_trigger_interval(trigs::AbstractVector, times::AbstractVector, starts, ends)::Tuple{Float64,Bool}
+    start_idx = findfirst(in(starts), trigs)
+    isnothing(start_idx) && return (NaN, true)
+    rel_idx = findfirst(in(ends), @view trigs[start_idx:end])
+    isnothing(rel_idx) && return (NaN, true)
+    end_idx = start_idx + rel_idx - 1
+    return (Float64(times[end_idx] - times[start_idx]), false)
+end
 
 function _shifted_epoch_time(trigs::AbstractVector, times::AbstractVector, triggers)::Union{Vector{Float64},Nothing}
     resp_idx = findfirst(in(triggers), trigs)
@@ -135,8 +286,8 @@ function _crop_start_indices(shifted_times::Vector{Vector{Float64}}, window::Tup
     min_samples = typemax(Int)
     for i = 1:n_ep
         t = shifted_times[i]
-        s_idx = find_closest_time_index(t, window[1])
-        e_idx = find_closest_time_index(t, window[2])
+        s_idx = _find_closest_time_index(t, window[1])
+        e_idx = _find_closest_time_index(t, window[2])
         start_idxs[i] = s_idx
         min_samples = min(min_samples, e_idx - s_idx + 1)
     end
@@ -260,71 +411,8 @@ function _realign_multi_cropped(
     ]
 end
 
-# === CORE REALIGNMENT API ===
+_default_realign_output_dir(input_dir::String, pattern::String) = joinpath(input_dir, "realigned_$(_clean_pattern(pattern))")
 
-"""
-    realign!(dat::EpochData, realignment_triggers) -> EpochData
-    realign!(dat_vec::AbstractVector{<:EpochData}, realignment_triggers; global_interval = nothing, global_n_samples = nothing) -> AbstractVector{<:EpochData}
-
-Realign epoched data in-place so the first matching trigger in `realignment_triggers` becomes `t = 0`,
-dropping epochs without a matching trigger and cropping all remaining epochs to a shared common time window.
-Accepts an integer trigger or vector of triggers.
-"""
-function realign!(dat::EpochData, realignment_triggers::TriggerSpec)
-    dat.data = _realign_single_cropped(dat, realignment_triggers)
-    return dat
-end
-
-function realign!(
-    dat_vec::AbstractVector{<:EpochData},
-    realignment_triggers::TriggerSpec;
-    global_interval::Interval = nothing,
-    global_n_samples::Union{Int,Nothing} = nothing,
-)
-    cropped_sets =
-        _realign_multi_cropped(dat_vec, realignment_triggers; global_interval = global_interval, global_n_samples = global_n_samples)
-    for i in eachindex(dat_vec)
-        dat_vec[i].data = cropped_sets[i]
-    end
-    return dat_vec
-end
-
-"""
-    realign(dat::EpochData, realignment_triggers) -> EpochData
-    realign(dat_vec::AbstractVector{<:EpochData}, realignment_triggers; global_interval = nothing, global_n_samples = nothing) -> Vector{EpochData}
-    realign(file_pattern::String, realignment_triggers; input_dir = pwd(), participant_selection = participants(), output_dir = nothing)
-
-Non-mutating and batch file versions of [`realign!`](@ref).
-"""
-function realign(dat::EpochData, realignment_triggers::TriggerSpec)::EpochData
-    cropped = _realign_single_cropped(dat, realignment_triggers)
-    return EpochData(dat.file, dat.condition, dat.condition_name, cropped, copy(dat.layout), dat.sample_rate, copy(dat.analysis_info))
-end
-
-function realign(
-    dat_vec::AbstractVector{<:EpochData},
-    realignment_triggers::TriggerSpec;
-    global_interval::Interval = nothing,
-    global_n_samples::Union{Int,Nothing} = nothing,
-)::Vector{EpochData}
-    cropped_sets =
-        _realign_multi_cropped(dat_vec, realignment_triggers; global_interval = global_interval, global_n_samples = global_n_samples)
-    return EpochData[
-        EpochData(
-            dat_vec[i].file,
-            dat_vec[i].condition,
-            dat_vec[i].condition_name,
-            cropped_sets[i],
-            copy(dat_vec[i].layout),
-            dat_vec[i].sample_rate,
-            copy(dat_vec[i].analysis_info),
-        ) for i in eachindex(dat_vec)
-    ]
-end
-
-# === BATCH PROCESSING ===
-
-_default_realign_output_dir(input_dir::String, pattern::String) = joinpath(input_dir, "realigned_$(clean_pattern(pattern))")
 _default_calculate_trigger_interval_output_dir(input_dir::String) = joinpath(input_dir, "epochs_calculate_trigger_interval")
 
 function _process_realign_file(
@@ -362,65 +450,6 @@ function _process_realign_file(
     return BatchResult(true, filename, "Realigned $n_eps total epochs to $n_s samples each")
 end
 
-function realign(
-    file_pattern::String,
-    realignment_triggers::TriggerSpec;
-    input_dir::String = pwd(),
-    participant_selection = participants(),
-    output_dir::Union{String,Nothing} = nothing,
-)
-    _with_batch_logging("realignment", "realign.log", input_dir, output_dir) do ctx
-        @log_call "realign"
-        output_dir = _prepare_output_dir!(ctx, _default_realign_output_dir(input_dir, file_pattern))
-
-        files = _find_batch_files(file_pattern, input_dir, participant_selection)
-        if isempty(files)
-            @minimal_warning "No JLD2 files found matching pattern '$file_pattern' in $input_dir"
-            return nothing
-        end
-        @info "Found $(length(files)) JLD2 files matching pattern '$file_pattern'"
-
-        triggers = _as_triggers(realignment_triggers)
-        @info "Pass 1/2: Global timeline scanning across $(length(files)) files..."
-        grand_starts = Float64[]
-        grand_ends = Float64[]
-        all_shifted_sets = Vector{Vector{Float64}}[]
-
-        for file in files
-            epochs_data = read_data(joinpath(input_dir, file))
-            isnothing(epochs_data) && continue
-            vec_data = epochs_data isa Vector ? epochs_data : [epochs_data]
-            for dat in vec_data
-                isempty(dat.data) && continue
-                _, shifted_times = _scan_realigned_epochs(dat, triggers; warn_dropped = false)
-                isempty(shifted_times) && continue
-                s, e = _common_window_from_times(shifted_times)
-                push!(grand_starts, s)
-                push!(grand_ends, e)
-                push!(all_shifted_sets, shifted_times)
-            end
-        end
-
-        isempty(grand_starts) && @minimal_error("No valid realigned data found across any file! (All trials likely missing the trigger)")
-
-        global_interval = (maximum(grand_starts), minimum(grand_ends))
-        if global_interval[1] >= global_interval[2]
-            @minimal_error(
-                "No common time interval found across files after realignment. " *
-                "Common start: $(global_interval[1]) s, Common end: $(global_interval[2]) s."
-            )
-        end
-        global_n_samples = minimum(last(_crop_start_indices(st, global_interval)) for st in all_shifted_sets)
-        @info "Grand Global Interval: $(global_interval[1]) to $(global_interval[2]) (Strict: $global_n_samples samples)"
-
-        @info "Pass 2/2: Realigning to disk..."
-        process_fn =
-            (input_path, output_path) -> _process_realign_file(input_path, output_path, triggers, global_interval, global_n_samples)
-        results = _run_batch_operation(process_fn, files, input_dir, output_dir; operation_name = "Realigning epochs")
-        _log_batch_summary(results, output_dir)
-    end
-end
-
 function _process_calculate_trigger_interval_file(
     filepath::String,
     output_path::String,
@@ -439,24 +468,4 @@ function _process_calculate_trigger_interval_file(
 
     n_eps = epochs_data isa Vector ? sum(n_epochs(cond) for cond in epochs_data) : n_epochs(epochs_data)
     return BatchResult(true, filename, "Appended interval column (:$column_name) to $n_eps total epochs")
-end
-
-function calculate_trigger_interval(
-    file_pattern::String,
-    start_triggers::TriggerSpec,
-    end_triggers::TriggerSpec;
-    input_dir::String = pwd(),
-    participant_selection = participants(),
-    output_dir::Union{String,Nothing} = nothing,
-    column_name::Union{Symbol,AbstractString} = :interval,
-)
-    col_sym = Symbol(column_name)
-    _with_batch_logging("calculate_trigger_interval", "calculate_trigger_interval.log", input_dir, output_dir) do ctx
-        @log_call "calculate_trigger_interval"
-        output_dir = _prepare_output_dir!(ctx, _default_calculate_trigger_interval_output_dir(input_dir))
-        process_fn =
-            (input_path, output_path) ->
-                _process_calculate_trigger_interval_file(input_path, output_path, start_triggers, end_triggers, col_sym)
-        batch_process(process_fn, file_pattern, input_dir, output_dir, participant_selection, "Calculating trigger intervals")
-    end
 end

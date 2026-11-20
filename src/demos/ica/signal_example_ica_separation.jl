@@ -1,13 +1,17 @@
+# Interactive blind source separation and unmixing matrix ICA demo.
+
+######################################
+########### User Functions ###########
+######################################
+
 """
     signal_example_ica_separation()
 
 Interactive 2-source / 2-electrode ICA separation demo illustrating forward mixing matrices,
 manual subtraction weights, and automatic recovery via Infomax ICA.
 
-## See Also
-- [`signal_example_ica_mixture`](@ref), [`signal_example_ica_geometry`](@ref),
-  [`signal_example_ica_clt`](@ref), [`signal_example_ica_sphering`](@ref),
-  [`signal_example_ica_optimization`](@ref)
+# Returns
+- `fig::Figure`: The Makie figure object
 
 # Examples
 ```julia
@@ -15,8 +19,10 @@ using GLMakie, EegFun
 EegFun.signal_example_ica_separation()
 ```
 
-# Returns
-- `fig::Figure`: The Makie figure object
+# See Also
+- [`signal_example_ica_mixture`](@ref), [`signal_example_ica_geometry`](@ref),
+  [`signal_example_ica_clt`](@ref), [`signal_example_ica_sphering`](@ref),
+  [`signal_example_ica_optimization`](@ref)
 """
 function signal_example_ica_separation()
     _check_interactive_demo_backend("ICA Separation demo") || return nothing

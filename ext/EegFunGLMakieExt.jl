@@ -1,7 +1,14 @@
+# GLMakie.jl backend extension for interactive EEG figure windows.
+
 module EegFunGLMakieExt
 
 using EegFun
+
 using GLMakie
+
+######################################
+######### Internal Functions #########
+######################################
 
 function __init__()
     EegFun.MAKIE_EXT_STATE.glmakie_active = true

@@ -1,4 +1,5 @@
 # Independent Component Analysis (ICA)
+
 include("ica/api.jl")
 include("ica/infomax.jl")
 include("ica/picard.jl")

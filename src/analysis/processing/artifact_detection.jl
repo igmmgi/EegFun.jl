@@ -1,5 +1,9 @@
 # Detection, reporting, and repair of artifacts in continuous and epoched EEG data.
 
+######################################
+######### Internal Functions #########
+######################################
+
 function _validate_detector_args(mode::Symbol, threshold::Real, window_size::Union{Nothing,Real} = nothing)
     mode in (:separate, :combined) || @minimal_error("mode must be :separate or :combined")
     threshold > 0 || @minimal_error("threshold must be greater than 0")
@@ -292,13 +296,23 @@ function _count_artifacts(
 end
 
 include("artifact_detection/eog_onsets.jl")
+
 include("artifact_detection/extreme.jl")
+
 include("artifact_detection/step.jl")
+
 include("artifact_detection/flatline.jl")
+
 include("artifact_detection/peak_to_peak.jl")
+
 include("artifact_detection/bridged.jl")
+
 include("artifact_detection/epoch_rejection_types.jl")
+
 include("artifact_detection/epoch_detection.jl")
+
 include("artifact_detection/repair.jl")
+
 include("artifact_detection/subset_bad_data.jl")
+
 include("artifact_detection/autoreject.jl")

@@ -1,9 +1,26 @@
+# Bipolar EOG channel derivation and eye-blink/saccade onset detection.
+
+######################################
+########### User Functions ###########
+######################################
+
 """
-    detect_eog_onsets!(dat::ContinuousData, criterion::Real, channel_in::Symbol, channel_out::Symbol; step_size::Int=20)
+    detect_eog_onsets(dat::ContinuousData, criterion::Real, channel_in::Symbol, channel_out::Symbol; step_size::Int = 20)
+    detect_eog_onsets(dat::ContinuousData, eog_cfg::Dict)
+
+Detect electrooculogram (EOG) step onsets in `channel_in` exceeding `criterion` (μV) and record boolean flags in `channel_out`
+on a copy of `dat`. When passed `eog_cfg::Dict`, detects both vertical (`vEOG`) and horizontal (`hEOG`) onsets.
+"""
+detect_eog_onsets(dat::ContinuousData, args...; kwargs...) = detect_eog_onsets!(copy(dat), args...; kwargs...)
+
+detect_eog_onsets(dat_vec::AbstractVector{<:ContinuousData}, args...; kwargs...) =
+    [detect_eog_onsets(d, args...; kwargs...) for d in dat_vec]
+
+"""
+    detect_eog_onsets!(dat::ContinuousData, criterion::Real, channel_in::Symbol, channel_out::Symbol; step_size::Int = 20)
     detect_eog_onsets!(dat::ContinuousData, eog_cfg::Dict)
 
-Detect electrooculogram (EOG) step onsets in `channel_in` exceeding `criterion` (μV) and record boolean flags in `channel_out`.
-When passed `eog_cfg::Dict`, detects both vertical (`vEOG`) and horizontal (`hEOG`) onsets in-place.
+In-place mutating version of [`detect_eog_onsets`](@ref).
 """
 function detect_eog_onsets!(dat::ContinuousData, criterion::Real, channel_in::Symbol, channel_out::Symbol; step_size::Int = 20)
     @info "Detecting EOG onsets in channel $(channel_in) with stepsize criterion $(criterion) μV"
@@ -27,19 +44,9 @@ function detect_eog_onsets!(dat::ContinuousData, eog_cfg::Dict)
     return dat
 end
 
-"""
-    detect_eog_onsets(dat, args...; kwargs...)
-
-Non-mutating version of [`detect_eog_onsets!`](@ref).
-"""
-detect_eog_onsets(dat::ContinuousData, args...; kwargs...) = detect_eog_onsets!(copy(dat), args...; kwargs...)
-
 function detect_eog_onsets!(dat_vec::AbstractVector{<:ContinuousData}, args...; kwargs...)
     for d in dat_vec
         detect_eog_onsets!(d, args...; kwargs...)
     end
     return dat_vec
 end
-
-detect_eog_onsets(dat_vec::AbstractVector{<:ContinuousData}, args...; kwargs...) =
-    [detect_eog_onsets(d, args...; kwargs...) for d in dat_vec]

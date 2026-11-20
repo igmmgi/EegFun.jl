@@ -1,29 +1,8 @@
 # Model RDM construction and temporal model alignment for RSA.
 
-function _fill_rdm_from_dissimilarities!(rdm::Matrix{Float64}, compute_dissim)
-    n = size(rdm, 1)
-    @inbounds for i = 1:n
-        rdm[i, i] = 0.0
-        for j = (i+1):n
-            dissim = Float64(compute_dissim(i, j))
-            rdm[i, j] = dissim
-            rdm[j, i] = dissim
-        end
-    end
-    return rdm
-end
-
-function _categorical_rdm(categories::AbstractVector)
-    rdm = zeros(Float64, length(categories), length(categories))
-    return _fill_rdm_from_dissimilarities!(rdm, (i, j) -> categories[i] == categories[j] ? 0.0 : 1.0)
-end
-
-function _difference_rdm(values::AbstractVector)
-    rdm = zeros(Float64, length(values), length(values))
-    return _fill_rdm_from_dissimilarities!(rdm, (i, j) -> abs(Float64(values[i]) - Float64(values[j])))
-end
-
-_ordered_entries(d::AbstractDict) = d isa Dict ? sort!(collect(pairs(d)); by = first) : collect(pairs(d))
+######################################
+########### User Functions ###########
+######################################
 
 """
     create_rdm(vectors::AbstractVector{<:AbstractVector{<:Real}}; dissimilarity_measure::Symbol = :correlation)
@@ -105,6 +84,83 @@ function create_rdm(categories::AbstractVector{<:Union{Integer,Symbol,AbstractSt
     (method == :difference && categories isa AbstractVector{<:Integer}) && return _difference_rdm(categories)
     @minimal_error("Unsupported method: :$method for $(typeof(categories)). Use :categorical")
 end
+
+function create_rdm(
+    temporal_data::AbstractArray{<:Real,3},
+    times::AbstractVector{<:Real};
+    dissimilarity_measure::Symbol = :correlation,
+    align_to::Union{AbstractVector{<:Real},RsaData,Nothing} = nothing,
+    interpolation_method::Symbol = :linear,
+)
+    target_times = if isnothing(align_to)
+        nothing
+    elseif align_to isa RsaData
+        align_to.times
+    else
+        Vector{Float64}(align_to)
+    end
+
+    t_data = temporal_data isa Array{Float64,3} ? temporal_data : Array{Float64,3}(temporal_data)
+    t_times = times isa Vector{Float64} ? times : Vector{Float64}(times)
+    if !isnothing(target_times)
+        @info "Resampling temporal model data from $(length(times)) to $(length(target_times)) timepoints"
+        t_data, t_times = resample_temporal_data(t_data, t_times, target_times; method = interpolation_method)
+    end
+
+    n_conditions, n_features, n_timepoints = size(t_data)
+    length(t_times) != n_timepoints &&
+        @minimal_error("Time vector length ($(length(t_times))) doesn't match temporal data time dimension ($n_timepoints)")
+
+    rdms = zeros(Float64, n_timepoints, n_conditions, n_conditions)
+    rdm_buf = zeros(Float64, n_conditions, n_conditions)
+    condition_patterns = [Vector{Float64}(undef, n_features) for _ = 1:n_conditions]
+
+    @inbounds for t = 1:n_timepoints
+        for c = 1:n_conditions
+            cp = condition_patterns[c]
+            @simd for f = 1:n_features
+                cp[f] = t_data[c, f, t]
+            end
+        end
+        _compute_rdm!(rdm_buf, condition_patterns, dissimilarity_measure)
+        for j = 1:n_conditions, i = 1:n_conditions
+            rdms[t, i, j] = rdm_buf[i, j]
+        end
+    end
+
+    return rdms
+end
+
+function create_rdm(
+    temporal_vectors::AbstractVector{<:AbstractVector{<:AbstractVector{<:Real}}},
+    times::AbstractVector{<:Real};
+    dissimilarity_measure::Symbol = :correlation,
+    align_to::Union{AbstractVector{<:Real},RsaData,Nothing} = nothing,
+    interpolation_method::Symbol = :linear,
+)
+    n_conditions = length(temporal_vectors)
+    n_timepoints = length(times)
+    for (cond_idx, cond_data) in enumerate(temporal_vectors)
+        length(cond_data) != n_timepoints &&
+            @minimal_error("Condition $cond_idx has $(length(cond_data)) timepoints, expected $n_timepoints")
+    end
+
+    n_features = length(temporal_vectors[1][1])
+    temporal_data = zeros(Float64, n_conditions, n_features, n_timepoints)
+    for cond_idx = 1:n_conditions, t = 1:n_timepoints
+        temporal_data[cond_idx, :, t] = temporal_vectors[cond_idx][t]
+    end
+
+    return create_rdm(
+        temporal_data,
+        times;
+        dissimilarity_measure = dissimilarity_measure,
+        align_to = align_to,
+        interpolation_method = interpolation_method,
+    )
+end
+
+create_rdm(model_data::AbstractDict{<:AbstractString,<:Any}) = create_model_rdms(model_data)
 
 """
     resample_temporal_data(
@@ -196,81 +252,6 @@ function resample_temporal_data(
     return resampled_data, target_times_f64
 end
 
-function create_rdm(
-    temporal_data::AbstractArray{<:Real,3},
-    times::AbstractVector{<:Real};
-    dissimilarity_measure::Symbol = :correlation,
-    align_to::Union{AbstractVector{<:Real},RsaData,Nothing} = nothing,
-    interpolation_method::Symbol = :linear,
-)
-    target_times = if isnothing(align_to)
-        nothing
-    elseif align_to isa RsaData
-        align_to.times
-    else
-        Vector{Float64}(align_to)
-    end
-
-    t_data = temporal_data isa Array{Float64,3} ? temporal_data : Array{Float64,3}(temporal_data)
-    t_times = times isa Vector{Float64} ? times : Vector{Float64}(times)
-    if !isnothing(target_times)
-        @info "Resampling temporal model data from $(length(times)) to $(length(target_times)) timepoints"
-        t_data, t_times = resample_temporal_data(t_data, t_times, target_times; method = interpolation_method)
-    end
-
-    n_conditions, n_features, n_timepoints = size(t_data)
-    length(t_times) != n_timepoints &&
-        @minimal_error("Time vector length ($(length(t_times))) doesn't match temporal data time dimension ($n_timepoints)")
-
-    rdms = zeros(Float64, n_timepoints, n_conditions, n_conditions)
-    rdm_buf = zeros(Float64, n_conditions, n_conditions)
-    condition_patterns = [Vector{Float64}(undef, n_features) for _ = 1:n_conditions]
-
-    @inbounds for t = 1:n_timepoints
-        for c = 1:n_conditions
-            cp = condition_patterns[c]
-            @simd for f = 1:n_features
-                cp[f] = t_data[c, f, t]
-            end
-        end
-        _compute_rdm!(rdm_buf, condition_patterns, dissimilarity_measure)
-        for j = 1:n_conditions, i = 1:n_conditions
-            rdms[t, i, j] = rdm_buf[i, j]
-        end
-    end
-
-    return rdms
-end
-
-function create_rdm(
-    temporal_vectors::AbstractVector{<:AbstractVector{<:AbstractVector{<:Real}}},
-    times::AbstractVector{<:Real};
-    dissimilarity_measure::Symbol = :correlation,
-    align_to::Union{AbstractVector{<:Real},RsaData,Nothing} = nothing,
-    interpolation_method::Symbol = :linear,
-)
-    n_conditions = length(temporal_vectors)
-    n_timepoints = length(times)
-    for (cond_idx, cond_data) in enumerate(temporal_vectors)
-        length(cond_data) != n_timepoints &&
-            @minimal_error("Condition $cond_idx has $(length(cond_data)) timepoints, expected $n_timepoints")
-    end
-
-    n_features = length(temporal_vectors[1][1])
-    temporal_data = zeros(Float64, n_conditions, n_features, n_timepoints)
-    for cond_idx = 1:n_conditions, t = 1:n_timepoints
-        temporal_data[cond_idx, :, t] = temporal_vectors[cond_idx][t]
-    end
-
-    return create_rdm(
-        temporal_data,
-        times;
-        dissimilarity_measure = dissimilarity_measure,
-        align_to = align_to,
-        interpolation_method = interpolation_method,
-    )
-end
-
 """
     create_temporal_model_rdms(
         temporal_model_data::AbstractDict{<:AbstractString,<:Any},
@@ -354,4 +335,31 @@ function create_model_rdms(model_data::AbstractDict{<:AbstractString,<:Any})
     return model_rdms, model_names
 end
 
-create_rdm(model_data::AbstractDict{<:AbstractString,<:Any}) = create_model_rdms(model_data)
+######################################
+######### Internal Functions #########
+######################################
+
+function _fill_rdm_from_dissimilarities!(rdm::Matrix{Float64}, compute_dissim)
+    n = size(rdm, 1)
+    @inbounds for i = 1:n
+        rdm[i, i] = 0.0
+        for j = (i+1):n
+            dissim = Float64(compute_dissim(i, j))
+            rdm[i, j] = dissim
+            rdm[j, i] = dissim
+        end
+    end
+    return rdm
+end
+
+function _categorical_rdm(categories::AbstractVector)
+    rdm = zeros(Float64, length(categories), length(categories))
+    return _fill_rdm_from_dissimilarities!(rdm, (i, j) -> categories[i] == categories[j] ? 0.0 : 1.0)
+end
+
+function _difference_rdm(values::AbstractVector)
+    rdm = zeros(Float64, length(values), length(values))
+    return _fill_rdm_from_dissimilarities!(rdm, (i, j) -> abs(Float64(values[i]) - Float64(values[j])))
+end
+
+_ordered_entries(d::AbstractDict) = d isa Dict ? sort!(collect(pairs(d)); by = first) : collect(pairs(d))

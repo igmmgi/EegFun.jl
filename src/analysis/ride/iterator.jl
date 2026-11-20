@@ -1,3 +1,9 @@
+# Iterative L1/L2 RIDE template and single-trial latency estimation loop.
+
+######################################
+######### Types & Constants ##########
+######################################
+
 struct _RideIterWorkspace{T<:Real}
     trial_residues::Vector{Vector{T}}
     sort_buffers::Vector{Vector{T}}
@@ -5,104 +11,18 @@ struct _RideIterWorkspace{T<:Real}
     prev_templates::Array{T,3}
 end
 
-function _RideIterWorkspace(::Type{T}, n_samples::Int, n_channels::Int, n_trials::Int, n_components::Int, method::Symbol) where {T<:Real}
-    n_workers = max(1, min(Threads.nthreads(), n_channels))
-    trial_residues = [Vector{T}(undef, n_samples) for _ = 1:n_workers]
-    sort_buffers = method === :median ? [Vector{T}(undef, n_trials) for _ = 1:n_workers] : Vector{T}[]
-    aligned_buffers = method === :median ? [Matrix{T}(undef, n_samples, n_trials) for _ = 1:n_workers] : Matrix{T}[]
-    prev_templates = Array{T,3}(undef, n_samples, n_channels, n_components)
-    return _RideIterWorkspace{T}(trial_residues, sort_buffers, aligned_buffers, prev_templates)
-end
-
-function _ride_tukey_window(::Type{T}, L::Int, alpha::Real) where {T<:Real}
-    L <= 0 && return T[]
-    w = ones(T, L)
-    (L <= 2 || alpha <= 0) && return w
-    a = clamp(Float64(alpha), 0.0, 1.0)
-    m = round(Int, a * (L - 1) / 2.0)
-    m <= 0 && return w
-    @inbounds for i = 0:(m-1)
-        val = T(0.5 * (1.0 - cos(π * i / m)))
-        w[i+1] = val
-        w[L-i] = val
-    end
-    return w
-end
-
-function _apply_ride_boundary_taper!(
-    vec::AbstractVector{T},
-    win_range::UnitRange{Int},
-    taper_weights::Vector{T};
-    baseline_range::Union{Nothing,UnitRange{Int}} = nothing,
-    detrend_edges::Bool = false,
-) where {T<:Real}
-    n = length(vec)
-    w_start = first(win_range)
-    w_end = last(win_range)
-    L = length(win_range)
-
-    @inbounds for s = 1:(w_start-1)
-        vec[s] = zero(T)
-    end
-    @inbounds for s = (w_end+1):n
-        vec[s] = zero(T)
-    end
-    L == 0 && return vec
-
-    if !isnothing(baseline_range) && !isempty(baseline_range)
-        b_start = clamp(first(baseline_range), 1, n)
-        b_end = clamp(last(baseline_range), b_start, n)
-        base_val = mean(view(vec, b_start:b_end))
-        @inbounds @simd for s = w_start:w_end
-            vec[s] -= base_val
-        end
-    elseif detrend_edges && L >= 4
-        n_edge = max(1, min(div(L, 4), round(Int, 0.05 * L)))
-        left_mean = mean(view(vec, w_start:(w_start+n_edge-1)))
-        right_mean = mean(view(vec, (w_end-n_edge+1):w_end))
-        slope = (right_mean - left_mean) / T(max(1, L - 1))
-        @inbounds @simd for idx = 1:L
-            s = w_start + idx - 1
-            vec[s] -= left_mean + slope * T(idx - 1)
-        end
-    end
-
-    if length(taper_weights) == L
-        @inbounds @simd for idx = 1:L
-            vec[w_start+idx-1] *= taper_weights[idx]
-        end
-    end
-    return vec
-end
-
-@inline function _add_shifted!(dest::AbstractVector{T}, src::AbstractVector{T}, shift::Int) where {T}
-    n = length(dest)
-    abs(shift) >= n && return dest
-    if shift > 0
-        @inbounds @simd for s = 1:(n-shift)
-            dest[s+shift] += src[s]
-        end
-    elseif shift < 0
-        s_val = -shift
-        @inbounds @simd for s = 1:(n-s_val)
-            dest[s] += src[s+s_val]
-        end
-    else
-        @inbounds @simd for s = 1:n
-            dest[s] += src[s]
-        end
-    end
-    return dest
-end
+######################################
+######### Internal Functions #########
+######################################
 
 """
-    ride_iteration!(templates, data, latencies; max_iter=50, tol=1e-3, method=:median,
+    _ride_iteration!(templates, data, latencies; max_iter=50, tol=1e-3, method=:median,
                     taper_alpha=0.2, component_windows=nothing, baseline_range=nothing)
 
 Run the inner L1 (`:median`) or L2 (`:mean`) RIDE template estimation loop in-place with
 boundary drift stabilization and Tukey tapering, returning `(iterations, converged)`.
 """
-function ride_iteration!(
+function _ride_iteration!(
     templates::AbstractArray{T,3},
     data::AbstractArray{T,3},
     latencies::AbstractMatrix{Int};
@@ -239,4 +159,94 @@ function ride_iteration!(
     end
 
     return iter, converged
+end
+
+function _RideIterWorkspace(::Type{T}, n_samples::Int, n_channels::Int, n_trials::Int, n_components::Int, method::Symbol) where {T<:Real}
+    n_workers = max(1, min(Threads.nthreads(), n_channels))
+    trial_residues = [Vector{T}(undef, n_samples) for _ = 1:n_workers]
+    sort_buffers = method === :median ? [Vector{T}(undef, n_trials) for _ = 1:n_workers] : Vector{T}[]
+    aligned_buffers = method === :median ? [Matrix{T}(undef, n_samples, n_trials) for _ = 1:n_workers] : Matrix{T}[]
+    prev_templates = Array{T,3}(undef, n_samples, n_channels, n_components)
+    return _RideIterWorkspace{T}(trial_residues, sort_buffers, aligned_buffers, prev_templates)
+end
+
+function _ride_tukey_window(::Type{T}, L::Int, alpha::Real) where {T<:Real}
+    L <= 0 && return T[]
+    w = ones(T, L)
+    (L <= 2 || alpha <= 0) && return w
+    a = clamp(Float64(alpha), 0.0, 1.0)
+    m = round(Int, a * (L - 1) / 2.0)
+    m <= 0 && return w
+    @inbounds for i = 0:(m-1)
+        val = T(0.5 * (1.0 - cos(π * i / m)))
+        w[i+1] = val
+        w[L-i] = val
+    end
+    return w
+end
+
+function _apply_ride_boundary_taper!(
+    vec::AbstractVector{T},
+    win_range::UnitRange{Int},
+    taper_weights::Vector{T};
+    baseline_range::Union{Nothing,UnitRange{Int}} = nothing,
+    detrend_edges::Bool = false,
+) where {T<:Real}
+    n = length(vec)
+    w_start = first(win_range)
+    w_end = last(win_range)
+    L = length(win_range)
+
+    @inbounds for s = 1:(w_start-1)
+        vec[s] = zero(T)
+    end
+    @inbounds for s = (w_end+1):n
+        vec[s] = zero(T)
+    end
+    L == 0 && return vec
+
+    if !isnothing(baseline_range) && !isempty(baseline_range)
+        b_start = clamp(first(baseline_range), 1, n)
+        b_end = clamp(last(baseline_range), b_start, n)
+        base_val = mean(view(vec, b_start:b_end))
+        @inbounds @simd for s = w_start:w_end
+            vec[s] -= base_val
+        end
+    elseif detrend_edges && L >= 4
+        n_edge = max(1, min(div(L, 4), round(Int, 0.05 * L)))
+        left_mean = mean(view(vec, w_start:(w_start+n_edge-1)))
+        right_mean = mean(view(vec, (w_end-n_edge+1):w_end))
+        slope = (right_mean - left_mean) / T(max(1, L - 1))
+        @inbounds @simd for idx = 1:L
+            s = w_start + idx - 1
+            vec[s] -= left_mean + slope * T(idx - 1)
+        end
+    end
+
+    if length(taper_weights) == L
+        @inbounds @simd for idx = 1:L
+            vec[w_start+idx-1] *= taper_weights[idx]
+        end
+    end
+    return vec
+end
+
+@inline function _add_shifted!(dest::AbstractVector{T}, src::AbstractVector{T}, shift::Int) where {T}
+    n = length(dest)
+    abs(shift) >= n && return dest
+    if shift > 0
+        @inbounds @simd for s = 1:(n-shift)
+            dest[s+shift] += src[s]
+        end
+    elseif shift < 0
+        s_val = -shift
+        @inbounds @simd for s = 1:(n-s_val)
+            dest[s] += src[s+s_val]
+        end
+    else
+        @inbounds @simd for s = 1:n
+            dest[s] += src[s]
+        end
+    end
+    return dest
 end

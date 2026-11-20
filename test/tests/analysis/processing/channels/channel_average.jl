@@ -1,0 +1,1019 @@
+# Tests for region-of-interest and multi-channel averaging.
+
+using Test
+using DataFrames
+using EegFun
+using JLD2
+using Statistics
+
+@testset "channel_average" begin
+
+    dat = EegFun.create_test_continuous_data(n = 500)
+
+    # Append averaged columns only (Symbols input)
+    EegFun.channel_average!(dat, channel_selections = [EegFun.channels([:Ch1, :Ch2])])
+
+    @test :Ch1_Ch2 ∈ propertynames(dat.data)
+    @test all(dat.data.Ch1_Ch2 .== (dat.data.Ch1 .+ dat.data.Ch2) ./ 2)
+
+    # Reduce to only averages and create averaged layout
+    dat = EegFun.create_test_continuous_data(n = 500)
+    dat = EegFun.channel_average(dat, channel_selections = [EegFun.channels([:Ch1, :Ch2])]; reduce = true)
+    @test all(propertynames(dat.data) .== [:time, :sample, :trigger, :Ch1_Ch2])
+    @test size(dat.layout.data, 1) == 1
+    @test :inc ∈ propertynames(dat.layout.data)
+    @test :azi ∈ propertynames(dat.layout.data)
+
+    # Append averaged channels to layout
+    dat = EegFun.create_test_continuous_data(n = 500)
+    dat = EegFun.channel_average(dat, channel_selections = [EegFun.channels([:Ch2, :Ch3])])
+    @test :Ch2_Ch3 ∈ propertynames(dat.data)
+    @test any(dat.layout.data.label .== :Ch2_Ch3)
+
+    # Mutating version
+    dat = EegFun.create_test_continuous_data(n = 500)
+    EegFun.channel_average!(dat, channel_selections = [EegFun.channels([:Ch1, :Ch3])])
+    @test :Ch1_Ch3 ∈ propertynames(dat.data)
+    @test :Ch1_Ch2 ∉ propertynames(dat.data)
+
+    # Auto-label :avg for all channels
+    dat = EegFun.create_test_continuous_data(n = 500)
+    dat = EegFun.channel_average(dat, channel_selections = [EegFun.channels([:Ch1, :Ch2, :Ch3])]; reduce = true)
+    @test :avg ∈ propertynames(dat.data)
+
+    # Custom output_labels applied 
+    dat = EegFun.create_test_continuous_data(n = 500)
+    EegFun.channel_average!(dat, channel_selections = [EegFun.channels([:Ch1, :Ch2])]; output_labels = [:output_label])
+    @test :output_label ∈ propertynames(dat.data)
+
+    # Duplicate labels in layout (should accumulate)
+    # First add B_C, then add again to verify rows accumulate
+    dat = EegFun.create_test_continuous_data(n = 500)
+    EegFun.channel_average!(dat, channel_selections = [EegFun.channels([:Ch2, :Ch3])])
+    n1 = sum(dat.layout.data.label .== :Ch2_Ch3)
+    EegFun.channel_average!(dat, channel_selections = [EegFun.channels([:Ch2, :Ch3])])
+    n2 = sum(dat.layout.data.label .== :Ch2_Ch3)
+    @test n1 == 1 && n2 == 2
+
+    # EpochData append and reduce
+    # Create simple EpochData (2 epochs) from dat
+    dat = EegFun.create_test_epoch_data(n = 500)
+    dat = EegFun.channel_average(dat, channel_selections = [EegFun.channels([:Ch1, :Ch2])])
+
+    @test :Ch1_Ch2 ∈ propertynames(dat.data[1]) && :Ch1_Ch2 ∈ propertynames(dat.data[2])
+    @test :Ch1_Ch2 ∈ propertynames(dat.data[3]) && :Ch1_Ch2 ∈ propertynames(dat.data[4])
+
+    dat = EegFun.create_test_epoch_data(n = 500)
+    dat = EegFun.channel_average(dat, channel_selections = [EegFun.channels([:Ch1, :Ch2])]; reduce = true)
+
+    # Expect meta columns (leading) + A_B only
+    cols = propertynames(dat.data[1])
+    @test cols[end] == :Ch1_Ch2
+    @test :Ch1 ∉ cols && :Ch2 ∉ cols && :Ch3 ∉ cols
+
+    # ErpData reduce path
+    dat = EegFun.create_test_epoch_data(n = 500)
+    dat = EegFun.channel_average(dat, channel_selections = [EegFun.channels([:Ch1, :Ch2])]; reduce = true)
+    # condition and condition_name are in struct, not DataFrame
+    @test all(propertynames(dat.data[1]) .== [:time, :sample, :epoch, :Ch1_Ch2])
+    @test all(propertynames(dat.data[end]) .== [:time, :sample, :epoch, :Ch1_Ch2])
+    @test hasproperty(dat, :condition)
+    @test hasproperty(dat, :condition_name)
+
+    # Test default behavior (average all channels)
+    dat = EegFun.create_test_epoch_data(n = 500)
+    EegFun.channel_average!(dat)  # Should use default channels() from second function
+    @test :avg ∈ propertynames(dat.data[1])
+    @test all(dat.data[1].avg .== (dat.data[1].Ch1 .+ dat.data[1].Ch2 .+ dat.data[1].Ch3) ./ 3)
+    @test all(dat.data[end].avg .== (dat.data[end].Ch1 .+ dat.data[end].Ch2 .+ dat.data[end].Ch3) ./ 3)
+
+    # Test single channel selection with custom label
+    dat = EegFun.create_test_epoch_data(n = 500)
+    EegFun.channel_average!(dat, channel_selections = [EegFun.channels([:Ch1, :Ch2])], output_labels = [:custom])
+    @test :custom ∈ propertynames(dat.data[1])
+    @test :custom ∈ propertynames(dat.data[end])
+    @test all(dat.data[1].custom .== (dat.data[1].Ch1 .+ dat.data[1].Ch2) ./ 2)
+    @test all(dat.data[end].custom .== (dat.data[end].Ch1 .+ dat.data[end].Ch2) ./ 2)
+
+end
+
+@testset "Batch Average Channels" begin
+
+    # Create a temporary directory for test files
+    test_dir = mktempdir()
+
+    try
+
+        @testset "Setup test files" begin
+            for participant in [1, 2]
+                erps = EegFun.create_test_batch_erp_data(n_conditions = 2, n_channels = 7)
+                filename = joinpath(test_dir, "$(participant)_erps_unrejected.jld2")
+                jldsave(filename; data = erps)
+                @test isfile(filename)
+            end
+        end
+
+        @testset "Basic channel averaging" begin
+            output_dir = joinpath(test_dir, "combined_output")
+
+            # Average two channel groups
+            result = EegFun.channel_average(
+                "erps_unrejected",
+                [EegFun.channels([:Ch1, :Ch2]), EegFun.channels([:Ch3, :Ch4])],
+                input_dir = test_dir,
+                output_dir = output_dir,
+            )
+
+            @test !isnothing(result)
+            @test result.success == 2
+            @test result.errors == 0
+            @test isdir(output_dir)
+
+            # Check that averaged files exist
+            @test isfile(joinpath(output_dir, "1_erps_unrejected.jld2"))
+            @test isfile(joinpath(output_dir, "2_erps_unrejected.jld2"))
+
+            # Load and verify averaged data
+            erps = load(joinpath(output_dir, "1_erps_unrejected.jld2"), "data")
+            @test length(erps) == 2  # 2 conditions
+            @test erps[1] isa EegFun.ErpData
+
+            # Should have original channels + 2 averaged channels
+            @test hasproperty(erps[1].data, :Ch1)
+            @test hasproperty(erps[1].data, :Ch2)
+            @test hasproperty(erps[1].data, :Ch3)
+            @test hasproperty(erps[1].data, :Ch4)
+            @test hasproperty(erps[1].data, :avg_1)  # Default label
+            @test hasproperty(erps[1].data, :avg_2)  # Default label
+
+            # Verify averaging: avg_1 should be mean of Ch1 and Ch2
+            @test erps[1].data.avg_1 ≈ (erps[1].data.Ch1 .+ erps[1].data.Ch2) ./ 2
+        end
+
+        @testset "Custom output labels" begin
+            output_dir = joinpath(test_dir, "combined_custom_labels")
+
+            result = EegFun.channel_average(
+                "erps_unrejected",
+                [EegFun.channels([:Ch1, :Ch2]), EegFun.channels([:Ch3, :Ch4])],
+                output_labels = [:Group1, :Group2],
+                input_dir = test_dir,
+                output_dir = output_dir,
+            )
+
+            @test result.success == 2
+
+            erps = load(joinpath(output_dir, "1_erps_unrejected.jld2"), "data")
+            @test hasproperty(erps[1].data, :Group1)
+            @test hasproperty(erps[1].data, :Group2)
+            @test !hasproperty(erps[1].data, :avg_1)
+        end
+
+        @testset "Reduce mode" begin
+            output_dir = joinpath(test_dir, "combined_reduce")
+
+            # With reduce=true, only averaged channels should remain
+            result = EegFun.channel_average(
+                "erps_unrejected",
+                [EegFun.channels([:Ch1, :Ch2]), EegFun.channels([:Ch3, :Ch4])],
+                output_labels = [:Group1, :Group2],
+                input_dir = test_dir,
+                output_dir = output_dir,
+                reduce = true,
+            )
+
+            @test result.success == 2
+
+            erps = load(joinpath(output_dir, "1_erps_unrejected.jld2"), "data")
+
+            # Should have metadata + only averaged channels
+            @test hasproperty(erps[1].data, :time)
+            @test hasproperty(erps[1].data, :Group1)
+            @test hasproperty(erps[1].data, :Group2)
+
+            # Original channels should be removed
+            @test !hasproperty(erps[1].data, :Ch1)
+            @test !hasproperty(erps[1].data, :Ch2)
+            @test !hasproperty(erps[1].data, :Ch3)
+            @test !hasproperty(erps[1].data, :Ch4)
+            @test !hasproperty(erps[1].data, :Ch5)
+        end
+
+        @testset "Average specific participants" begin
+            output_dir = joinpath(test_dir, "combined_participant")
+
+            result = EegFun.channel_average(
+                "erps_unrejected",
+                [EegFun.channels([:Ch1, :Ch2])],
+                input_dir = test_dir,
+                output_dir = output_dir,
+                participant_selection = EegFun.participants(1),
+            )
+
+            @test result.success == 1
+            @test result.errors == 0
+            @test isfile(joinpath(output_dir, "1_erps_unrejected.jld2"))
+            @test !isfile(joinpath(output_dir, "2_erps_unrejected.jld2"))
+        end
+
+        @testset "Average multiple participants" begin
+            output_dir = joinpath(test_dir, "combined_multi_participants")
+
+            result = EegFun.channel_average(
+                "erps_unrejected",
+                [EegFun.channels([:Ch1, :Ch2])],
+                input_dir = test_dir,
+                output_dir = output_dir,
+                participant_selection = EegFun.participants([1, 2]),
+            )
+
+            @test result.success == 2
+            @test result.errors == 0
+            @test isfile(joinpath(output_dir, "1_erps_unrejected.jld2"))
+            @test isfile(joinpath(output_dir, "2_erps_unrejected.jld2"))
+        end
+
+        @testset "Average specific conditions" begin
+            output_dir = joinpath(test_dir, "combined_condition")
+
+            result = EegFun.channel_average(
+                "erps_unrejected",
+                [EegFun.channels([:Ch1, :Ch2])],
+                input_dir = test_dir,
+                output_dir = output_dir,
+                condition_selection = EegFun.conditions(1),
+            )
+
+            @test result.success == 2
+
+            # Load and verify only one condition
+            erps = load(joinpath(output_dir, "1_erps_unrejected.jld2"), "data")
+            @test length(erps) == 1
+            @test erps[1].condition == 1
+        end
+
+        @testset "Average multiple conditions" begin
+            output_dir = joinpath(test_dir, "combined_multi_conditions")
+
+            result = EegFun.channel_average(
+                "erps_unrejected",
+                [EegFun.channels([:Ch1, :Ch2])],
+                input_dir = test_dir,
+                output_dir = output_dir,
+                condition_selection = EegFun.conditions([1, 2]),
+            )
+
+            @test result.success == 2
+
+            erps = load(joinpath(output_dir, "1_erps_unrejected.jld2"), "data")
+            @test length(erps) == 2
+        end
+
+        @testset "Error handling" begin
+            # Non-existent directory
+            @test_throws Exception EegFun.channel_average(
+                "erps_unrejected",
+                [EegFun.channels([:Ch1, :Ch2])],
+                input_dir = "/nonexistent/path",
+            )
+
+            # Mismatched output labels
+            @test_throws Exception EegFun.channel_average(
+                "erps_unrejected",
+                [EegFun.channels([:Ch1, :Ch2]), EegFun.channels([:Ch3, :Ch4])],
+                output_labels = [:Group1],  # Only 1 label for 2 groups
+                input_dir = test_dir,
+            )
+        end
+
+        @testset "No matching files" begin
+            empty_dir = joinpath(test_dir, "empty_match")
+            mkpath(empty_dir)
+
+            result = EegFun.channel_average("erps_unrejected", [EegFun.channels([:Ch1, :Ch2])], input_dir = empty_dir)
+
+            @test isnothing(result)
+        end
+
+        @testset "Logging" begin
+            output_dir = joinpath(test_dir, "combined_with_log")
+
+            EegFun.channel_average("erps_unrejected", [EegFun.channels([:Ch1, :Ch2])], input_dir = test_dir, output_dir = output_dir)
+
+            log_file = joinpath(output_dir, "channel_average.log")
+            @test isfile(log_file)
+
+            log_contents = read(log_file, String)
+            @test contains(log_contents, "Batch channel averaging started")
+            @test contains(log_contents, "channel_average")
+        end
+
+        @testset "Existing output directory" begin
+            output_dir = joinpath(test_dir, "existing_output_combine")
+            mkpath(output_dir)
+
+            touch(joinpath(output_dir, "dummy.txt"))
+            @test isfile(joinpath(output_dir, "dummy.txt"))
+
+            EegFun.channel_average("erps_unrejected", [EegFun.channels([:Ch1, :Ch2])], input_dir = test_dir, output_dir = output_dir)
+
+            @test isfile(joinpath(output_dir, "dummy.txt"))
+            @test isfile(joinpath(output_dir, "1_erps_unrejected.jld2"))
+        end
+
+        @testset "Partial failures" begin
+            partial_dir = joinpath(test_dir, "partial_test")
+            mkpath(partial_dir)
+
+            # Create one valid file
+            erps = EegFun.create_test_batch_erp_data(n_conditions = 2, n_channels = 7)
+            jldsave(joinpath(partial_dir, "1_erps_unrejected.jld2"); data = erps)
+
+            # Create one malformed file (invalid data type - String instead of Vector{ErpData})
+            jldsave(joinpath(partial_dir, "2_erps_unrejected.jld2"); data = "invalid_data")
+
+            output_dir = joinpath(test_dir, "combined_partial")
+            result =
+                EegFun.channel_average("erps_unrejected", [EegFun.channels([:Ch1, :Ch2])], input_dir = partial_dir, output_dir = output_dir)
+
+            @test result.success == 1
+            @test result.errors == 1
+            @test isfile(joinpath(output_dir, "1_erps_unrejected.jld2"))
+            @test !isfile(joinpath(output_dir, "2_erps_unrejected.jld2"))
+        end
+
+        @testset "Return value structure" begin
+            output_dir = joinpath(test_dir, "combined_return_check")
+
+            result =
+                EegFun.channel_average("erps_unrejected", [EegFun.channels([:Ch1, :Ch2])], input_dir = test_dir, output_dir = output_dir)
+
+            @test hasfield(typeof(result), :success)
+            @test hasfield(typeof(result), :errors)
+            @test result.success isa Integer
+            @test result.errors isa Integer
+            @test result.success >= 0
+            @test result.errors >= 0
+            @test result.success + result.errors == 2
+        end
+
+        @testset "Averaging math correctness" begin
+            # Verify that averaging is mathematically correct
+            math_dir = joinpath(test_dir, "math_test")
+            mkpath(math_dir)
+
+            fs = 256.0
+            n_samples = 11
+            t = range(0.0, 1.0, length = n_samples)
+
+            # Create channels with known values
+            ch1_vals = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0]
+            ch2_vals = [11.0, 10.0, 9.0, 8.0, 7.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0]
+
+            df = DataFrame(time = collect(t), sample = 1:n_samples, condition = fill(1, n_samples), Ch1 = ch1_vals, Ch2 = ch2_vals)
+
+            layout = EegFun.Layout(DataFrame(label = [:Ch1, :Ch2], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing, nothing)
+
+            erps = [EegFun.ErpData("test_data", 1, "condition_1", df, layout, fs, EegFun.AnalysisInfo(), 1)]
+            jldsave(joinpath(math_dir, "1_erps_math.jld2"); data = erps)
+
+            # Average
+            output_dir = joinpath(test_dir, "combined_math")
+            EegFun.channel_average(
+                "erps_math",
+                [EegFun.channels([:Ch1, :Ch2])],
+                output_labels = [:avg],
+                input_dir = math_dir,
+                output_dir = output_dir,
+            )
+
+            erps_combined = load(joinpath(output_dir, "1_erps_math.jld2"), "data")
+
+            # Expected average: [6.0, 6.0, 6.0, 6.0, 6.0, 6.0, 6.0, 6.0, 6.0, 6.0, 6.0]
+            expected_avg = fill(6.0, 11)
+            @test erps_combined[1].data.avg ≈ expected_avg
+        end
+
+        @testset "Layout preservation" begin
+            output_dir = joinpath(test_dir, "combined_layout")
+
+            # Get original layout info
+            original_erps = load(joinpath(test_dir, "1_erps_unrejected.jld2"), "data")
+            original_n_channels = nrow(original_erps[1].layout.data)
+
+            # Average without reduce (should append to layout)
+            EegFun.channel_average(
+                "erps_unrejected",
+                [EegFun.channels([:Ch1, :Ch2])],
+                input_dir = test_dir,
+                output_dir = output_dir,
+                reduce = false,
+            )
+
+            erps = load(joinpath(output_dir, "1_erps_unrejected.jld2"), "data")
+
+            # Layout should have original channels + 1 averaged
+            @test nrow(erps[1].layout.data) == original_n_channels + 1
+
+            # Verify averaged channel is in layout
+            @test :avg_1 in erps[1].layout.data.label
+        end
+
+        @testset "Layout in reduce mode" begin
+            output_dir = joinpath(test_dir, "combined_layout_reduce")
+
+            # Average with reduce (layout should only have averaged channels)
+            EegFun.channel_average(
+                "erps_unrejected",
+                [EegFun.channels([:Ch1, :Ch2]), EegFun.channels([:Ch3, :Ch4])],
+                output_labels = [:Group1, :Group2],
+                input_dir = test_dir,
+                output_dir = output_dir,
+                reduce = true,
+            )
+
+            erps = load(joinpath(output_dir, "1_erps_unrejected.jld2"), "data")
+
+            # Layout should only have 2 channels
+            @test nrow(erps[1].layout.data) == 2
+            @test :Group1 in erps[1].layout.data.label
+            @test :Group2 in erps[1].layout.data.label
+            @test :Ch1 ∉ erps[1].layout.data.label
+        end
+
+        @testset "Multiple channel groups" begin
+            output_dir = joinpath(test_dir, "combined_multiple_groups")
+
+            # Average 3 different groups
+            result = EegFun.channel_average(
+                "erps_unrejected",
+                [EegFun.channels([:Ch1, :Ch2]), EegFun.channels([:Ch3, :Ch4]), EegFun.channels([:Ch5, :Ch6, :Ch7])],
+                output_labels = [:Group1, :Group2, :Group3],
+                input_dir = test_dir,
+                output_dir = output_dir,
+            )
+
+            @test result.success == 2
+
+            erps = load(joinpath(output_dir, "1_erps_unrejected.jld2"), "data")
+            @test hasproperty(erps[1].data, :Group1)
+            @test hasproperty(erps[1].data, :Group2)
+            @test hasproperty(erps[1].data, :Group3)
+
+            expected_group3 = (erps[1].data.Ch5 .+ erps[1].data.Ch6 .+ erps[1].data.Ch7) ./ 3
+            @test erps[1].data.Group3 ≈ expected_group3
+        end
+
+        @testset "Single channel group" begin
+            output_dir = joinpath(test_dir, "combined_single_group")
+
+            # Average just one group
+            result = EegFun.channel_average(
+                "erps_unrejected",
+                [EegFun.channels([:Ch1, :Ch2])],
+                output_labels = [:Group1],
+                input_dir = test_dir,
+                output_dir = output_dir,
+            )
+
+            @test result.success == 2
+
+            erps = load(joinpath(output_dir, "1_erps_unrejected.jld2"), "data")
+            @test hasproperty(erps[1].data, :Group1)
+        end
+
+        @testset "Combined filters" begin
+            output_dir = joinpath(test_dir, "combined_filters")
+
+            # Average with participant AND condition filters
+            result = EegFun.channel_average(
+                "erps_unrejected",
+                [EegFun.channels([:Ch1, :Ch2])],
+                input_dir = test_dir,
+                output_dir = output_dir,
+                participant_selection = EegFun.participants(1),
+                condition_selection = EegFun.conditions(1),
+            )
+
+            @test result.success == 1
+
+            erps = load(joinpath(output_dir, "1_erps_unrejected.jld2"), "data")
+            @test length(erps) == 1
+            @test !isfile(joinpath(output_dir, "2_erps_unrejected.jld2"))
+        end
+
+        @testset "Pattern matching variants" begin
+            pattern_dir = joinpath(test_dir, "pattern_test")
+            mkpath(pattern_dir)
+
+            erps = EegFun.create_test_batch_erp_data(n_conditions = 2, n_channels = 7)
+            jldsave(joinpath(pattern_dir, "1_erps_uncorrected.jld2"); data = erps)
+            jldsave(joinpath(pattern_dir, "2_erps_unrejected.jld2"); data = erps)
+            jldsave(joinpath(pattern_dir, "3_custom_erps.jld2"); data = erps)
+
+            # Test pattern matching "erps_uncorrected"
+            output_dir1 = joinpath(test_dir, "combined_original")
+            result1 = EegFun.channel_average(
+                "erps_uncorrected",
+                [EegFun.channels([:Ch1, :Ch2])],
+                input_dir = pattern_dir,
+                output_dir = output_dir1,
+            )
+            @test result1.success == 1
+
+            # Test pattern matching "erps" (should match all)
+            output_dir2 = joinpath(test_dir, "combined_all_erps")
+            result2 = EegFun.channel_average("erps", [EegFun.channels([:Ch1, :Ch2])], input_dir = pattern_dir, output_dir = output_dir2)
+            @test result2.success == 3
+        end
+
+        @testset "Output file overwriting" begin
+            overwrite_dir = joinpath(test_dir, "combined_overwrite")
+
+            # First run
+            EegFun.channel_average("erps_unrejected", [EegFun.channels([:Ch1, :Ch2])], input_dir = test_dir, output_dir = overwrite_dir)
+
+            file1 = joinpath(overwrite_dir, "1_erps_unrejected.jld2")
+            mtime1 = stat(file1).mtime
+
+            sleep(0.1)
+
+            # Second run (should overwrite)
+            EegFun.channel_average("erps_unrejected", [EegFun.channels([:Ch1, :Ch2])], input_dir = test_dir, output_dir = overwrite_dir)
+
+            mtime2 = stat(file1).mtime
+            @test mtime2 > mtime1
+        end
+
+        @testset "Channel exclusion predicate" begin
+            output_dir = joinpath(test_dir, "combined_exclusion")
+
+            # Average all channels except Ch5
+            result = EegFun.channel_average(
+                "erps_unrejected",
+                [EegFun.channels_not([:Ch5])],
+                output_labels = [:not_Ch5],
+                input_dir = test_dir,
+                output_dir = output_dir,
+                reduce = true,
+            )
+
+            @test result.success == 2
+
+            erps = load(joinpath(output_dir, "1_erps_unrejected.jld2"), "data")
+            @test hasproperty(erps[1].data, :not_Ch5)
+            @test !hasproperty(erps[1].data, :Ch5)
+            @test !hasproperty(erps[1].data, :Ch1)  # All original channels removed in reduce mode
+        end
+
+        @testset "EpochData support" begin
+            # Create EpochData test files
+            epochs_dir = joinpath(test_dir, "epochs_test")
+            mkpath(epochs_dir)
+
+            epochs = EegFun.create_test_epoch_data()
+            jldsave(joinpath(epochs_dir, "1_epochs.jld2"); data = [epochs])
+
+            # Average channels in epoch data
+            output_dir = joinpath(test_dir, "combined_epochs")
+            result = EegFun.channel_average(
+                "epochs",
+                [EegFun.channels([:Ch1, :Ch2])],
+                output_labels = [:Group1],
+                input_dir = epochs_dir,
+                output_dir = output_dir,
+            )
+
+            @test result.success == 1
+
+            epochs_combined = load(joinpath(output_dir, "1_epochs.jld2"), "data")
+            @test epochs_combined[1] isa EegFun.EpochData
+            @test hasproperty(epochs_combined[1].data[1], :Group1)
+            @test hasproperty(epochs_combined[1].data[1], :Ch1)  # Original channels preserved
+        end
+
+        @testset "Invalid channel selection" begin
+            # Request non-existent channels
+            invalid_dir = joinpath(test_dir, "invalid_channels")
+            mkpath(invalid_dir)
+
+            erps = EegFun.create_test_batch_erp_data(n_conditions = 1, n_channels = 7)
+            jldsave(joinpath(invalid_dir, "1_erps.jld2"); data = erps)
+
+            output_dir = joinpath(test_dir, "combined_invalid")
+
+            # This should fail because channels don't exist
+            result = EegFun.channel_average(
+                "erps",
+                [EegFun.channels([:NonExistent1, :NonExistent2])],
+                input_dir = invalid_dir,
+                output_dir = output_dir,
+            )
+
+            # Should fail for all files
+            @test result.success == 0
+            @test result.errors == 1
+        end
+
+        @testset "Single channel in group" begin
+            output_dir = joinpath(test_dir, "combined_single_channel")
+
+            # Average just one channel (edge case)
+            result = EegFun.channel_average(
+                "erps_unrejected",
+                [EegFun.channels([:Ch5])],
+                output_labels = [:Ch5_avg],
+                input_dir = test_dir,
+                output_dir = output_dir,
+            )
+
+            @test result.success == 2
+
+            erps = load(joinpath(output_dir, "1_erps_unrejected.jld2"), "data")
+            @test hasproperty(erps[1].data, :Ch5_avg)
+
+            # Single channel average should equal the original
+            @test erps[1].data.Ch5_avg ≈ erps[1].data.Ch5
+        end
+
+        @testset "All channels combined" begin
+            output_dir = joinpath(test_dir, "combined_all_channels")
+
+            # Average ALL channels
+            result = EegFun.channel_average(
+                "erps_unrejected",
+                [EegFun.channels()],  # All channels
+                output_labels = [:global_avg],
+                input_dir = test_dir,
+                output_dir = output_dir,
+                reduce = true,
+            )
+
+            @test result.success == 2
+
+            erps = load(joinpath(output_dir, "1_erps_unrejected.jld2"), "data")
+
+            # Should only have metadata + global_avg
+            @test hasproperty(erps[1].data, :global_avg)
+            @test !hasproperty(erps[1].data, :Ch1)
+
+            # Verify it's the average of all original channels
+            original_erps = load(joinpath(test_dir, "1_erps_unrejected.jld2"), "data")
+            all_ch_data = hcat(
+                original_erps[1].data.Ch1,
+                original_erps[1].data.Ch2,
+                original_erps[1].data.Ch3,
+                original_erps[1].data.Ch4,
+                original_erps[1].data.Ch5,
+                original_erps[1].data.Ch6,
+                original_erps[1].data.Ch7,
+            )
+            expected_avg = vec(mean(all_ch_data, dims = 2))
+            @test erps[1].data.global_avg ≈ expected_avg
+        end
+
+        @testset "Overlapping channel groups" begin
+            output_dir = joinpath(test_dir, "combined_overlapping")
+
+            # Same channel in multiple groups
+            result = EegFun.channel_average(
+                "erps_unrejected",
+                [EegFun.channels([:Ch1, :Ch2, :Ch5]), EegFun.channels([:Ch5, :Ch6, :Ch7])],
+                output_labels = [:Group1, :Group2],
+                input_dir = test_dir,
+                output_dir = output_dir,
+            )
+
+            @test result.success == 2
+
+            erps = load(joinpath(output_dir, "1_erps_unrejected.jld2"), "data")
+            @test hasproperty(erps[1].data, :Group1)
+            @test hasproperty(erps[1].data, :Group2)
+
+            # Verify both averages include Ch5
+            expected_group1 = (erps[1].data.Ch1 .+ erps[1].data.Ch2 .+ erps[1].data.Ch5) ./ 3
+            expected_group2 = (erps[1].data.Ch5 .+ erps[1].data.Ch6 .+ erps[1].data.Ch7) ./ 3
+            @test erps[1].data.Group1 ≈ expected_group1
+            @test erps[1].data.Group2 ≈ expected_group2
+        end
+
+        @testset "Sample rate and analysis info preservation" begin
+            output_dir = joinpath(test_dir, "combined_metadata_preserve")
+
+            # Get original metadata
+            original_erps = load(joinpath(test_dir, "1_erps_unrejected.jld2"), "data")
+            original_fs = original_erps[1].sample_rate
+
+            EegFun.channel_average("erps_unrejected", [EegFun.channels([:Ch1, :Ch2])], input_dir = test_dir, output_dir = output_dir)
+
+            erps = load(joinpath(output_dir, "1_erps_unrejected.jld2"), "data")
+
+            # Verify sample rate preserved
+            @test erps[1].sample_rate == original_fs
+
+            # Verify it's still ErpData
+            @test erps[1] isa EegFun.ErpData
+        end
+
+        @testset "Condition out of range" begin
+            output_dir = joinpath(test_dir, "combined_invalid_condition")
+
+            # Request condition 5 when only 2 exist
+            # With predicate-based selection, this results in empty selection but successful processing
+            result = EegFun.channel_average(
+                "erps_unrejected",
+                [EegFun.channels([:Ch1, :Ch2])],
+                input_dir = test_dir,
+                output_dir = output_dir,
+                condition_selection = EegFun.conditions(5),
+            )
+
+            # Files are processed successfully but with empty condition selection
+            @test result.success == 2
+            @test result.errors == 0
+        end
+
+        @testset "Many channels" begin
+            # Test with 20 channels
+            many_ch_dir = joinpath(test_dir, "many_channels")
+            mkpath(many_ch_dir)
+
+            fs = 256.0
+            n_samples = 101
+            t = range(-0.2, 0.2, length = n_samples)
+
+            # Create 20 channels
+            channel_names = Symbol.("Ch" .* string.(1:20))
+
+            df = DataFrame(time = collect(t), sample = 1:n_samples, condition = fill(1, n_samples))
+            for ch in channel_names
+                df[!, ch] = randn(n_samples)
+            end
+
+            layout = EegFun.Layout(DataFrame(label = channel_names, inc = zeros(20), azi = zeros(20)), nothing, nothing, nothing)
+
+            erps = [EegFun.ErpData("test_data", 1, "condition_1", df, layout, fs, EegFun.AnalysisInfo(), 1)]
+            jldsave(joinpath(many_ch_dir, "1_erps_many.jld2"); data = erps)
+
+            # Average into 4 groups
+            output_dir = joinpath(test_dir, "combined_many_ch")
+            result = EegFun.channel_average(
+                "erps_many",
+                [
+                    EegFun.channels(channel_names[1:5]),
+                    EegFun.channels(channel_names[6:10]),
+                    EegFun.channels(channel_names[11:15]),
+                    EegFun.channels(channel_names[16:20]),
+                ],
+                output_labels = [:Group1, :Group2, :Group3, :Group4],
+                input_dir = many_ch_dir,
+                output_dir = output_dir,
+            )
+
+            @test result.success == 1
+
+            erps_combined = load(joinpath(output_dir, "1_erps_many.jld2"), "data")
+            @test hasproperty(erps_combined[1].data, :Group1)
+            @test hasproperty(erps_combined[1].data, :Group2)
+            @test hasproperty(erps_combined[1].data, :Group3)
+            @test hasproperty(erps_combined[1].data, :Group4)
+        end
+
+        @testset "Metadata columns preserved" begin
+            output_dir = joinpath(test_dir, "combined_metadata_cols")
+
+            EegFun.channel_average(
+                "erps_unrejected",
+                [EegFun.channels([:Ch1, :Ch2])],
+                input_dir = test_dir,
+                output_dir = output_dir,
+                reduce = false,
+            )
+
+            erps = load(joinpath(output_dir, "1_erps_unrejected.jld2"), "data")
+
+            # Verify metadata columns still exist
+            @test hasproperty(erps[1].data, :time)
+            @test hasproperty(erps[1].data, :sample)
+            # condition is now in struct, not DataFrame
+            @test hasproperty(erps[1], :condition)
+        end
+
+        @testset "Metadata columns in reduce mode" begin
+            output_dir = joinpath(test_dir, "combined_metadata_reduce")
+
+            EegFun.channel_average(
+                "erps_unrejected",
+                [EegFun.channels([:Ch1, :Ch2])],
+                output_labels = [:Group1],
+                input_dir = test_dir,
+                output_dir = output_dir,
+                reduce = true,
+            )
+
+            erps = load(joinpath(output_dir, "1_erps_unrejected.jld2"), "data")
+
+            # Metadata should be preserved in reduce mode
+            @test hasproperty(erps[1].data, :time)
+            # condition is now in struct, not DataFrame
+            @test hasproperty(erps[1], :condition)
+
+            # Only averaged channel and metadata
+            @test hasproperty(erps[1].data, :Group1)
+            @test !hasproperty(erps[1].data, :Ch1)
+        end
+
+        @testset "Empty result handling" begin
+            empty_dir = joinpath(test_dir, "empty_result")
+            mkpath(empty_dir)
+
+            # Create file but select channels that result in empty selection
+            erps = EegFun.create_test_batch_erp_data(n_conditions = 1, n_channels = 7)
+            jldsave(joinpath(empty_dir, "1_erps.jld2"); data = erps)
+
+            # Use a predicate that selects nothing
+            output_dir = joinpath(test_dir, "combined_empty")
+            result = EegFun.channel_average(
+                "erps",
+                [ch -> Symbol[]],  # Returns empty
+                input_dir = empty_dir,
+                output_dir = output_dir,
+            )
+
+            # Should fail because no channels selected
+            @test result.success == 0
+            @test result.errors == 1
+        end
+
+    finally
+        # Cleanup
+        rm(test_dir, recursive = true, force = true)
+    end
+end
+
+@testset "TF Channel Average" begin
+
+    @testset "Mutating: basic average all channels" begin
+        tf = EegFun.create_test_tf_data(n_channels = 3, power_offset = 3.0, noise = 0.0)
+
+        EegFun.channel_average!(tf)
+
+        # Should have added :avg column to both power and phase
+        @test hasproperty(tf.data_power, :avg)
+        @test hasproperty(tf.data_phase, :avg)
+
+        # :avg should be the mean of Ch1, Ch2, Ch3 (all 3.0 with noise=0)
+        @test all(tf.data_power[!, :avg] .≈ 3.0)
+    end
+
+    @testset "Mutating: specific channel group" begin
+        tf = EegFun.create_test_tf_data(n_channels = 3, power_offset = 2.0, noise = 0.0)
+
+        EegFun.channel_average!(tf, channel_selections = [EegFun.channels([:Ch1, :Ch2])], output_labels = [:frontal])
+
+        @test hasproperty(tf.data_power, :frontal)
+        @test hasproperty(tf.data_phase, :frontal)
+        @test all(tf.data_power[!, :frontal] .≈ 2.0)
+    end
+
+    @testset "Mutating: reduce mode" begin
+        tf = EegFun.create_test_tf_data(n_channels = 3, power_offset = 1.0, noise = 0.0)
+
+        EegFun.channel_average!(tf, channel_selections = [EegFun.channels([:Ch1, :Ch2])], output_labels = [:avg_group], reduce = true)
+
+        # Should only have metadata + averaged columns
+        @test hasproperty(tf.data_power, :time)
+        @test hasproperty(tf.data_power, :freq)
+        @test hasproperty(tf.data_power, :avg_group)
+        @test !hasproperty(tf.data_power, :Ch1)
+        @test !hasproperty(tf.data_power, :Ch3)
+
+        # Same for phase
+        @test hasproperty(tf.data_phase, :avg_group)
+        @test !hasproperty(tf.data_phase, :Ch1)
+    end
+
+    @testset "Non-mutating: returns copy" begin
+        tf = EegFun.create_test_tf_data(n_channels = 3)
+
+        result = EegFun.channel_average(tf)
+
+        # Original should not be modified
+        @test !hasproperty(tf.data_power, :avg)
+
+        # Result should have the averaged column
+        @test hasproperty(result.data_power, :avg)
+        @test hasproperty(result.data_phase, :avg)
+    end
+
+    @testset "Non-mutating: Vector{TimeFreqData}" begin
+        tfs = [EegFun.create_test_tf_data(condition = 1), EegFun.create_test_tf_data(condition = 2)]
+
+        results = EegFun.channel_average(tfs)
+
+        @test length(results) == 2
+        @test all(hasproperty(r.data_power, :avg) for r in results)
+        @test all(hasproperty(r.data_phase, :avg) for r in results)
+
+        # Originals untouched
+        @test !hasproperty(tfs[1].data_power, :avg)
+    end
+
+    @testset "Both DataFrames stay in sync" begin
+        tf = EegFun.create_test_tf_data(n_channels = 3)
+
+        EegFun.channel_average!(tf, channel_selections = [EegFun.channels([:Ch1, :Ch2])], output_labels = [:test_avg])
+
+        # Same number of rows
+        @test nrow(tf.data_power) == nrow(tf.data_phase)
+
+        # Same columns added
+        @test propertynames(tf.data_power) == propertynames(tf.data_phase)
+    end
+
+    @testset "TimeFreqEpochData: power and phase both averaged" begin
+        tfe = EegFun.create_test_tf_epoch_data(n_channels = 3, n_epochs = 2, power_offset = 2.0, noise = 0.0)
+
+        EegFun.channel_average!(tfe, channel_selections = [EegFun.channels([:Ch1, :Ch2])], output_labels = [:grp])
+
+        for i = 1:2
+            @test hasproperty(tfe.data_power[i], :grp)
+            @test hasproperty(tfe.data_phase[i], :grp)
+            @test all(tfe.data_power[i][!, :grp] .≈ 2.0)
+        end
+    end
+
+    @testset "TimeFreqEpochData: reduce mode" begin
+        tfe = EegFun.create_test_tf_epoch_data(n_channels = 3, n_epochs = 2)
+
+        EegFun.channel_average!(tfe, channel_selections = [EegFun.channels([:Ch1, :Ch2])], output_labels = [:grp], reduce = true)
+
+        for dfs in (tfe.data_power, tfe.data_phase), df in dfs
+            @test propertynames(df) == [:time, :freq, :grp]
+        end
+        @test EegFun.channel_labels(tfe) == [:grp]
+    end
+
+    @testset "Ergonomic channel_selection and Vector channel_average!" begin
+        # Singular keyword channel_selection
+        dat = EegFun.create_test_continuous_data(n = 100)
+        EegFun.channel_average!(dat; channel_selection = [:Ch1, :Ch2], output_labels = "my_mean")
+        @test :my_mean ∈ propertynames(dat.data)
+        @test dat.data.my_mean ≈ (dat.data.Ch1 .+ dat.data.Ch2) ./ 2
+
+        # Un-nested single group in channel_selections
+        dat2 = EegFun.create_test_continuous_data(n = 100)
+        EegFun.channel_average!(dat2; channel_selections = ["Ch1", "Ch2"], output_labels = :my_mean2)
+        @test :my_mean2 ∈ propertynames(dat2.data)
+
+        # In-place Vector method
+        dats = [EegFun.create_test_continuous_data(n = 50), EegFun.create_test_continuous_data(n = 50)]
+        EegFun.channel_average!(dats; channel_selection = [:Ch1, :Ch2], output_labels = :vec_avg)
+        @test :vec_avg ∈ propertynames(dats[1].data)
+        @test :vec_avg ∈ propertynames(dats[2].data)
+    end
+
+    @testset "Default extra-channel exclusion and circular TF phase mean" begin
+        # 1. Default selection excludes extra channels while keeping layout channels containing "_"
+        df_ext = DataFrame(
+            time = [0.0, 0.01, 0.02],
+            sample = [1, 2, 3],
+            Ch1 = [2.0, 2.0, 2.0],
+            Fp1_bip = [4.0, 4.0, 4.0],
+            vEOG = [1000.0, 1000.0, 1000.0],
+            interval = [true, false, true],
+        )
+        lay_ext = EegFun.Layout(DataFrame(label = [:Ch1, :Fp1_bip], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing, nothing)
+        cont_ext = EegFun.ContinuousData("ext_test", df_ext, lay_ext, 100, EegFun.AnalysisInfo())
+        avg_ext = EegFun.channel_average(cont_ext)
+        @test avg_ext.data.avg ≈ [3.0, 3.0, 3.0] # mean of Ch1 (2) and Fp1_bip (4), excluding vEOG
+        @test EegFun.extra_labels(avg_ext) == [:vEOG, :interval]
+        @test EegFun.channel_labels(avg_ext) == [:Ch1, :Fp1_bip, :avg]
+
+        # Symmetric equatorial ROI (T7/T8 centroid = (0, 0, 0)) stays in layout for reduce = false and reduce = true
+        df_eq = DataFrame(time = [0.0, 0.01], sample = [1, 2], T7 = [2.0, 4.0], T8 = [6.0, 8.0])
+        lay_eq = EegFun.Layout(DataFrame(label = [:T7, :T8], inc = [90.0, 90.0], azi = [180.0, 0.0]), nothing, nothing, nothing)
+        erp_eq = EegFun.ErpData("eq", 1, "c1", df_eq, lay_eq, 100, EegFun.AnalysisInfo(), 10)
+        erp_eq_red = EegFun.channel_average(erp_eq; channel_selections = [EegFun.channels([:T7, :T8])], reduce = true)
+        @test EegFun.channel_labels(erp_eq_red) == [:avg]
+        @test erp_eq_red.data.avg ≈ [4.0, 6.0]
+
+        # 2. Circular mean on TimeFreqData.data_phase and TimeFreqEpochData.data_phase across ±π branch cut
+        tf_circ = EegFun.create_test_tf_data(n_channels = 2, power_offset = 4.0, noise = 0.0)
+        tf_circ.data_phase[!, :Ch1] .= 3.1
+        tf_circ.data_phase[!, :Ch2] .= -3.1
+        EegFun.channel_average!(tf_circ)
+        # Arithmetic mean would give 0.0 (opposite direction!), whereas circular mean gives ±π
+        @test all(abs.(abs.(tf_circ.data_phase[!, :avg]) .- π) .< 1e-6)
+
+        tfe_circ = EegFun.create_test_tf_epoch_data(n_channels = 2, n_epochs = 2, power_offset = 4.0, noise = 0.0)
+        for df_p in tfe_circ.data_phase
+            df_p[!, :Ch1] .= 3.1
+            df_p[!, :Ch2] .= -3.1
+        end
+        EegFun.channel_average!(tfe_circ)
+        for df_p in tfe_circ.data_phase
+            @test all(abs.(abs.(df_p[!, :avg]) .- π) .< 1e-6)
+        end
+    end
+end

@@ -1,12 +1,25 @@
-@inline _validate_mirror_side(side::Symbol) =
-    side in (:pre, :post, :both) || @minimal_error("side must be :pre, :post, or :both, got :$side")
+# Temporal boundary mirroring and unmirroring to suppress filter edge artifacts.
+
+######################################
+########### User Functions ###########
+######################################
+
+"""
+    mirror(dat::EegData, side::Symbol = :both)
+    mirror(data_vec::Vector{<:EegData}, side::Symbol = :both)
+
+Mirror data by reflecting time-reversed copies at boundaries (`:pre`, `:post`, or `:both`) on a copy of `dat`
+to suppress edge artifacts during filtering. Call [`unmirror`](@ref) with the same `side` afterward.
+"""
+mirror(dat::EegData, side::Symbol = :both) = mirror!(copy(dat), side)
+
+mirror(data_vec::Vector{<:EegData}, side::Symbol = :both) = [mirror(dat, side) for dat in data_vec]
 
 """
     mirror!(dat::EegData, side::Symbol = :both)
     mirror!(data_vec::Vector{<:EegData}, side::Symbol = :both)
 
-Mirror data in-place by reflecting time-reversed copies at boundaries (`:pre`, `:post`, or `:both`)
-to suppress edge artifacts during filtering. Call [`unmirror!`](@ref) with the same `side` afterward.
+In-place mutating version of [`mirror`](@ref).
 """
 function mirror!(dat::SingleDataFrameEeg, side::Symbol = :both)
     _validate_mirror_side(side)
@@ -37,19 +50,20 @@ function mirror!(data_vec::Vector{<:EegData}, side::Symbol = :both)
 end
 
 """
-    mirror(dat::EegData, side::Symbol = :both)
-    mirror(data_vec::Vector{<:EegData}, side::Symbol = :both)
+    unmirror(dat::EegData, side::Symbol = :both)
+    unmirror(data_vec::Vector{<:EegData}, side::Symbol = :both)
 
-Non-mutating version of [`mirror!`](@ref).
+Remove mirrored boundary segments on a copy of `dat`, restoring original length. `side` must match [`mirror`](@ref).
 """
-mirror(dat::EegData, side::Symbol = :both) = mirror!(copy(dat), side)
-mirror(data_vec::Vector{<:EegData}, side::Symbol = :both) = [mirror(dat, side) for dat in data_vec]
+unmirror(dat::EegData, side::Symbol = :both) = unmirror!(copy(dat), side)
+
+unmirror(data_vec::Vector{<:EegData}, side::Symbol = :both) = [unmirror(dat, side) for dat in data_vec]
 
 """
     unmirror!(dat::EegData, side::Symbol = :both)
     unmirror!(data_vec::Vector{<:EegData}, side::Symbol = :both)
 
-Remove mirrored boundary segments in-place, restoring original length. `side` must match [`mirror!`](@ref).
+In-place mutating version of [`unmirror`](@ref).
 """
 function unmirror!(dat::SingleDataFrameEeg, side::Symbol = :both)
     _validate_mirror_side(side)
@@ -79,14 +93,12 @@ function unmirror!(data_vec::Vector{<:EegData}, side::Symbol = :both)
     return data_vec
 end
 
-"""
-    unmirror(dat::EegData, side::Symbol = :both)
-    unmirror(data_vec::Vector{<:EegData}, side::Symbol = :both)
+######################################
+######### Internal Functions #########
+######################################
 
-Non-mutating version of [`unmirror!`](@ref).
-"""
-unmirror(dat::EegData, side::Symbol = :both) = unmirror!(copy(dat), side)
-unmirror(data_vec::Vector{<:EegData}, side::Symbol = :both) = [unmirror(dat, side) for dat in data_vec]
+@inline _validate_mirror_side(side::Symbol) =
+    side in (:pre, :post, :both) || @minimal_error("side must be :pre, :post, or :both, got :$side")
 
 function _mirror_column(src::AbstractVector{T}, n::Int, pre_len::Int, post_len::Int) where {T}
     n_new = pre_len + n + post_len

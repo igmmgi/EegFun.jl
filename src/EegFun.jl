@@ -1,3 +1,5 @@
+# Top-level module definition and file includes for EegFun.jl.
+
 module EegFun
 
 # Core dependencies
@@ -50,189 +52,26 @@ using LIBSVM
 # Public API declarations
 include("public_api.jl")
 
-# Core types
-include("types/core.jl")
-include("types/pipeline.jl")
-include("types/statistics.jl")
-include("types/statistics_tf.jl")
-include("types/decoding.jl")
-include("types/rsa.jl")
-
-# Utility functions
-include("utils/error.jl")
-include("utils/gpu.jl")
-include("utils/create_data.jl")
-include("utils/batch.jl")
-include("utils/data.jl")
-include("utils/files.jl")
-include("utils/logging.jl")
-include("utils/misc.jl")
-include("utils/viewer.jl")
-include("utils/print.jl")
-include("utils/tables.jl")
-
-# Layout handling
+# Core types, utilities, layouts, I/O, and configuration
+include("types.jl")
+include("utils.jl")
 include("layouts/layout.jl")
-
-# Data import/export
-include("io/eeglab.jl")
-include("io/fieldtrip.jl")
-include("io/xdf.jl")
-include("io/bids_export.jl")
-include("io/bids_import.jl")
-
-# Configuration system
+include("io.jl")
 include("config/config.jl")
 
-# Analysis functions
-include("analysis/processing/apply.jl")
-include("analysis/processing/artifact_detection.jl")
-include("analysis/processing/baseline.jl")
-include("analysis/processing/detrend.jl")
-include("analysis/processing/channel_average.jl")
-include("analysis/processing/channel_delete.jl")
-include("analysis/processing/channel_difference.jl")
-include("analysis/processing/channel_repair.jl")
-include("analysis/processing/channel_summary.jl")
-include("analysis/processing/channel_metrics.jl")
-include("analysis/processing/condition_combine.jl")
-include("analysis/processing/condition_difference.jl")
-include("analysis/processing/condition_average.jl")
-include("analysis/processing/grand_average.jl")
-include("analysis/processing/epochs.jl")
-include("analysis/processing/filter.jl")
-include("analysis/processing/ica.jl")
-include("analysis/processing/cleanline.jl")
+# Analysis subsystems
+include("analysis/processing.jl")
+include("analysis/erps.jl")
+include("analysis/ride.jl")
+include("analysis/statistics.jl")
+include("analysis/time_frequency.jl")
+include("analysis/decoding.jl")
+include("analysis/rsa.jl")
 
-include("analysis/processing/mirror.jl")
-include("analysis/processing/rereference.jl")
-include("analysis/processing/resample.jl")
-include("analysis/processing/csd.jl")
-include("analysis/processing/triggers.jl")
-include("analysis/processing/read_data.jl")
-
-include("analysis/erps/jackknife_average.jl")
-include("analysis/erps/erp_measurements.jl")
-include("analysis/erps/gfp.jl")
-include("analysis/erps/lrp.jl")
-include("analysis/erps/realign.jl")
-include("analysis/ride/utils.jl")
-include("analysis/ride/woody.jl")
-include("analysis/ride/iterator.jl")
-include("analysis/ride/decompose.jl")
-include("analysis/ride/ride.jl")
-
-# Statistics submodules (loaded in dependency order)
-include("analysis/statistics/core.jl")
-include("analysis/statistics/statistics_tf_helpers.jl")
-include("analysis/statistics/thresholding.jl")
-include("analysis/statistics/clustering.jl")
-include("analysis/statistics/permutations.jl")
-include("analysis/statistics/inference.jl")
-include("analysis/statistics/statistics.jl")
-include("analysis/statistics/lmm_stats.jl")
-include("analysis/statistics/statsapi.jl")
-
-# time-frequency analysis
-include("analysis/time_frequency/tf_utils.jl")
-include("analysis/time_frequency/tf_morlet.jl")
-include("analysis/time_frequency/tf_stft.jl")
-include("analysis/time_frequency/tf_multitaper.jl")
-include("analysis/time_frequency/tf_itc.jl")
-include("analysis/time_frequency/freq_spectrum.jl")
-include("analysis/time_frequency/baseline.jl")
-
-# decoding analysis via libsvm
-include("analysis/decoding/liblinear.jl")
-include("analysis/decoding/decoding.jl")
-include("analysis/decoding/preparation.jl")
-include("analysis/decoding/decoding_statistics.jl")
-
-# RSA (Representational Similarity Analysis)
-include("analysis/rsa/rsa_models.jl")
-include("analysis/rsa/rsa.jl")
-include("analysis/rsa/rsa_noise_ceiling.jl")
-include("analysis/rsa/rsa_crossvalidation.jl")
-
-# analysis pipelines
-include("pipelines/utils/utils.jl")
-include("pipelines/utils/repair_info.jl")
-include("pipelines/utils/repair.jl")
-include("pipelines/utils/summaries.jl")
-include("pipelines/utils/template.jl")
-include("pipelines/pipeline.jl")
-
-# Plotting functions
-include("plots/utils/plot_misc.jl")
-include("plots/utils/themes.jl")
-include("plots/utils/plot_ui_utils.jl")
-
-# Layout system (must be included before other plotting functions)
-include("plots/utils/layout_system.jl")
-
-# Shared interactivity (must be included before plot_erp and plot_epochs)
-include("plots/utils/shared_interactivity.jl")
-
-include("plots/processing/plot_artifacts.jl")
-include("plots/processing/plot_channel_summary.jl")
-include("plots/processing/plot_correlation_heatmap.jl")
-include("plots/processing/plot_databrowser.jl")
-include("plots/processing/plot_ica.jl")
-include("plots/processing/plot_ica_artifacts.jl")
-include("plots/processing/plot_joint_probability.jl")
-include("plots/processing/plot_layout.jl")
-include("plots/processing/plot_triggers.jl")
-include("plots/processing/plot_filter.jl")
-
-include("plots/erps/plot_epochs.jl")
-include("plots/erps/plot_epochs_rejection.jl")
-include("plots/erps/plot_erp.jl")
-include("plots/erps/plot_erp_image.jl")
-include("plots/erps/plot_erp_measurements.jl")
-include("plots/erps/plot_erp_measurement_gui.jl")
-include("plots/erps/plot_erp_filter_gui.jl")
-include("plots/erps/plot_gfp.jl")
-include("plots/erps/plot_erp_stats.jl")
-include("plots/erps/plot_topography_stats.jl")
-include("plots/erps/plot_topography.jl")
-include("plots/erps/plot_topography_3d.jl")
-
-include("plots/time_frequency/plot_tf.jl")
-include("plots/time_frequency/plot_tf_stats.jl")
-
-include("plots/time_frequency/plot_power_spectrum.jl")
-include("plots/time_frequency/plot_topography_tf.jl")
-
-include("plots/decoding/plot_decoding.jl")
-include("plots/rsa/plot_rsa.jl")
-
-include("plots/plot_gui.jl")
-include("plots/plot_gui_helpers.jl")
-include("plots/utils/help_system.jl")
-include("plots/utils/makie_recipes.jl")
-
-# Demos
-include("demos/signal_processing/signal_example_sampling.jl")
-include("demos/signal_processing/signal_example_composition.jl")
-include("demos/signal_processing/signal_example_dotproduct.jl")
-include("demos/signal_processing/signal_example_convolution.jl")
-include("demos/signal_processing/signal_example_tf.jl")
-
-include("demos/ica/signal_example_ica_mixture.jl")
-include("demos/ica/signal_example_ica_separation.jl")
-include("demos/ica/signal_example_ica_geometry.jl")
-include("demos/ica/signal_example_ica_clt.jl")
-include("demos/ica/signal_example_ica_sphering.jl")
-include("demos/ica/signal_example_ica_optimization.jl")
-
-include("demos/erp/simulate_erp.jl")
-include("demos/machine_learning/signal_example_decoding.jl")
-include("demos/eog/signal_example_eog.jl")
-include("demos/emg/signal_example_emg.jl")
-include("demos/ecg/signal_example_ecg_einthoven.jl")
-include("demos/ecg/signal_example_ecg_hrv.jl")
-include("demos/eda/signal_example_eda_scr.jl")
-include("demos/eda/signal_example_eda_habituation.jl")
+# Automated pipelines, plotting, and interactive demos
+include("pipelines.jl")
+include("plots.jl")
+include("demos.jl")
 
 # Precompilation
 include("precompile.jl")

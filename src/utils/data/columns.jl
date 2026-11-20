@@ -1,7 +1,15 @@
+# Internal column classification helpers distinguishing EEG, extra, and metadata columns.
+
+######################################
+######### Internal Functions #########
+######################################
+
 _first_df(dat::SingleDataFrameEeg) = dat.data
+
 _first_df(dat::MultiDataFrameEeg) = isempty(dat.data) ? nothing : dat.data[1]
 
 _as_symbol_vec(v::AbstractVector{Symbol}) = v
+
 _as_symbol_vec(v::AbstractVector) = Symbol[Symbol(x) for x in v]
 
 function _channel_cols(layout_channels::AbstractVector{Symbol}, df::DataFrame)::Vector{Symbol}
@@ -73,8 +81,11 @@ function _count_channels(layout_channels::AbstractVector{Symbol}, df::DataFrame)
 end
 
 _channel_cols(layout_channels::AbstractVector, df::DataFrame)::Vector{Symbol} = _channel_cols(_as_symbol_vec(layout_channels), df)
+
 _meta_cols(layout_channels::AbstractVector, df::DataFrame)::Vector{Symbol} = _meta_cols(_as_symbol_vec(layout_channels), df)
+
 _extra_cols(layout_channels::AbstractVector, df::DataFrame)::Vector{Symbol} = _extra_cols(_as_symbol_vec(layout_channels), df)
+
 _count_channels(layout_channels::AbstractVector, df::DataFrame)::Int = _count_channels(_as_symbol_vec(layout_channels), df)
 
 function _get_cols_by_group(dat::EegData, group::Symbol)::Vector{Symbol}

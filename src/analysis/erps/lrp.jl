@@ -1,3 +1,101 @@
+# Lateralized Readiness Potential (LRP) double-subtraction calculations.
+
+######################################
+########### User Functions ###########
+######################################
+
+"""
+    lrp(erp_left::ErpData, erp_right::ErpData; channel_selection = channels()) -> ErpData
+    lrp(erps::AbstractVector{<:ErpData}, condition_pairs; condition_selection = conditions(), channel_selection = channels()) -> Vector{ErpData}
+    lrp(file_pattern::String, condition_pairs; input_dir = pwd(), channel_selection = channels(), participant_selection = participants(), output_dir = nothing)
+
+Calculate the lateralized readiness potential (LRP) from ERP data using the double-subtraction formula:
+- `LRP_odd  = 0.5 * ((odd_right - even_right) + (even_left - odd_left))`
+- `LRP_even = -LRP_odd`
+
+# Arguments
+- `erp_left`, `erp_right`: Paired left- and right-response `ErpData`
+- `channel_selection`: Odd/left hemisphere channel selector; default `channels()` auto-detects all odd/even pairs (e.g., `C3`/`C4`, `CP3`/`CP4`)
+- `condition_pairs`: Vector of `(left_cond, right_cond)` integer tuples
+
+# References
+- Coles, M. G. H. (1989). Modern mind-brain reading. *Psychophysiology*, 26(3), 251-269.
+- de Jong, R. et al. (1988). Use of partial stimulus information. *JEP:HPP*, 14(4), 682-692.
+- Oostenveld, R. et al. (2003). Brain symmetry and topographic analysis. *Clin. Neurophysiology*, 114(7), 1194-1202.
+"""
+function lrp(erp_left::ErpData, erp_right::ErpData; channel_selection = channels())::ErpData
+    @info "Calculating lateralized readiness potential (LRP)"
+    _have_same_structure(erp_left, erp_right) || @minimal_error("Left and right ERPs have inconsistent structure")
+
+    pairs = _get_channel_pairs_from_selection(erp_left, erp_right, channel_selection)
+    isempty(pairs) && @minimal_error(
+        "No valid lateral channel pairs found. Check that selected channels have odd numbers and their even counterparts exist."
+    )
+
+    @info "Using $(length(pairs)) channel pair(s): $(pairs)"
+    lrp_data = _calculate_lrp(erp_left, erp_right, pairs)
+    @info "LRP calculation complete"
+    return lrp_data
+end
+
+function lrp(
+    erps::AbstractVector{<:ErpData},
+    condition_pairs::AbstractVector{<:Tuple{Integer,Integer}};
+    condition_selection = conditions(),
+    channel_selection = channels(),
+)::Vector{ErpData}
+    _validate_lrp_pairs(condition_pairs)
+
+    erps_filtered = erps[get_selected_conditions(erps, condition_selection)]
+    isempty(erps_filtered) && @minimal_error("No ERP conditions available after applying condition_selection")
+
+    part_groups = _group_by_participant_file(erps_filtered)
+    if !isnothing(part_groups)
+        return reduce(vcat, [lrp(pg, condition_pairs; channel_selection = channel_selection) for pg in part_groups])
+    end
+
+    @info "Calculating LRP for $(length(condition_pairs)) condition pair(s) from $(length(erps_filtered)) condition(s)"
+    cond_nums = Int[d.condition for d in erps_filtered]
+    use_cond_field = allunique(cond_nums) && all(>(0), cond_nums)
+    lrp_results = Vector{ErpData}(undef, length(condition_pairs))
+
+    for (idx, (left_raw, right_raw)) in enumerate(condition_pairs)
+        left_cond, right_cond = Int(left_raw), Int(right_raw)
+        left_idx = _resolve_lrp_cond_idx(erps_filtered, cond_nums, use_cond_field, left_cond, "Left")
+        right_idx = _resolve_lrp_cond_idx(erps_filtered, cond_nums, use_cond_field, right_cond, "Right")
+
+        @info "  Processing pair $idx: condition $left_cond (left) vs $right_cond (right)"
+        lrp_data = lrp(erps_filtered[left_idx], erps_filtered[right_idx]; channel_selection = channel_selection)
+        lrp_data.condition = idx
+        lrp_data.condition_name = "lrp_$(left_cond)_$(right_cond)"
+        lrp_results[idx] = lrp_data
+    end
+
+    @info "LRP calculation complete for all $(length(condition_pairs)) pair(s)"
+    return lrp_results
+end
+
+function lrp(
+    file_pattern::String,
+    condition_pairs::AbstractVector{<:Tuple{Integer,Integer}};
+    input_dir::String = pwd(),
+    channel_selection = channels(),
+    participant_selection = participants(),
+    output_dir::Union{String,Nothing} = nothing,
+)
+    _with_batch_logging("LRP calculation", "lrp.log", input_dir, output_dir) do ctx
+        @log_call "lrp"
+        _validate_lrp_pairs(condition_pairs)
+        output_dir = _prepare_output_dir!(ctx, _default_lrp_output_dir(input_dir, condition_pairs))
+        process_fn = (input_path, output_path) -> _process_lrp_file(input_path, output_path, condition_pairs, channel_selection)
+        batch_process(process_fn, file_pattern, input_dir, output_dir, participant_selection, "Calculating LRP")
+    end
+end
+
+######################################
+######### Internal Functions #########
+######################################
+
 function _parse_channel_label(label::Symbol)
     s = String(label)
     digits_only = filter(isdigit, s)
@@ -124,92 +222,4 @@ function _process_lrp_file(
     lrp_results = lrp(erps_data, condition_pairs; channel_selection = channel_selection)
     jldsave(output_path; data = lrp_results, format_version = EEGFUN_FORMAT_VERSION)
     return BatchResult(true, filename, "Calculated LRP for $(length(lrp_results)) pair(s)")
-end
-
-"""
-    lrp(erp_left::ErpData, erp_right::ErpData; channel_selection = channels()) -> ErpData
-    lrp(erps::AbstractVector{<:ErpData}, condition_pairs; condition_selection = conditions(), channel_selection = channels()) -> Vector{ErpData}
-    lrp(file_pattern::String, condition_pairs; input_dir = pwd(), channel_selection = channels(), participant_selection = participants(), output_dir = nothing)
-
-Calculate the lateralized readiness potential (LRP) from ERP data using the double-subtraction formula:
-- `LRP_odd  = 0.5 * ((odd_right - even_right) + (even_left - odd_left))`
-- `LRP_even = -LRP_odd`
-
-# Arguments
-- `erp_left`, `erp_right`: Paired left- and right-response `ErpData`
-- `channel_selection`: Odd/left hemisphere channel selector; default `channels()` auto-detects all odd/even pairs (e.g., `C3`/`C4`, `CP3`/`CP4`)
-- `condition_pairs`: Vector of `(left_cond, right_cond)` integer tuples
-
-# References
-- Coles, M. G. H. (1989). Modern mind-brain reading. *Psychophysiology*, 26(3), 251-269.
-- de Jong, R. et al. (1988). Use of partial stimulus information. *JEP:HPP*, 14(4), 682-692.
-- Oostenveld, R. et al. (2003). Brain symmetry and topographic analysis. *Clin. Neurophysiology*, 114(7), 1194-1202.
-"""
-function lrp(erp_left::ErpData, erp_right::ErpData; channel_selection = channels())::ErpData
-    @info "Calculating lateralized readiness potential (LRP)"
-    _have_same_structure(erp_left, erp_right) || @minimal_error("Left and right ERPs have inconsistent structure")
-
-    pairs = _get_channel_pairs_from_selection(erp_left, erp_right, channel_selection)
-    isempty(pairs) && @minimal_error(
-        "No valid lateral channel pairs found. Check that selected channels have odd numbers and their even counterparts exist."
-    )
-
-    @info "Using $(length(pairs)) channel pair(s): $(pairs)"
-    lrp_data = _calculate_lrp(erp_left, erp_right, pairs)
-    @info "LRP calculation complete"
-    return lrp_data
-end
-
-function lrp(
-    erps::AbstractVector{<:ErpData},
-    condition_pairs::AbstractVector{<:Tuple{Integer,Integer}};
-    condition_selection = conditions(),
-    channel_selection = channels(),
-)::Vector{ErpData}
-    _validate_lrp_pairs(condition_pairs)
-
-    erps_filtered = erps[get_selected_conditions(erps, condition_selection)]
-    isempty(erps_filtered) && @minimal_error("No ERP conditions available after applying condition_selection")
-
-    part_groups = _group_by_participant_file(erps_filtered)
-    if !isnothing(part_groups)
-        return reduce(vcat, [lrp(pg, condition_pairs; channel_selection = channel_selection) for pg in part_groups])
-    end
-
-    @info "Calculating LRP for $(length(condition_pairs)) condition pair(s) from $(length(erps_filtered)) condition(s)"
-    cond_nums = Int[d.condition for d in erps_filtered]
-    use_cond_field = allunique(cond_nums) && all(>(0), cond_nums)
-    lrp_results = Vector{ErpData}(undef, length(condition_pairs))
-
-    for (idx, (left_raw, right_raw)) in enumerate(condition_pairs)
-        left_cond, right_cond = Int(left_raw), Int(right_raw)
-        left_idx = _resolve_lrp_cond_idx(erps_filtered, cond_nums, use_cond_field, left_cond, "Left")
-        right_idx = _resolve_lrp_cond_idx(erps_filtered, cond_nums, use_cond_field, right_cond, "Right")
-
-        @info "  Processing pair $idx: condition $left_cond (left) vs $right_cond (right)"
-        lrp_data = lrp(erps_filtered[left_idx], erps_filtered[right_idx]; channel_selection = channel_selection)
-        lrp_data.condition = idx
-        lrp_data.condition_name = "lrp_$(left_cond)_$(right_cond)"
-        lrp_results[idx] = lrp_data
-    end
-
-    @info "LRP calculation complete for all $(length(condition_pairs)) pair(s)"
-    return lrp_results
-end
-
-function lrp(
-    file_pattern::String,
-    condition_pairs::AbstractVector{<:Tuple{Integer,Integer}};
-    input_dir::String = pwd(),
-    channel_selection = channels(),
-    participant_selection = participants(),
-    output_dir::Union{String,Nothing} = nothing,
-)
-    _with_batch_logging("LRP calculation", "lrp.log", input_dir, output_dir) do ctx
-        @log_call "lrp"
-        _validate_lrp_pairs(condition_pairs)
-        output_dir = _prepare_output_dir!(ctx, _default_lrp_output_dir(input_dir, condition_pairs))
-        process_fn = (input_path, output_path) -> _process_lrp_file(input_path, output_path, condition_pairs, channel_selection)
-        batch_process(process_fn, file_pattern, input_dir, output_dir, participant_selection, "Calculating LRP")
-    end
 end

@@ -1,4 +1,9 @@
-# === DEFAULT KEYWORD ARGUMENTS ===
+# Visualizations for continuous artifact intervals, epoch rejections, and repairs.
+
+######################################
+######### Types & Constants ##########
+######################################
+
 const PLOT_ARTIFACT_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :display_plot => (true, "Display plot."),
     :plot_title => (nothing, "Custom plot title override."),
@@ -20,6 +25,140 @@ const PLOT_ARTIFACT_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 )
 
 const _EMPTY_CHANNEL_SET = Set{Symbol}()
+
+######################################
+########### User Functions ###########
+######################################
+
+"""
+    plot_artifact_detection(epochs::EpochData, artifacts::EpochRejectionInfo; channel_selection=channels(), kwargs...)
+    plot_artifact_detection(epochs::AbstractVector{<:EpochData}, artifacts::AbstractVector{<:EpochRejectionInfo}; kwargs...)
+
+Interactive plot of epoch artifact detection results with epoch and artifact navigation controls.
+
+$(_generate_kwargs_doc(PLOT_ARTIFACT_KWARGS))
+"""
+function plot_artifact_detection(epochs::EpochData, artifacts::EpochRejectionInfo; channel_selection = channels(), kwargs...)
+    return _run_artifact_viewer(
+        epochs,
+        artifacts,
+        channel_selection,
+        1,
+        (idx, axes, legends, sel_chs, sel_set, rej_by_ep, rej_cmap, def_col, pkw) -> begin
+            ax = axes[1]
+            _set_origin_lines!(ax; add_xy_origin = pkw[:add_xy_origin])
+            rej_set = get(rej_by_ep, idx, _EMPTY_CHANNEL_SET)
+            ax.title = !pkw[:show_title] ? "" : something(pkw[:plot_title], "Artifact Detection - Epoch $idx")
+            _plot_artifact_channels!(ax, epochs.data[idx], sel_chs, rej_set, sel_set, rej_cmap, def_col, pkw)
+            pkw[:legend] && _set_artifact_legend!(ax, length(sel_chs), legends[1])
+        end;
+        kwargs...,
+    )
+end
+
+function plot_artifact_detection(
+    epochs::AbstractVector{<:EpochData},
+    artifacts::AbstractVector{<:EpochRejectionInfo};
+    channel_selection = channels(),
+    kwargs...,
+)
+    length(epochs) == length(artifacts) ||
+        @minimal_error("epochs and artifacts must have the same length (got $(length(epochs)) and $(length(artifacts)))")
+    return [plot_artifact_detection(epochs[i], artifacts[i]; channel_selection = channel_selection, kwargs...) for i in eachindex(epochs)]
+end
+
+"""
+    plot_artifact_repair(epochs_raw::EpochData, epochs_repaired::EpochData, artifacts::EpochRejectionInfo; channel_selection=channels(), kwargs...)
+
+Interactive before/after comparison of original and repaired epochs with navigation controls.
+
+$(_generate_kwargs_doc(PLOT_ARTIFACT_KWARGS))
+"""
+function plot_artifact_repair(
+    epochs_raw::EpochData,
+    epochs_repaired::EpochData,
+    artifacts::EpochRejectionInfo;
+    channel_selection = channels(),
+    kwargs...,
+)
+    return _run_artifact_viewer(
+        epochs_raw,
+        artifacts,
+        channel_selection,
+        2,
+        (idx, axes, legends, sel_chs, sel_set, rej_by_ep, rej_cmap, def_col, pkw) -> begin
+            ax1, ax2 = axes[1], axes[2]
+            _set_origin_lines!(ax1; add_xy_origin = pkw[:add_xy_origin])
+            _set_origin_lines!(ax2; add_xy_origin = pkw[:add_xy_origin])
+            rej_set = get(rej_by_ep, idx, _EMPTY_CHANNEL_SET)
+            ax1.title = pkw[:show_title] ? "Original Data - Epoch $idx" : ""
+            ax2.title = pkw[:show_title] ? "Repaired Data - Epoch $idx" : ""
+            _plot_artifact_channels!(ax1, epochs_raw.data[idx], sel_chs, rej_set, sel_set, rej_cmap, def_col, pkw)
+            _plot_artifact_channels!(ax2, epochs_repaired.data[idx], sel_chs, rej_set, sel_set, rej_cmap, def_col, pkw; is_repaired = true)
+            if pkw[:legend]
+                _set_artifact_legend!(ax1, length(sel_chs), legends[1])
+                _set_artifact_legend!(ax2, length(sel_chs), legends[2])
+            end
+        end;
+        kwargs...,
+    )
+end
+
+"""
+    plot_artifact_rejection(epochs_raw::EpochData, epochs_rejected::EpochData, artifacts::EpochRejectionInfo; channel_selection=channels(), kwargs...)
+
+Interactive before/after comparison between original and post-rejection epochs aligned by epoch number.
+Rejected epochs display a blank lower panel with red axis spines.
+
+$(_generate_kwargs_doc(PLOT_ARTIFACT_KWARGS))
+"""
+function plot_artifact_rejection(
+    epochs_raw::EpochData,
+    epochs_rejected::EpochData,
+    artifacts::EpochRejectionInfo;
+    channel_selection = channels(),
+    kwargs...,
+)
+    epoch_number_to_idx = Dict{Int,Int}(ep_df.epoch[1] => i for (i, ep_df) in enumerate(epochs_rejected.data))
+    return _run_artifact_viewer(
+        epochs_raw,
+        artifacts,
+        channel_selection,
+        2,
+        (idx, axes, legends, sel_chs, sel_set, rej_by_ep, rej_cmap, def_col, pkw) -> begin
+            ax1, ax2 = axes[1], axes[2]
+            _set_origin_lines!(ax1; add_xy_origin = pkw[:add_xy_origin])
+            ep_orig = epochs_raw.data[idx]
+            ep_num = ep_orig.epoch[1]
+            rej_set = get(rej_by_ep, ep_num, _EMPTY_CHANNEL_SET)
+            rej_idx = get(epoch_number_to_idx, ep_num, nothing)
+
+            ax1.title = pkw[:show_title] ? "Original Data - Epoch $ep_num" : ""
+            ax2.title = pkw[:show_title] ? "Rejected Data - Epoch $ep_num" : ""
+
+            _plot_artifact_channels!(ax1, ep_orig, sel_chs, rej_set, sel_set, rej_cmap, def_col, pkw)
+            if !isnothing(rej_idx)
+                _set_axis_spine_color!(ax1, def_col)
+                _set_axis_spine_color!(ax2, def_col)
+                _set_origin_lines!(ax2; add_xy_origin = pkw[:add_xy_origin])
+                _plot_artifact_channels!(ax2, epochs_rejected.data[rej_idx], sel_chs, rej_set, sel_set, rej_cmap, def_col, pkw)
+                if pkw[:legend]
+                    _set_artifact_legend!(ax1, length(sel_chs), legends[1])
+                    _set_artifact_legend!(ax2, length(sel_chs), legends[2])
+                end
+            else
+                _set_axis_spine_color!(ax1, :red)
+                _set_axis_spine_color!(ax2, :red)
+                pkw[:legend] && _set_artifact_legend!(ax1, length(sel_chs), legends[1])
+            end
+        end;
+        kwargs...,
+    )
+end
+
+######################################
+######### Internal Functions #########
+######################################
 
 function _create_artifact_controls(layout_pos, n_epochs::Int, n_artifact_epochs::Int)
     controls_layout = GridLayout(layout_pos, tellheight = false, tellwidth = false)
@@ -196,130 +335,4 @@ function _run_artifact_viewer(
     plot_kwargs[:display_plot] && _display_figure(fig)
     _set_window_title("Makie")
     return (fig = fig, axes = axes)
-end
-
-"""
-    plot_artifact_detection(epochs::EpochData, artifacts::EpochRejectionInfo; channel_selection=channels(), kwargs...)
-    plot_artifact_detection(epochs::AbstractVector{<:EpochData}, artifacts::AbstractVector{<:EpochRejectionInfo}; kwargs...)
-
-Interactive plot of epoch artifact detection results with epoch and artifact navigation controls.
-
-$(_generate_kwargs_doc(PLOT_ARTIFACT_KWARGS))
-"""
-function plot_artifact_detection(epochs::EpochData, artifacts::EpochRejectionInfo; channel_selection = channels(), kwargs...)
-    return _run_artifact_viewer(
-        epochs,
-        artifacts,
-        channel_selection,
-        1,
-        (idx, axes, legends, sel_chs, sel_set, rej_by_ep, rej_cmap, def_col, pkw) -> begin
-            ax = axes[1]
-            _set_origin_lines!(ax; add_xy_origin = pkw[:add_xy_origin])
-            rej_set = get(rej_by_ep, idx, _EMPTY_CHANNEL_SET)
-            ax.title = !pkw[:show_title] ? "" : something(pkw[:plot_title], "Artifact Detection - Epoch $idx")
-            _plot_artifact_channels!(ax, epochs.data[idx], sel_chs, rej_set, sel_set, rej_cmap, def_col, pkw)
-            pkw[:legend] && _set_artifact_legend!(ax, length(sel_chs), legends[1])
-        end;
-        kwargs...,
-    )
-end
-
-function plot_artifact_detection(
-    epochs::AbstractVector{<:EpochData},
-    artifacts::AbstractVector{<:EpochRejectionInfo};
-    channel_selection = channels(),
-    kwargs...,
-)
-    length(epochs) == length(artifacts) ||
-        @minimal_error("epochs and artifacts must have the same length (got $(length(epochs)) and $(length(artifacts)))")
-    return [plot_artifact_detection(epochs[i], artifacts[i]; channel_selection = channel_selection, kwargs...) for i in eachindex(epochs)]
-end
-
-"""
-    plot_artifact_repair(epochs_raw::EpochData, epochs_repaired::EpochData, artifacts::EpochRejectionInfo; channel_selection=channels(), kwargs...)
-
-Interactive before/after comparison of original and repaired epochs with navigation controls.
-
-$(_generate_kwargs_doc(PLOT_ARTIFACT_KWARGS))
-"""
-function plot_artifact_repair(
-    epochs_raw::EpochData,
-    epochs_repaired::EpochData,
-    artifacts::EpochRejectionInfo;
-    channel_selection = channels(),
-    kwargs...,
-)
-    return _run_artifact_viewer(
-        epochs_raw,
-        artifacts,
-        channel_selection,
-        2,
-        (idx, axes, legends, sel_chs, sel_set, rej_by_ep, rej_cmap, def_col, pkw) -> begin
-            ax1, ax2 = axes[1], axes[2]
-            _set_origin_lines!(ax1; add_xy_origin = pkw[:add_xy_origin])
-            _set_origin_lines!(ax2; add_xy_origin = pkw[:add_xy_origin])
-            rej_set = get(rej_by_ep, idx, _EMPTY_CHANNEL_SET)
-            ax1.title = pkw[:show_title] ? "Original Data - Epoch $idx" : ""
-            ax2.title = pkw[:show_title] ? "Repaired Data - Epoch $idx" : ""
-            _plot_artifact_channels!(ax1, epochs_raw.data[idx], sel_chs, rej_set, sel_set, rej_cmap, def_col, pkw)
-            _plot_artifact_channels!(ax2, epochs_repaired.data[idx], sel_chs, rej_set, sel_set, rej_cmap, def_col, pkw; is_repaired = true)
-            if pkw[:legend]
-                _set_artifact_legend!(ax1, length(sel_chs), legends[1])
-                _set_artifact_legend!(ax2, length(sel_chs), legends[2])
-            end
-        end;
-        kwargs...,
-    )
-end
-
-"""
-    plot_artifact_rejection(epochs_raw::EpochData, epochs_rejected::EpochData, artifacts::EpochRejectionInfo; channel_selection=channels(), kwargs...)
-
-Interactive before/after comparison between original and post-rejection epochs aligned by epoch number.
-Rejected epochs display a blank lower panel with red axis spines.
-
-$(_generate_kwargs_doc(PLOT_ARTIFACT_KWARGS))
-"""
-function plot_artifact_rejection(
-    epochs_raw::EpochData,
-    epochs_rejected::EpochData,
-    artifacts::EpochRejectionInfo;
-    channel_selection = channels(),
-    kwargs...,
-)
-    epoch_number_to_idx = Dict{Int,Int}(ep_df.epoch[1] => i for (i, ep_df) in enumerate(epochs_rejected.data))
-    return _run_artifact_viewer(
-        epochs_raw,
-        artifacts,
-        channel_selection,
-        2,
-        (idx, axes, legends, sel_chs, sel_set, rej_by_ep, rej_cmap, def_col, pkw) -> begin
-            ax1, ax2 = axes[1], axes[2]
-            _set_origin_lines!(ax1; add_xy_origin = pkw[:add_xy_origin])
-            ep_orig = epochs_raw.data[idx]
-            ep_num = ep_orig.epoch[1]
-            rej_set = get(rej_by_ep, ep_num, _EMPTY_CHANNEL_SET)
-            rej_idx = get(epoch_number_to_idx, ep_num, nothing)
-
-            ax1.title = pkw[:show_title] ? "Original Data - Epoch $ep_num" : ""
-            ax2.title = pkw[:show_title] ? "Rejected Data - Epoch $ep_num" : ""
-
-            _plot_artifact_channels!(ax1, ep_orig, sel_chs, rej_set, sel_set, rej_cmap, def_col, pkw)
-            if !isnothing(rej_idx)
-                _set_axis_spine_color!(ax1, def_col)
-                _set_axis_spine_color!(ax2, def_col)
-                _set_origin_lines!(ax2; add_xy_origin = pkw[:add_xy_origin])
-                _plot_artifact_channels!(ax2, epochs_rejected.data[rej_idx], sel_chs, rej_set, sel_set, rej_cmap, def_col, pkw)
-                if pkw[:legend]
-                    _set_artifact_legend!(ax1, length(sel_chs), legends[1])
-                    _set_artifact_legend!(ax2, length(sel_chs), legends[2])
-                end
-            else
-                _set_axis_spine_color!(ax1, :red)
-                _set_axis_spine_color!(ax2, :red)
-                pkw[:legend] && _set_artifact_legend!(ax1, length(sel_chs), legends[1])
-            end
-        end;
-        kwargs...,
-    )
 end

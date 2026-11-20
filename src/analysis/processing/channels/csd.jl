@@ -1,10 +1,32 @@
+# Surface Laplacian / Current Source Density (CSD) spatial filtering.
+
+######################################
+######### Types & Constants ##########
+######################################
+
 const _CsdData = Union{ContinuousData,ErpData,EpochData}
 
+const _CSD_BLOCK_SIZE = 2048
+
+######################################
+########### User Functions ###########
+######################################
+
 """
-    compute_csd!(data; m::Int=4, lambda::Real=1e-5, n_legendre_terms::Int=50)
+    compute_csd(dat; m::Int = 4, lambda::Real = 1e-5, n_legendre_terms::Int = 50)
 
 Compute the Current Source Density (CSD / surface Laplacian) of `ContinuousData`, `EpochData`, or `ErpData`
-in-place using spherical splines (Perrin et al., 1989; 1990 Corrigenda). Sets `data.analysis_info.reference = :csd`.
+(or a `Vector` thereof) using spherical splines (Perrin et al., 1989; 1990 Corrigenda) without modifying `dat`.
+Sets `analysis_info.reference = :csd` on the returned copy.
+"""
+compute_csd(dat::_CsdData, args...; kwargs...) = compute_csd!(copy(dat), args...; kwargs...)
+
+compute_csd(dat::AbstractVector{<:_CsdData}, args...; kwargs...) = [compute_csd(d, args...; kwargs...) for d in dat]
+
+"""
+    compute_csd!(data; m::Int = 4, lambda::Real = 1e-5, n_legendre_terms::Int = 50)
+
+In-place mutating version of [`compute_csd`](@ref).
 """
 function compute_csd!(data::_CsdData; m::Int = 4, lambda::Real = 1e-5, n_legendre_terms::Int = 50)
     channels = channel_labels(data)
@@ -42,6 +64,10 @@ function compute_csd!(dat::AbstractVector{<:_CsdData}, args...; kwargs...)
     end
     return dat
 end
+
+######################################
+######### Internal Functions #########
+######################################
 
 function _spherical_coords(layout::Layout, channels::AbstractVector{Symbol} = Symbol.(layout.data.label); warn_zero::Bool = true)
     use_polar = hasproperty(layout.data, :inc) && hasproperty(layout.data, :azi)
@@ -81,8 +107,6 @@ function _spherical_coords(layout::Layout, channels::AbstractVector{Symbol} = Sy
 end
 
 _calc_h(cosang::AbstractArray, m::Int = 4, n_legendre_terms::Int = 50) = _calc_g(cosang, m - 1, n_legendre_terms)
-
-const _CSD_BLOCK_SIZE = 2048
 
 function _ensure_float64_cols(df::DataFrame, channels::AbstractVector{Symbol})
     cols = Vector{Vector{Float64}}(undef, length(channels))
@@ -145,11 +169,3 @@ function _apply_csd!(data::EpochData, filter_matrix::Matrix{Float64}, channels::
     end
     return nothing
 end
-
-"""
-    compute_csd(dat, args...; kwargs...)
-
-Non-mutating version of [`compute_csd!`](@ref).
-"""
-compute_csd(dat::_CsdData, args...; kwargs...) = compute_csd!(copy(dat), args...; kwargs...)
-compute_csd(dat::AbstractVector{<:_CsdData}, args...; kwargs...) = [compute_csd(d, args...; kwargs...) for d in dat]

@@ -1,15 +1,8 @@
-function _format_time(seconds::Real)
-    seconds < 60 && return "$(round(seconds; digits = 1))s"
-    if seconds < 3600
-        return "$(floor(Int, seconds / 60))m $(floor(Int, seconds % 60))s"
-    end
-    return "$(floor(Int, seconds / 3600))h $(floor(Int, (seconds % 3600) / 60))m"
-end
+# Automated end-to-end EEG preprocessing pipeline (`preprocess` and `batch_process`).
 
-@inline function _save_pipeline_jld2(output_directory::String, data_file::String, suffix::String, obj, msg::String)
-    @info msg
-    jldsave(_make_output_filename(output_directory, data_file, suffix); data = obj, format_version = EEGFUN_FORMAT_VERSION)
-end
+######################################
+########### User Functions ###########
+######################################
 
 """
     preprocess(config::String; base_dir = nothing, log_level = :info, skip_existing = false, dry_run = false)
@@ -107,6 +100,32 @@ function preprocess(
         close_global_logging()
         _pipeline_finalize_log(log_filename, output_directory_ref[])
     end
+end
+
+"""
+    validate_config(config::String; base_dir::Union{String,Nothing} = nothing)
+
+Validate a preprocessing pipeline configuration file (`dry_run = true`) without processing data or writing output files.
+"""
+function validate_config(config::String; base_dir::Union{String,Nothing} = nothing)
+    preprocess(config; base_dir = base_dir, log_level = :info, dry_run = true)
+end
+
+######################################
+######### Internal Functions #########
+######################################
+
+function _format_time(seconds::Real)
+    seconds < 60 && return "$(round(seconds; digits = 1))s"
+    if seconds < 3600
+        return "$(floor(Int, seconds / 60))m $(floor(Int, seconds % 60))s"
+    end
+    return "$(floor(Int, seconds / 3600))h $(floor(Int, (seconds % 3600) / 60))m"
+end
+
+@inline function _save_pipeline_jld2(output_directory::String, data_file::String, suffix::String, obj, msg::String)
+    @info msg
+    jldsave(_make_output_filename(output_directory, data_file, suffix); data = obj, format_version = EEGFUN_FORMAT_VERSION)
 end
 
 function _pipeline_setup(config::String, base_dir::String, dry_run::Bool, output_directory_ref::Ref{String})
@@ -304,7 +323,7 @@ function _pipeline_dry_run_summary(
     for (i, f) in enumerate(raw_data_files)
         status = isfile(_make_output_filename(output_directory, f, "_epochs")) ? "(already processed)" : "(pending)"
         bdf_note = ""
-        if get_file_extension(f) == ".bdf"
+        if _get_file_extension(f) == ".bdf"
             info = _bdf_file_integrity(f)
             if info.status == :truncated
                 act_mb = round(info.actual_bytes / (1024 * 1024); digits = 2)
@@ -719,13 +738,4 @@ function _pipeline_epoch_and_reject!(
         _save_pipeline_jld2(output_directory, data_file, "_erps", average_epochs(epochs), "Saving ERP data (good)")
 
     @info section("End of Processing")
-end
-
-"""
-    validate_config(config::String; base_dir::Union{String,Nothing} = nothing)
-
-Validate a preprocessing pipeline configuration file (`dry_run = true`) without processing data or writing output files.
-"""
-function validate_config(config::String; base_dir::Union{String,Nothing} = nothing)
-    preprocess(config; base_dir = base_dir, log_level = :info, dry_run = true)
 end

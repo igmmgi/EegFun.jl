@@ -1,3 +1,9 @@
+# Interactive Morlet wavelet time-frequency tradeoff teaching demo.
+
+######################################
+########### User Functions ###########
+######################################
+
 """
     signal_example_tf()
 
@@ -5,15 +11,15 @@ Interactive time-frequency analysis demo comparing Morlet wavelets, STFT (Hannin
 Multitaper (DPSS) decomposition across up to three synthetic oscillatory components, with
 live resolution, noise, frequency-scale, and baseline-correction controls.
 
+# Returns
+- `fig::Figure`: The Makie figure object
+- `axes::NamedTuple`: Named tuple with `:time` and `:tf` axes
+
 # Examples
 ```julia
 using GLMakie, EegFun
 EegFun.signal_example_tf()
 ```
-
-# Returns
-- `fig::Figure`: The Makie figure object
-- `axes::NamedTuple`: Named tuple with `:time` and `:tf` axes
 """
 function signal_example_tf()
     _check_interactive_demo_backend("Signal Time-Frequency demo") || return nothing

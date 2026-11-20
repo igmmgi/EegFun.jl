@@ -1,6 +1,8 @@
 # Time-frequency plotting functions for visualizing TimeFreqData.
 
-const _SIGNED_TF_BASELINE_METHODS = (:db, :percent, :relchange, :normchange, :zscore, :absolute)
+######################################
+######### Types & Constants ##########
+######################################
 
 const PLOT_TF_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Display
@@ -59,44 +61,6 @@ const PLOT_TF_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     ),
 )
 
-# === SHARED TF EXTRACTION & RANGE HELPERS ===
-
-function _sorted_unique_f64(col::AbstractVector)::Vector{Float64}
-    n = length(col)
-    n == 0 && return Float64[]
-    if issorted(col)
-        cnt = 1
-        prev = Float64(col[1])
-        @inbounds for i = 2:n
-            v = Float64(col[i])
-            if v != prev
-                cnt += 1
-                prev = v
-            end
-        end
-        out = Vector{Float64}(undef, cnt)
-        prev = Float64(col[1])
-        out[1] = prev
-        k = 1
-        @inbounds for i = 2:n
-            v = Float64(col[i])
-            if v != prev
-                k += 1
-                out[k] = v
-                prev = v
-            end
-        end
-        return out
-    end
-    u = unique(col)
-    out = Vector{Float64}(undef, length(u))
-    @inbounds for i in eachindex(u)
-        out[i] = Float64(u[i])
-    end
-    sort!(out)
-    return out
-end
-
 struct _TFFastExtractor
     df::DataFrame
     freqs::Vector{Float64}
@@ -107,118 +71,39 @@ struct _TFFastExtractor
     rounded_times::Vector{Float64}
 end
 
-function _is_canonical_tf_grid(freq_col::AbstractVector, time_col::AbstractVector, freqs::Vector{Float64}, times::Vector{Float64})::Bool
-    nf = length(freqs)
-    nt = length(times)
-    (length(freq_col) == nf * nt && length(time_col) == nf * nt) || return false
-    idx = 0
-    @inbounds for ti = 1:nt
-        t = times[ti]
-        for fi = 1:nf
-            idx += 1
-            (abs(Float64(freq_col[idx]) - freqs[fi]) <= 1e-6 && abs(Float64(time_col[idx]) - t) <= 1e-6) || return false
-        end
-    end
-    return true
+mutable struct TFSelectionState
+    active::Observable{Bool}
+    visible::Observable{Bool}
+    bounds::Observable{NTuple{4,Float64}}
+    rectangles::Vector{Makie.Poly}
+    active_axis::Union{Nothing,Axis}
 end
 
-function _tf_make_extractor(df::DataFrame, freqs::Vector{Float64}, times::Vector{Float64})::_TFFastExtractor
-    if _is_canonical_tf_grid(df[!, :freq], df[!, :time], freqs, times)
-        return _TFFastExtractor(df, freqs, times, true, nothing, Float64[], Float64[])
-    end
-    return _TFFastExtractor(df, freqs, times, false, _tf_build_row_index(df), round.(freqs, digits = 6), round.(times, digits = 6))
-end
-
-function _tf_extract_matrix(ext::_TFFastExtractor, channel::Symbol)::Matrix{Float64}
-    nf = length(ext.freqs)
-    nt = length(ext.times)
-    if ext.canonical
-        col = ext.df[!, channel]
-        mat = Matrix{Float64}(undef, nf, nt)
-        if col isa Vector{Float64}
-            copyto!(mat, col)
-        else
-            @inbounds for i in eachindex(mat, col)
-                mat[i] = Float64(col[i])
-            end
-        end
-        return mat
-    end
-    return _tf_df_to_matrix(
-        ext.df,
-        channel,
-        ext.freqs,
-        ext.times,
-        ext.row_index::Dict{Tuple{Float64,Float64},Int};
-        rounded_freqs = ext.rounded_freqs,
-        rounded_times = ext.rounded_times,
-    )
-end
-
-function _select_tf_channels(all_channels::Vector{Symbol}, channel_selection, channel_plot_order = nothing)
-    chan_func = _to_channel_func(channel_selection)
-    selected_channels = all_channels[chan_func(all_channels)]
-    isempty(selected_channels) && @minimal_error("No channels matched. Available: $(all_channels)")
-    if !isnothing(channel_plot_order)
-        ordered = Symbol[Symbol(ch) for ch in channel_plot_order if Symbol(ch) in selected_channels]
-        !isempty(ordered) && (selected_channels = ordered)
-    end
-    return selected_channels
-end
-
-function _tf_finite_extrema(mats)
-    gmin = Inf
-    gmax = -Inf
-    for mat in mats
-        @inbounds for v in mat
-            if isfinite(v)
-                gmin = min(gmin, v)
-                gmax = max(gmax, v)
-            end
-        end
-    end
-    return gmin, gmax
-end
-
-function _tf_auto_colorrange(gmin::Float64, gmax::Float64, colormap; force_symmetric::Bool = false, has_signed_baseline::Bool = false)
-    isinf(gmin) && return (-1.0, 1.0)
-    if force_symmetric || (_is_diverging_colormap(colormap) && (gmin < 0 || has_signed_baseline))
-        return _symmetric_colorrange(gmin, gmax)
-    elseif gmin ≈ gmax
-        return (gmin - 1.0, gmax + 1.0)
-    else
-        return (gmin, gmax)
-    end
-end
+######################################
+########### User Functions ###########
+######################################
 
 """
+    plot_tf(tf_data::AbstractVector{<:TimeFreqData}; channel_selection = channels(), baseline_interval = nothing, kwargs...)
+    plot_tf(tf::TimeFreqData; channel_selection = channels(), baseline_interval = nothing, kwargs...)
     plot_tf(filepath::String; kwargs...)
-    plot_tf(tf::TimeFreqData; channel_selection, baseline_interval, kwargs...)
-    plot_tf(tfs::Vector{TimeFreqData}; channel_selection, baseline_interval, kwargs...)
 
-Plot time-frequency data as a heatmap (time × frequency). Supports single condition,
-multi-condition grid, and topographic layouts.
+Plot time-frequency data as a heatmap (time × frequency). Supports single-condition,
+multi-condition `:grid`, and `:topo` layouts.
 
 # Arguments
-- `filepath::String`: Path to a `.jld2` file, or a `TimeFreqData` / `Vector{TimeFreqData}` object
-- `channel_selection::Function`: Channel filter (default: all channels)
-- `baseline_interval`: Baseline window as `(start, stop)` in seconds (default: `nothing`)
+- `tf` / `tf_data` / `filepath`: `TimeFreqData`, `Vector{TimeFreqData}`, or `.jld2` file path.
+- `channel_selection`: Channel filter (default: `channels()`).
+- `baseline_interval`: Baseline window as `(start, stop)` in seconds (default: `nothing`).
 
 $(_generate_kwargs_doc(PLOT_TF_KWARGS))
 
 # Examples
 ```julia
-plot_tf("tf_morlet_result.jld2")
-plot_tf("tf_morlet_result.jld2"; layout=:grid, channel_selection=channels([:Cz, :Pz]))
-plot_tf(tf; colormap=:RdBu, yscale=:log10, baseline_interval=(-0.3, 0.0))
+plot_tf(tf; colormap = :RdBu, yscale = :log10, baseline_interval = (-0.3, 0.0))
+plot_tf("tf_morlet_result.jld2"; layout = :grid, channel_selection = channels([:Cz, :Pz]))
 ```
 """
-function plot_tf(filepath::String; kwargs...)
-    data = read_data(filepath)
-    isnothing(data) && @minimal_error "No data found in file: $filepath"
-    return plot_tf(data; kwargs...)
-end
-
 function plot_tf(tf_data::AbstractVector{<:TimeFreqData}; channel_selection = channels(), baseline_interval::Interval = nothing, kwargs...)
     isempty(tf_data) && @minimal_error("Empty TimeFreqData vector")
 
@@ -519,14 +404,134 @@ function plot_tf(
     return (fig = fig, axes = axes)
 end
 
-# === INTERNAL HELPERS ===
+function plot_tf(filepath::String; kwargs...)
+    data = read_data(filepath)
+    isnothing(data) && @minimal_error "No data found in file: $filepath"
+    return plot_tf(data; kwargs...)
+end
 
-mutable struct TFSelectionState
-    active::Observable{Bool}
-    visible::Observable{Bool}
-    bounds::Observable{NTuple{4,Float64}}
-    rectangles::Vector{Makie.Poly}
-    active_axis::Union{Nothing,Axis}
+######################################
+######### Internal Functions #########
+######################################
+
+function _sorted_unique_f64(col::AbstractVector)::Vector{Float64}
+    n = length(col)
+    n == 0 && return Float64[]
+    if issorted(col)
+        cnt = 1
+        prev = Float64(col[1])
+        @inbounds for i = 2:n
+            v = Float64(col[i])
+            if v != prev
+                cnt += 1
+                prev = v
+            end
+        end
+        out = Vector{Float64}(undef, cnt)
+        prev = Float64(col[1])
+        out[1] = prev
+        k = 1
+        @inbounds for i = 2:n
+            v = Float64(col[i])
+            if v != prev
+                k += 1
+                out[k] = v
+                prev = v
+            end
+        end
+        return out
+    end
+    u = unique(col)
+    out = Vector{Float64}(undef, length(u))
+    @inbounds for i in eachindex(u)
+        out[i] = Float64(u[i])
+    end
+    sort!(out)
+    return out
+end
+
+function _is_canonical_tf_grid(freq_col::AbstractVector, time_col::AbstractVector, freqs::Vector{Float64}, times::Vector{Float64})::Bool
+    nf = length(freqs)
+    nt = length(times)
+    (length(freq_col) == nf * nt && length(time_col) == nf * nt) || return false
+    idx = 0
+    @inbounds for ti = 1:nt
+        t = times[ti]
+        for fi = 1:nf
+            idx += 1
+            (abs(Float64(freq_col[idx]) - freqs[fi]) <= 1e-6 && abs(Float64(time_col[idx]) - t) <= 1e-6) || return false
+        end
+    end
+    return true
+end
+
+function _tf_make_extractor(df::DataFrame, freqs::Vector{Float64}, times::Vector{Float64})::_TFFastExtractor
+    if _is_canonical_tf_grid(df[!, :freq], df[!, :time], freqs, times)
+        return _TFFastExtractor(df, freqs, times, true, nothing, Float64[], Float64[])
+    end
+    return _TFFastExtractor(df, freqs, times, false, _tf_build_row_index(df), round.(freqs, digits = 6), round.(times, digits = 6))
+end
+
+function _tf_extract_matrix(ext::_TFFastExtractor, channel::Symbol)::Matrix{Float64}
+    nf = length(ext.freqs)
+    nt = length(ext.times)
+    if ext.canonical
+        col = ext.df[!, channel]
+        mat = Matrix{Float64}(undef, nf, nt)
+        if col isa Vector{Float64}
+            copyto!(mat, col)
+        else
+            @inbounds for i in eachindex(mat, col)
+                mat[i] = Float64(col[i])
+            end
+        end
+        return mat
+    end
+    return _tf_df_to_matrix(
+        ext.df,
+        channel,
+        ext.freqs,
+        ext.times,
+        ext.row_index::Dict{Tuple{Float64,Float64},Int};
+        rounded_freqs = ext.rounded_freqs,
+        rounded_times = ext.rounded_times,
+    )
+end
+
+function _select_tf_channels(all_channels::Vector{Symbol}, channel_selection, channel_plot_order = nothing)
+    chan_func = _to_channel_func(channel_selection)
+    selected_channels = all_channels[chan_func(all_channels)]
+    isempty(selected_channels) && @minimal_error("No channels matched. Available: $(all_channels)")
+    if !isnothing(channel_plot_order)
+        ordered = Symbol[Symbol(ch) for ch in channel_plot_order if Symbol(ch) in selected_channels]
+        !isempty(ordered) && (selected_channels = ordered)
+    end
+    return selected_channels
+end
+
+function _tf_finite_extrema(mats)
+    gmin = Inf
+    gmax = -Inf
+    for mat in mats
+        @inbounds for v in mat
+            if isfinite(v)
+                gmin = min(gmin, v)
+                gmax = max(gmax, v)
+            end
+        end
+    end
+    return gmin, gmax
+end
+
+function _tf_auto_colorrange(gmin::Float64, gmax::Float64, colormap; force_symmetric::Bool = false, has_signed_baseline::Bool = false)
+    isinf(gmin) && return (-1.0, 1.0)
+    if force_symmetric || (_is_diverging_colormap(colormap) && (gmin < 0 || has_signed_baseline))
+        return _symmetric_colorrange(gmin, gmax)
+    elseif gmin ≈ gmax
+        return (gmin - 1.0, gmax + 1.0)
+    else
+        return (gmin, gmax)
+    end
 end
 
 function _snap_tf_interval(lo::Float64, hi::Float64, grid::Vector{Float64})::Tuple{Float64,Float64}

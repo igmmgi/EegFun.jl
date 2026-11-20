@@ -1,5 +1,9 @@
 # Cluster-level p-value inference and multiple-comparison significance masks.
 
+######################################
+######### Internal Functions #########
+######################################
+
 @inline function _cluster_pval_and_sig(
     polarity::Symbol,
     cluster_stat::Float64,

@@ -1,0 +1,499 @@
+# Tests for polyphase anti-aliased resampling of EEG data and trigger alignment.
+
+using Test
+using DataFrames
+using JLD2
+using Statistics
+using EegFun
+
+function _make_test_layout(df::DataFrame)
+    cols = String.(setdiff(propertynames(df), [:time, :trigger, :trial, :condition, :rt, :sample]))
+    return EegFun.Layout(DataFrame(label = cols), nothing, nothing, nothing)
+end
+
+@testset "Resample tests" begin
+
+    @testset "Continuous data resampling" begin
+
+        @testset "Basic downsampling by factor 2" begin
+            # Create continuous data at 512 Hz
+            n_samples = 1000
+            sample_rate = 512
+            time = collect(0:(n_samples-1)) ./ sample_rate
+
+            data = DataFrame(
+                time = time,
+                C3 = sin.(2π .* 10 .* time),  # 10 Hz signal
+                C4 = cos.(2π .* 10 .* time),
+                trigger = zeros(Int, n_samples),
+            )
+            data.trigger[100] = 1  # Add a trigger
+            data.trigger[500] = 2
+
+            continuous = EegFun.ContinuousData("test_data", data, _make_test_layout(data), sample_rate, EegFun.AnalysisInfo())
+
+            # Resample by factor of 2
+            resampled = EegFun.resample(continuous, 256)
+
+            # Check sample rate
+            @test resampled.sample_rate == 256
+            @test continuous.sample_rate == 512  # Original unchanged
+
+            # Check number of samples (exactly 500 from regular downsampling)
+            @test nrow(resampled.data) == 500
+
+            # Check that we kept the right samples (every 2nd)
+            @test resampled.data.time[1] ≈ continuous.data.time[1]
+            @test resampled.data.time[2] ≈ continuous.data.time[3]
+            @test resampled.data.time[end] ≈ continuous.data.time[end-1]
+
+            # Check that triggers are preserved
+            @test sum(resampled.data.trigger .== 1) >= 1
+            @test sum(resampled.data.trigger .== 2) >= 1
+
+            # Check columns are preserved
+            @test names(resampled.data) == names(continuous.data)
+        end
+
+        @testset "Mutating version" begin
+            # Create continuous data
+            n_samples = 1000
+            sample_rate = 512
+            time = collect(0:(n_samples-1)) ./ sample_rate
+
+            data = DataFrame(time = time, C3 = randn(n_samples), C4 = randn(n_samples))
+
+            continuous = EegFun.ContinuousData("test_data", data, _make_test_layout(data), sample_rate, EegFun.AnalysisInfo())
+
+            original_nrow = nrow(continuous.data)
+
+            # Resample in-place
+            EegFun.resample!(continuous, 256)
+
+            # Check modifications
+            @test continuous.sample_rate == 256
+            @test nrow(continuous.data) == original_nrow ÷ 2
+        end
+
+        @testset "Factor of 4 downsampling" begin
+            # Create data at 1024 Hz
+            n_samples = 1024
+            sample_rate = 1024
+            time = collect(0:(n_samples-1)) ./ sample_rate
+
+            data = DataFrame(time = time, C3 = randn(n_samples))
+
+            continuous = EegFun.ContinuousData("test_data", data, _make_test_layout(data), sample_rate, EegFun.AnalysisInfo())
+
+            # Downsample by 4
+            resampled = EegFun.resample(continuous, 256)
+
+            @test resampled.sample_rate == 256
+            @test nrow(resampled.data) == 256
+            @test resampled.data.time[1] ≈ 0.0
+            @test resampled.data.time[2] ≈ 4 / 1024
+        end
+
+        @testset "Factor of 1 (no change)" begin
+            data = DataFrame(time = [0.0, 0.001], C3 = [1.0, 2.0])
+            continuous = EegFun.ContinuousData("test_data", data, _make_test_layout(data), 1000, EegFun.AnalysisInfo())
+
+            original_nrow = nrow(continuous.data)
+            EegFun.resample!(continuous, 1000)
+
+            @test continuous.sample_rate == 1000
+            @test nrow(continuous.data) == original_nrow
+        end
+
+        @testset "Metadata preservation" begin
+            # Create data with multiple metadata columns
+            n_samples = 500
+            data = DataFrame(
+                time = collect(0:(n_samples-1)) ./ 500,
+                C3 = randn(n_samples),
+                C4 = randn(n_samples),
+                trigger = zeros(Int, n_samples),
+                trial = ones(Int, n_samples),
+                condition = fill("A", n_samples),
+                rt = fill(0.5, n_samples),
+            )
+            data.trigger[100] = 1
+
+            continuous = EegFun.ContinuousData("test_data", data, _make_test_layout(data), 500, EegFun.AnalysisInfo())
+
+            resampled = EegFun.resample(continuous, 100)
+
+            # All columns should be present
+            @test names(resampled.data) == names(continuous.data)
+
+            # Metadata values should be preserved (for kept samples)
+            @test all(resampled.data.trial .== 1)
+            @test all(resampled.data.condition .== "A")
+            @test all(resampled.data.rt .== 0.5)
+
+            # Triggers should be preserved
+            @test sum(resampled.data.trigger .== 1) >= 1
+        end
+    end
+
+    @testset "Epoched data resampling" begin
+
+        @testset "Basic epoch downsampling" begin
+            # Create 3 epochs at 512 Hz
+            n_samples = 256
+            n_epochs = 3
+            sample_rate = 512
+
+            epochs = []
+            for i = 1:n_epochs
+                time = collect(-0.2:(1/sample_rate):0.3)[1:n_samples]
+                epoch = DataFrame(
+                    time = time,
+                    C3 = randn(n_samples),
+                    C4 = randn(n_samples),
+                    trial = fill(i, n_samples),
+                    rt = fill(0.5 + 0.1 * i, n_samples),
+                )
+                push!(epochs, epoch)
+            end
+
+            epoch_data =
+                EegFun.EpochData("test_data", 1, "condition_1", epochs, _make_test_layout(epochs[1]), sample_rate, EegFun.AnalysisInfo())
+
+            # Resample by factor of 2
+            resampled = EegFun.resample(epoch_data, 256)
+
+            # Check sample rate
+            @test resampled.sample_rate == 256
+            @test epoch_data.sample_rate == 512  # Original unchanged
+
+            # Check number of epochs
+            @test length(resampled.data) == 3
+
+            # Check samples per epoch
+            @test nrow(resampled.data[1]) == 128
+            @test nrow(resampled.data[2]) == 128
+            @test nrow(resampled.data[3]) == 128
+
+            # Check metadata preservation
+            @test resampled.data[1].trial[1] == 1
+            @test resampled.data[2].trial[1] == 2
+            @test resampled.data[3].trial[1] == 3
+
+            @test all(resampled.data[1].rt .≈ 0.6)
+            @test all(resampled.data[2].rt .≈ 0.7)
+            @test all(resampled.data[3].rt .≈ 0.8)
+        end
+
+        @testset "Mutating epoch resampling" begin
+            # Create epochs
+            epochs = []
+            for i = 1:2
+                epoch = DataFrame(time = collect(0:511) ./ 512, C3 = randn(512))
+                push!(epochs, epoch)
+            end
+
+            epoch_data = EegFun.EpochData("test_data", 1, "condition_1", epochs, _make_test_layout(epochs[1]), 512, EegFun.AnalysisInfo())
+
+            original_n_samples = nrow(epoch_data.data[1])
+
+            # Resample in-place
+            EegFun.resample!(epoch_data, 128)
+
+            @test epoch_data.sample_rate == 128
+            @test nrow(epoch_data.data[1]) == original_n_samples ÷ 4
+            @test nrow(epoch_data.data[2]) == original_n_samples ÷ 4
+        end
+
+        @testset "Epoch column preservation" begin
+            # Create epochs with triggers
+            epochs = []
+            for i = 1:2
+                epoch = DataFrame(time = collect(0:255) ./ 256, C3 = randn(256), trigger = zeros(Int, 256), condition = fill("A", 256))
+                epoch.trigger[50] = i
+                push!(epochs, epoch)
+            end
+
+            epoch_data = EegFun.EpochData("test_data", 1, "condition_1", epochs, _make_test_layout(epochs[1]), 256, EegFun.AnalysisInfo())
+
+            resampled = EegFun.resample(epoch_data, 128)
+
+            # Check columns preserved
+            @test names(resampled.data[1]) == names(epoch_data.data[1])
+
+            # Check trigger preserved (may not be at exact same index)
+            @test sum(resampled.data[1].trigger .== 1) >= 1
+            @test sum(resampled.data[2].trigger .== 2) >= 1
+        end
+    end
+
+    @testset "ERP data resampling" begin
+
+        @testset "Basic ERP downsampling" begin
+            # Create ERP at 512 Hz
+            n_samples = 512
+            sample_rate = 512
+            time = collect(-0.2:(1/sample_rate):0.8)[1:n_samples]
+
+            data = DataFrame(time = time, C3 = sin.(2π .* 10 .* time), C4 = cos.(2π .* 10 .* time))
+
+            erp = EegFun.ErpData(
+                "test_data",
+                1,
+                "condition_1",
+                data,
+                _make_test_layout(data),
+                sample_rate,
+                EegFun.AnalysisInfo(),
+                50,  # 50 epochs averaged
+            )
+
+            # Resample by factor of 2
+            resampled = EegFun.resample(erp, 256)
+
+            # Check sample rate
+            @test resampled.sample_rate == 256
+            @test erp.sample_rate == 512  # Original unchanged
+
+            # Check number of samples
+            @test nrow(resampled.data) == 256
+
+            # Check n_epochs preserved
+            @test resampled.n_epochs == 50
+            @test erp.n_epochs == 50
+
+            # Check time vector
+            @test resampled.data.time[1] ≈ erp.data.time[1]
+            @test resampled.data.time[2] ≈ erp.data.time[3]
+        end
+
+        @testset "ERP with metadata columns" begin
+            # Create ERP with condition info
+            data = DataFrame(time = collect(0:511) ./ 512, C3 = randn(512))
+
+            erp = EegFun.ErpData("test_data", 1, "Target", data, _make_test_layout(data), 512, EegFun.AnalysisInfo(), 30)
+
+            resampled = EegFun.resample(erp, 128)
+
+            @test resampled.sample_rate == 128
+            @test nrow(resampled.data) == 128
+            @test resampled.condition_name == "Target"  # condition_name is in struct, not DataFrame
+        end
+    end
+
+    @testset "Error handling" begin
+
+        @testset "Invalid target rates" begin
+            data = DataFrame(time = [0.0, 0.001], C3 = [1.0, 2.0])
+            continuous = EegFun.ContinuousData("test_data", data, _make_test_layout(data), 1000, EegFun.AnalysisInfo())
+
+            # Zero target rate
+            @test_throws Exception EegFun.resample(continuous, 0)
+
+            # Negative target rate
+            @test_throws Exception EegFun.resample(continuous, -1.0)
+        end
+
+
+    end
+
+    @testset "Batch processing" begin
+
+        @testset "Batch resample continuous data" begin
+            mktempdir() do tmpdir
+                # Create test files
+                for i = 1:3
+                    data = DataFrame(time = collect(0:511) ./ 512, C3 = randn(512), C4 = randn(512))
+
+                    continuous = EegFun.ContinuousData("test_data", data, _make_test_layout(data), 512, EegFun.AnalysisInfo())
+
+                    jldsave(joinpath(tmpdir, "$(i)_continuous.jld2"); data = continuous)
+                end
+
+                # Create output directory
+                output_dir = joinpath(tmpdir, "resampled")
+
+                # Batch resample
+                EegFun.resample("continuous", 256, input_dir = tmpdir, output_dir = output_dir)
+
+                # Check output files exist
+                @test isfile(joinpath(output_dir, "1_continuous.jld2"))
+                @test isfile(joinpath(output_dir, "2_continuous.jld2"))
+                @test isfile(joinpath(output_dir, "3_continuous.jld2"))
+
+                # Load and check one file
+                resampled = load(joinpath(output_dir, "1_continuous.jld2"), "data")
+                @test resampled isa EegFun.ContinuousData
+                @test resampled.sample_rate == 256
+                @test nrow(resampled.data) == 256
+            end
+        end
+
+        @testset "Batch resample epochs" begin
+            mktempdir() do tmpdir
+                # Create test files
+                for i = 1:2
+                    epochs = []
+                    for j = 1:3
+                        epoch = DataFrame(time = collect(0:255) ./ 256, C3 = randn(256))
+                        push!(epochs, epoch)
+                    end
+
+                    epoch_data =
+                        EegFun.EpochData("test_data", 1, "condition_1", epochs, _make_test_layout(epochs[1]), 256, EegFun.AnalysisInfo())
+
+                    jldsave(joinpath(tmpdir, "$(i)_epochs.jld2"); data = epoch_data)
+                end
+
+                output_dir = joinpath(tmpdir, "resampled")
+
+                # Batch resample
+                EegFun.resample("epochs", 128, input_dir = tmpdir, output_dir = output_dir)
+
+                # Check output
+                @test isfile(joinpath(output_dir, "1_epochs.jld2"))
+
+                # Load and verify
+                resampled = load(joinpath(output_dir, "1_epochs.jld2"), "data")
+                @test resampled isa EegFun.EpochData
+                @test resampled.sample_rate == 128
+                @test nrow(resampled.data[1]) == 128
+            end
+        end
+
+        @testset "Participant filtering" begin
+            mktempdir() do tmpdir
+                # Create files for participants 1-5
+                for i = 1:5
+                    data = DataFrame(time = collect(0:255) ./ 256, C3 = randn(256))
+                    continuous = EegFun.ContinuousData("test_data", data, _make_test_layout(data), 256, EegFun.AnalysisInfo())
+                    jldsave(joinpath(tmpdir, "$(i)_continuous.jld2"); data = continuous)
+                end
+
+                output_dir = joinpath(tmpdir, "resampled")
+
+                # Process only participants 2 and 4
+                EegFun.resample(
+                    "continuous",
+                    128,
+                    input_dir = tmpdir,
+                    participant_selection = EegFun.participants([2, 4]),
+                    output_dir = output_dir,
+                )
+                println("input_dir: $tmpdir")
+                println("output_dir: $output_dir")
+
+                # Check only selected participants were processed
+                @test !isfile(joinpath(output_dir, "1_continuous.jld2"))
+                @test isfile(joinpath(output_dir, "2_continuous.jld2"))
+                @test !isfile(joinpath(output_dir, "3_continuous.jld2"))
+                @test isfile(joinpath(output_dir, "4_continuous.jld2"))
+                @test !isfile(joinpath(output_dir, "5_continuous.jld2"))
+            end
+        end
+    end
+
+    @testset "Analysis info preservation" begin
+
+        @testset "Continuous data analysis info" begin
+            data = DataFrame(time = collect(0:511) ./ 512, C3 = randn(512))
+
+            analysis_info = EegFun.AnalysisInfo(reference = :avg, hp_filter = 0.1, lp_filter = 40.0)
+
+            continuous = EegFun.ContinuousData("test_data", data, _make_test_layout(data), 512, analysis_info)
+
+            resampled = EegFun.resample(continuous, 256)
+
+            # Analysis info should be preserved
+            @test resampled.analysis_info.reference == :avg
+            @test resampled.analysis_info.hp_filter == 0.1
+            @test resampled.analysis_info.lp_filter == 40.0
+        end
+    end
+
+    @testset "1-based trigger mapping, pad alignment, extra/Bool columns, and Vector batch" begin
+        # 1. Exact 1-based trigger & metadata index mapping + non-integer ratio (500 -> 200 Hz, rate = 2//5)
+        fs_orig = 500
+        n_orig = 1000
+        t_orig = collect(0:(n_orig-1)) ./ fs_orig
+        trig_orig = zeros(Int, n_orig)
+        trig_orig[1] = 11     # 1-based index 1 -> must map to index 1
+        trig_orig[251] = 22   # t = 0.5s (orig idx 251) -> (251-1)*0.4 + 1 = 101 (t = 0.5s at 200 Hz!)
+        flag_col = falses(n_orig)
+        flag_col[252] = true  # off-grid Bool flag inside bin around 101 -> OR-reduced so true is preserved!
+        extra_float = sin.(2π .* 5.0 .* t_orig) .+ 0.5 .* sin.(2π .* 150.0 .* t_orig) # 150 Hz above new Nyquist (100 Hz)
+        const_meta = fill(42.0, n_orig)
+
+        df = DataFrame(
+            time = t_orig,
+            sample = 1:n_orig,
+            trigger = trig_orig,
+            C3 = cos.(2π .* 10.0 .* t_orig),
+            vEOG = extra_float,
+            const_val = const_meta,
+            artifact_flag = Vector{Bool}(flag_col),
+        )
+        lay = EegFun.Layout(DataFrame(label = [:C3], inc = [0.0], azi = [0.0]), nothing, nothing, nothing)
+        cont = EegFun.ContinuousData("resamp_reg", df, lay, fs_orig, EegFun.AnalysisInfo())
+
+        res = EegFun.resample(cont, 200)
+        @test res.sample_rate == 200
+        @test nrow(res.data) == 400
+        @test res.data.trigger[1] == 11
+        @test res.data.trigger[101] == 22
+        @test any(res.data.artifact_flag)
+        @test res.data.artifact_flag[101] == true
+        # Constant float extra column stays exact without ringing
+        @test all(res.data.const_val .== 42.0)
+        # Continuous float extra channel (:vEOG) was anti-aliased (150 Hz attenuated, only 5 Hz remains -> amplitude ~1)
+        t_new = res.data.time
+        @test cor(res.data.vEOG[20:380], sin.(2π .* 5.0 .* t_new[20:380])) > 0.98
+
+        # Fractional target_rate throws EegFunError cleanly (no InexactError)
+        @test_throws EegFun.EegFunError EegFun.resample(cont, 125.5)
+
+        # :trigger_info annotations at off-grid samples and sequential :sample indices are preserved
+        cont_ti = copy(cont)
+        cont_ti.data.sample = collect(1:nrow(cont_ti.data))
+        cont_ti.data.trigger .= 0
+        cont_ti.data.trigger_info = fill("", nrow(cont_ti.data))
+        cont_ti.data.trigger[3] = 101
+        cont_ti.data.trigger_info[3] = "StimulusA"
+        cont_ti.data.trigger[203] = 202
+        cont_ti.data.trigger_info[203] = "ResponseB"
+        res_ti = EegFun.resample(cont_ti, 200)
+        idx_101 = findfirst(==(101), res_ti.data.trigger)
+        idx_202 = findfirst(==(202), res_ti.data.trigger)
+        @test !isnothing(idx_101) && res_ti.data.trigger_info[idx_101] == "StimulusA"
+        @test !isnothing(idx_202) && res_ti.data.trigger_info[idx_202] == "ResponseB"
+        @test res_ti.data.sample == collect(1:nrow(res_ti.data))
+
+        # SingleDataFrameEeg restriction: unsupported SingleDataFrameEeg subtype cannot hit Continuous/Erp method
+        tf_dat = EegFun.create_test_tf_data()
+        @test_throws MethodError EegFun.resample!(tf_dat, 100)
+
+        # Batch resample on Vector{EpochData} and Vector{ErpData} saved in JLD2
+        mktempdir() do tmpdir
+            ep_vec = EegFun.create_test_epoch_data_vector(conditions = 1:2, n_epochs = 2, fs = 256, n = 256)
+            jldsave(joinpath(tmpdir, "1_epochs_vec.jld2"); data = ep_vec)
+            erp_vec = EegFun.create_test_batch_erp_data(n_conditions = 2, fs = 256)
+            jldsave(joinpath(tmpdir, "1_erps_vec.jld2"); data = erp_vec)
+
+            out_ep = joinpath(tmpdir, "out_ep")
+            out_erp = joinpath(tmpdir, "out_erp")
+            r1 = EegFun.resample("epochs_vec", 128; input_dir = tmpdir, output_dir = out_ep)
+            r2 = EegFun.resample("erps_vec", 128; input_dir = tmpdir, output_dir = out_erp)
+            @test r1.success == 1 && r1.errors == 0
+            @test r2.success == 1 && r2.errors == 0
+
+            loaded_ep = load(joinpath(out_ep, "1_epochs_vec.jld2"), "data")
+            @test loaded_ep isa Vector{EegFun.EpochData}
+            @test all(ep.sample_rate == 128 for ep in loaded_ep)
+
+            loaded_erp = load(joinpath(out_erp, "1_erps_vec.jld2"), "data")
+            @test loaded_erp isa Vector{EegFun.ErpData}
+            @test all(e.sample_rate == 128 for e in loaded_erp)
+        end
+    end
+
+end

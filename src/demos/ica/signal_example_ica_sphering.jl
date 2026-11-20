@@ -1,17 +1,23 @@
+# Interactive centering and PCA whitening (sphering) ICA teaching demo.
+
+######################################
+########### User Functions ###########
+######################################
+
 """
     signal_example_ica_sphering()
 
 Interactive ICA preprocessing demo showing how centering, PCA rotation, and variance scaling
 (whitening/sphering) transform a correlated mixture into a rotationally symmetric search space.
 
-## See Also
-- [`signal_example_ica_geometry`](@ref), [`signal_example_ica_optimization`](@ref)
-
 # Examples
 ```julia
 using GLMakie, EegFun
 EegFun.signal_example_ica_sphering()
 ```
+
+# See Also
+- [`signal_example_ica_geometry`](@ref), [`signal_example_ica_optimization`](@ref)
 """
 function signal_example_ica_sphering()
     _check_interactive_demo_backend("ICA Sphering demo") || return nothing

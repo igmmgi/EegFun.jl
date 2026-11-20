@@ -1,5 +1,9 @@
 # Cross-validated unbiased RDM computation for RSA (Walther et al., 2016).
 
+######################################
+######### Types & Constants ##########
+######################################
+
 struct _CrossFoldWorkspace
     meansA::Vector{Matrix{Float64}}
     meansB::Vector{Matrix{Float64}}
@@ -13,6 +17,88 @@ struct _CrossFoldWorkspace
     varA::Vector{Bool}
     varB::Vector{Bool}
 end
+
+######################################
+########### User Functions ###########
+######################################
+
+"""
+    rsa_crossvalidated(
+        epochs::AbstractVector{<:EpochData};
+        channel_selection = channels(),
+        sample_selection = samples(),
+        interval_selection::Interval = times(),
+        dissimilarity_measure::Symbol = :correlation,
+        cv_method::Symbol = :splithalf,
+        n_folds::Int = 5,
+        n_iterations::Int = 100,
+        normalize_method::Symbol = :none,
+        rng::AbstractRNG = Random.default_rng(),
+    ) -> RsaData
+
+Compute unbiased cross-validated RDMs across disjoint trial splits (Walther et al., 2016),
+supporting `:splithalf`, `:leaveoneout`, and `:kfold` cross-validation and `:correlation`
+(`:pearson`), `:spearman`, `:euclidean`, and `:mahalanobis` (`:crossnobis`) measures.
+"""
+function rsa_crossvalidated(
+    epochs::AbstractVector{<:EpochData};
+    channel_selection = channels(),
+    sample_selection = samples(),
+    interval_selection::Interval = times(),
+    dissimilarity_measure::Symbol = :correlation,
+    cv_method::Symbol = :splithalf,
+    n_folds::Int = 5,
+    n_iterations::Int = 100,
+    normalize_method::Symbol = :none,
+    rng::AbstractRNG = Random.default_rng(),
+)
+    dissimilarity_measure in (:correlation, :pearson, :spearman, :euclidean, :mahalanobis, :crossnobis) || @minimal_error(
+        "Unknown dissimilarity measure: $dissimilarity_measure. Use :correlation, :spearman, :euclidean, :mahalanobis, or :crossnobis"
+    )
+
+    combined_sel = _combine_interval_sample(interval_selection, sample_selection)
+    data_arrays, times, n_trials_per_condition, condition_names, selected_channels, layout_sub, first_epoch =
+        _prepare_and_validate_rsa(epochs, channel_selection, combined_sel)
+
+    n_conditions = length(condition_names)
+    n_timepoints = length(times)
+    n_ch = length(selected_channels)
+    min_trials = minimum(n_trials_per_condition)
+    min_trials < 2 && @minimal_error("Cross-validated RSA requires at least 2 trials per condition, got $min_trials")
+
+    rdms = if cv_method == :splithalf
+        n_iterations < 1 && @minimal_error("n_iterations must be >= 1, got $n_iterations")
+        min_trials < 10 && @minimal_warning "Split-half CV works best with 20+ trials per condition, got $min_trials"
+        _cv_splithalf(data_arrays, n_timepoints, n_conditions, n_ch, dissimilarity_measure, n_iterations; rng = rng)
+    elseif cv_method == :leaveoneout
+        min_trials < 5 && @minimal_warning "Leave-one-out CV works best with at least 5 trials per condition, got $min_trials"
+        _cv_folded(data_arrays, n_timepoints, n_conditions, n_ch, dissimilarity_measure, min_trials; shuffle_trials = false)
+    elseif cv_method == :kfold
+        n_folds < 2 && @minimal_error("K-fold CV requires n_folds >= 2, got $n_folds")
+        min_trials < n_folds && @minimal_error("K-fold CV requires at least $n_folds trials per condition, got $min_trials")
+        _cv_folded(data_arrays, n_timepoints, n_conditions, n_ch, dissimilarity_measure, n_folds; shuffle_trials = true, rng = rng)
+    else
+        @minimal_error("Unknown CV method: $cv_method. Use :splithalf, :leaveoneout, or :kfold")
+    end
+
+    _normalize_rdms!(rdms, normalize_method)
+
+    return RsaData(
+        first_epoch.file,
+        condition_names,
+        times,
+        rdms,
+        dissimilarity_measure,
+        selected_channels,
+        layout_sub,
+        first_epoch.sample_rate;
+        analysis_info = copy(first_epoch.analysis_info),
+    )
+end
+
+######################################
+######### Internal Functions #########
+######################################
 
 function _CrossFoldWorkspace(n_channels::Int, n_timepoints::Int, n_conditions::Int, max_total_trials::Int, dissimilarity_measure::Symbol)
     use_mahal = dissimilarity_measure in (:mahalanobis, :crossnobis)
@@ -244,78 +330,4 @@ function _cv_folded(
 
     rdms_sum ./= n_folds
     return rdms_sum
-end
-
-"""
-    rsa_crossvalidated(
-        epochs::AbstractVector{<:EpochData};
-        channel_selection = channels(),
-        sample_selection = samples(),
-        interval_selection::Interval = times(),
-        dissimilarity_measure::Symbol = :correlation,
-        cv_method::Symbol = :splithalf,
-        n_folds::Int = 5,
-        n_iterations::Int = 100,
-        normalize_method::Symbol = :none,
-        rng::AbstractRNG = Random.default_rng(),
-    ) -> RsaData
-
-Compute unbiased cross-validated RDMs across disjoint trial splits (Walther et al., 2016),
-supporting `:splithalf`, `:leaveoneout`, and `:kfold` cross-validation and `:correlation`
-(`:pearson`), `:spearman`, `:euclidean`, and `:mahalanobis` (`:crossnobis`) measures.
-"""
-function rsa_crossvalidated(
-    epochs::AbstractVector{<:EpochData};
-    channel_selection = channels(),
-    sample_selection = samples(),
-    interval_selection::Interval = times(),
-    dissimilarity_measure::Symbol = :correlation,
-    cv_method::Symbol = :splithalf,
-    n_folds::Int = 5,
-    n_iterations::Int = 100,
-    normalize_method::Symbol = :none,
-    rng::AbstractRNG = Random.default_rng(),
-)
-    dissimilarity_measure in (:correlation, :pearson, :spearman, :euclidean, :mahalanobis, :crossnobis) || @minimal_error(
-        "Unknown dissimilarity measure: $dissimilarity_measure. Use :correlation, :spearman, :euclidean, :mahalanobis, or :crossnobis"
-    )
-
-    combined_sel = _combine_interval_sample(interval_selection, sample_selection)
-    data_arrays, times, n_trials_per_condition, condition_names, selected_channels, layout_sub, first_epoch =
-        _prepare_and_validate_rsa(epochs, channel_selection, combined_sel)
-
-    n_conditions = length(condition_names)
-    n_timepoints = length(times)
-    n_ch = length(selected_channels)
-    min_trials = minimum(n_trials_per_condition)
-    min_trials < 2 && @minimal_error("Cross-validated RSA requires at least 2 trials per condition, got $min_trials")
-
-    rdms = if cv_method == :splithalf
-        n_iterations < 1 && @minimal_error("n_iterations must be >= 1, got $n_iterations")
-        min_trials < 10 && @minimal_warning "Split-half CV works best with 20+ trials per condition, got $min_trials"
-        _cv_splithalf(data_arrays, n_timepoints, n_conditions, n_ch, dissimilarity_measure, n_iterations; rng = rng)
-    elseif cv_method == :leaveoneout
-        min_trials < 5 && @minimal_warning "Leave-one-out CV works best with at least 5 trials per condition, got $min_trials"
-        _cv_folded(data_arrays, n_timepoints, n_conditions, n_ch, dissimilarity_measure, min_trials; shuffle_trials = false)
-    elseif cv_method == :kfold
-        n_folds < 2 && @minimal_error("K-fold CV requires n_folds >= 2, got $n_folds")
-        min_trials < n_folds && @minimal_error("K-fold CV requires at least $n_folds trials per condition, got $min_trials")
-        _cv_folded(data_arrays, n_timepoints, n_conditions, n_ch, dissimilarity_measure, n_folds; shuffle_trials = true, rng = rng)
-    else
-        @minimal_error("Unknown CV method: $cv_method. Use :splithalf, :leaveoneout, or :kfold")
-    end
-
-    _normalize_rdms!(rdms, normalize_method)
-
-    return RsaData(
-        first_epoch.file,
-        condition_names,
-        times,
-        rdms,
-        dissimilarity_measure,
-        selected_channels,
-        layout_sub,
-        first_epoch.sample_rate;
-        analysis_info = copy(first_epoch.analysis_info),
-    )
 end

@@ -1,3 +1,9 @@
+# Reusable Makie UI controls, BroadcastChannel observables, and menu helpers.
+
+######################################
+######### Internal Functions #########
+######################################
+
 function _build_checkbox_grid!(grid, items, cols, checked_fn; fontsize = 14, label_fn = string)
     checkboxes = Checkbox[]
     for (i, item) in enumerate(items)

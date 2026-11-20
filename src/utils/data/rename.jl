@@ -1,8 +1,21 @@
+# In-place and non-mutating channel renaming across EEG data and layouts.
+
+######################################
+########### User Functions ###########
+######################################
+
+"""
+    rename_channel(dat::EegData, rename_dict::Dict{Symbol,Symbol})
+
+Return a copy of `dat` with channels in both data and `Layout` renamed according to `rename_dict` (`old => new`),
+supporting simultaneous swaps (e.g., `Dict(:A => :B, :B => :A)`).
+"""
+rename_channel(dat::EegData, rename_dict::Dict{Symbol,Symbol}) = rename_channel!(copy(dat), rename_dict)
+
 """
     rename_channel!(dat::EegData, rename_dict::Dict{Symbol,Symbol})
 
-Rename channels in `dat` and its `Layout` in place according to `rename_dict` (`old => new`),
-supporting simultaneous swaps (e.g., `Dict(:A => :B, :B => :A)`).
+In-place mutating version of [`rename_channel`](@ref).
 """
 function rename_channel!(dat::EegData, rename_dict::Dict{Symbol,Symbol})
     original_channels = Set{Symbol}(dat.layout.data.label)
@@ -18,6 +31,10 @@ function rename_channel!(dat::EegData, rename_dict::Dict{Symbol,Symbol})
     @info "rename_channel!: Renamed $n_found channels in data and layout"
     return dat
 end
+
+######################################
+######### Internal Functions #########
+######################################
 
 function _rename_data_columns!(df::DataFrame, rename_dict::Dict{Symbol,Symbol}, existing_channels::Set{Symbol})
     pairs = Pair{Symbol,Symbol}[]
@@ -52,10 +69,3 @@ function _rename_data_columns!(dat::EegData, rename_dict::Dict{Symbol,Symbol}, e
     end
     return nothing
 end
-
-"""
-    rename_channel(dat::EegData, rename_dict::Dict{Symbol,Symbol})
-
-Return a copy of `dat` with channels renamed according to `rename_dict`.
-"""
-rename_channel(dat::EegData, rename_dict::Dict{Symbol,Symbol}) = rename_channel!(copy(dat), rename_dict)

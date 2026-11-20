@@ -1,0 +1,284 @@
+# Tests for time-resolved MVPA decoding on epoched ERP data.
+
+using Test
+using Random
+using Statistics
+using EegFun
+
+@testset "ERP Decoding" begin
+
+    # ────────────────────────────────────────────────────────────
+    # 1. _prepare_decoding_data (EpochData)
+    # ────────────────────────────────────────────────────────────
+    @testset "_prepare_decoding_data (ERP)" begin
+        Random.seed!(300)
+        cond1 = EegFun.create_test_epoch_data(condition = 1, n_epochs = 8, n_channels = 3, n = 100, fs = 1000)
+        cond2 = EegFun.create_test_epoch_data(condition = 2, n_epochs = 8, n_channels = 3, n = 100, fs = 1000)
+
+        data_arrays, n_trials = EegFun._prepare_decoding_data([cond1, cond2])
+
+        @test length(data_arrays) == 2
+        @test length(n_trials) == 2
+        @test n_trials[1] == 8
+        @test n_trials[2] == 8
+
+        # Shape: [channels × time × trials]
+        @test size(data_arrays[1]) == (3, 100, 8)
+        @test size(data_arrays[2]) == (3, 100, 8)
+
+        # Data should be finite
+        @test all(isfinite, data_arrays[1])
+        @test all(isfinite, data_arrays[2])
+    end
+
+    @testset "_prepare_decoding_data (ERP) - unequal trials" begin
+        Random.seed!(301)
+        cond1 = EegFun.create_test_epoch_data(condition = 1, n_epochs = 10, n_channels = 3, n = 50, fs = 1000)
+        cond2 = EegFun.create_test_epoch_data(condition = 2, n_epochs = 6, n_channels = 3, n = 50, fs = 1000)
+
+        data_arrays, n_trials = EegFun._prepare_decoding_data([cond1, cond2])
+
+        @test n_trials[1] == 10
+        @test n_trials[2] == 6
+        @test size(data_arrays[1], 3) == 10
+        @test size(data_arrays[2], 3) == 6
+        # Channel dimension should be same for both
+        @test size(data_arrays[1], 1) == size(data_arrays[2], 1)
+    end
+
+    # ────────────────────────────────────────────────────────────
+    # 3. decode_libsvm (EpochData)
+    # ────────────────────────────────────────────────────────────
+    @testset "decode_libsvm (ERP) - basic" begin
+        Random.seed!(310)
+        # Create epoch data with distinguishable conditions (amplitude differs by condition)
+        cond1 = EegFun.create_test_epoch_data(condition = 1, n_epochs = 20, n_channels = 3, n = 50, fs = 1000)
+        cond2 = EegFun.create_test_epoch_data(condition = 2, n_epochs = 20, n_channels = 3, n = 50, fs = 1000)
+
+        result = EegFun.decode_libsvm([cond1, cond2]; n_iterations = 2, n_folds = 2)
+
+        @test result isa EegFun.DecodedData
+        @test length(result.times) == 50
+        @test length(result.average_score) == 50
+        @test result.parameters.n_classes == 2
+        @test result.parameters.n_iterations == 2
+        @test result.parameters.n_folds == 2
+        @test result.parameters.chance_level ≈ 0.5
+        @test result.parameters.class_coding == :binary
+
+        # All scores should be valid probabilities
+        @test all(0 .<= result.average_score .<= 1)
+
+        # Should have standard error
+        @test !isnothing(result.stderror)
+        @test length(result.stderror) == 50
+
+        # Should have confusion matrix
+        @test !isnothing(result.confusion_matrix)
+        @test size(result.confusion_matrix) == (50, 2, 2)
+
+        # Condition names should be set
+        @test result.condition_names == ["condition_1", "condition_2"]
+
+        # Channels should be set
+        @test length(result.channels) == 3
+    end
+
+    @testset "decode_libsvm (ERP) - channel selection" begin
+        Random.seed!(311)
+        cond1 = EegFun.create_test_epoch_data(condition = 1, n_epochs = 12, n_channels = 3, n = 50, fs = 1000)
+        cond2 = EegFun.create_test_epoch_data(condition = 2, n_epochs = 12, n_channels = 3, n = 50, fs = 1000)
+
+        result = EegFun.decode_libsvm([cond1, cond2]; channel_selection = EegFun.channels([:Ch1, :Ch2]), n_iterations = 2, n_folds = 2)
+
+        @test length(result.channels) == 2
+        @test result.channels == [:Ch1, :Ch2]
+    end
+
+    @testset "decode_libsvm (ERP) - interval selection" begin
+        Random.seed!(312)
+        cond1 = EegFun.create_test_epoch_data(condition = 1, n_epochs = 12, n_channels = 3, n = 100, fs = 1000)
+        cond2 = EegFun.create_test_epoch_data(condition = 2, n_epochs = 12, n_channels = 3, n = 100, fs = 1000)
+
+        # Select a subset of time points  
+        result = EegFun.decode_libsvm([cond1, cond2]; interval_selection = EegFun.times(0.01, 0.05), n_iterations = 2, n_folds = 2)
+
+        @test length(result.times) < 100  # Should be smaller than full time range
+        @test all(0.01 .<= result.times .<= 0.05)
+    end
+
+    @testset "decode_libsvm (ERP) - multiclass (3 conditions)" begin
+        Random.seed!(314)
+        cond1 = EegFun.create_test_epoch_data(condition = 1, n_epochs = 12, n_channels = 3, n = 30, fs = 1000)
+        cond2 = EegFun.create_test_epoch_data(condition = 2, n_epochs = 12, n_channels = 3, n = 30, fs = 1000)
+        cond3 = EegFun.create_test_epoch_data(condition = 3, n_epochs = 12, n_channels = 3, n = 30, fs = 1000)
+
+        result = EegFun.decode_libsvm([cond1, cond2, cond3]; n_iterations = 2, n_folds = 2)
+
+        @test result isa EegFun.DecodedData
+        @test length(result.times) == 30
+        @test length(result.average_score) == 30
+        @test result.parameters.n_classes == 3
+        @test result.parameters.class_coding == :one_vs_all
+        @test result.parameters.chance_level ≈ 1 / 3
+        @test all(0 .<= result.average_score .<= 1)
+        @test !isnothing(result.confusion_matrix)
+        @test size(result.confusion_matrix) == (30, 3, 3)
+        # Confusion matrix rows should sum to 1.0
+        for t = 1:30, c = 1:3
+            @test sum(result.confusion_matrix[t, c, :]) ≈ 1.0
+        end
+        @test !isnothing(result.raw_predictions)
+        @test size(result.raw_predictions, 1) == 2
+        @test size(result.raw_predictions, 2) == 2
+        @test size(result.raw_predictions, 3) == 30
+    end
+
+    @testset "decode_libsvm (ERP) - multiclass (4 conditions) & save_raw_predictions=false" begin
+        Random.seed!(315)
+        conds = [EegFun.create_test_epoch_data(condition = i, n_epochs = 12, n_channels = 3, n = 20, fs = 1000) for i = 1:4]
+
+        result = EegFun.decode_libsvm(conds; n_iterations = 2, n_folds = 2, save_raw_predictions = false)
+
+        @test result isa EegFun.DecodedData
+        @test result.parameters.n_classes == 4
+        @test result.parameters.class_coding == :one_vs_all
+        @test result.parameters.chance_level ≈ 0.25
+        @test isnothing(result.raw_predictions)
+        @test !isnothing(result.confusion_matrix)
+        @test size(result.confusion_matrix) == (20, 4, 4)
+        for t = 1:20, c = 1:4
+            @test sum(result.confusion_matrix[t, c, :]) ≈ 1.0
+        end
+    end
+
+    @testset "decode_libsvm (ERP) - error cases" begin
+        Random.seed!(313)
+        cond1 = EegFun.create_test_epoch_data(condition = 1, n_epochs = 10, n_channels = 3, n = 50, fs = 1000)
+
+        # Need at least 2 conditions
+        @test_throws Exception EegFun.decode_libsvm([cond1]; n_iterations = 2, n_folds = 2)
+
+        # Need at least 2 folds
+        cond2 = EegFun.create_test_epoch_data(condition = 2, n_epochs = 10, n_channels = 3, n = 50, fs = 1000)
+        @test_throws Exception EegFun.decode_libsvm([cond1, cond2]; n_iterations = 2, n_folds = 1)
+
+        # Empty epochs
+        @test_throws Exception EegFun.decode_libsvm(EegFun.EpochData[]; n_iterations = 2, n_folds = 2)
+    end
+
+    # ────────────────────────────────────────────────────────────
+    # 4. Batch decode_libsvm (Vector of participants)
+    # ────────────────────────────────────────────────────────────
+    @testset "decode_libsvm (ERP) - vector of participants" begin
+        Random.seed!(320)
+
+        # 2 participants, each with 2 conditions
+        participants = Vector{Vector{EegFun.EpochData}}()
+        for p = 1:2
+            cond1 = EegFun.create_test_epoch_data(condition = 1, n_epochs = 12, n_channels = 3, n = 50, fs = 1000)
+            cond2 = EegFun.create_test_epoch_data(condition = 2, n_epochs = 12, n_channels = 3, n = 50, fs = 1000)
+            push!(participants, [cond1, cond2])
+        end
+
+        results = EegFun.decode_libsvm(participants; n_iterations = 2, n_folds = 2)
+
+        @test length(results) == 2
+        @test all(r -> r isa EegFun.DecodedData, results)
+        @test results[1].times == results[2].times
+    end
+
+    # ────────────────────────────────────────────────────────────
+    # 5. grand_average (DecodedData)
+    # ────────────────────────────────────────────────────────────
+    @testset "grand_average (DecodedData)" begin
+        Random.seed!(330)
+
+        # Decode 3 participants
+        all_decoded = EegFun.DecodedData[]
+        for p = 1:3
+            cond1 = EegFun.create_test_epoch_data(condition = 1, n_epochs = 12, n_channels = 3, n = 50, fs = 1000)
+            cond2 = EegFun.create_test_epoch_data(condition = 2, n_epochs = 12, n_channels = 3, n = 50, fs = 1000)
+            decoded = EegFun.decode_libsvm([cond1, cond2]; n_iterations = 2, n_folds = 2, show_progress = false)
+            push!(all_decoded, decoded)
+        end
+
+        ga = EegFun.grand_average(all_decoded)
+
+        @test ga isa EegFun.DecodedData
+        @test ga.file == "grand_average"
+        @test length(ga.times) == length(all_decoded[1].times)
+        @test length(ga.average_score) == length(ga.times)
+        @test !isnothing(ga.stderror)
+        @test all(0 .<= ga.average_score .<= 1)
+
+        # Grand average should be mean of individual scores
+        expected_avg = mean([d.average_score for d in all_decoded])
+        @test ga.average_score ≈ expected_avg
+
+        # Single participant should return a copy with identical scores
+        single_ga = EegFun.grand_average([all_decoded[1]])
+        @test single_ga !== all_decoded[1]
+        @test single_ga.average_score == all_decoded[1].average_score
+
+        # Base.copy isolation and empty DecodedData show guard
+        cp = copy(ga)
+        @test cp !== ga
+        @test cp.average_score == ga.average_score
+        cp.average_score[1] = -99.0
+        @test ga.average_score[1] != -99.0
+
+        empty_dd = EegFun.DecodedData("empty", ["A", "B"], Float64[], Float64[], Symbol[], ga.parameters)
+        io = IOBuffer()
+        show(io, empty_dd)
+        @test contains(String(take!(io)), "DecodedData")
+    end
+
+    @testset "decode_libsvm - balanced accuracy, n_iterations=1 SE, and NaN guard" begin
+        rng_imb = Random.Xoshiro(340)
+        # Imbalanced classes (80% majority) with pure i.i.d. noise: balanced accuracy stays centered around 0.5 (not majority-class 0.8!)
+        c_maj = EegFun.create_test_epoch_data(condition = 1, n_epochs = 64, n_channels = 3, n = 20, fs = 1000, seed = 10)
+        c_min = EegFun.create_test_epoch_data(condition = 2, n_epochs = 16, n_channels = 3, n = 20, fs = 1000, seed = 20)
+        for ep_dat in (c_maj, c_min), df in ep_dat.data, ch in (:Ch1, :Ch2, :Ch3)
+            df[!, ch] .= randn(rng_imb, 20)
+        end
+        res_imb = EegFun.decode_libsvm(
+            [c_maj, c_min];
+            equalize_trials = false,
+            n_iterations = 3,
+            n_folds = 4,
+            show_progress = false,
+            rng = Random.Xoshiro(341),
+        )
+        @test 0.35 <= mean(res_imb.average_score) <= 0.65
+
+        # n_iterations = 1 produces finite fold-based stderror
+        res_it1 = EegFun.decode_libsvm([c_maj, c_min]; n_iterations = 1, n_folds = 4, show_progress = false)
+        @test !isnothing(res_it1.stderror)
+        @test all(isfinite, res_it1.stderror)
+
+        # NaN input features throw EegFunError
+        c_nan = copy(c_min)
+        c_nan.data[1].Ch1[1] = NaN
+        @test_throws EegFun.EegFunError EegFun.decode_libsvm([c_maj, c_nan]; n_iterations = 1, n_folds = 2, show_progress = false)
+
+        ga_1 = EegFun.grand_average([res_it1])
+        @test ga_1 !== res_it1
+        ga_2 = EegFun.grand_average([res_it1, res_imb])
+        @test ga_2.times !== res_it1.times
+        @test ga_2.channels !== res_it1.channels
+
+        # Structure and bounds validation in decode_libsvm & libsvm_classifier
+        c_short = EegFun.create_test_epoch_data(n = 20, fs = 100, n_epochs = 8, n_channels = 2)
+        c_short.condition = 2
+        @test_throws EegFun.EegFunError EegFun.decode_libsvm([c_maj, c_short]; n_iterations = 1, n_folds = 2, show_progress = false)
+
+        c_zero = copy(c_min)
+        empty!(c_zero.data)
+        @test_throws EegFun.EegFunError EegFun.decode_libsvm([c_maj, c_zero]; n_iterations = 1, n_folds = 2, show_progress = false)
+
+        @test_throws EegFun.EegFunError EegFun.libsvm_classifier(ones(4, 3), [1, 2], ones(2, 3))
+        @test_throws EegFun.EegFunError EegFun.libsvm_classifier(ones(4, 3), [1, 1, 2, 2], ones(2, 5))
+    end
+
+end # @testset "ERP Decoding"

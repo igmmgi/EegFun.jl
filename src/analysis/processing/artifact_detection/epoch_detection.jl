@@ -1,4 +1,14 @@
+# Automatic z-score and threshold-based bad-epoch detection.
+
+######################################
+######### Types & Constants ##########
+######################################
+
 const _EPOCH_Z_MEASURES = (:variance, :max, :min, :abs, :range, :kurtosis)
+
+######################################
+########### User Functions ###########
+######################################
 
 """
     detect_bad_epochs_automatic(dat::EpochData; z_criterion::Real=3, abs_criterion::Real=100,
@@ -92,8 +102,19 @@ end
 
 detect_bad_epochs_automatic(dat::AbstractVector{<:EpochData}; kwargs...) = detect_bad_epochs_automatic.(dat; kwargs...)
 
+"""
+    get_rejected(info::EpochRejectionInfo) -> Vector{Rejection}
+    get_rejected(info::AbstractVector{<:EpochRejectionInfo}) -> Vector{Vector{Rejection}}
+
+Return the deduplicated `Rejection` entries recorded in `info`.
+"""
 get_rejected(info::EpochRejectionInfo) = info.rejected
+
 get_rejected(info::AbstractVector{<:EpochRejectionInfo}) = get_rejected.(info)
+
+######################################
+######### Internal Functions #########
+######################################
 
 @inline function _epoch_sample_stats(col::AbstractVector{<:Real}, samples_idx, compute_z::Bool)
     v = @views col[samples_idx]

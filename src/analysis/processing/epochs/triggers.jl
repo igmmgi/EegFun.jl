@@ -1,17 +1,14 @@
-function _clean_triggers(trigger_data::Vector{<:Integer})::Vector{<:Integer}
-    n = length(trigger_data)
-    cleaned = zeros(eltype(trigger_data), n)
-    n == 0 && return cleaned
+# Event trigger inspection, counting, sequence matching, and interval measurement.
 
-    @inbounds begin
-        trigger_data[1] > 0 && (cleaned[1] = trigger_data[1])
-        for i = 2:n
-            v = trigger_data[i]
-            (v > 0 && v != trigger_data[i-1]) && (cleaned[i] = v)
-        end
-    end
-    return cleaned
-end
+######################################
+######### Types & Constants ##########
+######################################
+
+const _TriggerSeqEntry = NamedTuple{(:sequence, :t0),Tuple{Vector{Int},Int}}
+
+######################################
+########### User Functions ###########
+######################################
 
 """
     trigger_count(dat::ContinuousData) -> TriggerInfo
@@ -29,84 +26,8 @@ function trigger_count(df::DataFrame)::TriggerInfo
     t_info = hasproperty(df, :trigger_info) ? df.trigger_info : nothing
     return _trigger_count_impl([df.trigger], ["count"]; trigger_info = t_info)
 end
+
 trigger_count(dat::ContinuousData)::TriggerInfo = trigger_count(dat.data)
-
-function _trigger_count_impl(
-    trigger_datasets::Vector{<:Vector{<:Integer}},
-    column_names::Vector{String};
-    trigger_info::Union{Nothing,Vector{String}} = nothing,
-)
-    n_ds = length(trigger_datasets)
-    counts_per_ds = [Dict{Int,Int}() for _ = 1:n_ds]
-
-    for (ds_idx, dataset) in enumerate(trigger_datasets)
-        counts = counts_per_ds[ds_idx]
-        @inbounds for val in dataset
-            if val != 0
-                iv = Int(val)
-                counts[iv] = get(counts, iv, 0) + 1
-            end
-        end
-    end
-
-    non_zero_triggers = Int[]
-    if n_ds == 1
-        append!(non_zero_triggers, keys(counts_per_ds[1]))
-    elseif n_ds > 1
-        seen = Set{Int}()
-        for counts in counts_per_ds, k in keys(counts)
-            k in seen || (push!(seen, k); push!(non_zero_triggers, k))
-        end
-    end
-    sort!(non_zero_triggers)
-
-    has_info = !isnothing(trigger_info)
-    n_out_cols = 1 + (has_info ? 1 : 0) + length(column_names)
-    out_names = Vector{Symbol}(undef, n_out_cols)
-    out_cols = Vector{AbstractVector}(undef, n_out_cols)
-    out_names[1] = :trigger
-    out_cols[1] = non_zero_triggers
-
-    col_offset = 1
-    if has_info
-        col_offset += 1
-        out_names[col_offset] = :trigger_info
-        if isempty(non_zero_triggers)
-            out_cols[col_offset] = String[]
-        else
-            trigger_info_map = Dict{Int,String}()
-            ds1 = trigger_datasets[1]
-            tinfo = trigger_info::Vector{String}
-            @inbounds for i in eachindex(ds1, tinfo)
-                t = Int(ds1[i])
-                if t != 0 && !haskey(trigger_info_map, t)
-                    trigger_info_map[t] = tinfo[i]
-                end
-            end
-            out_cols[col_offset] = String[get(trigger_info_map, t, "") for t in non_zero_triggers]
-        end
-    end
-
-    for (i, cname) in enumerate(column_names)
-        out_names[col_offset+i] = Symbol(cname)
-        out_cols[col_offset+i] = isempty(non_zero_triggers) ? Int[] : Int[get(counts_per_ds[i], t, 0) for t in non_zero_triggers]
-    end
-
-    return TriggerInfo(DataFrame(out_cols, out_names; copycols = false))
-end
-
-function Base.show(io::IO, info::TriggerInfo)
-    if isempty(info.data)
-        println(io, "No non-zero triggers found in the data.")
-        return
-    end
-    col_names = names(info.data)
-    title = ("raw_count" in col_names && "cleaned_count" in col_names) ? "Trigger Count Summary (Raw vs Cleaned)" : "Trigger Count Summary"
-    n_cols = length(col_names)
-    alignment = hasproperty(info.data, :trigger_info) ? [:r, :l, fill(:r, n_cols - 2)...] : fill(:r, n_cols)
-    pretty_table(io, info.data; title = title, alignment = alignment)
-    println(io)
-end
 
 function trigger_count(dat::BiosemiDataFormat.BiosemiData)::TriggerInfo
     cleaned_triggers = _clean_triggers(dat.triggers.raw)
@@ -175,32 +96,6 @@ function search_sequence(array, sequences::Vector{<:Vector}; ignore_values::Vect
     return all_matches
 end
 
-function _search_single_sequence(array, sequence::Vector; ignore_values::Vector{Int} = [0], sort_indices::Bool = true)
-    (isempty(array) || isempty(sequence)) && return Vector{Int}[]
-
-    if all(x -> x isa UnitRange, sequence)
-        indices = search_sequence(array, UnitRange{Int}[x for x in sequence]; ignore_values = ignore_values, sort_indices = sort_indices)
-        return Vector{Int}[[idx] for idx in indices]
-    end
-
-    seq_len = length(sequence)
-    if seq_len == 1
-        indices = _search_single_trigger(array, sequence[1], ignore_values)
-        return Vector{Int}[[idx] for idx in indices]
-    end
-
-    idx_start_positions = _search_single_trigger(array, sequence[1], ignore_values)
-    matches = Vector{Int}[]
-    max_idx = length(array) - seq_len + 1
-    for idx in idx_start_positions
-        idx > max_idx && continue
-        positions = _collect_sequence_positions(array, sequence, idx, ignore_values)
-        !isnothing(positions) && push!(matches, positions)
-    end
-    sort_indices && !issorted(matches, by = first) && sort!(matches, by = first)
-    return matches
-end
-
 search_sequence(array, sequence::Vector; ignore_values::Vector{Int} = [0], sort_indices::Bool = true) =
     _search_single_sequence(array, sequence; ignore_values = ignore_values, sort_indices = sort_indices)
 
@@ -229,63 +124,6 @@ function search_sequence(array, ranges::Vector{<:UnitRange}; ignore_values::Vect
     return all_indices
 end
 
-_search_single_trigger(array, trigger::Integer, ignore_values::Vector{Int} = [0]) =
-    search_sequence(array, trigger; ignore_values = ignore_values)
-_search_single_trigger(array, trigger::UnitRange, ignore_values::Vector{Int} = [0]) =
-    search_sequence(array, [trigger]; ignore_values = ignore_values)
-_search_single_trigger(array, trigger::Symbol, ignore_values::Vector{Int} = [0]) = @minimal_error("Single wildcard sequences not supported")
-function _search_single_trigger(array, trigger::Vector{<:Integer}, ignore_values::Vector{Int} = [0])
-    isempty(trigger) && return Int[]
-    out = Int[]
-    for v in trigger
-        append!(out, search_sequence(array, Int(v); ignore_values = ignore_values))
-    end
-    sort!(out)
-    return out
-end
-
-@inline _is_ignored(v, ignore_values::Vector{Int}, ignore_zero_only::Bool) = ignore_zero_only ? (v == 0) : (v in ignore_values)
-
-function _collect_sequence_positions(array, sequence, start_idx::Int, ignore_values::Vector{Int})
-    n = length(array)
-    seq_len = length(sequence)
-    ignore_zero_only = length(ignore_values) == 1 && @inbounds(ignore_values[1]) == 0
-
-    # Check step 2 before allocating output vector so failed candidate starts allocate 0 bytes
-    current_idx = start_idx + 1
-    @inbounds while current_idx <= n && _is_ignored(array[current_idx], ignore_values, ignore_zero_only)
-        current_idx += 1
-    end
-    current_idx > n && return nothing
-    _matches_expected(@inbounds(array[current_idx]), @inbounds(sequence[2])) || return nothing
-
-    positions = Vector{Int}(undef, seq_len)
-    @inbounds positions[1] = start_idx
-    @inbounds positions[2] = current_idx
-
-    @inbounds for step = 3:seq_len
-        current_idx += 1
-        while current_idx <= n && _is_ignored(array[current_idx], ignore_values, ignore_zero_only)
-            current_idx += 1
-        end
-        current_idx > n && return nothing
-        _matches_expected(array[current_idx], sequence[step]) || return nothing
-        positions[step] = current_idx
-    end
-    return positions
-end
-
-_matches_expected(actual::Integer, expected::Integer) = actual == expected
-_matches_expected(actual::Real, expected::Integer) = actual == expected
-_matches_expected(actual::Integer, expected::Real) = actual == expected
-_matches_expected(actual::Real, expected::Real) = actual == expected
-_matches_expected(actual::Real, expected::Symbol) = expected == :any
-_matches_expected(actual::Real, expected::UnitRange) = actual in expected
-_matches_expected(actual::Real, expected::Vector{<:Integer}) = actual in expected
-_matches_expected(actual, expected) = @minimal_error("Unsupported sequence type: $expected")
-
-const _TriggerSeqEntry = NamedTuple{(:sequence, :t0),Tuple{Vector{Int},Int}}
-
 """
     trigger_info(dat::EpochData) -> Vector{NamedTuple{(:sequence, :t0),Tuple{Vector{Int},Int}}}
     trigger_info(dat_vec::AbstractVector{<:EpochData}) -> Dict{String,Vector{...}}
@@ -297,7 +135,7 @@ function trigger_info(dat::EpochData)
     unique_seqs = _TriggerSeqEntry[]
     for epoch in dat
         if hasproperty(epoch, :trigger) && hasproperty(epoch, :time)
-            zero_idx = find_closest_time_index(epoch.time, 0.0)
+            zero_idx = _find_closest_time_index(epoch.time, 0.0)
             t0_trigger = epoch.trigger[zero_idx]
             seq = Int[x for x in epoch.trigger if x != 0]
             nt = (sequence = seq, t0 = t0_trigger)
@@ -349,3 +187,190 @@ function trigger_info(file_pattern::String; input_dir::String = pwd(), participa
     end
     return merged_info
 end
+
+function Base.show(io::IO, info::TriggerInfo)
+    if isempty(info.data)
+        println(io, "No non-zero triggers found in the data.")
+        return
+    end
+    col_names = names(info.data)
+    title = ("raw_count" in col_names && "cleaned_count" in col_names) ? "Trigger Count Summary (Raw vs Cleaned)" : "Trigger Count Summary"
+    n_cols = length(col_names)
+    alignment = hasproperty(info.data, :trigger_info) ? [:r, :l, fill(:r, n_cols - 2)...] : fill(:r, n_cols)
+    pretty_table(io, info.data; title = title, alignment = alignment)
+    println(io)
+end
+
+######################################
+######### Internal Functions #########
+######################################
+
+function _clean_triggers(trigger_data::Vector{<:Integer})::Vector{<:Integer}
+    n = length(trigger_data)
+    cleaned = zeros(eltype(trigger_data), n)
+    n == 0 && return cleaned
+
+    @inbounds begin
+        trigger_data[1] > 0 && (cleaned[1] = trigger_data[1])
+        for i = 2:n
+            v = trigger_data[i]
+            (v > 0 && v != trigger_data[i-1]) && (cleaned[i] = v)
+        end
+    end
+    return cleaned
+end
+
+function _trigger_count_impl(
+    trigger_datasets::Vector{<:Vector{<:Integer}},
+    column_names::Vector{String};
+    trigger_info::Union{Nothing,Vector{String}} = nothing,
+)
+    n_ds = length(trigger_datasets)
+    counts_per_ds = [Dict{Int,Int}() for _ = 1:n_ds]
+
+    for (ds_idx, dataset) in enumerate(trigger_datasets)
+        counts = counts_per_ds[ds_idx]
+        @inbounds for val in dataset
+            if val != 0
+                iv = Int(val)
+                counts[iv] = get(counts, iv, 0) + 1
+            end
+        end
+    end
+
+    non_zero_triggers = Int[]
+    if n_ds == 1
+        append!(non_zero_triggers, keys(counts_per_ds[1]))
+    elseif n_ds > 1
+        seen = Set{Int}()
+        for counts in counts_per_ds, k in keys(counts)
+            k in seen || (push!(seen, k); push!(non_zero_triggers, k))
+        end
+    end
+    sort!(non_zero_triggers)
+
+    has_info = !isnothing(trigger_info)
+    n_out_cols = 1 + (has_info ? 1 : 0) + length(column_names)
+    out_names = Vector{Symbol}(undef, n_out_cols)
+    out_cols = Vector{AbstractVector}(undef, n_out_cols)
+    out_names[1] = :trigger
+    out_cols[1] = non_zero_triggers
+
+    col_offset = 1
+    if has_info
+        col_offset += 1
+        out_names[col_offset] = :trigger_info
+        if isempty(non_zero_triggers)
+            out_cols[col_offset] = String[]
+        else
+            trigger_info_map = Dict{Int,String}()
+            ds1 = trigger_datasets[1]
+            tinfo = trigger_info::Vector{String}
+            @inbounds for i in eachindex(ds1, tinfo)
+                t = Int(ds1[i])
+                if t != 0 && !haskey(trigger_info_map, t)
+                    trigger_info_map[t] = tinfo[i]
+                end
+            end
+            out_cols[col_offset] = String[get(trigger_info_map, t, "") for t in non_zero_triggers]
+        end
+    end
+
+    for (i, cname) in enumerate(column_names)
+        out_names[col_offset+i] = Symbol(cname)
+        out_cols[col_offset+i] = isempty(non_zero_triggers) ? Int[] : Int[get(counts_per_ds[i], t, 0) for t in non_zero_triggers]
+    end
+
+    return TriggerInfo(DataFrame(out_cols, out_names; copycols = false))
+end
+
+function _search_single_sequence(array, sequence::Vector; ignore_values::Vector{Int} = [0], sort_indices::Bool = true)
+    (isempty(array) || isempty(sequence)) && return Vector{Int}[]
+
+    if all(x -> x isa UnitRange, sequence)
+        indices = search_sequence(array, UnitRange{Int}[x for x in sequence]; ignore_values = ignore_values, sort_indices = sort_indices)
+        return Vector{Int}[[idx] for idx in indices]
+    end
+
+    seq_len = length(sequence)
+    if seq_len == 1
+        indices = _search_single_trigger(array, sequence[1], ignore_values)
+        return Vector{Int}[[idx] for idx in indices]
+    end
+
+    idx_start_positions = _search_single_trigger(array, sequence[1], ignore_values)
+    matches = Vector{Int}[]
+    max_idx = length(array) - seq_len + 1
+    for idx in idx_start_positions
+        idx > max_idx && continue
+        positions = _collect_sequence_positions(array, sequence, idx, ignore_values)
+        !isnothing(positions) && push!(matches, positions)
+    end
+    sort_indices && !issorted(matches, by = first) && sort!(matches, by = first)
+    return matches
+end
+
+_search_single_trigger(array, trigger::Integer, ignore_values::Vector{Int} = [0]) =
+    search_sequence(array, trigger; ignore_values = ignore_values)
+
+_search_single_trigger(array, trigger::UnitRange, ignore_values::Vector{Int} = [0]) =
+    search_sequence(array, [trigger]; ignore_values = ignore_values)
+
+_search_single_trigger(array, trigger::Symbol, ignore_values::Vector{Int} = [0]) = @minimal_error("Single wildcard sequences not supported")
+
+function _search_single_trigger(array, trigger::Vector{<:Integer}, ignore_values::Vector{Int} = [0])
+    isempty(trigger) && return Int[]
+    out = Int[]
+    for v in trigger
+        append!(out, search_sequence(array, Int(v); ignore_values = ignore_values))
+    end
+    sort!(out)
+    return out
+end
+
+@inline _is_ignored(v, ignore_values::Vector{Int}, ignore_zero_only::Bool) = ignore_zero_only ? (v == 0) : (v in ignore_values)
+
+function _collect_sequence_positions(array, sequence, start_idx::Int, ignore_values::Vector{Int})
+    n = length(array)
+    seq_len = length(sequence)
+    ignore_zero_only = length(ignore_values) == 1 && @inbounds(ignore_values[1]) == 0
+
+    # Check step 2 before allocating output vector so failed candidate starts allocate 0 bytes
+    current_idx = start_idx + 1
+    @inbounds while current_idx <= n && _is_ignored(array[current_idx], ignore_values, ignore_zero_only)
+        current_idx += 1
+    end
+    current_idx > n && return nothing
+    _matches_expected(@inbounds(array[current_idx]), @inbounds(sequence[2])) || return nothing
+
+    positions = Vector{Int}(undef, seq_len)
+    @inbounds positions[1] = start_idx
+    @inbounds positions[2] = current_idx
+
+    @inbounds for step = 3:seq_len
+        current_idx += 1
+        while current_idx <= n && _is_ignored(array[current_idx], ignore_values, ignore_zero_only)
+            current_idx += 1
+        end
+        current_idx > n && return nothing
+        _matches_expected(array[current_idx], sequence[step]) || return nothing
+        positions[step] = current_idx
+    end
+    return positions
+end
+
+_matches_expected(actual::Integer, expected::Integer) = actual == expected
+
+_matches_expected(actual::Real, expected::Integer) = actual == expected
+
+_matches_expected(actual::Integer, expected::Real) = actual == expected
+
+_matches_expected(actual::Real, expected::Real) = actual == expected
+
+_matches_expected(actual::Real, expected::Symbol) = expected == :any
+
+_matches_expected(actual::Real, expected::UnitRange) = actual in expected
+
+_matches_expected(actual::Real, expected::Vector{<:Integer}) = actual in expected
+
+_matches_expected(actual, expected) = @minimal_error("Unsupported sequence type: $expected")

@@ -1,3 +1,9 @@
+# Interactive trial-by-trial epoch artifact review and rejection GUI.
+
+######################################
+######### Types & Constants ##########
+######################################
+
 const PLOT_EPOCHS_REJECTION_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :display_plot => (true, "Whether to display the plot"),
     :dims => ((4, 6), "Grid dimensions as (rows, cols) for epoch display"),
@@ -20,7 +26,25 @@ const PLOT_EPOCHS_REJECTION_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 """
     EpochRejectionState
 
-Stores the state of the epoch rejection interface.
+Stores the interactive UI state of [`detect_bad_epochs_interactive`](@ref).
+
+# Fields
+- `epoch_data::EpochData`: Epoched EEG dataset under inspection
+- `selected_channels::Vector{Symbol}`: Ordered channel symbols displayed in each epoch panel
+- `selected_channels_set::Set{Symbol}`: Fast lookup set for `selected_channels`
+- `rejected::Vector{Bool}`: Per-epoch rejection flags (`length == n_total_epochs`)
+- `current_page::Observable{Int}`: Currently visible 1-based page index
+- `epochs_per_page::Int`: Number of epoch subplots per page (`rows * cols`)
+- `n_total_epochs::Int`: Total number of epochs in `epoch_data`
+- `n_pages::Int`: Total number of pages
+- `checkboxes::Vector{Toggle}`: Per-panel Makie `Toggle` widgets
+- `axes::Vector{Axis}`: Per-panel Makie `Axis` objects
+- `fig::Figure`: Parent Makie `Figure`
+- `show_bad_channels_only::Observable{Bool}`: Filter toggle restricting traces to artifact-flagged channels
+- `artifact_info::Union{Nothing,EpochRejectionInfo}`: Automated detection metadata used for highlighting
+- `colors::Vector{Any}`: Per-channel trace colors
+- `global_ylim::Union{Nothing,Tuple{Float64,Float64}}`: Shared y-axis limits across epochs when enabled
+- `is_updating_toggles::Base.RefValue{Bool}`: Re-entrancy guard during programmatic page updates
 """
 mutable struct EpochRejectionState
     epoch_data::EpochData
@@ -41,29 +65,9 @@ mutable struct EpochRejectionState
     is_updating_toggles::Base.RefValue{Bool}
 end
 
-function Base.getproperty(state::EpochRejectionState, sym::Symbol)
-    sym === :epoch_axes && return getfield(state, :axes)
-    return getfield(state, sym)
-end
-
-Base.broadcastable(state::EpochRejectionState) = Ref(state)
-Base.iterate(state::EpochRejectionState, idx::Int = 1) = idx == 1 ? (state.fig, 2) : idx == 2 ? (state.axes, 3) : nothing
-
-function Base.show(io::IO, state::EpochRejectionState)
-    rejected_count = sum(state.rejected)
-    println(io, "EpochRejectionState:")
-    println(io, "  Total epochs: $(state.n_total_epochs)")
-    println(io, "  Rejected epochs: $rejected_count ($(round(100 * rejected_count / state.n_total_epochs, digits=1))%)")
-    println(io, "  Channels displayed: $(length(state.selected_channels))")
-end
-
-@inline function _set_axis_spine_color!(ax::Axis, color)
-    ax.leftspinecolor = color
-    ax.rightspinecolor = color
-    ax.bottomspinecolor = color
-    ax.topspinecolor = color
-    return nothing
-end
+######################################
+########### User Functions ###########
+######################################
 
 """
     detect_bad_epochs_interactive(dat::EpochData;
@@ -179,6 +183,53 @@ function detect_bad_epochs_interactive(
             kwargs...,
         ) for i in eachindex(epochs)
     ]
+end
+
+"""
+    get_rejected_epochs(state::EpochRejectionState)::Vector{Int}
+
+Get indices of rejected epochs from the rejection state.
+
+# Examples
+```julia
+state = detect_bad_epochs_interactive(epochs)
+rejected_indices = get_rejected_epochs(state)
+```
+"""
+get_rejected_epochs(state::EpochRejectionState)::Vector{Int} = findall(state.rejected)
+
+reject_epochs(dat::EpochData, state::EpochRejectionState)::EpochData = reject_epochs(dat, _to_rejection_info(state))
+
+reject_epochs(dat::Vector{EpochData}, states::Vector{EpochRejectionState})::Vector{EpochData} =
+    reject_epochs.(dat, _to_rejection_info.(states))
+
+function Base.getproperty(state::EpochRejectionState, sym::Symbol)
+    sym === :epoch_axes && return getfield(state, :axes)
+    return getfield(state, sym)
+end
+
+Base.broadcastable(state::EpochRejectionState) = Ref(state)
+
+Base.iterate(state::EpochRejectionState, idx::Int = 1) = idx == 1 ? (state.fig, 2) : idx == 2 ? (state.axes, 3) : nothing
+
+function Base.show(io::IO, state::EpochRejectionState)
+    rejected_count = sum(state.rejected)
+    println(io, "EpochRejectionState:")
+    println(io, "  Total epochs: $(state.n_total_epochs)")
+    println(io, "  Rejected epochs: $rejected_count ($(round(100 * rejected_count / state.n_total_epochs, digits=1))%)")
+    println(io, "  Channels displayed: $(length(state.selected_channels))")
+end
+
+######################################
+######### Internal Functions #########
+######################################
+
+@inline function _set_axis_spine_color!(ax::Axis, color)
+    ax.leftspinecolor = color
+    ax.rightspinecolor = color
+    ax.bottomspinecolor = color
+    ax.topspinecolor = color
+    return nothing
 end
 
 function _create_rejection_interface!(
@@ -342,19 +393,6 @@ function _calculate_global_ylim(dat::EpochData, selected_channels::Vector{Symbol
     return (global_min - padding, global_max + padding)
 end
 
-"""
-    get_rejected_epochs(state::EpochRejectionState)::Vector{Int}
-
-Get indices of rejected epochs from the rejection state.
-
-# Examples
-```julia
-state = detect_bad_epochs_interactive(epochs)
-rejected_indices = get_rejected_epochs(state)
-```
-"""
-get_rejected_epochs(state::EpochRejectionState)::Vector{Int} = findall(state.rejected)
-
 function _to_rejection_info(state::EpochRejectionState)::EpochRejectionInfo
     dat = state.epoch_data
     rejected_epoch_indices = findall(state.rejected)
@@ -372,7 +410,3 @@ function _to_rejection_info(state::EpochRejectionState)::EpochRejectionInfo
 end
 
 _to_rejection_info(states::Vector{EpochRejectionState})::Vector{EpochRejectionInfo} = _to_rejection_info.(states)
-
-reject_epochs(dat::EpochData, state::EpochRejectionState)::EpochData = reject_epochs(dat, _to_rejection_info(state))
-reject_epochs(dat::Vector{EpochData}, states::Vector{EpochRejectionState})::Vector{EpochData} =
-    reject_epochs.(dat, _to_rejection_info.(states))

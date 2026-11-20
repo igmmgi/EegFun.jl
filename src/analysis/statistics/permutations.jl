@@ -3,6 +3,94 @@
 # All permutations are drawn up front on the calling task via `_draw_permutation_plan(rng, ...)`,
 # so threaded execution is deterministic for a given `rng` regardless of thread count.
 
+######################################
+######### Types & Constants ##########
+######################################
+
+const _TF_PERM_CACHE_MAX_FLOATS = 16_000_000 # 128 MB cap for 4D TF permutation t-matrix cache
+
+######################################
+########### User Functions ###########
+######################################
+
+"""
+    generate_permutation_matrix(df, block_col; sync_col = nothing, n_permutations = 1000, type = :within, rng = Random.default_rng())
+
+Generate an `N × n_permutations` permutation matrix of integer row indices for Monte Carlo / permutation tests.
+
+# Arguments
+- `df`: A `DataFrame` containing the experimental design / trial metadata.
+- `block_col`: Column identifier (`Symbol` or `String`) for the grouping block (e.g. `:Subject` or `:Item`).
+
+# Keyword Arguments
+- `sync_col = nothing`: Column identifier to synchronize across for balanced crossed designs.
+- `n_permutations = 1000`: Number of permutations to generate.
+- `type = :within`: `:within` (shuffle within blocks), `:synchronized` (synchronized shuffle across `sync_col`), or `:global`.
+- `rng = Random.default_rng()`: Random number generator for reproducibility.
+
+# Returns
+- `Matrix{Int}`: An `N × n_permutations` matrix where each column is a valid permutation of `1:N`.
+"""
+function generate_permutation_matrix(
+    df,
+    block_col;
+    sync_col = nothing,
+    n_permutations::Int = 1000,
+    n_perms::Union{Nothing,Int} = nothing,
+    type = :within,
+    rng::AbstractRNG = Random.default_rng(),
+)
+    eff_n_perms = isnothing(n_perms) ? n_permutations : n_perms
+    N = nrow(df)
+    eff_n_perms <= 0 && return zeros(Int, N, 0)
+
+    perm_matrix = zeros(Int, N, eff_n_perms)
+    b_col = Symbol(block_col)
+    hasproperty(df, b_col) || @minimal_error("Column '$b_col' not found in DataFrame. Available columns: $(names(df))")
+    blocks = df[!, b_col]
+    unique_blocks = unique(blocks)
+    n_blocks = length(unique_blocks)
+
+    if type == :within
+        block_idxs = [findall(==(b), blocks) for b in unique_blocks]
+        _permute_within!(perm_matrix, block_idxs, eff_n_perms, rng)
+    elseif type == :synchronized
+        isnothing(sync_col) && @minimal_error("Synchronized shuffling requires `sync_col` (e.g. sync_col=:Subject, block_col=:Item).")
+        s_col = Symbol(sync_col)
+        hasproperty(df, s_col) || @minimal_error("Column '$s_col' not found in DataFrame. Available columns: $(names(df))")
+
+        syncs = df[!, s_col]
+        unique_syncs = unique(syncs)
+        n_syncs = length(unique_syncs)
+        sync_map = Dict(s => i for (i, s) in enumerate(unique_syncs))
+        block_map = Dict(b => i for (i, b) in enumerate(unique_blocks))
+
+        grid = [Int[] for _ = 1:n_syncs, _ = 1:n_blocks]
+        for i = 1:N
+            push!(grid[sync_map[syncs[i]], block_map[blocks[i]]], i)
+        end
+
+        cell_len = length(grid[1, 1])
+        for s = 1:n_syncs, b = 1:n_blocks
+            length(grid[s, b]) == cell_len || @minimal_error(
+                "Synchronized shuffling requires a balanced design where every sync group sees all items with equal trial count. Row maps unbalanced cell count for Sync: $(unique_syncs[s]), Block: $(unique_blocks[b]). For unbalanced designs, please supply a custom `perm_matrix`."
+            )
+        end
+
+        _permute_synchronized!(perm_matrix, grid, cell_len, eff_n_perms, rng)
+    elseif type == :global
+        _permute_global!(perm_matrix, eff_n_perms, rng)
+    else
+        @minimal_error("Unknown permutation type: $type. Supported types: :within, :synchronized, :global")
+    end
+
+    return perm_matrix
+end
+
+######################################
+######### Internal Functions #########
+######################################
+
 function _draw_permutation_plan(rng::AbstractRNG, design::Symbol, n_A::Int, n_B::Int, n_permutations::Int)
     if design == :paired
         return rand(rng, Bool, n_A, n_permutations)
@@ -88,14 +176,13 @@ function _start_permutation_progress(show_progress::Bool, n_permutations::Int, d
     show_progress || return nothing
     progress = Progress(n_permutations, desc = desc, showspeed = true)
     completed = Threads.Atomic{Int}(0)
-    track_progress_async(progress, completed, n_permutations)
+    _track_progress_async(progress, completed, n_permutations)
     return completed
 end
 
 _tick!(::Nothing) = nothing
-_tick!(completed::Threads.Atomic{Int}) = (Threads.atomic_add!(completed, 1); nothing)
 
-# === CPU PERMUTATION T-STATISTIC KERNELS ===
+_tick!(completed::Threads.Atomic{Int}) = (Threads.atomic_add!(completed, 1); nothing)
 
 function _perm_ttest_paired!(t_flat::AbstractVector{Float64}, D::Matrix{Float64}, signs::Vector{Float64}, swaps::AbstractVector)
     n_p, n_voxels = size(D)
@@ -242,8 +329,6 @@ _collect_permutation_t_matrices_tf(
     show_progress::Bool = true,
 ) = _collect_perm_t_generic(data1, data2, design, plan, show_progress, "Collecting TF t-matrices: ")
 
-# === GPU PERMUTATION KERNELS ===
-
 @kernel function _paired_perm_ttest_kernel!(t_out, @Const(D), @Const(plan), n_participants::Int)
     feat_idx, perm_idx = @index(Global, NTuple)
 
@@ -309,8 +394,8 @@ function _collect_permutation_t_matrices_gpu(prepared::StatisticalData, plan::Ab
     if prepared.analysis.design == :paired
         n_participants = size(prepared.analysis.data[1], 1)
         D_cpu = _build_perm_source(prepared.analysis.data[1], prepared.analysis.data[2], :paired)
-        D_gpu = gpu_array(Float32.(D_cpu))
-        plan_gpu = gpu_array(Matrix{Bool}(plan))
+        D_gpu = _gpu_array(Float32.(D_cpu))
+        plan_gpu = _gpu_array(Matrix{Bool}(plan))
         t_perm_gpu = KernelAbstractions.allocate(backend, Float32, n_features, n_permutations)
 
         _paired_perm_ttest_kernel!(backend)(t_perm_gpu, D_gpu, plan_gpu, n_participants; ndrange = (n_features, n_permutations))
@@ -323,8 +408,8 @@ function _collect_permutation_t_matrices_gpu(prepared::StatisticalData, plan::Ab
         X_cpu = _build_perm_source(prepared.analysis.data[1], prepared.analysis.data[2], :independent)
         X_centered = X_cpu .- mean(X_cpu, dims = 1)
 
-        X_gpu = gpu_array(Float32.(X_centered))
-        plan_gpu = gpu_array(Matrix{Int32}(plan))
+        X_gpu = _gpu_array(Float32.(X_centered))
+        plan_gpu = _gpu_array(Matrix{Int32}(plan))
         t_perm_gpu = KernelAbstractions.allocate(backend, Float32, n_features, n_permutations)
 
         _indep_perm_ttest_kernel!(backend)(t_perm_gpu, X_gpu, plan_gpu, n_A, n_B; ndrange = (n_features, n_permutations))
@@ -332,8 +417,6 @@ function _collect_permutation_t_matrices_gpu(prepared::StatisticalData, plan::Ab
         return reshape(Float64.(Array(t_perm_gpu)), n_electrodes, n_time, n_permutations)
     end
 end
-
-# === CLUSTER PERMUTATION LOOPS (ERP & TF) ===
 
 @inline _apply_perm_threshold!(
     mask_pos::BitArray{N},
@@ -438,8 +521,6 @@ function _run_permutations(
 
     return permutation_max_positive, permutation_max_negative
 end
-
-const _TF_PERM_CACHE_MAX_FLOATS = 16_000_000 # 128 MB cap for 4D TF permutation t-matrix cache
 
 function _stream_nonparametric_threshold_common_tf(
     prepared::TFStatisticalData,
@@ -597,8 +678,6 @@ function _run_permutations_tf(
     return permutation_max_positive, permutation_max_negative
 end
 
-# === DESIGN-AWARE BLOCK PERMUTATION MATRIX GENERATOR ===
-
 function _permute_within!(perm_matrix::Matrix{Int}, block_idxs::Vector{Vector{Int}}, n_perms::Int, rng::AbstractRNG)
     scratch_bufs = [copy(b) for b in block_idxs]
     for p = 1:n_perms
@@ -646,78 +725,4 @@ function _permute_global!(perm_matrix::Matrix{Int}, n_perms::Int, rng::AbstractR
             col[i], col[j] = col[j], col[i]
         end
     end
-end
-
-"""
-    generate_permutation_matrix(df, block_col; sync_col = nothing, n_permutations = 1000, type = :within, rng = Random.default_rng())
-
-Generate an `N × n_permutations` permutation matrix of integer row indices for Monte Carlo / permutation tests.
-
-# Arguments
-- `df`: A `DataFrame` containing the experimental design / trial metadata.
-- `block_col`: Column identifier (`Symbol` or `String`) for the grouping block (e.g. `:Subject` or `:Item`).
-
-# Keyword Arguments
-- `sync_col = nothing`: Column identifier to synchronize across for balanced crossed designs.
-- `n_permutations = 1000`: Number of permutations to generate.
-- `type = :within`: `:within` (shuffle within blocks), `:synchronized` (synchronized shuffle across `sync_col`), or `:global`.
-- `rng = Random.default_rng()`: Random number generator for reproducibility.
-
-# Returns
-- `Matrix{Int}`: An `N × n_permutations` matrix where each column is a valid permutation of `1:N`.
-"""
-function generate_permutation_matrix(
-    df,
-    block_col;
-    sync_col = nothing,
-    n_permutations::Int = 1000,
-    n_perms::Union{Nothing,Int} = nothing,
-    type = :within,
-    rng::AbstractRNG = Random.default_rng(),
-)
-    eff_n_perms = isnothing(n_perms) ? n_permutations : n_perms
-    N = nrow(df)
-    eff_n_perms <= 0 && return zeros(Int, N, 0)
-
-    perm_matrix = zeros(Int, N, eff_n_perms)
-    b_col = Symbol(block_col)
-    hasproperty(df, b_col) || @minimal_error("Column '$b_col' not found in DataFrame. Available columns: $(names(df))")
-    blocks = df[!, b_col]
-    unique_blocks = unique(blocks)
-    n_blocks = length(unique_blocks)
-
-    if type == :within
-        block_idxs = [findall(==(b), blocks) for b in unique_blocks]
-        _permute_within!(perm_matrix, block_idxs, eff_n_perms, rng)
-    elseif type == :synchronized
-        isnothing(sync_col) && @minimal_error("Synchronized shuffling requires `sync_col` (e.g. sync_col=:Subject, block_col=:Item).")
-        s_col = Symbol(sync_col)
-        hasproperty(df, s_col) || @minimal_error("Column '$s_col' not found in DataFrame. Available columns: $(names(df))")
-
-        syncs = df[!, s_col]
-        unique_syncs = unique(syncs)
-        n_syncs = length(unique_syncs)
-        sync_map = Dict(s => i for (i, s) in enumerate(unique_syncs))
-        block_map = Dict(b => i for (i, b) in enumerate(unique_blocks))
-
-        grid = [Int[] for _ = 1:n_syncs, _ = 1:n_blocks]
-        for i = 1:N
-            push!(grid[sync_map[syncs[i]], block_map[blocks[i]]], i)
-        end
-
-        cell_len = length(grid[1, 1])
-        for s = 1:n_syncs, b = 1:n_blocks
-            length(grid[s, b]) == cell_len || @minimal_error(
-                "Synchronized shuffling requires a balanced design where every sync group sees all items with equal trial count. Row maps unbalanced cell count for Sync: $(unique_syncs[s]), Block: $(unique_blocks[b]). For unbalanced designs, please supply a custom `perm_matrix`."
-            )
-        end
-
-        _permute_synchronized!(perm_matrix, grid, cell_len, eff_n_perms, rng)
-    elseif type == :global
-        _permute_global!(perm_matrix, eff_n_perms, rng)
-    else
-        @minimal_error("Unknown permutation type: $type. Supported types: :within, :synchronized, :global")
-    end
-
-    return perm_matrix
 end

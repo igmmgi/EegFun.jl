@@ -1,38 +1,8 @@
-function _plot_component_metric!(
-    ax::Axis,
-    metrics_df::DataFrame,
-    metric_col::Symbol,
-    identified_comps::AbstractVector{<:Integer};
-    threshold = nothing,
-    threshold_style = :dash,
-    threshold_color = :gray,
-    threshold_label = nothing,
-    add_legend::Bool = false,
-    label_all::String = "All Components",
-    label_highlight::String = "Identified Components",
-)
-    comps_col = metrics_df[!, :Component]
-    vals_col = metrics_df[!, metric_col]
-    scatter!(ax, comps_col, vals_col, color = :gray, markersize = 12, label = add_legend ? label_all : nothing)
+# Diagnostic feature plots for EOG, ECG, line-noise, and kurtosis ICA components.
 
-    if !isnothing(threshold)
-        t_label = add_legend && !isnothing(threshold_label) ? threshold_label : nothing
-        hlines!(ax, threshold, color = threshold_color, linestyle = threshold_style, label = t_label)
-    end
-
-    if !isempty(identified_comps)
-        id_set = Set{Int}(identified_comps)
-        hi_idx = findall(c -> Int(c) in id_set, comps_col)
-        if !isempty(hi_idx)
-            hi_comps = comps_col[hi_idx]
-            hi_vals = vals_col[hi_idx]
-            scatter!(ax, hi_comps, hi_vals, color = :red, markersize = 15, label = add_legend ? label_highlight : nothing)
-            text!(ax, hi_comps, hi_vals; text = string.(hi_comps), color = :red, align = (:center, :bottom), fontsize = 14, offset = (0, 5))
-        end
-    end
-
-    add_legend && axislegend(ax, position = (1.0, 1.0))
-end
+######################################
+########### User Functions ###########
+######################################
 
 """
     plot_eog_component_features(identified_comps::Dict, metrics_df::DataFrame; kwargs...) -> NamedTuple
@@ -156,35 +126,6 @@ function plot_line_noise_components(line_noise_comps::AbstractVector{<:Integer},
 
     plot_kwargs[:display_plot] && _display_figure(fig)
     return (fig = fig, axes = [ax1, ax2])
-end
-
-function _scatter_ecg_panel!(ax::Axis, hr_bpm::Vector{Float64}, y_col::AbstractVector, comps_col::AbstractVector, is_ecg::Set{Int})
-    non_x = Float64[]
-    non_y = Float64[]
-    ecg_x = Float64[]
-    ecg_y = Float64[]
-    ecg_lbls = String[]
-
-    @inbounds for i in eachindex(hr_bpm, y_col, comps_col)
-        x = hr_bpm[i]
-        y = Float64(y_col[i])
-        (isnan(x) || isnan(y)) && continue
-        c = Int(comps_col[i])
-        if c in is_ecg
-            push!(ecg_x, x)
-            push!(ecg_y, y)
-            push!(ecg_lbls, string(c))
-        else
-            push!(non_x, x)
-            push!(non_y, y)
-        end
-    end
-
-    !isempty(non_x) && scatter!(ax, non_x, non_y, color = :gray, markersize = 8, label = "Non-ECG")
-    if !isempty(ecg_x)
-        scatter!(ax, ecg_x, ecg_y, color = :red, markersize = 12, marker = :diamond, label = "ECG")
-        text!(ax, ecg_x, ecg_y; text = ecg_lbls, align = (:center, :bottom), offset = (0, 3), fontsize = 12)
-    end
 end
 
 """
@@ -349,4 +290,73 @@ function plot_artifact_components(ica::InfoIca, artifacts::ArtifactComponents; k
 
     display_plot && _display_figure(fig)
     return (fig = fig, axes = axes)
+end
+
+######################################
+######### Internal Functions #########
+######################################
+
+function _plot_component_metric!(
+    ax::Axis,
+    metrics_df::DataFrame,
+    metric_col::Symbol,
+    identified_comps::AbstractVector{<:Integer};
+    threshold = nothing,
+    threshold_style = :dash,
+    threshold_color = :gray,
+    threshold_label = nothing,
+    add_legend::Bool = false,
+    label_all::String = "All Components",
+    label_highlight::String = "Identified Components",
+)
+    comps_col = metrics_df[!, :Component]
+    vals_col = metrics_df[!, metric_col]
+    scatter!(ax, comps_col, vals_col, color = :gray, markersize = 12, label = add_legend ? label_all : nothing)
+
+    if !isnothing(threshold)
+        t_label = add_legend && !isnothing(threshold_label) ? threshold_label : nothing
+        hlines!(ax, threshold, color = threshold_color, linestyle = threshold_style, label = t_label)
+    end
+
+    if !isempty(identified_comps)
+        id_set = Set{Int}(identified_comps)
+        hi_idx = findall(c -> Int(c) in id_set, comps_col)
+        if !isempty(hi_idx)
+            hi_comps = comps_col[hi_idx]
+            hi_vals = vals_col[hi_idx]
+            scatter!(ax, hi_comps, hi_vals, color = :red, markersize = 15, label = add_legend ? label_highlight : nothing)
+            text!(ax, hi_comps, hi_vals; text = string.(hi_comps), color = :red, align = (:center, :bottom), fontsize = 14, offset = (0, 5))
+        end
+    end
+
+    add_legend && axislegend(ax, position = (1.0, 1.0))
+end
+
+function _scatter_ecg_panel!(ax::Axis, hr_bpm::Vector{Float64}, y_col::AbstractVector, comps_col::AbstractVector, is_ecg::Set{Int})
+    non_x = Float64[]
+    non_y = Float64[]
+    ecg_x = Float64[]
+    ecg_y = Float64[]
+    ecg_lbls = String[]
+
+    @inbounds for i in eachindex(hr_bpm, y_col, comps_col)
+        x = hr_bpm[i]
+        y = Float64(y_col[i])
+        (isnan(x) || isnan(y)) && continue
+        c = Int(comps_col[i])
+        if c in is_ecg
+            push!(ecg_x, x)
+            push!(ecg_y, y)
+            push!(ecg_lbls, string(c))
+        else
+            push!(non_x, x)
+            push!(non_y, y)
+        end
+    end
+
+    !isempty(non_x) && scatter!(ax, non_x, non_y, color = :gray, markersize = 8, label = "Non-ECG")
+    if !isempty(ecg_x)
+        scatter!(ax, ecg_x, ecg_y, color = :red, markersize = 12, marker = :diamond, label = "ECG")
+        text!(ax, ecg_x, ecg_y; text = ecg_lbls, align = (:center, :bottom), offset = (0, 3), fontsize = 12)
+    end
 end

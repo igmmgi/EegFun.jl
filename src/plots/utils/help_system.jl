@@ -1,3 +1,9 @@
+# Keyboard/mouse shortcut help overlays for interactive Makie plots.
+
+######################################
+######### Types & Constants ##########
+######################################
+
 struct PlotHelpInfo
     title::String
     interactions::Vector{Tuple{String,String}}
@@ -98,6 +104,10 @@ const _PLOT_HELP_INFO = Dict{Symbol,PlotHelpInfo}(
 )
 
 const _EMPTY_PLOT_HELP = PlotHelpInfo("Plot", Tuple{String,String}[])
+
+######################################
+######### Internal Functions #########
+######################################
 
 _get_plot_help_info(plot_type::Symbol)::PlotHelpInfo = get(_PLOT_HELP_INFO, plot_type, _EMPTY_PLOT_HELP)
 

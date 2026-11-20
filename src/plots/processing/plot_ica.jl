@@ -1,60 +1,265 @@
-# Single shared kwargs for all topography plots (both ICA and standard)
-const PLOT_TOPOGRAPHY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
-    :display_plot => (true, "Whether to display the plot"),
-    :figure_title => ("", "Title drawn at the top of the entire figure canvas"),
-    :figure_title_fontsize => (24, "Font size for figure title"),
-    :interactive => (true, "Whether to enable interactive features"),
-    :theme_fontsize => (nothing, "Font size for theme"),
-    :zoom_step => (0.2, "Fractional zoom step for arrow keys (e.g. 0.2 means 20% zoom in/out)"),
-    :figure_padding => ((10, 30, 10, 10), "Padding around entire figure as (left, right, bottom, top) tuple (in pixels)"),
-    :method => (
-        :thin_plate,
-        "Interpolation method: :multiquadratic, :inverse_multiquadratic, :gaussian, :inverse_quadratic, :thin_plate, :polyharmonic, :shepard, :nearest, :spherical_spline. See https://eljungsk.github.io/ScatteredInterpolation.jl/dev/methods/ for details on methods.",
-    ),
-    :colormap => (nothing, "Colormap for the topography"),
-    :gridscale => (75, "Grid resolution for interpolation"),
-    :dims => (nothing, "Grid dimensions (rows, cols). If nothing, calculates best square-ish grid"),
-    :colorrange => (nothing, "Color scale limits as (min, max) tuple (nothing for auto)"),
-    :num_levels => (20, "Number of contour levels (for ICA plots)."),
-    :plot_title => (nothing, "Plot title"),
-    :show_title => (true, "Whether to show the plot title"),
-    :plot_title_position => (
-        nothing,
-        "Relative (x, y) coordinates for the plot title (e.g., (0.5, 0.95)). If provided, the title is drawn inside the axis.",
-    ),
-    :plot_title_align => ((:center, :top), "Alignment of the inner plot title"),
-    :plot_title_fontsize => (16, "Font size for the title"),
-    :time_unit =>
-        (:s, "Time unit for display labels (:s or :ms). Only affects title strings — all intervals and selections remain in seconds."),
-    :head_color => (nothing, "Color of the head shape outline."),
-    :head_linewidth => (2, "Line width of the head shape outline."),
-    :head_radius => (1.0, "Radius of the head shape in mm."),
-    :point_plot => (true, "Whether to plot electrode points."),
-    :point_marker => (:circle, "Marker style for electrode points."),
-    :point_markersize => (12, "Size of electrode point markers."),
-    :point_color => (nothing, "Color of electrode points."),
-    :label_plot => (true, "Whether to plot electrode labels."),
-    :label_fontsize => (20, "Font size for electrode labels."),
-    :label_color => (nothing, "Color of electrode labels."),
-    :label_xoffset => (0, "X-axis offset for electrode labels."),
-    :label_yoffset => (0, "Y-axis offset for electrode labels."),
-    :colorbar_kwargs => (
-        NamedTuple(),
-        "Additional kwargs passed directly to the Makie Colorbar block (see Makie's [Colorbar documentation](https://docs.makie.org/stable/reference/blocks/colorbar/) for available attributes).",
-    ),
-    :colorbar_plot => (true, "Whether to show the colorbar"),
-    :colorbar_position => (:right, "Position of the colorbar (:right, :left, :top, :bottom, or tuple)"),
-    :colorbar_label => ("", "Label for the colorbar"),
-    :colorbar_plot_numbers => ([], "Plot indices for which to show colorbars. Empty list shows colorbars for all plots."),
-    :highlight_channels => (
-        nothing,
-        "Highlight channel groups as a NamedTuple or Vector of NamedTuples. Each group: (channels=[:Cz, :Pz], color=:white, size=8, marker=:circle)",
-    ),
-    :use_global_scale => (false, "Do multiple ICA topoplots share the same color scale based on min/max across all components?"),
-    :component_selection => (components(), "Function that returns boolean vector for component filtering"),
-)
+# Interactive ICA component scalp topographies and scrolling activation browser.
+
+######################################
+######### Types & Constants ##########
+######################################
 
 const _CHANNEL_OVERLAY_COLORS = [:grey, :dodgerblue, :darkorange, :mediumpurple, :forestgreen, :crimson, :goldenrod, :deeppink]
+
+mutable struct IcaOverlayState
+    names::Vector{Symbol}
+    plots::Vector{Vector{Any}}
+end
+
+mutable struct IcaArtifactState
+    data::Union{Nothing,ArtifactComponents}
+    toggles::Union{Nothing,Dict{Symbol,Observable{Bool}}}
+    textbox::Union{Nothing,Textbox}
+end
+
+mutable struct IcaComponentState
+    dat::ContinuousData
+    ica::InfoIca
+    component_data::Matrix{Float64}
+    n_visible_components::Int
+    window_size::Int
+    comp_start::Observable{Int}
+    xrange::Observable{UnitRange{Int}}
+    ylims::Observable{Tuple{Float64,Float64}}
+    channel_yscale::Observable{Float64}
+    use_global_scale::Observable{Bool}
+    invert_scale::Observable{Bool}
+    components::Vector{Int}
+    plot_kwargs::Dict{Symbol,Any}
+    fig::Union{Nothing,Figure}
+    axs::Vector{Axis}
+    channel_axs::Vector{Union{Axis,Nothing}}
+    topo_axs::Vector{Axis}
+    lines_obs::Vector{Observable{Vector{Float64}}}
+    overlay::IcaOverlayState
+    artifacts::IcaArtifactState
+
+    function IcaComponentState(
+        dat,
+        ica,
+        component_selection,
+        n_visible_components,
+        window_size;
+        method = :thin_plate,
+        gridscale = 100,
+        kwargs...,
+    )
+        dat_matrix = _prepare_ica_plot_matrix(dat, ica)
+        component_data = ica.unmixing * dat_matrix
+        total_components, n_samps = size(component_data)
+
+        comp_start = Observable(1)
+        use_global_scale = Observable(Bool(get(kwargs, :use_global_scale, false)))
+        invert_scale = Observable(false)
+
+        time_zero_idx = clamp(searchsortedfirst(dat.data.time, 0.0), 1, length(dat.data.time))
+        start_idx = max(1, time_zero_idx - div(window_size, 2))
+        end_idx = min(n_samps, start_idx + window_size - 1)
+        end_idx == n_samps && (start_idx = max(1, end_idx - window_size + 1))
+        xrange = Observable(start_idx:end_idx)
+
+        comps_to_use = findall(component_selection(1:total_components))
+
+        max_abs = 0.0
+        has_val = false
+        if !isempty(comps_to_use) && all(<=(total_components), comps_to_use)
+            @inbounds for s = start_idx:end_idx, c in comps_to_use
+                v = abs(component_data[c, s])
+                v > max_abs && (max_abs = v)
+                has_val = true
+            end
+        end
+        initial_range = (has_val && max_abs > 0.0) ? max_abs : 1.0
+
+        ylims = Observable((-initial_range, initial_range))
+        channel_yscale = Observable(1.0)
+
+        plot_kwargs = Dict{Symbol,Any}(pairs(kwargs))
+        delete!(plot_kwargs, :use_global_scale)
+        plot_kwargs[:method] = method
+        plot_kwargs[:gridscale] = gridscale
+
+        new(
+            dat,
+            ica,
+            component_data,
+            n_visible_components,
+            window_size,
+            comp_start,
+            xrange,
+            ylims,
+            channel_yscale,
+            use_global_scale,
+            invert_scale,
+            comps_to_use,
+            plot_kwargs,
+            nothing,
+            Axis[],
+            Union{Axis,Nothing}[],
+            Axis[],
+            Observable{Vector{Float64}}[],
+            IcaOverlayState(Symbol[], Vector{Any}[]),
+            IcaArtifactState(nothing, nothing, nothing),
+        )
+    end
+end
+
+######################################
+########### User Functions ###########
+######################################
+
+"""
+    plot_topography(ica::InfoIca; component_selection = components(), kwargs...) -> NamedTuple
+
+Plot ICA component scalp topographies in a grid layout.
+
+$(_generate_kwargs_doc(PLOT_TOPOGRAPHY_KWARGS))
+"""
+function plot_topography(ica::InfoIca; component_selection = components(), kwargs...)
+    merged_kwargs = Dict{Symbol,Any}(:colorbar_label => "a.u.", pairs(kwargs)...)
+    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, merged_kwargs)
+
+    dims = plot_kwargs[:dims]
+    display_plot = plot_kwargs[:display_plot]
+    show_title = plot_kwargs[:show_title]
+    colorbar_plot = plot_kwargs[:colorbar_plot]
+
+    _ensure_coordinates_2d!(ica.layout)
+    _ensure_coordinates_3d!(ica.layout)
+
+    fontsize_kw = isnothing(plot_kwargs[:theme_fontsize]) ? (;) : (; fontsize = plot_kwargs[:theme_fontsize])
+    comps = get_selected_components(ica, component_selection)
+    if isempty(comps)
+        return (fig = _eegfun_figure(; figure_padding = plot_kwargs[:figure_padding], fontsize_kw...), axes = Axis[])
+    end
+
+    fig = _eegfun_figure(; figure_padding = plot_kwargs[:figure_padding], fontsize_kw...)
+    isnothing(dims) && (dims = _best_rect(length(comps)))
+    (length(dims) == 2 && all(dims .> 0)) || @minimal_error "Invalid dimensions: $dims. Expected [rows, cols] with positive values."
+    total_cells = dims[1] * dims[2]
+    total_cells < length(comps) && @minimal_error "Grid dimensions $dims provide $total_cells cells but need $(length(comps))."
+
+    all_data, x_bounds, y_bounds = _prepare_ica_topo_data(ica, comps, plot_kwargs[:method], plot_kwargs[:gridscale])
+    use_global = Bool(plot_kwargs[:use_global_scale])
+    levels_result =
+        isnothing(plot_kwargs[:colorrange]) ? _calculate_ica_topo_levels(all_data, use_global, plot_kwargs[:num_levels]) : nothing
+
+    axes = Vector{Axis}(undef, length(comps))
+    for i in eachindex(comps)
+        base_row, base_col = divrem(i - 1, dims[2]) .+ (1, 1)
+        default_title = @sprintf("IC %d (%.1f%%)", comps[i], ica.variance[comps[i]] * 100)
+        ax_title = if !show_title
+            ""
+        elseif !isnothing(plot_kwargs[:plot_title]) && length(comps) == 1
+            String(plot_kwargs[:plot_title])
+        else
+            default_title
+        end
+
+        ax = if colorbar_plot
+            sg = GridLayout(fig[base_row, base_col])
+            Axis(sg[1, 1], title = ax_title)
+        else
+            Axis(fig[base_row, base_col], title = ax_title)
+        end
+        axes[i] = ax
+
+        comp_levels = isnothing(levels_result) ? nothing : (use_global ? levels_result : levels_result[i])
+        _plot_ica_topography_impl!(
+            fig,
+            ax,
+            ica,
+            comps[i],
+            plot_kwargs,
+            colorbar_plot;
+            precomputed_topo = (all_data[i], x_bounds, y_bounds),
+            pre_calculated_levels = comp_levels,
+        )
+    end
+
+    zoom_step = plot_kwargs[:zoom_step]
+    on(events(fig).keyboardbutton) do event
+        if event.action == Keyboard.press && event.key in (Keyboard.up, Keyboard.down)
+            fig_axes = filter(a -> a isa Axis, fig.content)
+            if event.key == Keyboard.up
+                _topo_scale_up!.(fig_axes, zoom_step)
+            else
+                _topo_scale_down!.(fig_axes, zoom_step)
+            end
+        end
+    end
+
+    display_plot && _display_figure(fig)
+    _set_window_title("Makie")
+    return (fig = fig, axes = axes)
+end
+
+"""
+    plot_ica_component_activation(dat::ContinuousData, ica::InfoIca; artifacts = nothing, kwargs...) -> NamedTuple
+
+Interactive viewer for ICA component time-course activations and scalp topographies.
+
+$(_generate_kwargs_doc(PLOT_TOPOGRAPHY_KWARGS))
+"""
+function plot_ica_component_activation(dat::ContinuousData, ica::InfoIca; artifacts::Union{Nothing,ArtifactComponents} = nothing, kwargs...)
+    _set_window_title(_generate_window_title(dat))
+
+    merged_kwargs = Dict{Symbol,Any}(:colorbar_label => "a.u.", pairs(kwargs)...)
+    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, merged_kwargs)
+
+    _ensure_coordinates_2d!(ica.layout)
+    _ensure_coordinates_3d!(ica.layout)
+
+    component_selection = pop!(plot_kwargs, :component_selection)
+    selected_components = findall(component_selection(1:length(ica.ica_label)))
+    isempty(selected_components) && @minimal_error("No ICA components matched component_selection")
+    n_visible_components = min(length(selected_components), 10)
+    window_size = min(2000, n_samples(dat))
+    method = pop!(plot_kwargs, :method)
+    gridscale = pop!(plot_kwargs, :gridscale)
+    display_plot = pop!(plot_kwargs, :display_plot)
+
+    plot_kwargs[:point_plot] = false
+    plot_kwargs[:label_plot] = false
+
+    state = IcaComponentState(
+        dat,
+        ica,
+        component_selection,
+        n_visible_components,
+        window_size;
+        method = method,
+        gridscale = gridscale,
+        plot_kwargs...,
+    )
+
+    fontsize_kw = isnothing(plot_kwargs[:theme_fontsize]) ? (;) : (; fontsize = plot_kwargs[:theme_fontsize])
+    fig = _eegfun_figure(; figure_padding = plot_kwargs[:figure_padding], fontsize_kw...)
+    _create_component_activation_plots!(fig, state)
+    _add_navigation_controls!(fig, state)
+    _add_navigation_sliders!(fig, state)
+    _add_channel_menu!(fig, state)
+    !isnothing(artifacts) && _add_artifact_category_checkboxes!(fig, state, artifacts)
+    _setup_keyboard_interactions!(fig, state)
+
+    colsize!(fig.layout, 1, Relative(0.15))
+    colsize!(fig.layout, 2, Relative(0.85))
+    rowgap!(fig.layout, 5)
+    rowgap!(fig.layout, state.n_visible_components, 80)
+
+    screen = display_plot ? _display_figure(fig) : nothing
+    _set_window_title("Makie")
+    return (fig = fig, axes = state.axs, screen = screen)
+end
+
+######################################
+######### Internal Functions #########
+######################################
 
 function _finite_matrix_extrema(data::AbstractMatrix{<:Real})
     lo = Inf
@@ -267,253 +472,6 @@ function _plot_topography!(fig::Figure, ax::Axis, ica::InfoIca, component::Int; 
         plot_kwargs[:colorbar_plot];
         precomputed_topo = precomputed_topo,
     )
-end
-
-"""
-    plot_topography(ica::InfoIca; component_selection = components(), kwargs...) -> NamedTuple
-
-Plot ICA component scalp topographies in a grid layout.
-
-$(_generate_kwargs_doc(PLOT_TOPOGRAPHY_KWARGS))
-"""
-function plot_topography(ica::InfoIca; component_selection = components(), kwargs...)
-    merged_kwargs = Dict{Symbol,Any}(:colorbar_label => "a.u.", pairs(kwargs)...)
-    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, merged_kwargs)
-
-    dims = plot_kwargs[:dims]
-    display_plot = plot_kwargs[:display_plot]
-    show_title = plot_kwargs[:show_title]
-    colorbar_plot = plot_kwargs[:colorbar_plot]
-
-    _ensure_coordinates_2d!(ica.layout)
-    _ensure_coordinates_3d!(ica.layout)
-
-    fontsize_kw = isnothing(plot_kwargs[:theme_fontsize]) ? (;) : (; fontsize = plot_kwargs[:theme_fontsize])
-    comps = get_selected_components(ica, component_selection)
-    if isempty(comps)
-        return (fig = _eegfun_figure(; figure_padding = plot_kwargs[:figure_padding], fontsize_kw...), axes = Axis[])
-    end
-
-    fig = _eegfun_figure(; figure_padding = plot_kwargs[:figure_padding], fontsize_kw...)
-    isnothing(dims) && (dims = _best_rect(length(comps)))
-    (length(dims) == 2 && all(dims .> 0)) || @minimal_error "Invalid dimensions: $dims. Expected [rows, cols] with positive values."
-    total_cells = dims[1] * dims[2]
-    total_cells < length(comps) && @minimal_error "Grid dimensions $dims provide $total_cells cells but need $(length(comps))."
-
-    all_data, x_bounds, y_bounds = _prepare_ica_topo_data(ica, comps, plot_kwargs[:method], plot_kwargs[:gridscale])
-    use_global = Bool(plot_kwargs[:use_global_scale])
-    levels_result =
-        isnothing(plot_kwargs[:colorrange]) ? _calculate_ica_topo_levels(all_data, use_global, plot_kwargs[:num_levels]) : nothing
-
-    axes = Vector{Axis}(undef, length(comps))
-    for i in eachindex(comps)
-        base_row, base_col = divrem(i - 1, dims[2]) .+ (1, 1)
-        default_title = @sprintf("IC %d (%.1f%%)", comps[i], ica.variance[comps[i]] * 100)
-        ax_title = if !show_title
-            ""
-        elseif !isnothing(plot_kwargs[:plot_title]) && length(comps) == 1
-            String(plot_kwargs[:plot_title])
-        else
-            default_title
-        end
-
-        ax = if colorbar_plot
-            sg = GridLayout(fig[base_row, base_col])
-            Axis(sg[1, 1], title = ax_title)
-        else
-            Axis(fig[base_row, base_col], title = ax_title)
-        end
-        axes[i] = ax
-
-        comp_levels = isnothing(levels_result) ? nothing : (use_global ? levels_result : levels_result[i])
-        _plot_ica_topography_impl!(
-            fig,
-            ax,
-            ica,
-            comps[i],
-            plot_kwargs,
-            colorbar_plot;
-            precomputed_topo = (all_data[i], x_bounds, y_bounds),
-            pre_calculated_levels = comp_levels,
-        )
-    end
-
-    zoom_step = plot_kwargs[:zoom_step]
-    on(events(fig).keyboardbutton) do event
-        if event.action == Keyboard.press && event.key in (Keyboard.up, Keyboard.down)
-            fig_axes = filter(a -> a isa Axis, fig.content)
-            if event.key == Keyboard.up
-                _topo_scale_up!.(fig_axes, zoom_step)
-            else
-                _topo_scale_down!.(fig_axes, zoom_step)
-            end
-        end
-    end
-
-    display_plot && _display_figure(fig)
-    _set_window_title("Makie")
-    return (fig = fig, axes = axes)
-end
-
-mutable struct IcaOverlayState
-    names::Vector{Symbol}
-    plots::Vector{Vector{Any}}
-end
-
-mutable struct IcaArtifactState
-    data::Union{Nothing,ArtifactComponents}
-    toggles::Union{Nothing,Dict{Symbol,Observable{Bool}}}
-    textbox::Union{Nothing,Textbox}
-end
-
-mutable struct IcaComponentState
-    dat::ContinuousData
-    ica::InfoIca
-    component_data::Matrix{Float64}
-    n_visible_components::Int
-    window_size::Int
-    comp_start::Observable{Int}
-    xrange::Observable{UnitRange{Int}}
-    ylims::Observable{Tuple{Float64,Float64}}
-    channel_yscale::Observable{Float64}
-    use_global_scale::Observable{Bool}
-    invert_scale::Observable{Bool}
-    components::Vector{Int}
-    plot_kwargs::Dict{Symbol,Any}
-    fig::Union{Nothing,Figure}
-    axs::Vector{Axis}
-    channel_axs::Vector{Union{Axis,Nothing}}
-    topo_axs::Vector{Axis}
-    lines_obs::Vector{Observable{Vector{Float64}}}
-    overlay::IcaOverlayState
-    artifacts::IcaArtifactState
-
-    function IcaComponentState(
-        dat,
-        ica,
-        component_selection,
-        n_visible_components,
-        window_size;
-        method = :thin_plate,
-        gridscale = 100,
-        kwargs...,
-    )
-        dat_matrix = _prepare_ica_plot_matrix(dat, ica)
-        component_data = ica.unmixing * dat_matrix
-        total_components, n_samps = size(component_data)
-
-        comp_start = Observable(1)
-        use_global_scale = Observable(Bool(get(kwargs, :use_global_scale, false)))
-        invert_scale = Observable(false)
-
-        time_zero_idx = clamp(searchsortedfirst(dat.data.time, 0.0), 1, length(dat.data.time))
-        start_idx = max(1, time_zero_idx - div(window_size, 2))
-        end_idx = min(n_samps, start_idx + window_size - 1)
-        end_idx == n_samps && (start_idx = max(1, end_idx - window_size + 1))
-        xrange = Observable(start_idx:end_idx)
-
-        comps_to_use = findall(component_selection(1:total_components))
-
-        max_abs = 0.0
-        has_val = false
-        if !isempty(comps_to_use) && all(<=(total_components), comps_to_use)
-            @inbounds for s = start_idx:end_idx, c in comps_to_use
-                v = abs(component_data[c, s])
-                v > max_abs && (max_abs = v)
-                has_val = true
-            end
-        end
-        initial_range = (has_val && max_abs > 0.0) ? max_abs : 1.0
-
-        ylims = Observable((-initial_range, initial_range))
-        channel_yscale = Observable(1.0)
-
-        plot_kwargs = Dict{Symbol,Any}(pairs(kwargs))
-        delete!(plot_kwargs, :use_global_scale)
-        plot_kwargs[:method] = method
-        plot_kwargs[:gridscale] = gridscale
-
-        new(
-            dat,
-            ica,
-            component_data,
-            n_visible_components,
-            window_size,
-            comp_start,
-            xrange,
-            ylims,
-            channel_yscale,
-            use_global_scale,
-            invert_scale,
-            comps_to_use,
-            plot_kwargs,
-            nothing,
-            Axis[],
-            Union{Axis,Nothing}[],
-            Axis[],
-            Observable{Vector{Float64}}[],
-            IcaOverlayState(Symbol[], Vector{Any}[]),
-            IcaArtifactState(nothing, nothing, nothing),
-        )
-    end
-end
-
-"""
-    plot_ica_component_activation(dat::ContinuousData, ica::InfoIca; artifacts = nothing, kwargs...) -> NamedTuple
-
-Interactive viewer for ICA component time-course activations and scalp topographies.
-
-$(_generate_kwargs_doc(PLOT_TOPOGRAPHY_KWARGS))
-"""
-function plot_ica_component_activation(dat::ContinuousData, ica::InfoIca; artifacts::Union{Nothing,ArtifactComponents} = nothing, kwargs...)
-    _set_window_title(_generate_window_title(dat))
-
-    merged_kwargs = Dict{Symbol,Any}(:colorbar_label => "a.u.", pairs(kwargs)...)
-    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, merged_kwargs)
-
-    _ensure_coordinates_2d!(ica.layout)
-    _ensure_coordinates_3d!(ica.layout)
-
-    component_selection = pop!(plot_kwargs, :component_selection)
-    selected_components = findall(component_selection(1:length(ica.ica_label)))
-    isempty(selected_components) && @minimal_error("No ICA components matched component_selection")
-    n_visible_components = min(length(selected_components), 10)
-    window_size = min(2000, n_samples(dat))
-    method = pop!(plot_kwargs, :method)
-    gridscale = pop!(plot_kwargs, :gridscale)
-    display_plot = pop!(plot_kwargs, :display_plot)
-
-    plot_kwargs[:point_plot] = false
-    plot_kwargs[:label_plot] = false
-
-    state = IcaComponentState(
-        dat,
-        ica,
-        component_selection,
-        n_visible_components,
-        window_size;
-        method = method,
-        gridscale = gridscale,
-        plot_kwargs...,
-    )
-
-    fontsize_kw = isnothing(plot_kwargs[:theme_fontsize]) ? (;) : (; fontsize = plot_kwargs[:theme_fontsize])
-    fig = _eegfun_figure(; figure_padding = plot_kwargs[:figure_padding], fontsize_kw...)
-    _create_component_activation_plots!(fig, state)
-    _add_navigation_controls!(fig, state)
-    _add_navigation_sliders!(fig, state)
-    _add_channel_menu!(fig, state)
-    !isnothing(artifacts) && _add_artifact_category_checkboxes!(fig, state, artifacts)
-    _setup_keyboard_interactions!(fig, state)
-
-    colsize!(fig.layout, 1, Relative(0.15))
-    colsize!(fig.layout, 2, Relative(0.85))
-    rowgap!(fig.layout, 5)
-    rowgap!(fig.layout, state.n_visible_components, 80)
-
-    screen = display_plot ? _display_figure(fig) : nothing
-    _set_window_title("Makie")
-    return (fig = fig, axes = state.axs, screen = screen)
 end
 
 function _fill_ica_plot_row!(dat_matrix::Matrix{Float64}, c::Int, col::AbstractVector{<:Real}, mc::Float64, inv_scale::Float64)
@@ -1030,29 +988,3 @@ function _get_component_index(state, i::Int)
     idx = state.comp_start[] + i - 1
     return idx <= length(state.components) ? state.components[idx] : typemax(Int)
 end
-
-const PLOT_ICA_QUALITY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
-    :display_plot => (true, "Whether to display the plot"),
-    :plot_title => (nothing, "Custom plot title override"),
-    :show_title => (true, "Whether to show the plot title"),
-    :legend => (true, "Whether to display the legend"),
-    :z_threshold => (3.0, "Z-score threshold for identifying components"),
-    :min_harmonic_power => (1.5, "Minimum harmonic power threshold for line noise detection"),
-    :max_ibi_std_s => (0.2, "Maximum inter-beat interval standard deviation for ECG detection"),
-    :min_peak_ratio => (0.7, "Minimum peak ratio for ECG detection"),
-    :plot_title_fontsize => (16, "Font size for plot titles"),
-    :label_fontsize => (14, "Font size for axis labels"),
-    :tick_fontsize => (12, "Font size for tick labels"),
-    :legend_fontsize => (12, "Font size for legend"),
-    :linewidth => (2, "Line width for plot lines"),
-    :line_alpha => (0.8, "Transparency for plot lines"),
-    :threshold_style => (:dash, "Line style for threshold lines"),
-    :zscore_threshold_color => (:red, "Color for z-score threshold lines"),
-    :zscore_threshold_style => (:dash, "Line style for z-score threshold lines"),
-    :marker_size => (8, "Size of markers"),
-    :marker_alpha => (0.7, "Transparency of markers"),
-    :correlation_color => (:steelblue, "Color for correlation plots"),
-    :threshold_color => (:red, "Color for threshold lines"),
-    :identified_color => (:green, "Color for identified components"),
-    :rejected_color => (:red, "Color for rejected components"),
-)

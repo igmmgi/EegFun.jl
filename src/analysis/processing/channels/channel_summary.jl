@@ -1,3 +1,219 @@
+# Per-channel descriptive statistics and variance summaries.
+
+######################################
+########### User Functions ###########
+######################################
+
+"""
+    channel_summary(dat::SingleDataFrameEeg; sample_selection = samples(), interval_selection::Interval = times(),
+                    channel_selection = channels(), include_meta::Bool = false, include_extra::Bool = false) -> DataFrame
+    channel_summary(dat::MultiDataFrameEeg; sample_selection = samples(), interval_selection::Interval = times(),
+                    channel_selection = channels(), include_meta::Bool = false, include_extra::Bool = false) -> DataFrame
+    channel_summary(file_pattern::String; input_dir = pwd(), participant_selection = participants(),
+                    condition_selection = conditions(), sample_selection = samples(), interval_selection = times(),
+                    channel_selection = channels(), include_extra::Bool = false, output_dir = nothing,
+                    output_file::String = "channel_summary")
+
+Compute summary statistics (`min`, `max`, `std`, `range`, `var`, `zvar`) per channel (and per epoch for
+`MultiDataFrameEeg`, or saved to CSV across JLD2 files in batch mode).
+"""
+function channel_summary(
+    dat::SingleDataFrameEeg;
+    sample_selection = samples(),
+    interval_selection::Interval = times(),
+    channel_selection = channels(),
+    include_meta::Bool = false,
+    include_extra::Bool = false,
+)::DataFrame
+    n_samples(dat) == 0 && @minimal_error("Cannot compute channel summary: data is empty")
+    selected_channels = get_selected_channels(dat, channel_selection; include_meta = include_meta, include_extra = include_extra)
+    selected_samples = get_selected_samples(dat, _combine_interval_sample(interval_selection, sample_selection))
+    return _channel_summary_impl(dat.data, selected_samples, selected_channels)
+end
+
+function channel_summary(
+    dat::MultiDataFrameEeg;
+    sample_selection = samples(),
+    interval_selection::Interval = times(),
+    channel_selection = channels(),
+    include_meta::Bool = false,
+    include_extra::Bool = false,
+)::DataFrame
+    isempty(dat.data) && @minimal_error("Cannot compute channel summary: no epochs in data")
+
+    valid_epochs = Tuple{Int,DataFrame}[]
+    sizehint!(valid_epochs, length(dat.data))
+    for (epoch_idx, epoch_df) in enumerate(dat.data)
+        if nrow(epoch_df) == 0
+            @minimal_warning("Skipping empty epoch $(epoch_idx)")
+            continue
+        end
+        orig_ep = hasproperty(epoch_df, :epoch) && !isempty(epoch_df.epoch) ? Int(epoch_df.epoch[1]) : epoch_idx
+        push!(valid_epochs, (orig_ep, epoch_df))
+    end
+    isempty(valid_epochs) && @minimal_error("No valid epochs found for channel summary")
+
+    first_df = valid_epochs[1][2]
+    first_single = ContinuousData(dat.file, first_df, dat.layout, dat.sample_rate, dat.analysis_info)
+    selected_channels = get_selected_channels(first_single, channel_selection; include_meta = include_meta, include_extra = include_extra)
+    isempty(selected_channels) && @minimal_error("No channels selected for channel summary")
+    col_indices = Int[columnindex(first_df, ch) for ch in selected_channels]
+
+    all_samples_fast =
+        (sample_selection isa AllSelection || sample_selection isa _AllSamples) &&
+        (isnothing(interval_selection) || interval_selection isa AllSelection)
+    combined_sel = all_samples_fast ? nothing : _combine_interval_sample(interval_selection, sample_selection)
+
+    n_valid = length(valid_epochs)
+    n_ch = length(selected_channels)
+    total_rows = n_valid * n_ch
+
+    epoch_col = Vector{Int}(undef, total_rows)
+    channel_col = Vector{Symbol}(undef, total_rows)
+    min_col = Vector{Float64}(undef, total_rows)
+    max_col = Vector{Float64}(undef, total_rows)
+    std_col = Vector{Float64}(undef, total_rows)
+    range_col = Vector{Float64}(undef, total_rows)
+    var_col = Vector{Float64}(undef, total_rows)
+    zvar_col = Vector{Float64}(undef, total_rows)
+
+    empty_idx = Int[]
+    process_epoch = function (k::Int)
+        orig_ep, epoch_df = valid_epochs[k]
+        r_start = (k - 1) * n_ch + 1
+        r_end = k * n_ch
+        rng = r_start:r_end
+        @inbounds for i = 1:n_ch
+            epoch_col[r_start+i-1] = orig_ep
+            channel_col[r_start+i-1] = selected_channels[i]
+        end
+
+        if all_samples_fast
+            _write_channel_summary_slice!(
+                epoch_df,
+                col_indices,
+                1:nrow(epoch_df),
+                empty_idx,
+                @view(min_col[rng]),
+                @view(max_col[rng]),
+                @view(std_col[rng]),
+                @view(range_col[rng]),
+                @view(var_col[rng]),
+                @view(zvar_col[rng]),
+            )
+        else
+            single_dat = ContinuousData(dat.file, epoch_df, dat.layout, dat.sample_rate, dat.analysis_info)
+            sel_samps = get_selected_samples(single_dat, combined_sel)
+            isempty(sel_samps) && @minimal_error("No samples selected for channel summary")
+            contig = _contiguous_sample_range(sel_samps)
+            _write_channel_summary_slice!(
+                epoch_df,
+                col_indices,
+                contig,
+                sel_samps,
+                @view(min_col[rng]),
+                @view(max_col[rng]),
+                @view(std_col[rng]),
+                @view(range_col[rng]),
+                @view(var_col[rng]),
+                @view(zvar_col[rng]),
+            )
+        end
+    end
+
+    if all_samples_fast && n_valid > 1 && total_rows * nrow(first_df) >= 16_384
+        Threads.@threads :static for k = 1:n_valid
+            process_epoch(k)
+        end
+    else
+        for k = 1:n_valid
+            process_epoch(k)
+        end
+    end
+
+    return DataFrame(
+        epoch = epoch_col,
+        channel = channel_col,
+        min = min_col,
+        max = max_col,
+        std = std_col,
+        range = range_col,
+        var = var_col,
+        zvar = zvar_col;
+        copycols = false,
+    )
+end
+
+channel_summary(dat::Vector{<:MultiDataFrameEeg}; kwargs...) = channel_summary.(dat; kwargs...)
+
+function channel_summary(
+    file_pattern::String;
+    input_dir::String = pwd(),
+    participant_selection = participants(),
+    condition_selection = conditions(),
+    sample_selection = samples(),
+    interval_selection::Interval = times(),
+    channel_selection = channels(),
+    include_extra::Bool = false,
+    output_dir::Union{String,Nothing} = nothing,
+    output_file::String = "channel_summary",
+)
+    _with_batch_logging("channel summary", "$(output_file).log", input_dir, output_dir) do ctx
+        @log_call "channel_summary"
+        output_dir = _prepare_output_dir!(ctx, _default_channel_summary_output_dir(input_dir, file_pattern))
+        files = _find_batch_files(file_pattern, input_dir, participant_selection)
+        if isempty(files)
+            @minimal_warning "No JLD2 files found matching pattern '$file_pattern' in $input_dir"
+            return nothing
+        end
+
+        @info "Found $(length(files)) JLD2 files to process"
+        all_summaries = DataFrame[]
+        n_success, n_error = 0, 0
+
+        for (i, file) in enumerate(files)
+            @info "Channel summary: $file ($i/$(length(files)))"
+            result, summary_dfs = try
+                _process_channel_summary_file(
+                    joinpath(input_dir, file),
+                    condition_selection,
+                    sample_selection,
+                    interval_selection,
+                    channel_selection,
+                    include_extra,
+                )
+            catch e
+                @error "Error processing $file" exception = (e, catch_backtrace())
+                (BatchResult(false, file, "Exception: $(sprint(showerror, e))"), DataFrame[])
+            end
+
+            if result.success
+                @info "  ✓ $(result.message)"
+                append!(all_summaries, summary_dfs)
+                n_success += 1
+            else
+                @minimal_warning "  ✗ $(result.message)"
+                n_error += 1
+            end
+        end
+
+        if !isempty(all_summaries)
+            output_path = joinpath(output_dir, "$(output_file).csv")
+            CSV.write(output_path, reduce(vcat, all_summaries))
+            @info "Combined results saved to: $output_path"
+        else
+            @minimal_warning "No results to save"
+        end
+
+        @info "Batch operation complete! Processed $n_success files successfully, $n_error errors"
+        @info "Output saved to: $output_dir"
+    end
+end
+
+######################################
+######### Internal Functions #########
+######################################
+
 function _col_summary_stats_contig(col::Vector{Float64}, rng::UnitRange{Int})
     n = length(rng)
     i1 = first(rng)
@@ -173,149 +389,7 @@ function _channel_summary_impl(data::DataFrame, sample_selection::Vector{Int}, c
     )
 end
 
-"""
-    channel_summary(dat::SingleDataFrameEeg; sample_selection = samples(), interval_selection::Interval = times(),
-                    channel_selection = channels(), include_meta::Bool = false, include_extra::Bool = false) -> DataFrame
-    channel_summary(dat::MultiDataFrameEeg; sample_selection = samples(), interval_selection::Interval = times(),
-                    channel_selection = channels(), include_meta::Bool = false, include_extra::Bool = false) -> DataFrame
-    channel_summary(file_pattern::String; input_dir = pwd(), participant_selection = participants(),
-                    condition_selection = conditions(), sample_selection = samples(), interval_selection = times(),
-                    channel_selection = channels(), include_extra::Bool = false, output_dir = nothing,
-                    output_file::String = "channel_summary")
-
-Compute summary statistics (`min`, `max`, `std`, `range`, `var`, `zvar`) per channel (and per epoch for
-`MultiDataFrameEeg`, or saved to CSV across JLD2 files in batch mode).
-"""
-function channel_summary(
-    dat::SingleDataFrameEeg;
-    sample_selection = samples(),
-    interval_selection::Interval = times(),
-    channel_selection = channels(),
-    include_meta::Bool = false,
-    include_extra::Bool = false,
-)::DataFrame
-    n_samples(dat) == 0 && @minimal_error("Cannot compute channel summary: data is empty")
-    selected_channels = get_selected_channels(dat, channel_selection; include_meta = include_meta, include_extra = include_extra)
-    selected_samples = get_selected_samples(dat, _combine_interval_sample(interval_selection, sample_selection))
-    return _channel_summary_impl(dat.data, selected_samples, selected_channels)
-end
-
-function channel_summary(
-    dat::MultiDataFrameEeg;
-    sample_selection = samples(),
-    interval_selection::Interval = times(),
-    channel_selection = channels(),
-    include_meta::Bool = false,
-    include_extra::Bool = false,
-)::DataFrame
-    isempty(dat.data) && @minimal_error("Cannot compute channel summary: no epochs in data")
-
-    valid_epochs = Tuple{Int,DataFrame}[]
-    sizehint!(valid_epochs, length(dat.data))
-    for (epoch_idx, epoch_df) in enumerate(dat.data)
-        if nrow(epoch_df) == 0
-            @minimal_warning("Skipping empty epoch $(epoch_idx)")
-            continue
-        end
-        orig_ep = hasproperty(epoch_df, :epoch) && !isempty(epoch_df.epoch) ? Int(epoch_df.epoch[1]) : epoch_idx
-        push!(valid_epochs, (orig_ep, epoch_df))
-    end
-    isempty(valid_epochs) && @minimal_error("No valid epochs found for channel summary")
-
-    first_df = valid_epochs[1][2]
-    first_single = ContinuousData(dat.file, first_df, dat.layout, dat.sample_rate, dat.analysis_info)
-    selected_channels = get_selected_channels(first_single, channel_selection; include_meta = include_meta, include_extra = include_extra)
-    isempty(selected_channels) && @minimal_error("No channels selected for channel summary")
-    col_indices = Int[columnindex(first_df, ch) for ch in selected_channels]
-
-    all_samples_fast =
-        (sample_selection isa AllSelection || sample_selection isa _AllSamples) &&
-        (isnothing(interval_selection) || interval_selection isa AllSelection)
-    combined_sel = all_samples_fast ? nothing : _combine_interval_sample(interval_selection, sample_selection)
-
-    n_valid = length(valid_epochs)
-    n_ch = length(selected_channels)
-    total_rows = n_valid * n_ch
-
-    epoch_col = Vector{Int}(undef, total_rows)
-    channel_col = Vector{Symbol}(undef, total_rows)
-    min_col = Vector{Float64}(undef, total_rows)
-    max_col = Vector{Float64}(undef, total_rows)
-    std_col = Vector{Float64}(undef, total_rows)
-    range_col = Vector{Float64}(undef, total_rows)
-    var_col = Vector{Float64}(undef, total_rows)
-    zvar_col = Vector{Float64}(undef, total_rows)
-
-    empty_idx = Int[]
-    process_epoch = function (k::Int)
-        orig_ep, epoch_df = valid_epochs[k]
-        r_start = (k - 1) * n_ch + 1
-        r_end = k * n_ch
-        rng = r_start:r_end
-        @inbounds for i = 1:n_ch
-            epoch_col[r_start+i-1] = orig_ep
-            channel_col[r_start+i-1] = selected_channels[i]
-        end
-
-        if all_samples_fast
-            _write_channel_summary_slice!(
-                epoch_df,
-                col_indices,
-                1:nrow(epoch_df),
-                empty_idx,
-                @view(min_col[rng]),
-                @view(max_col[rng]),
-                @view(std_col[rng]),
-                @view(range_col[rng]),
-                @view(var_col[rng]),
-                @view(zvar_col[rng]),
-            )
-        else
-            single_dat = ContinuousData(dat.file, epoch_df, dat.layout, dat.sample_rate, dat.analysis_info)
-            sel_samps = get_selected_samples(single_dat, combined_sel)
-            isempty(sel_samps) && @minimal_error("No samples selected for channel summary")
-            contig = _contiguous_sample_range(sel_samps)
-            _write_channel_summary_slice!(
-                epoch_df,
-                col_indices,
-                contig,
-                sel_samps,
-                @view(min_col[rng]),
-                @view(max_col[rng]),
-                @view(std_col[rng]),
-                @view(range_col[rng]),
-                @view(var_col[rng]),
-                @view(zvar_col[rng]),
-            )
-        end
-    end
-
-    if all_samples_fast && n_valid > 1 && total_rows * nrow(first_df) >= 16_384
-        Threads.@threads :static for k = 1:n_valid
-            process_epoch(k)
-        end
-    else
-        for k = 1:n_valid
-            process_epoch(k)
-        end
-    end
-
-    return DataFrame(
-        epoch = epoch_col,
-        channel = channel_col,
-        min = min_col,
-        max = max_col,
-        std = std_col,
-        range = range_col,
-        var = var_col,
-        zvar = zvar_col;
-        copycols = false,
-    )
-end
-
-channel_summary(dat::Vector{<:MultiDataFrameEeg}; kwargs...) = channel_summary.(dat; kwargs...)
-
-_default_channel_summary_output_dir(input_dir::String, pattern::String) = joinpath(input_dir, "channel_summary_$(clean_pattern(pattern))")
+_default_channel_summary_output_dir(input_dir::String, pattern::String) = joinpath(input_dir, "channel_summary_$(_clean_pattern(pattern))")
 
 function _process_channel_summary_file(
     filepath::String,
@@ -354,68 +428,4 @@ function _process_channel_summary_file(
     end
 
     return (BatchResult(true, filename, "Processed $(length(summary_dfs)) condition(s)"), summary_dfs)
-end
-
-function channel_summary(
-    file_pattern::String;
-    input_dir::String = pwd(),
-    participant_selection = participants(),
-    condition_selection = conditions(),
-    sample_selection = samples(),
-    interval_selection::Interval = times(),
-    channel_selection = channels(),
-    include_extra::Bool = false,
-    output_dir::Union{String,Nothing} = nothing,
-    output_file::String = "channel_summary",
-)
-    _with_batch_logging("channel summary", "$(output_file).log", input_dir, output_dir) do ctx
-        @log_call "channel_summary"
-        output_dir = _prepare_output_dir!(ctx, _default_channel_summary_output_dir(input_dir, file_pattern))
-        files = _find_batch_files(file_pattern, input_dir, participant_selection)
-        if isempty(files)
-            @minimal_warning "No JLD2 files found matching pattern '$file_pattern' in $input_dir"
-            return nothing
-        end
-
-        @info "Found $(length(files)) JLD2 files to process"
-        all_summaries = DataFrame[]
-        n_success, n_error = 0, 0
-
-        for (i, file) in enumerate(files)
-            @info "Channel summary: $file ($i/$(length(files)))"
-            result, summary_dfs = try
-                _process_channel_summary_file(
-                    joinpath(input_dir, file),
-                    condition_selection,
-                    sample_selection,
-                    interval_selection,
-                    channel_selection,
-                    include_extra,
-                )
-            catch e
-                @error "Error processing $file" exception = (e, catch_backtrace())
-                (BatchResult(false, file, "Exception: $(sprint(showerror, e))"), DataFrame[])
-            end
-
-            if result.success
-                @info "  ✓ $(result.message)"
-                append!(all_summaries, summary_dfs)
-                n_success += 1
-            else
-                @minimal_warning "  ✗ $(result.message)"
-                n_error += 1
-            end
-        end
-
-        if !isempty(all_summaries)
-            output_path = joinpath(output_dir, "$(output_file).csv")
-            CSV.write(output_path, reduce(vcat, all_summaries))
-            @info "Combined results saved to: $output_path"
-        else
-            @minimal_warning "No results to save"
-        end
-
-        @info "Batch operation complete! Processed $n_success files successfully, $n_error errors"
-        @info "Output saved to: $output_dir"
-    end
 end

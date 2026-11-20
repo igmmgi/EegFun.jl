@@ -1,3 +1,9 @@
+# Data structures for 4D time-frequency analytic and cluster-permutation statistics.
+
+######################################
+######### Types & Constants ##########
+######################################
+
 """
     TFStatsResult <: StatsResult
 
@@ -24,19 +30,6 @@ Prepared time-frequency data for permutation or analytic statistical testing (`p
 struct TFStatisticalData <: EegFunData
     data::Vector{TimeFreqData}
     analysis::TFAnalysisData
-end
-
-function Base.show(io::IO, data::TFStatisticalData)
-    n_p1, n_elec, n_freqs, n_time = size(data.analysis.data[1])
-    n_p2 = size(data.analysis.data[2], 1)
-
-    println(io, "TFStatisticalData")
-    println(io, "├─ Design: $(data.analysis.design)")
-    println(io, "├─ Condition 1 ($(data.data[1].condition_name)): $n_p1 participants")
-    println(io, "├─ Condition 2 ($(data.data[2].condition_name)): $n_p2 participants")
-    println(io, "├─ Frequencies: $(_range_str(data.analysis.frequencies, "Hz")) ($n_freqs bins)")
-    println(io, "├─ Time points: $(_range_str(data.analysis.time_points, "s"))")
-    println(io, "└─ Analysis dimensions: $n_p1 × $n_elec × $n_freqs × $n_time (participants × electrodes × freqs × time)")
 end
 
 struct TFStatMatrix
@@ -96,13 +89,47 @@ struct TFClusterPermutationResult <: TFStatsResult
     time_points::Vector{Float64}
 end
 
-function _print_cluster_line(io::IO, c::TFCluster)
-    p_str = c.p_value < 0.001 ? "<0.001" : Printf.@sprintf("%.3f", c.p_value)
-    stat_str = Printf.@sprintf("%.2f", c.cluster_stat)
-    println(
-        io,
-        "     [✓] Cluster $(c.id): stat=$stat_str, p=$p_str, $(length(c.electrodes)) electrodes, $(c.freq_range[1])-$(c.freq_range[2]) Hz, $(c.time_range[1])-$(c.time_range[2]) s",
-    )
+"""
+    TFAnalyticResult <: TFStatsResult
+
+Parametric point-wise t-test results on 3D time-frequency data (`analytic_test`).
+
+# Fields
+- `test_info::TestInfo`: Test design, degrees of freedom, alpha, tail, and multiple-comparison correction
+- `data::Vector{TimeFreqData}`: Grand-average TF data for conditions 1 and 2
+- `stat_matrix::TFStatMatrix`: T-statistic and p-value matrices `[electrodes × frequencies × time]`
+- `masks::TFMasks`: Significant positive and negative masks `[electrodes × frequencies × time]`
+- `electrodes::Vector{Symbol}`: Electrode labels
+- `frequencies::Vector{Float64}`: Frequency bins in Hz
+- `time_points::Vector{Float64}`: Time points in seconds
+- `critical_t::Float64`: Critical t-threshold
+"""
+struct TFAnalyticResult <: TFStatsResult
+    test_info::TestInfo
+    data::Vector{TimeFreqData}
+    stat_matrix::TFStatMatrix
+    masks::TFMasks
+    electrodes::Vector{Symbol}
+    frequencies::Vector{Float64}
+    time_points::Vector{Float64}
+    critical_t::Float64
+end
+
+######################################
+########### User Functions ###########
+######################################
+
+function Base.show(io::IO, data::TFStatisticalData)
+    n_p1, n_elec, n_freqs, n_time = size(data.analysis.data[1])
+    n_p2 = size(data.analysis.data[2], 1)
+
+    println(io, "TFStatisticalData")
+    println(io, "├─ Design: $(data.analysis.design)")
+    println(io, "├─ Condition 1 ($(data.data[1].condition_name)): $n_p1 participants")
+    println(io, "├─ Condition 2 ($(data.data[2].condition_name)): $n_p2 participants")
+    println(io, "├─ Frequencies: $(_range_str(data.analysis.frequencies, "Hz")) ($n_freqs bins)")
+    println(io, "├─ Time points: $(_range_str(data.analysis.time_points, "s"))")
+    println(io, "└─ Analysis dimensions: $n_p1 × $n_elec × $n_freqs × $n_time (participants × electrodes × freqs × time)")
 end
 
 function Base.show(io::IO, result::TFClusterPermutationResult)
@@ -143,32 +170,6 @@ function Base.show(io::IO, result::TFClusterPermutationResult)
     end
 end
 
-"""
-    TFAnalyticResult <: TFStatsResult
-
-Parametric point-wise t-test results on 3D time-frequency data (`analytic_test`).
-
-# Fields
-- `test_info::TestInfo`: Test design, degrees of freedom, alpha, tail, and multiple-comparison correction
-- `data::Vector{TimeFreqData}`: Grand-average TF data for conditions 1 and 2
-- `stat_matrix::TFStatMatrix`: T-statistic and p-value matrices `[electrodes × frequencies × time]`
-- `masks::TFMasks`: Significant positive and negative masks `[electrodes × frequencies × time]`
-- `electrodes::Vector{Symbol}`: Electrode labels
-- `frequencies::Vector{Float64}`: Frequency bins in Hz
-- `time_points::Vector{Float64}`: Time points in seconds
-- `critical_t::Float64`: Critical t-threshold
-"""
-struct TFAnalyticResult <: TFStatsResult
-    test_info::TestInfo
-    data::Vector{TimeFreqData}
-    stat_matrix::TFStatMatrix
-    masks::TFMasks
-    electrodes::Vector{Symbol}
-    frequencies::Vector{Float64}
-    time_points::Vector{Float64}
-    critical_t::Float64
-end
-
 function Base.show(io::IO, result::TFAnalyticResult)
     println(io, "TFAnalyticResult")
     _print_test_info_tree(io, result.test_info)
@@ -178,4 +179,17 @@ function Base.show(io::IO, result::TFAnalyticResult)
     )
     println(io, "│  └─ $(_range_str(result.frequencies, "Hz")), $(_range_str(result.time_points, "s"))")
     println(io, "└─ Significant points: $(count(result.masks.positive)) positive, $(count(result.masks.negative)) negative")
+end
+
+######################################
+######### Internal Functions #########
+######################################
+
+function _print_cluster_line(io::IO, c::TFCluster)
+    p_str = c.p_value < 0.001 ? "<0.001" : Printf.@sprintf("%.3f", c.p_value)
+    stat_str = Printf.@sprintf("%.2f", c.cluster_stat)
+    println(
+        io,
+        "     [✓] Cluster $(c.id): stat=$stat_str, p=$p_str, $(length(c.electrodes)) electrodes, $(c.freq_range[1])-$(c.freq_range[2]) Hz, $(c.time_range[1])-$(c.time_range[2]) s",
+    )
 end

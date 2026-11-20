@@ -1,4 +1,9 @@
-# === DEFAULT KEYWORD ARGUMENTS ===
+# Channel joint-probability z-score distribution plots.
+
+######################################
+######### Types & Constants ##########
+######################################
+
 const PLOT_JOINT_PROBABILITY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :display_plot => (true, "Whether to display the plot"),
     :bar_color => (:steelblue, "Color of the bars"),
@@ -23,6 +28,42 @@ const PLOT_JOINT_PROBABILITY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :yminorgrid => (false, "Whether to show y-axis minor grid"),
     :sort_values => (false, "If true, sort the bars by joint probability values in descending order"),
 )
+
+######################################
+########### User Functions ###########
+######################################
+
+"""
+    plot_joint_probability(dat::DataFrame; kwargs...) -> NamedTuple
+
+Plot per-channel joint probability (`:jp`) bar charts from `dat`.
+
+$(_generate_kwargs_doc(PLOT_JOINT_PROBABILITY_KWARGS))
+"""
+function plot_joint_probability(dat::DataFrame; kwargs...)
+    plot_kwargs = _merge_plot_kwargs(PLOT_JOINT_PROBABILITY_KWARGS, kwargs)
+    fig = _eegfun_figure()
+    ax = Axis(fig[1, 1])
+    _plot_joint_probability_impl!(ax, dat, plot_kwargs)
+    _set_window_title("Joint Probability")
+    plot_kwargs[:display_plot] && _display_figure(fig)
+    _set_window_title("Makie")
+    return (fig = fig, axes = [ax])
+end
+
+"""
+    plot_joint_probability!(fig::Figure, ax::Axis, dat::DataFrame; kwargs...) -> Axis
+
+In-place axis version of [`plot_joint_probability`](@ref), drawing onto `ax` and returning `ax`.
+"""
+function plot_joint_probability!(fig::Figure, ax::Axis, dat::DataFrame; kwargs...)
+    plot_kwargs = _merge_plot_kwargs(PLOT_JOINT_PROBABILITY_KWARGS, kwargs)
+    return _plot_joint_probability_impl!(ax, dat, plot_kwargs)
+end
+
+######################################
+######### Internal Functions #########
+######################################
 
 function _plot_joint_probability_impl!(ax::Axis, dat::DataFrame, plot_kwargs::Dict{Symbol,Any})
     (:channel in propertynames(dat) && :jp in propertynames(dat)) || @minimal_error("DataFrame must contain :channel and :jp columns.")
@@ -67,33 +108,4 @@ function _plot_joint_probability_impl!(ax::Axis, dat::DataFrame, plot_kwargs::Di
         alpha = plot_kwargs[:bar_alpha],
     )
     return ax
-end
-
-"""
-    plot_joint_probability!(fig::Figure, ax::Axis, dat::DataFrame; kwargs...) -> Axis
-    plot_joint_probability(dat::DataFrame; kwargs...) -> NamedTuple
-
-Plot per-channel joint probability (`:jp`) bar charts from `dat`.
-
-$(_generate_kwargs_doc(PLOT_JOINT_PROBABILITY_KWARGS))
-"""
-function plot_joint_probability!(fig::Figure, ax::Axis, dat::DataFrame; kwargs...)
-    plot_kwargs = _merge_plot_kwargs(PLOT_JOINT_PROBABILITY_KWARGS, kwargs)
-    return _plot_joint_probability_impl!(ax, dat, plot_kwargs)
-end
-
-"""
-    plot_joint_probability(dat::DataFrame; kwargs...) -> NamedTuple
-
-Create a figure and plot per-channel joint probability (`:jp`) bar charts. See [`plot_joint_probability!`](@ref) for keyword options.
-"""
-function plot_joint_probability(dat::DataFrame; kwargs...)
-    plot_kwargs = _merge_plot_kwargs(PLOT_JOINT_PROBABILITY_KWARGS, kwargs)
-    fig = _eegfun_figure()
-    ax = Axis(fig[1, 1])
-    _plot_joint_probability_impl!(ax, dat, plot_kwargs)
-    _set_window_title("Joint Probability")
-    plot_kwargs[:display_plot] && _display_figure(fig)
-    _set_window_title("Makie")
-    return (fig = fig, axes = [ax])
 end

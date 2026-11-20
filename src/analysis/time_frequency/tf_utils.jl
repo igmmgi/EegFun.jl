@@ -1,3 +1,84 @@
+# Shared FFT plans, wavelet geometry, and GPU workspaces for TF analysis.
+
+######################################
+######### Types & Constants ##########
+######################################
+
+struct TFGeometry
+    n_trials::Int
+    n_samples::Int
+    n_pre_pad::Int
+    n_padded::Int
+    n_fft::Int
+    num_frex::Int
+    n_times::Int
+    return_trials::Bool
+    return_phase::Bool
+    filter_edges::Bool
+    itc::Bool  # accumulate unit phasors across trials (inter-trial phase coherence) instead of power
+end
+
+struct TFBuffers
+    data_fft::Matrix{ComplexF64}     # n_fft × n_trials
+    conv_result::Matrix{ComplexF64}  # n_fft × n_trials
+    power_trials::Array{Float64,3}   # n_trials × num_frex × n_times
+    conv_trials::Array{ComplexF64,3}
+    power_avg::Matrix{Float64}       # num_frex × n_times
+    conv_avg::Matrix{ComplexF64}
+end
+
+struct TFOutput{TFreq}
+    time_col::Vector{Float64}
+    freq_col::Vector{TFreq}
+    power_avg::Vector{Vector{Float64}}
+    phase_avg::Vector{Vector{Float64}}
+    power_trials::Matrix{Vector{Float64}}
+    phase_trials::Matrix{Vector{Float64}}
+end
+
+######################################
+########### User Functions ###########
+######################################
+
+function TFBuffers(g::TFGeometry; host_outputs::Bool = true)
+    rt, rp = g.return_trials, g.return_phase
+    return TFBuffers(
+        Matrix{ComplexF64}(undef, g.n_fft, g.n_trials),
+        host_outputs ? Matrix{ComplexF64}(undef, g.n_fft, g.n_trials) : Matrix{ComplexF64}(undef, 0, 0),
+        (host_outputs && rt) ? Array{Float64,3}(undef, g.n_trials, g.num_frex, g.n_times) : Array{Float64,3}(undef, 0, 0, 0),
+        (host_outputs && rt && rp) ? Array{ComplexF64,3}(undef, g.n_trials, g.num_frex, g.n_times) : Array{ComplexF64,3}(undef, 0, 0, 0),
+        (host_outputs && !rt) ? Matrix{Float64}(undef, g.num_frex, g.n_times) : Matrix{Float64}(undef, 0, 0),
+        (host_outputs && !rt && rp) ? Matrix{ComplexF64}(undef, g.num_frex, g.n_times) : Matrix{ComplexF64}(undef, 0, 0),
+    )
+end
+
+function TFOutput(times_out::AbstractVector, freqs::AbstractVector, n_ch::Int, g::TFGeometry)
+    time_col = repeat(Float64.(times_out), inner = length(freqs))
+    freq_col = repeat(freqs, outer = length(times_out))
+    if g.return_trials
+        return TFOutput(
+            time_col,
+            freq_col,
+            Vector{Float64}[],
+            Vector{Float64}[],
+            Matrix{Vector{Float64}}(undef, n_ch, g.n_trials),
+            Matrix{Vector{Float64}}(undef, n_ch, g.n_trials),
+        )
+    end
+    return TFOutput(
+        time_col,
+        freq_col,
+        Vector{Vector{Float64}}(undef, n_ch),
+        Vector{Vector{Float64}}(undef, n_ch),
+        Matrix{Vector{Float64}}(undef, 0, 0),
+        Matrix{Vector{Float64}}(undef, 0, 0),
+    )
+end
+
+######################################
+######### Internal Functions #########
+######################################
+
 function _tf_build_row_index(df::DataFrame)
     idx = Dict{Tuple{Float64,Float64},Int}()
     n = nrow(df)
@@ -122,10 +203,7 @@ function _tf_time_grid(dat::EpochData, time_steps::Real)
     return time_indices, times_out
 end
 
-# =============================================================================
 # SHARED DECOMPOSITION SCAFFOLDING (tf_morlet / tf_stft / tf_multitaper)
-# =============================================================================
-
 function _tf_prepare(dat::EpochData, pad, use_gpu::Bool, channel_selection, interval_selection::Interval, frequencies)
     _validate_tf_pad(pad)
     gpu_active = _tf_gpu_active(use_gpu)
@@ -138,20 +216,6 @@ function _tf_padding(pad::Union{Nothing,Symbol}, n_samples::Int)
     n_pre_pad = (pad === :pre || pad === :both) ? n_samples - 1 : 0
     n_post_pad = (pad === :post || pad === :both) ? n_samples - 1 : 0
     return n_pre_pad, n_post_pad, n_pre_pad + n_samples + n_post_pad
-end
-
-struct TFGeometry
-    n_trials::Int
-    n_samples::Int
-    n_pre_pad::Int
-    n_padded::Int
-    n_fft::Int
-    num_frex::Int
-    n_times::Int
-    return_trials::Bool
-    return_phase::Bool
-    filter_edges::Bool
-    itc::Bool  # accumulate unit phasors across trials (inter-trial phase coherence) instead of power
 end
 
 # Unit-length phasor e^{iφ} of a complex coefficient (zero-magnitude coefficients contribute nothing)
@@ -172,7 +236,7 @@ end
 
 function _tf_batch_fft_plans(n_fft::Int, n_trials::Int, gpu_active::Bool)
     if gpu_active
-        template = gpu_array(zeros(ComplexF64, n_fft, n_trials))
+        template = _gpu_array(zeros(ComplexF64, n_fft, n_trials))
         return plan_fft!(template, 1), plan_ifft!(template, 1)
     end
     template = Matrix{ComplexF64}(undef, n_fft, n_trials)
@@ -192,41 +256,20 @@ function _tf_padded_fft(wavelet::AbstractVector, plan, scratch::Vector{ComplexF6
     return out
 end
 
-struct TFBuffers
-    data_fft::Matrix{ComplexF64}     # n_fft × n_trials
-    conv_result::Matrix{ComplexF64}  # n_fft × n_trials
-    power_trials::Array{Float64,3}   # n_trials × num_frex × n_times
-    conv_trials::Array{ComplexF64,3}
-    power_avg::Matrix{Float64}       # num_frex × n_times
-    conv_avg::Matrix{ComplexF64}
-end
-
-function TFBuffers(g::TFGeometry; host_outputs::Bool = true)
-    rt, rp = g.return_trials, g.return_phase
-    return TFBuffers(
-        Matrix{ComplexF64}(undef, g.n_fft, g.n_trials),
-        host_outputs ? Matrix{ComplexF64}(undef, g.n_fft, g.n_trials) : Matrix{ComplexF64}(undef, 0, 0),
-        (host_outputs && rt) ? Array{Float64,3}(undef, g.n_trials, g.num_frex, g.n_times) : Array{Float64,3}(undef, 0, 0, 0),
-        (host_outputs && rt && rp) ? Array{ComplexF64,3}(undef, g.n_trials, g.num_frex, g.n_times) : Array{ComplexF64,3}(undef, 0, 0, 0),
-        (host_outputs && !rt) ? Matrix{Float64}(undef, g.num_frex, g.n_times) : Matrix{Float64}(undef, 0, 0),
-        (host_outputs && !rt && rp) ? Matrix{ComplexF64}(undef, g.num_frex, g.n_times) : Matrix{ComplexF64}(undef, 0, 0),
-    )
-end
-
 function _tf_gpu_buffers(g::TFGeometry; extra...)
     rt, rp = g.return_trials, g.return_phase
     base = (
-        local_data_fft_gpu = gpu_array(zeros(ComplexF64, g.n_fft, g.n_trials)),
-        local_conv_result_gpu = gpu_array(zeros(ComplexF64, g.n_fft, g.n_trials)),
-        curr_wavelet_gpu = gpu_array(zeros(ComplexF64, g.n_fft)),
-        eegpower_trials_gpu = rt ? gpu_array(zeros(Float64, g.n_trials, g.num_frex, g.n_times)) : nothing,
-        eegconv_trials_gpu = (rt && rp) ? gpu_array(zeros(ComplexF64, g.n_trials, g.num_frex, g.n_times)) : nothing,
-        eegpower_avg_gpu = !rt ? gpu_array(zeros(Float64, g.num_frex, g.n_times)) : nothing,
-        eegconv_avg_gpu = (!rt && rp) ? gpu_array(zeros(ComplexF64, g.num_frex, g.n_times)) : nothing,
-        adjusted_indices_gpu = gpu_array(zeros(Int, g.n_times)),
-        extracted_power_gpu = !rt ? gpu_array(zeros(Float64, g.n_times, g.n_trials)) : nothing,
-        sum_power_gpu = !rt ? gpu_array(zeros(Float64, g.n_times, 1)) : nothing,
-        sum_complex_gpu = (!rt && rp) ? gpu_array(zeros(ComplexF64, g.n_times, 1)) : nothing,
+        local_data_fft_gpu = _gpu_array(zeros(ComplexF64, g.n_fft, g.n_trials)),
+        local_conv_result_gpu = _gpu_array(zeros(ComplexF64, g.n_fft, g.n_trials)),
+        curr_wavelet_gpu = _gpu_array(zeros(ComplexF64, g.n_fft)),
+        eegpower_trials_gpu = rt ? _gpu_array(zeros(Float64, g.n_trials, g.num_frex, g.n_times)) : nothing,
+        eegconv_trials_gpu = (rt && rp) ? _gpu_array(zeros(ComplexF64, g.n_trials, g.num_frex, g.n_times)) : nothing,
+        eegpower_avg_gpu = !rt ? _gpu_array(zeros(Float64, g.num_frex, g.n_times)) : nothing,
+        eegconv_avg_gpu = (!rt && rp) ? _gpu_array(zeros(ComplexF64, g.num_frex, g.n_times)) : nothing,
+        adjusted_indices_gpu = _gpu_array(zeros(Int, g.n_times)),
+        extracted_power_gpu = !rt ? _gpu_array(zeros(Float64, g.n_times, g.n_trials)) : nothing,
+        sum_power_gpu = !rt ? _gpu_array(zeros(Float64, g.n_times, 1)) : nothing,
+        sum_complex_gpu = (!rt && rp) ? _gpu_array(zeros(ComplexF64, g.n_times, 1)) : nothing,
     )
     return merge(base, values(extra))
 end
@@ -241,6 +284,7 @@ function _tf_reset_outputs!(buf::TFBuffers, g::TFGeometry)
     end
     return nothing
 end
+
 function _tf_reset_outputs!(gb::NamedTuple, g::TFGeometry)
     if g.return_trials
         fill!(gb.eegpower_trials_gpu, 0.0)
@@ -306,38 +350,6 @@ function _tf_channel_results(buf::TFBuffers, gpu_buffers, g::TFGeometry)
     gb = gpu_buffers
     return rt ? (Array(gb.eegpower_trials_gpu), rp ? Array(gb.eegconv_trials_gpu) : nothing) :
            (Array(gb.eegpower_avg_gpu), rp ? Array(gb.eegconv_avg_gpu) : nothing)
-end
-
-struct TFOutput{TFreq}
-    time_col::Vector{Float64}
-    freq_col::Vector{TFreq}
-    power_avg::Vector{Vector{Float64}}
-    phase_avg::Vector{Vector{Float64}}
-    power_trials::Matrix{Vector{Float64}}
-    phase_trials::Matrix{Vector{Float64}}
-end
-
-function TFOutput(times_out::AbstractVector, freqs::AbstractVector, n_ch::Int, g::TFGeometry)
-    time_col = repeat(Float64.(times_out), inner = length(freqs))
-    freq_col = repeat(freqs, outer = length(times_out))
-    if g.return_trials
-        return TFOutput(
-            time_col,
-            freq_col,
-            Vector{Float64}[],
-            Vector{Float64}[],
-            Matrix{Vector{Float64}}(undef, n_ch, g.n_trials),
-            Matrix{Vector{Float64}}(undef, n_ch, g.n_trials),
-        )
-    end
-    return TFOutput(
-        time_col,
-        freq_col,
-        Vector{Vector{Float64}}(undef, n_ch),
-        Vector{Vector{Float64}}(undef, n_ch),
-        Matrix{Vector{Float64}}(undef, 0, 0),
-        Matrix{Vector{Float64}}(undef, 0, 0),
-    )
 end
 
 function _tf_store_channel!(out::TFOutput, ch_idx::Int, power::AbstractArray, conv, g::TFGeometry)

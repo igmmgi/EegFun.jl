@@ -1,35 +1,8 @@
-function _demo_adaptive_fonts(fig::Figure, base_width::Real, specs::Vararg{Tuple{Int,Int},N}) where {N}
-    obs = ntuple(i -> Observable(specs[i][1]), Val(N))
-    on(fig.scene.viewport) do area
-        scale = area.widths[1] / base_width
-        @inbounds for i = 1:N
-            def_val, min_val = specs[i]
-            obs[i][] = max(min_val, round(Int, def_val * scale))
-        end
-    end
-    return obs
-end
+# Interactive Nyquist sampling rate and aliasing teaching demo.
 
-function _demo_adaptive_fonts(fig::Figure, base_width::Real, specs::Vararg{Tuple{Real,Real},N}) where {N}
-    specs_f = ntuple(i -> (Float64(specs[i][1]), Float64(specs[i][2])), Val(N))
-    obs = ntuple(i -> Observable(specs_f[i][1]), Val(N))
-    bw = Float64(base_width)
-    on(fig.scene.viewport) do area
-        scale = area.widths[1] / bw
-        @inbounds for i = 1:N
-            def_val, min_val = specs_f[i]
-            obs[i][] = Float64(max(round(Int, min_val), round(Int, def_val * scale)))
-        end
-    end
-    return obs
-end
-
-function _demo_labelled_slider(parent, col::Int, header, range_vals, startval, fmt, fontsize; kwargs...)
-    Label(parent[1, col], header; fontsize = fontsize, halign = :center)
-    sl = Slider(parent[2, col]; range = range_vals, startvalue = startval, kwargs...)
-    lbl = Label(parent[3, col], fmt(startval); fontsize = fontsize, halign = :center)
-    return sl, lbl
-end
+######################################
+########### User Functions ###########
+######################################
 
 """
     signal_example_sampling()
@@ -39,15 +12,15 @@ Interactive Nyquist–Shannon sampling theorem demonstration.
 Displays a continuous sine wave alongside optional linear (join-the-dots) and ideal
 Whittaker–Shannon `sinc` reconstructions as duration, frequency, phase, and sample rate vary.
 
-# Example
+# Returns
+- `fig::Figure`: The Makie figure object containing the interactive GUI
+- `ax::Axis`: The axis object containing the plots
+
+# Examples
 ```julia
 using GLMakie, EegFun
 EegFun.signal_example_sampling()
 ```
-
-# Returns
-- `fig::Figure`: The Makie figure object containing the interactive GUI
-- `ax::Axis`: The axis object containing the plots
 """
 function signal_example_sampling()
     _check_interactive_demo_backend("Signal Sampling demo") || return nothing
@@ -184,4 +157,41 @@ function signal_example_sampling()
 
     _display_demo_figure(fig)
     return fig, ax
+end
+
+######################################
+######### Internal Functions #########
+######################################
+
+function _demo_adaptive_fonts(fig::Figure, base_width::Real, specs::Vararg{Tuple{Int,Int},N}) where {N}
+    obs = ntuple(i -> Observable(specs[i][1]), Val(N))
+    on(fig.scene.viewport) do area
+        scale = area.widths[1] / base_width
+        @inbounds for i = 1:N
+            def_val, min_val = specs[i]
+            obs[i][] = max(min_val, round(Int, def_val * scale))
+        end
+    end
+    return obs
+end
+
+function _demo_adaptive_fonts(fig::Figure, base_width::Real, specs::Vararg{Tuple{Real,Real},N}) where {N}
+    specs_f = ntuple(i -> (Float64(specs[i][1]), Float64(specs[i][2])), Val(N))
+    obs = ntuple(i -> Observable(specs_f[i][1]), Val(N))
+    bw = Float64(base_width)
+    on(fig.scene.viewport) do area
+        scale = area.widths[1] / bw
+        @inbounds for i = 1:N
+            def_val, min_val = specs_f[i]
+            obs[i][] = Float64(max(round(Int, min_val), round(Int, def_val * scale)))
+        end
+    end
+    return obs
+end
+
+function _demo_labelled_slider(parent, col::Int, header, range_vals, startval, fmt, fontsize; kwargs...)
+    Label(parent[1, col], header; fontsize = fontsize, halign = :center)
+    sl = Slider(parent[2, col]; range = range_vals, startvalue = startval, kwargs...)
+    lbl = Label(parent[3, col], fmt(startval); fontsize = fontsize, halign = :center)
+    return sl, lbl
 end

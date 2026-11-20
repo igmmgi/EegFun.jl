@@ -1,4 +1,9 @@
-# === DEFAULT KEYWORD ARGUMENTS ===
+# Event trigger timeline overview and inter-trigger timing histograms.
+
+######################################
+######### Types & Constants ##########
+######################################
+
 const PLOT_TRIGGERS_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :window_size => (10.0, "Size of the time window to display in seconds."),
     :initial_position => (-2.0, "Initial position of the time interval in seconds."),
@@ -27,6 +32,60 @@ const PLOT_TRIGGERS_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :xminorgrid => (false, "Whether to show x-axis minor grid"),
     :yminorgrid => (false, "Whether to show y-axis minor grid"),
 )
+
+######################################
+########### User Functions ###########
+######################################
+
+"""
+    plot_trigger_overview(trigger_times, trigger_values, trigger_count; kwargs...) -> NamedTuple
+    plot_trigger_overview(dat::ContinuousData; kwargs...) -> NamedTuple
+
+Plot trigger onset occurrences across time grouped by trigger value with a summary count legend.
+
+$(_generate_kwargs_doc(PLOT_TRIGGERS_KWARGS))
+"""
+function plot_trigger_overview(trigger_times, trigger_values, trigger_count; kwargs...)
+    plot_kwargs = _merge_plot_kwargs(PLOT_TRIGGERS_KWARGS, kwargs)
+    return _render_trigger_overview(trigger_times, trigger_values, trigger_count, nothing, plot_kwargs)
+end
+
+function plot_trigger_overview(dat::ContinuousData; kwargs...)
+    @info "Plotting trigger (cleaned) overview for ContinuousData"
+    _set_window_title(_generate_window_title(dat))
+    plot_kwargs = _merge_plot_kwargs(PLOT_TRIGGERS_KWARGS, kwargs)
+    trigger_codes, trigger_times, trigger_info = _extract_trigger_data(dat, plot_kwargs[:ignore_triggers])
+
+    result = if any(!isempty, trigger_info)
+        trigger_count, trigger_labels = _count_triggers(trigger_codes, trigger_info)
+        _render_trigger_overview(trigger_times, trigger_codes, trigger_count, trigger_labels, plot_kwargs)
+    else
+        trigger_count = _count_triggers(trigger_codes)
+        _render_trigger_overview(trigger_times, trigger_codes, trigger_count, nothing, plot_kwargs)
+    end
+    _set_window_title("Makie")
+    return result
+end
+
+"""
+    plot_trigger_timing(dat::ContinuousData; kwargs...) -> NamedTuple
+
+Plot interactive trigger onset timing and inter-trigger intervals with position and window-size sliders.
+
+$(_generate_kwargs_doc(PLOT_TRIGGERS_KWARGS))
+"""
+function plot_trigger_timing(dat::ContinuousData; kwargs...)
+    _set_window_title(_generate_window_title(dat))
+    plot_kwargs = _merge_plot_kwargs(PLOT_TRIGGERS_KWARGS, kwargs)
+    trigger_codes, trigger_times, trigger_info = _extract_trigger_data(dat, plot_kwargs[:ignore_triggers])
+    result = _create_interactive_trigger_plot_impl(trigger_codes, trigger_times, trigger_info, plot_kwargs)
+    _set_window_title("Makie")
+    return result
+end
+
+######################################
+######### Internal Functions #########
+######################################
 
 function _plot_trigger_vertical_lines!(
     ax::Axis,
@@ -182,36 +241,6 @@ function _render_trigger_overview(
 
     plot_kwargs[:display_plot] && _display_figure(fig)
     return (fig = fig, axes = [ax])
-end
-
-"""
-    plot_trigger_overview(trigger_times, trigger_values, trigger_count; kwargs...) -> NamedTuple
-    plot_trigger_overview(dat::ContinuousData; kwargs...) -> NamedTuple
-
-Plot trigger onset occurrences across time grouped by trigger value with a summary count legend.
-
-$(_generate_kwargs_doc(PLOT_TRIGGERS_KWARGS))
-"""
-function plot_trigger_overview(trigger_times, trigger_values, trigger_count; kwargs...)
-    plot_kwargs = _merge_plot_kwargs(PLOT_TRIGGERS_KWARGS, kwargs)
-    return _render_trigger_overview(trigger_times, trigger_values, trigger_count, nothing, plot_kwargs)
-end
-
-function plot_trigger_overview(dat::ContinuousData; kwargs...)
-    @info "Plotting trigger (cleaned) overview for ContinuousData"
-    _set_window_title(_generate_window_title(dat))
-    plot_kwargs = _merge_plot_kwargs(PLOT_TRIGGERS_KWARGS, kwargs)
-    trigger_codes, trigger_times, trigger_info = _extract_trigger_data(dat, plot_kwargs[:ignore_triggers])
-
-    result = if any(!isempty, trigger_info)
-        trigger_count, trigger_labels = _count_triggers(trigger_codes, trigger_info)
-        _render_trigger_overview(trigger_times, trigger_codes, trigger_count, trigger_labels, plot_kwargs)
-    else
-        trigger_count = _count_triggers(trigger_codes)
-        _render_trigger_overview(trigger_times, trigger_codes, trigger_count, nothing, plot_kwargs)
-    end
-    _set_window_title("Makie")
-    return result
 end
 
 function _setup_axis_properties!(ax::Axis, plot_kwargs::Dict = _merge_plot_kwargs(PLOT_TRIGGERS_KWARGS, (;)))
@@ -420,20 +449,4 @@ function _create_interactive_trigger_plot_impl(
     update_plot!()
     plot_kwargs[:display_plot] && _display_figure(fig)
     return (fig = fig, axes = [ax])
-end
-
-"""
-    plot_trigger_timing(dat::ContinuousData; kwargs...) -> NamedTuple
-
-Plot interactive trigger onset timing and inter-trigger intervals with position and window-size sliders.
-
-$(_generate_kwargs_doc(PLOT_TRIGGERS_KWARGS))
-"""
-function plot_trigger_timing(dat::ContinuousData; kwargs...)
-    _set_window_title(_generate_window_title(dat))
-    plot_kwargs = _merge_plot_kwargs(PLOT_TRIGGERS_KWARGS, kwargs)
-    trigger_codes, trigger_times, trigger_info = _extract_trigger_data(dat, plot_kwargs[:ignore_triggers])
-    result = _create_interactive_trigger_plot_impl(trigger_codes, trigger_times, trigger_info, plot_kwargs)
-    _set_window_title("Makie")
-    return result
 end

@@ -1,10 +1,16 @@
+# Unified raw EEG and saved `.jld2` dataset loading interface.
+
+######################################
+########### User Functions ###########
+######################################
+
 """
     read_raw_data(filepath::String; header_only::Bool = false, kwargs...)
 
 Read raw EEG data from `filepath` (dispatching on `.bdf`, `.vhdr`/`.eeg`/`.vmrk`, `.edf`, `.fif`/`.fiff`, or `.xdf`/`.xdfz`/`.xdf.gz`).
 """
 function read_raw_data(filepath::String; header_only::Bool = false, kwargs...)
-    ext = get_file_extension(filepath)
+    ext = _get_file_extension(filepath)
     if ext == ".bdf"
         return read_bdf(filepath; header_only = header_only, kwargs...)
     elseif ext == ".vhdr" || ext == ".eeg" || ext == ".vmrk"

@@ -1,0 +1,471 @@
+# Tests for time-domain and time-frequency baseline correction and detrending.
+
+using Test
+using DataFrames
+using Statistics
+using EegFun
+
+@testset "baseline" begin
+
+    # Baseline over first sample for Ch1, Ch2, and Ch3
+    dat = EegFun.create_test_continuous_data(n = 6)
+    EegFun.baseline!(dat, (0.0, 0.0))
+
+    @test isapprox(mean(dat.data.Ch1[1]), 0.0; atol = 1e-9)
+    @test isapprox(mean(dat.data.Ch2[1]), 0.0; atol = 1e-9)
+    @test isapprox(mean(dat.data.Ch3[1]), 0.0; atol = 1e-9)
+
+    dat = EegFun.create_test_continuous_data(n = 6)
+    dat = EegFun.baseline(dat, (0.0, 0.0))
+
+    @test isapprox(mean(dat.data.Ch1[1]), 0.0; atol = 1e-9)
+    @test isapprox(mean(dat.data.Ch2[1]), 0.0; atol = 1e-9)
+    @test isapprox(mean(dat.data.Ch3[1]), 0.0; atol = 1e-9)
+
+    # Baseline over entire range for all channels
+    dat = EegFun.create_test_continuous_data(n = 6)
+    EegFun.baseline!(dat)
+
+    @test isapprox(mean(dat.data.Ch1), 0.0; atol = 1e-9)
+    @test isapprox(mean(dat.data.Ch2), 0.0; atol = 1e-9)
+    @test isapprox(mean(dat.data.Ch3), 0.0; atol = 1e-9)
+
+    dat = EegFun.create_test_continuous_data(n = 6)
+    dat = EegFun.baseline(dat)
+
+    @test isapprox(mean(dat.data.Ch1), 0.0; atol = 1e-9)
+    @test isapprox(mean(dat.data.Ch2), 0.0; atol = 1e-9)
+    @test isapprox(mean(dat.data.Ch3), 0.0; atol = 1e-9)
+
+
+    # EpochData: each epoch baselined independently
+    dat = EegFun.create_test_epoch_data(n = 3)
+    EegFun.baseline!(dat, (0.0, 0.0))
+
+    @test isapprox(mean(dat.data[1].Ch1[1]), 0.0; atol = 1e-9)
+    @test isapprox(mean(dat.data[2].Ch2[1]), 0.0; atol = 1e-9)
+    @test isapprox(mean(dat.data[3].Ch3[1]), 0.0; atol = 1e-9)
+
+    dat = EegFun.create_test_epoch_data(n = 3)
+    EegFun.baseline!(dat, (0.0, 0.002))
+
+    @test isapprox(mean(dat.data[1].Ch1[1:3]), 0.0; atol = 1e-9)
+    @test isapprox(mean(dat.data[2].Ch2[1:3]), 0.0; atol = 1e-9)
+    @test isapprox(mean(dat.data[3].Ch3[1:3]), 0.0; atol = 1e-9)
+
+
+    # Tuple converted to indices correctly
+    dat = EegFun.create_test_continuous_data(n = 6)
+    EegFun.baseline!(dat, (0.003, 0.003))
+
+    @test isapprox(mean(dat.data.Ch1[4]), 0.0; atol = 1e-9)
+    @test isapprox(mean(dat.data.Ch2[4]), 0.0; atol = 1e-9)
+    @test isapprox(mean(dat.data.Ch3[4]), 0.0; atol = 1e-9)
+
+    dat = EegFun.create_test_continuous_data(n = 6)
+    dat = EegFun.baseline(dat, (0.003, 0.003))
+
+    @test isapprox(mean(dat.data.Ch1[4]), 0.0; atol = 1e-9)
+    @test isapprox(mean(dat.data.Ch2[4]), 0.0; atol = 1e-9)
+    @test isapprox(mean(dat.data.Ch3[4]), 0.0; atol = 1e-9)
+
+
+    dat = EegFun.create_test_epoch_data(n = 6)
+    EegFun.baseline!(dat, (0.003, 0.003))
+
+    @test isapprox(mean(dat.data[1].Ch1[4]), 0.0; atol = 1e-9)
+    @test isapprox(mean(dat.data[2].Ch2[4]), 0.0; atol = 1e-9)
+    @test isapprox(mean(dat.data[3].Ch3[4]), 0.0; atol = 1e-9)
+
+    dat = EegFun.create_test_epoch_data(n = 6)
+    dat = EegFun.baseline(dat, (0.003, 0.003))
+
+    @test isapprox(mean(dat.data[1].Ch1[4]), 0.0; atol = 1e-9)
+    @test isapprox(mean(dat.data[2].Ch2[4]), 0.0; atol = 1e-9)
+    @test isapprox(mean(dat.data[3].Ch3[4]), 0.0; atol = 1e-9)
+
+    # Test channel selection
+    dat = EegFun.create_test_continuous_data(n = 10)
+    original_ch1 = copy(dat.data.Ch1)
+    original_ch2 = copy(dat.data.Ch2)
+    original_ch3 = copy(dat.data.Ch3)
+
+    # Baseline only Ch1 and Ch2
+    EegFun.baseline!(dat, (0.0, 0.004), channel_selection = EegFun.channels([:Ch1, :Ch2]))
+
+    # Ch1 and Ch2 should be baselined
+    @test isapprox(mean(dat.data.Ch1[1:5]), 0.0; atol = 1e-9)
+    @test isapprox(mean(dat.data.Ch2[1:5]), 0.0; atol = 1e-9)
+
+    # Ch3 should not be baselined (should be different from original)
+    baseline_mean_ch1 = mean(original_ch1[1:5])
+    baseline_mean_ch2 = mean(original_ch2[1:5])
+    @test isapprox(dat.data.Ch1, original_ch1 .- baseline_mean_ch1; atol = 1e-9)
+    @test isapprox(dat.data.Ch2, original_ch2 .- baseline_mean_ch2; atol = 1e-9)
+    @test dat.data.Ch3 == original_ch3  # Ch3 unchanged
+
+    # Test with non-mutating version and channel selection
+    dat = EegFun.create_test_continuous_data(n = 10)
+    original_ch1 = copy(dat.data.Ch1)
+    baseline_mean_ch1 = mean(original_ch1[1:5])
+
+    dat_baselined = EegFun.baseline(dat, (0.0, 0.004), channel_selection = EegFun.channels([:Ch1]))
+
+    @test isapprox(mean(dat_baselined.data.Ch1[1:5]), 0.0; atol = 1e-9)
+    @test isapprox(dat_baselined.data.Ch1, original_ch1 .- baseline_mean_ch1; atol = 1e-9)
+    @test dat_baselined !== dat  # Should be different object
+
+    # Test empty channel selection (should warn and return early)
+    dat = EegFun.create_test_continuous_data(n = 10)
+    original_ch1 = copy(dat.data.Ch1)
+
+    EegFun.baseline!(dat, (0.0, 0.004), channel_selection = EegFun.channels(Symbol[]))
+
+    # Data should be unchanged
+    @test dat.data.Ch1 == original_ch1
+
+    # Test with EpochData and channel selection
+    epochs = EegFun.create_test_epoch_data(n = 10, n_epochs = 3)
+    original_epoch1_ch1 = copy(epochs.data[1].Ch1)
+    baseline_mean_epoch1 = mean(original_epoch1_ch1[1:5])
+
+    EegFun.baseline!(epochs, (0.0, 0.004), channel_selection = EegFun.channels([:Ch1]))
+
+    @test isapprox(mean(epochs.data[1].Ch1[1:5]), 0.0; atol = 1e-9)
+    @test isapprox(epochs.data[1].Ch1, original_epoch1_ch1 .- baseline_mean_epoch1; atol = 1e-9)
+
+    # Test with ErpData
+    erp = EegFun.create_test_erp_data(participant = 1, condition = 1, n_channels = 3)
+    original_erp_ch1 = copy(erp.data.Ch1)
+    baseline_mean_erp = mean(original_erp_ch1[1:10])
+
+    EegFun.baseline!(erp, (-0.5, -0.491))
+
+    @test isapprox(mean(erp.data.Ch1[1:10]), 0.0; atol = 1e-9)
+    @test isapprox(erp.data.Ch1, original_erp_ch1 .- baseline_mean_erp; atol = 1e-9)
+
+    # Test with ErpData and channel selection
+    erp = EegFun.create_test_erp_data(participant = 1, condition = 1, n_channels = 3)
+    original_erp_ch1 = copy(erp.data.Ch1)
+    original_erp_ch2 = copy(erp.data.Ch2)
+    baseline_mean_erp = mean(original_erp_ch1[1:10])
+
+    EegFun.baseline!(erp, (-0.5, -0.491), channel_selection = EegFun.channels([:Ch1]))
+
+    @test isapprox(mean(erp.data.Ch1[1:10]), 0.0; atol = 1e-9)
+    @test isapprox(erp.data.Ch1, original_erp_ch1 .- baseline_mean_erp; atol = 1e-9)
+    @test erp.data.Ch2 == original_erp_ch2  # Ch2 unchanged
+
+    # Test baseline! without interval (uses entire range)
+    dat = EegFun.create_test_continuous_data(n = 20)
+    original_ch1 = copy(dat.data.Ch1)
+    baseline_mean_ch1 = mean(original_ch1)
+
+    EegFun.baseline!(dat)
+
+    @test isapprox(mean(dat.data.Ch1), 0.0; atol = 1e-9)
+    @test isapprox(dat.data.Ch1, original_ch1 .- baseline_mean_ch1; atol = 1e-9)
+
+    # Test baseline (non-mutating) without interval
+    dat = EegFun.create_test_continuous_data(n = 20)
+    original_ch1 = copy(dat.data.Ch1)
+    baseline_mean_ch1 = mean(original_ch1)
+
+    dat_baselined = EegFun.baseline(dat)
+
+    @test isapprox(mean(dat_baselined.data.Ch1), 0.0; atol = 1e-9)
+    @test isapprox(dat_baselined.data.Ch1, original_ch1 .- baseline_mean_ch1; atol = 1e-9)
+    @test dat_baselined !== dat
+
+    # Test with larger baseline interval
+    dat = EegFun.create_test_continuous_data(n = 100)
+    original_ch1 = copy(dat.data.Ch1)
+    baseline_mean_ch1 = mean(original_ch1[10:50])
+
+    EegFun.baseline!(dat, (0.009, 0.049))
+
+    @test isapprox(mean(dat.data.Ch1[10:50]), 0.0; atol = 1e-9)
+    @test isapprox(dat.data.Ch1, original_ch1 .- baseline_mean_ch1; atol = 1e-9)
+
+    # Test tuple with larger range
+    dat = EegFun.create_test_continuous_data(n = 100, fs = 1000)
+    original_ch1 = copy(dat.data.Ch1)
+    # Find indices for time range 0.01 to 0.05 seconds
+    time_idx_start = findfirst(x -> x >= 0.01, dat.data.time)
+    time_idx_stop = findlast(x -> x <= 0.05, dat.data.time)
+    baseline_mean_ch1 = mean(original_ch1[time_idx_start:time_idx_stop])
+
+    EegFun.baseline!(dat, (0.01, 0.05))
+
+    @test isapprox(mean(dat.data.Ch1[time_idx_start:time_idx_stop]), 0.0; atol = 1e-9)
+    @test isapprox(dat.data.Ch1, original_ch1 .- baseline_mean_ch1; atol = 1e-9)
+
+    # Test that baseline correction is applied to entire signal, not just baseline interval
+    dat = EegFun.create_test_continuous_data(n = 100)
+    original_ch1 = copy(dat.data.Ch1)
+    baseline_mean_ch1 = mean(original_ch1[1:10])
+    original_mean_ch1 = mean(original_ch1)
+
+    EegFun.baseline!(dat, (0.0, 0.009))
+
+    # Mean of baseline interval should be 0
+    @test isapprox(mean(dat.data.Ch1[1:10]), 0.0; atol = 1e-9)
+    # Entire signal should be shifted by baseline mean
+    @test isapprox(dat.data.Ch1, original_ch1 .- baseline_mean_ch1; atol = 1e-9)
+    # Mean of entire signal should be original_mean - baseline_mean
+    @test isapprox(mean(dat.data.Ch1), original_mean_ch1 - baseline_mean_ch1; atol = 1e-9)
+
+    # Test with EpochData - each epoch baselined independently
+    epochs = EegFun.create_test_epoch_data(n = 10, n_epochs = 3)
+    original_epoch_ch1_1 = copy(epochs.data[1].Ch1)
+    original_epoch_ch1_2 = copy(epochs.data[2].Ch1)
+    original_epoch_ch1_3 = copy(epochs.data[3].Ch1)
+
+    baseline_mean_epoch_1 = mean(original_epoch_ch1_1[1:5])
+    baseline_mean_epoch_2 = mean(original_epoch_ch1_2[1:5])
+    baseline_mean_epoch_3 = mean(original_epoch_ch1_3[1:5])
+
+    EegFun.baseline!(epochs, (0.0, 0.004))
+
+    # Each epoch should be baselined independently
+    @test isapprox(mean(epochs.data[1].Ch1[1:5]), 0.0; atol = 1e-9)
+    @test isapprox(mean(epochs.data[2].Ch1[1:5]), 0.0; atol = 1e-9)
+    @test isapprox(mean(epochs.data[3].Ch1[1:5]), 0.0; atol = 1e-9)
+
+    @test isapprox(epochs.data[1].Ch1, original_epoch_ch1_1 .- baseline_mean_epoch_1; atol = 1e-9)
+    @test isapprox(epochs.data[2].Ch1, original_epoch_ch1_2 .- baseline_mean_epoch_2; atol = 1e-9)
+    @test isapprox(epochs.data[3].Ch1, original_epoch_ch1_3 .- baseline_mean_epoch_3; atol = 1e-9)
+
+    # Test error handling - invalid interval (start > stop)
+    # validate_baseline_interval throws an EegFunError for invalid intervals
+    dat = EegFun.create_test_continuous_data(n = 10)
+    @test_throws Exception EegFun.baseline!(dat, (0.005, 0.001))
+
+    # Test error handling - invalid interval (negative start time)
+    dat = EegFun.create_test_continuous_data(n = 10)
+    @test_throws Exception EegFun.baseline!(dat, (-1.0, 0.005))
+
+    # Test error handling - invalid interval (stop time past data range)
+    dat = EegFun.create_test_continuous_data(n = 10)
+    @test_throws Exception EegFun.baseline!(dat, (0.0, 100.0))
+
+    # Test error handling - invalid tuple (completely outside time range)
+    # When tuple is outside range, _find_idx_start_end returns nothing
+    dat = EegFun.create_test_continuous_data(n = 10, fs = 1000)
+    @test_throws Exception EegFun.baseline!(dat, (100.0, 200.0))
+
+    # Test with single sample baseline interval
+    dat = EegFun.create_test_continuous_data(n = 20)
+    original_ch1 = copy(dat.data.Ch1)
+    baseline_value = original_ch1[5]  # Single sample value
+
+    EegFun.baseline!(dat, (0.004, 0.004))
+
+    @test isapprox(dat.data.Ch1[5], 0.0; atol = 1e-9)
+    @test isapprox(dat.data.Ch1, original_ch1 .- baseline_value; atol = 1e-9)
+
+    # Test that metadata columns are not affected
+    dat = EegFun.create_test_continuous_data(n = 20)
+    original_time = copy(dat.data.time)
+    original_sample = copy(dat.data.sample)
+    original_triggers = copy(dat.data.trigger)
+
+    EegFun.baseline!(dat, (0.0, 0.009))
+
+    @test dat.data.time == original_time
+    @test dat.data.sample == original_sample
+    @test dat.data.trigger == original_triggers
+
+    # Test baseline! without interval on EpochData (uses entire time range)
+    # This test catches the bug where dat.data.time was accessed directly on Vector{DataFrame}
+    epochs_no_interval = EegFun.create_test_epoch_data(n = 20, n_epochs = 3)
+    original_epoch1_ch1_no_int = copy(epochs_no_interval.data[1].Ch1)
+    original_epoch2_ch1_no_int = copy(epochs_no_interval.data[2].Ch1)
+    baseline_mean_epoch1_no_int = mean(original_epoch1_ch1_no_int)
+    baseline_mean_epoch2_no_int = mean(original_epoch2_ch1_no_int)
+
+    EegFun.baseline!(epochs_no_interval)
+
+    # Each epoch should be baselined to its own mean
+    @test isapprox(mean(epochs_no_interval.data[1].Ch1), 0.0; atol = 1e-9)
+    @test isapprox(mean(epochs_no_interval.data[2].Ch1), 0.0; atol = 1e-9)
+    @test isapprox(epochs_no_interval.data[1].Ch1, original_epoch1_ch1_no_int .- baseline_mean_epoch1_no_int; atol = 1e-9)
+    @test isapprox(epochs_no_interval.data[2].Ch1, original_epoch2_ch1_no_int .- baseline_mean_epoch2_no_int; atol = 1e-9)
+
+    # Test non-mutating version without interval on EpochData
+    epochs = EegFun.create_test_epoch_data(n = 20, n_epochs = 2)
+    original_epoch_ch1 = copy(epochs.data[1].Ch1)
+    baseline_mean_epoch = mean(original_epoch_ch1)
+
+    epochs_baselined = EegFun.baseline(epochs)
+
+    @test isapprox(mean(epochs_baselined.data[1].Ch1), 0.0; atol = 1e-9)
+    @test isapprox(epochs_baselined.data[1].Ch1, original_epoch_ch1 .- baseline_mean_epoch; atol = 1e-9)
+    @test epochs_baselined !== epochs  # Should be different object
+
+    # Test baseline! and baseline on TimeFreqData
+    tf = EegFun.create_test_tf_data(n_channels = 2, power_offset = 5.0, noise = 0.0)
+    tf_base = EegFun.baseline(tf, (0.0, 0.2); method = :db)
+    @test tf_base isa EegFun.TimeFreqData
+    @test tf_base !== tf
+    @test !isnothing(tf_base.baseline)
+    @test tf_base.baseline.method == :db
+
+    EegFun.baseline!(tf, (0.0, 0.2); method = :db)
+    @test !isnothing(tf.baseline)
+    @test isapprox(tf.data_power.Ch1, tf_base.data_power.Ch1)
+
+    # Vector{TimeFreqData}
+    tf_vec = [EegFun.create_test_tf_data(condition = 1), EegFun.create_test_tf_data(condition = 2)]
+    tf_vec_base = EegFun.baseline(tf_vec, (0.0, 0.2); method = :relative)
+    @test length(tf_vec_base) == 2
+    @test tf_vec_base[1].baseline.method == :relative
+
+    EegFun.baseline!(tf_vec, (0.0, 0.2); method = :relative)
+    @test tf_vec[1].baseline.method == :relative
+
+    # Ergonomic channel selection and vector dispatch
+    erp1 = EegFun.create_test_erp_data(n_channels = 3)
+    orig_ch2 = copy(erp1.data.Ch2)
+    erp1_base = EegFun.baseline(erp1; channel_selection = :Ch1)
+    @test isapprox(mean(erp1_base.data.Ch1), 0.0; atol = 1e-9)
+    @test erp1_base.data.Ch2 == orig_ch2
+
+    erp_vec = [EegFun.create_test_erp_data(n_channels = 3, condition = 1), EegFun.create_test_erp_data(n_channels = 3, condition = 2)]
+    erp_vec_base = EegFun.baseline(erp_vec; channel_selection = [:Ch1, :Ch2])
+    @test length(erp_vec_base) == 2
+    @test isapprox(mean(erp_vec_base[1].data.Ch1), 0.0; atol = 1e-9)
+    @test isapprox(mean(erp_vec_base[1].data.Ch2), 0.0; atol = 1e-9)
+    @test erp_vec_base[1].data.Ch3 == erp_vec[1].data.Ch3
+
+    EegFun.baseline!(erp_vec; channel_selection = "Ch1")
+    @test isapprox(mean(erp_vec[1].data.Ch1), 0.0; atol = 1e-9)
+    @test isapprox(mean(erp_vec[2].data.Ch1), 0.0; atol = 1e-9)
+
+    # Test vector interval [start, stop] and TimeSelection
+    erp_vec_interval = [EegFun.create_test_erp_data(n_channels = 3, condition = 1)]
+    res_vec_interval = EegFun.baseline(erp_vec_interval, [-0.5, -0.49]; channel_selection = :Ch1)
+    @test res_vec_interval isa Vector{<:EegFun.ErpData}
+    @test isapprox(mean(res_vec_interval[1].data.Ch1[1:11]), 0.0; atol = 1e-9)
+
+    res_times_interval = EegFun.baseline(erp_vec_interval[1], EegFun.times(-0.5, -0.49); channel_selection = :Ch1)
+    @test isapprox(mean(res_times_interval.data.Ch1[1:11]), 0.0; atol = 1e-9)
+end
+
+@testset "tf_baseline matches reference (thread safety)" begin
+    # Many channels so that multiple threads process channels concurrently
+    tf = EegFun.create_test_tf_data(n_channels = 32, power_offset = 3.0, noise = 0.5)
+    freqs = unique(tf.data_power.freq)
+    base_t = (0.0, 0.1)
+    in_base = base_t[1] .<= tf.data_power.time .<= base_t[2]
+    for method in (:absolute, :relchange, :db, :zscore)
+        res = EegFun.tf_baseline(tf, base_t; method = method)
+        for ch in EegFun.channel_labels(tf)
+            col = tf.data_power[!, ch]
+            expected = similar(col)
+            for f in freqs
+                rows = tf.data_power.freq .== f
+                bvals = col[rows .& in_base]
+                bm = mean(bvals)
+                expected[rows] .= if method == :absolute
+                    col[rows] .- bm
+                elseif method == :relchange
+                    (col[rows] .- bm) ./ bm
+                elseif method == :db
+                    10 .* log10.(col[rows] ./ bm)
+                else
+                    (col[rows] .- bm) ./ std(bvals, corrected = true)
+                end
+            end
+            @test res.data_power[!, ch] ≈ expected
+        end
+    end
+end
+
+@testset "TimeFreqEpochData baseline & TF baseline edge guards" begin
+    tf_ep = EegFun.create_test_tf_epoch_data(n_channels = 2, n_epochs = 3, power_offset = 4.0, noise = 0.2)
+    orig_ep1_ch1 = copy(tf_ep.data_power[1].Ch1)
+
+    tf_ep_base = EegFun.baseline(tf_ep, (0.0, 0.2); method = :db)
+    @test tf_ep_base isa EegFun.TimeFreqEpochData
+    @test tf_ep.data_power[1].Ch1 == orig_ep1_ch1  # non-mutating
+    @test tf_ep_base.baseline.method == :db
+
+    EegFun.tf_baseline!(tf_ep, (0.0, 0.2); method = :zscore)
+    @test tf_ep.baseline.method == :zscore
+
+    # Vector{TimeFreqEpochData}
+    tf_ep_vec = [
+        EegFun.create_test_tf_epoch_data(condition = 1, n_epochs = 2, power_offset = 3.0),
+        EegFun.create_test_tf_epoch_data(condition = 2, n_epochs = 2, power_offset = 5.0),
+    ]
+    tf_ep_vec_b = EegFun.baseline(tf_ep_vec, (0.0, 0.2); method = :relchange)
+    @test length(tf_ep_vec_b) == 2
+    @test tf_ep_vec_b[1].baseline.method == :relchange
+
+    # Invalid / out-of-range intervals throw EegFunError
+    tf_single = EegFun.create_test_tf_data(n_channels = 2, power_offset = 3.0, noise = 0.1)
+    @test_throws EegFun.EegFunError EegFun.tf_baseline(tf_single, (0.2, 0.0))
+    @test_throws EegFun.EegFunError EegFun.tf_baseline(tf_single, (-10.0, -9.0))
+
+    # Zero-SD / zero-mean / non-positive guards produce NaN (never 1e30 or ±Inf)
+    tf_const = EegFun.create_test_tf_data(n_channels = 1, power_offset = 2.0, noise = 0.0)
+    tf_const.data_power.Ch1 .= 2.0
+    res_z0 = EegFun.tf_baseline(tf_const, (0.0, 0.2); method = :zscore)
+    @test all(isnan, res_z0.data_power.Ch1)
+
+    tf_zero = EegFun.create_test_tf_data(n_channels = 1, power_offset = 0.0, noise = 0.0)
+    tf_zero.data_power.Ch1 .= 0.0
+    @test all(isnan, EegFun.tf_baseline(tf_zero, (0.0, 0.2); method = :db).data_power.Ch1)
+    @test all(isnan, EegFun.tf_baseline(tf_zero, (0.0, 0.2); method = :relchange).data_power.Ch1)
+
+    @testset "detrend and detrend! on EegData and vectors" begin
+        # 1. ContinuousData linear detrending (non-mutating and mutating + channel_selection)
+        cdat = EegFun.create_test_continuous_data(n = 100, fs = 100)
+        t = cdat.data.time
+        cdat.data.Ch1 = 4.5 .* t .- 2.0
+        cdat.data.Ch2 = -3.0 .* t .+ 1.25
+        orig_ch2 = copy(cdat.data.Ch2)
+
+        cdat_dt = EegFun.detrend(cdat; channel_selection = EegFun.channels([:Ch1]))
+        @test maximum(abs, cdat_dt.data.Ch1) < 1e-12
+        @test cdat_dt.data.Ch2 == orig_ch2
+        @test maximum(abs, cdat.data.Ch1) > 1.0  # original untouched
+
+        EegFun.detrend!(cdat)
+        @test maximum(abs, cdat.data.Ch1) < 1e-12
+        @test maximum(abs, cdat.data.Ch2) < 1e-12
+
+        # 2. Interval-restricted linear detrending on ErpData (estimate pre-stimulus ramp, subtract across epoch)
+        erp = EegFun.create_test_erp_data()
+        t_erp = erp.data.time
+        step_resp = ifelse.(t_erp .>= 0.2, 5.0, 0.0)
+        erp.data.Ch1 = 2.0 .* t_erp .+ 1.0 .+ step_resp
+        EegFun.detrend!(erp; interval_selection = (first(t_erp), 0.1))
+        pre_mask = t_erp .<= 0.1
+        post_mask = t_erp .>= 0.25
+        @test maximum(abs, erp.data.Ch1[pre_mask]) < 1e-12
+        @test all(x -> isapprox(x, 5.0; atol = 1e-12), erp.data.Ch1[post_mask])
+
+        # 3. EpochData & Vector{EpochData} per-trial detrending + type = :constant + interval_selection = nothing
+        ep1 = EegFun.create_test_epoch_data(n = 50, fs = 100, n_epochs = 3, condition = 1)
+        ep2 = EegFun.create_test_epoch_data(n = 50, fs = 100, n_epochs = 2, condition = 2)
+        for (k, df) in enumerate(ep1.data)
+            df.Ch1 = (k * 3.0) .* df.time .+ k
+        end
+        ep_vec_dt = EegFun.detrend([ep1, ep2])
+        for df in ep_vec_dt[1].data
+            @test maximum(abs, df.Ch1) < 1e-12
+        end
+
+        ep_const = EegFun.detrend(ep1; type = :constant)
+        @test isapprox(mean(ep_const.data[1].Ch1), 0.0; atol = 1e-12)
+        @test EegFun.detrend!(copy(ep1); interval_selection = nothing).data[1].Ch1 == ep1.data[1].Ch1
+        @test_throws EegFun.EegFunError EegFun.detrend!(copy(ep1); type = :quadratic)
+
+        # 4. Numerical stability of detrend(x, y) for large x offsets
+        x_large = collect(1.0e6 .+ (0.0:0.01:1.0))
+        y_large = 2.5 .* (x_large .- 1.0e6) .- 0.75
+        @test maximum(abs, EegFun.detrend(x_large, y_large)) < 1e-9
+    end
+end

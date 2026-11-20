@@ -1,23 +1,8 @@
-function _bridged_pairs(X::Matrix{Float64}, selected_channels::Vector{Symbol}, correlation_threshold::Real)
-    R = cor(X; dims = 1)
-    n_ch = length(selected_channels)
-    pairs_1 = Symbol[]
-    pairs_2 = Symbol[]
-    corrs = Float64[]
+# Electrical bridge detection across EEG channels via temporal correlation.
 
-    for i = 1:(n_ch-1)
-        ch1 = selected_channels[i]
-        for j = (i+1):n_ch
-            r = R[i, j]
-            if r > correlation_threshold
-                push!(pairs_1, ch1)
-                push!(pairs_2, selected_channels[j])
-                push!(corrs, r)
-            end
-        end
-    end
-    return DataFrame(channel_1 = pairs_1, channel_2 = pairs_2, correlation = corrs)
-end
+######################################
+########### User Functions ###########
+######################################
 
 """
     find_bridged_channels(dat::SingleDataFrameEeg, correlation_threshold::Real=0.99; channel_selection=channels())
@@ -59,4 +44,29 @@ end
 
 function find_bridged_channels(dat::AbstractVector{<:EegData}, correlation_threshold::Real = 0.99; channel_selection = channels())
     return [find_bridged_channels(d, correlation_threshold; channel_selection = channel_selection) for d in dat]
+end
+
+######################################
+######### Internal Functions #########
+######################################
+
+function _bridged_pairs(X::Matrix{Float64}, selected_channels::Vector{Symbol}, correlation_threshold::Real)
+    R = cor(X; dims = 1)
+    n_ch = length(selected_channels)
+    pairs_1 = Symbol[]
+    pairs_2 = Symbol[]
+    corrs = Float64[]
+
+    for i = 1:(n_ch-1)
+        ch1 = selected_channels[i]
+        for j = (i+1):n_ch
+            r = R[i, j]
+            if r > correlation_threshold
+                push!(pairs_1, ch1)
+                push!(pairs_2, selected_channels[j])
+                push!(corrs, r)
+            end
+        end
+    end
+    return DataFrame(channel_1 = pairs_1, channel_2 = pairs_2, correlation = corrs)
 end

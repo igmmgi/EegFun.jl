@@ -1,50 +1,8 @@
-function _file_percentage_summary(files::AbstractVector{S}, pcts::AbstractVector{<:Real}) where {S}
-    file_idx = Dict{S,Int}()
-    unique_files = S[]
-    sums = Float64[]
-    counts = Int[]
-    @inbounds for i in eachindex(files, pcts)
-        f = files[i]
-        idx = get(file_idx, f, 0)
-        if idx == 0
-            push!(unique_files, f)
-            push!(sums, Float64(pcts[i]))
-            push!(counts, 1)
-            file_idx[f] = length(unique_files)
-        else
-            sums[idx] += Float64(pcts[i])
-            counts[idx] += 1
-        end
-    end
-    @inbounds for k in eachindex(sums)
-        sums[k] = round(sums[k] / counts[k]; digits = 1)
-    end
-    return DataFrame(AbstractVector[unique_files, sums], [:file, :percentage]; copycols = false)
-end
+# Pipeline summary tables, artifact reports, and batch logging helpers.
 
-function _epoch_and_file_summary(all_epoch_counts::Vector{DataFrame})
-    epoch_summary = reduce(vcat, all_epoch_counts)
-    file_summary = _file_percentage_summary(epoch_summary.file, epoch_summary.percentage)
-    return epoch_summary, file_summary
-end
-
-function _merge_jld2_summary(path::String, new_df::DataFrame, new_files::Set)
-    merged = if isfile(path)
-        existing = JLD2.load(path, "data")
-        keep = [!in(f, new_files) for f in existing.file]
-        vcat(existing[keep, :], new_df)
-    else
-        new_df
-    end
-    return sort(merged, :file; by = _natural_sort_key)
-end
-
-function _merge_summaries(new_epoch_summary::DataFrame, new_file_summary::DataFrame, output_directory::String)
-    new_files = Set(new_epoch_summary.file)
-    merged_epoch = _merge_jld2_summary(joinpath(output_directory, "epoch_summary.jld2"), new_epoch_summary, new_files)
-    merged_file = _merge_jld2_summary(joinpath(output_directory, "file_summary.jld2"), new_file_summary, new_files)
-    return merged_epoch, merged_file
-end
+######################################
+########### User Functions ###########
+######################################
 
 """
     compare_rejections(rejection1::Vector{EpochRejectionInfo}, rejection2::Vector{EpochRejectionInfo}) -> DataFrame
@@ -168,21 +126,6 @@ function summarize_electrode_repairs(file_pattern::String; input_dir::String = p
     return per_file_df, summarize_electrode_repairs(continuous_repairs)
 end
 
-function _empty_ica_summary()
-    return (
-        DataFrame(
-            file = String[],
-            total_components = Int[],
-            vEOG = Int[],
-            hEOG = Int[],
-            ECG = Int[],
-            line_noise = Int[],
-            channel_noise = Int[],
-        ),
-        DataFrame(component_type = String[], avg_per_participant = Float64[]),
-    )
-end
-
 """
     summarize_ica_components(ica_components::Vector{ArtifactComponents}) -> Tuple{DataFrame,DataFrame}
     summarize_ica_components(file_pattern::String; input_dir::String = pwd()) -> Tuple{DataFrame,DataFrame}
@@ -263,4 +206,71 @@ function summarize_ica_components(file_pattern::String; input_dir::String = pwd(
     end
     sort!(per_file_df, :file; by = _natural_sort_key)
     return per_file_df, avg_df
+end
+
+######################################
+######### Internal Functions #########
+######################################
+
+function _file_percentage_summary(files::AbstractVector{S}, pcts::AbstractVector{<:Real}) where {S}
+    file_idx = Dict{S,Int}()
+    unique_files = S[]
+    sums = Float64[]
+    counts = Int[]
+    @inbounds for i in eachindex(files, pcts)
+        f = files[i]
+        idx = get(file_idx, f, 0)
+        if idx == 0
+            push!(unique_files, f)
+            push!(sums, Float64(pcts[i]))
+            push!(counts, 1)
+            file_idx[f] = length(unique_files)
+        else
+            sums[idx] += Float64(pcts[i])
+            counts[idx] += 1
+        end
+    end
+    @inbounds for k in eachindex(sums)
+        sums[k] = round(sums[k] / counts[k]; digits = 1)
+    end
+    return DataFrame(AbstractVector[unique_files, sums], [:file, :percentage]; copycols = false)
+end
+
+function _epoch_and_file_summary(all_epoch_counts::Vector{DataFrame})
+    epoch_summary = reduce(vcat, all_epoch_counts)
+    file_summary = _file_percentage_summary(epoch_summary.file, epoch_summary.percentage)
+    return epoch_summary, file_summary
+end
+
+function _merge_jld2_summary(path::String, new_df::DataFrame, new_files::Set)
+    merged = if isfile(path)
+        existing = JLD2.load(path, "data")
+        keep = [!in(f, new_files) for f in existing.file]
+        vcat(existing[keep, :], new_df)
+    else
+        new_df
+    end
+    return sort(merged, :file; by = _natural_sort_key)
+end
+
+function _merge_summaries(new_epoch_summary::DataFrame, new_file_summary::DataFrame, output_directory::String)
+    new_files = Set(new_epoch_summary.file)
+    merged_epoch = _merge_jld2_summary(joinpath(output_directory, "epoch_summary.jld2"), new_epoch_summary, new_files)
+    merged_file = _merge_jld2_summary(joinpath(output_directory, "file_summary.jld2"), new_file_summary, new_files)
+    return merged_epoch, merged_file
+end
+
+function _empty_ica_summary()
+    return (
+        DataFrame(
+            file = String[],
+            total_components = Int[],
+            vEOG = Int[],
+            hEOG = Int[],
+            ECG = Int[],
+            line_noise = Int[],
+            channel_noise = Int[],
+        ),
+        DataFrame(component_type = String[], avg_per_participant = Float64[]),
+    )
 end

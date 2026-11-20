@@ -1,7 +1,67 @@
+# Callback, validation, and file discovery helpers for `plot_gui`.
+
+######################################
+######### Types & Constants ##########
+######################################
+
+const _RAW_EEG_EXTS = (".bdf", ".jld2", ".set", ".vhdr")
+
+######################################
+######### Internal Functions #########
+######################################
+
+function _setup_multi_int_callback(input, bc_obs::Observable, field_name::String, state_obs::Observable)
+    _bind_textbox_validation!(input) do stripped
+        if isempty(stripped)
+            bc_obs[] = :white
+            state_obs[] = ""
+        elseif isnothing(_parse_gui_int_field(stripped))
+            bc_obs[] = :lightcoral
+            state_obs[] = "__INVALID__"
+            @minimal_warning "Invalid $field_name value: \"$stripped\" (must be integers or ranges, e.g. 1 2 3 or 1:50)"
+        else
+            bc_obs[] = :white
+            state_obs[] = stripped
+        end
+    end
+end
+
+function _setup_numeric_callback(input, bc_obs::Observable, field_name::String, update_fn::Function; range_check = nothing)
+    _bind_textbox_validation!(input) do stripped
+        if isempty(stripped)
+            bc_obs[] = :white
+            update_fn(nothing)
+        else
+            parsed = tryparse(Float64, stripped)
+            if isnothing(parsed)
+                bc_obs[] = :lightcoral
+                @minimal_warning "Invalid $field_name value: \"$stripped\" (must be a number)"
+            else
+                bc_obs[] = :white
+                update_fn(parsed)
+            end
+        end
+        !isnothing(range_check) && range_check()
+    end
+end
+
+function _check_range(limit_obs, min_bc, max_bc, label)
+    lo, hi = limit_obs[]
+    if !isnothing(lo) && !isnothing(hi) && lo > hi
+        min_bc[] = :lightcoral
+        max_bc[] = :lightcoral
+        @minimal_warning "Invalid $label range: min ($lo) must be less than or equal to max ($hi)"
+    end
+end
+
 _is_pattern(fname) = lowercase(splitext(fname)[2]) != ".jld2"
+
 _gui_dir(gui_state) = isempty(gui_state.directory[]) ? pwd() : gui_state.directory[]
+
 _gui_filepath(gui_state) = _resolve_input_filepath(gui_state.filename[], _gui_dir(gui_state))
+
 _gui_selected_channels(gui_state) = isempty(gui_state.electrodes[]) ? channels() : channels(Symbol.(gui_state.electrodes[]))
+
 _gui_lim(tup) = (!isnothing(tup[1]) && !isnothing(tup[2])) ? (tup[1], tup[2]) : nothing
 
 function _validate_file(gui_state, required_ext::String = ".jld2")
@@ -114,50 +174,6 @@ function _bind_textbox_validation!(on_valid::Function, input)
     on(run_validate, input.stored_string)
     on(input.focused) do is_focused
         is_focused || run_validate(input.displayed_string[])
-    end
-end
-
-function setup_multi_int_callback(input, bc_obs::Observable, field_name::String, state_obs::Observable)
-    _bind_textbox_validation!(input) do stripped
-        if isempty(stripped)
-            bc_obs[] = :white
-            state_obs[] = ""
-        elseif isnothing(_parse_gui_int_field(stripped))
-            bc_obs[] = :lightcoral
-            state_obs[] = "__INVALID__"
-            @minimal_warning "Invalid $field_name value: \"$stripped\" (must be integers or ranges, e.g. 1 2 3 or 1:50)"
-        else
-            bc_obs[] = :white
-            state_obs[] = stripped
-        end
-    end
-end
-
-function setup_numeric_callback(input, bc_obs::Observable, field_name::String, update_fn::Function; range_check = nothing)
-    _bind_textbox_validation!(input) do stripped
-        if isempty(stripped)
-            bc_obs[] = :white
-            update_fn(nothing)
-        else
-            parsed = tryparse(Float64, stripped)
-            if isnothing(parsed)
-                bc_obs[] = :lightcoral
-                @minimal_warning "Invalid $field_name value: \"$stripped\" (must be a number)"
-            else
-                bc_obs[] = :white
-                update_fn(parsed)
-            end
-        end
-        !isnothing(range_check) && range_check()
-    end
-end
-
-function check_range(limit_obs, min_bc, max_bc, label)
-    lo, hi = limit_obs[]
-    if !isnothing(lo) && !isnothing(hi) && lo > hi
-        min_bc[] = :lightcoral
-        max_bc[] = :lightcoral
-        @minimal_warning "Invalid $label range: min ($lo) must be less than or equal to max ($hi)"
     end
 end
 
@@ -303,8 +319,6 @@ function _plot_ica(gui_state)
         end
     end
 end
-
-const _RAW_EEG_EXTS = (".bdf", ".jld2", ".set", ".vhdr")
 
 function _find_ica_source_file(source_basename::String, search_dirs::Vector{String})
     for dir in search_dirs, ext in _RAW_EEG_EXTS

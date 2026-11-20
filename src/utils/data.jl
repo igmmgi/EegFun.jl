@@ -1,3 +1,5 @@
+# Data access, subsetting, conversion, and table interface includes.
+
 include("data/columns.jl")
 include("data/access.jl")
 include("data/frames.jl")

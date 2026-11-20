@@ -1,4 +1,93 @@
+# Preconditioned ICA for Real Data (Picard / Picard-O) solvers for CPU and GPU.
+
+######################################
+######### Types & Constants ##########
+######################################
+
 const _PICARD_THREAD_ELEMS = 16_384
+
+mutable struct LBFGSBuffer{T<:AbstractFloat,MatT<:AbstractMatrix{T}}
+    s_buf::Vector{MatT}
+    y_buf::Vector{MatT}
+    r_buf::Vector{T}
+    a_buf::Vector{T}
+    m::Int
+    len::Int
+    head::Int
+end
+
+######################################
+########### User Functions ###########
+######################################
+
+function LBFGSBuffer(T::Type{<:AbstractFloat}, N::Int, m::Int)
+    return LBFGSBuffer{T,Matrix{T}}([zeros(T, N, N) for _ = 1:m], [zeros(T, N, N) for _ = 1:m], zeros(T, m), zeros(T, m), m, 0, 1)
+end
+
+function LBFGSBuffer(sample_mat::MatT, m::Int) where {T<:AbstractFloat,MatT<:AbstractMatrix{T}}
+    N = size(sample_mat, 1)
+    s_buf = [similar(sample_mat, N, N) for _ = 1:m]
+    y_buf = [similar(sample_mat, N, N) for _ = 1:m]
+    for k = 1:m
+        fill!(s_buf[k], zero(T))
+        fill!(y_buf[k], zero(T))
+    end
+    return LBFGSBuffer{T,MatT}(s_buf, y_buf, zeros(T, m), zeros(T, m), m, 0, 1)
+end
+
+"""
+    picard_ica(dat_ica, layout, filename; n_components, extended = false,
+               params = IcaPrms(), rng = Random.default_rng()) -> InfoIca
+
+Run Preconditioned ICA for Real Data (Picard; Ablin, Cardoso, & Gramfort, 2018), using an exact
+2×2 block Hessian preconditioner with L-BFGS (`extended = true` separates mixed sub-/super-Gaussian sources).
+"""
+function picard_ica(
+    dat_ica::Matrix{Float64},
+    layout::Layout,
+    filename::String;
+    n_components::Int,
+    extended::Bool = false,
+    params::IcaPrms = IcaPrms(),
+    rng::AbstractRNG = Random.default_rng(),
+)
+    ext_str = extended ? "Extended-" : ""
+    @info "Running $(ext_str)Picard ICA (use_gpu=$(params.use_gpu)): $(size(dat_ica, 1)) channels x $(size(dat_ica, 2)) samples -> $n_components components"
+
+    prep = _ica_preprocess(dat_ica, n_components, params)
+
+    if prep.gpu_active
+        W_init = Matrix{Float32}(I, n_components, n_components)
+        converged, n_iter, signs_f32, grad_norm = _picard_optimize_gpu!(W_init, Float32.(prep.dat_sphered), prep.prms, extended)
+        W_final = Float64.(W_init)
+        signs = Float64.(signs_f32)
+    else
+        W_final = Matrix{Float64}(I, n_components, n_components)
+        converged, n_iter, signs, grad_norm = _picard_optimize_cpu!(W_final, prep.dat_sphered, prep.prms, extended)
+    end
+
+    if !converged
+        @minimal_warning "Picard ICA reached maximum iterations or stopped early at iteration $n_iter without meeting tolerance ($(prep.prms.default_stop)) (final gradient norm: $(round(grad_norm, sigdigits=4)))."
+    end
+
+    is_sub_gaussian = extended ? BitVector(signs .< 0.0) : falses(n_components)
+    return _ica_postprocess(
+        W_final,
+        prep.sphere,
+        prep.pca_components,
+        prep.scale,
+        prep.original_mean,
+        prep.n_samples,
+        n_components,
+        filename,
+        layout,
+        is_sub_gaussian,
+    )
+end
+
+######################################
+######### Internal Functions #########
+######################################
 
 # Avoid oversubscribing hardware threads when OpenBLAS worker threads are also active in Picard
 @inline _picard_num_tasks(T_len::Int) = clamp(Sys.CPU_THREADS - BLAS.get_num_threads(), 1, min(Threads.nthreads(), cld(T_len, 256)))
@@ -102,31 +191,6 @@ function _picard_regularize_hessian!(h::Matrix{T}, lambda_min::T) where {T<:Abst
         end
     end
     return nothing
-end
-
-mutable struct LBFGSBuffer{T<:AbstractFloat,MatT<:AbstractMatrix{T}}
-    s_buf::Vector{MatT}
-    y_buf::Vector{MatT}
-    r_buf::Vector{T}
-    a_buf::Vector{T}
-    m::Int
-    len::Int
-    head::Int
-end
-
-function LBFGSBuffer(T::Type{<:AbstractFloat}, N::Int, m::Int)
-    return LBFGSBuffer{T,Matrix{T}}([zeros(T, N, N) for _ = 1:m], [zeros(T, N, N) for _ = 1:m], zeros(T, m), zeros(T, m), m, 0, 1)
-end
-
-function LBFGSBuffer(sample_mat::MatT, m::Int) where {T<:AbstractFloat,MatT<:AbstractMatrix{T}}
-    N = size(sample_mat, 1)
-    s_buf = [similar(sample_mat, N, N) for _ = 1:m]
-    y_buf = [similar(sample_mat, N, N) for _ = 1:m]
-    for k = 1:m
-        fill!(s_buf[k], zero(T))
-        fill!(y_buf[k], zero(T))
-    end
-    return LBFGSBuffer{T,MatT}(s_buf, y_buf, zeros(T, m), zeros(T, m), m, 0, 1)
 end
 
 @inline function _lbfgs_reset!(buf::LBFGSBuffer)
@@ -445,56 +509,6 @@ function _picard_optimize_cpu!(W::Matrix{T}, dat_ica::Matrix{T}, params::IcaPrms
     return false, max_iter, signs, gradient_norm
 end
 
-"""
-    picard_ica(dat_ica, layout, filename; n_components, extended = false,
-               params = IcaPrms(), rng = Random.default_rng()) -> InfoIca
-
-Run Preconditioned ICA for Real Data (Picard; Ablin, Cardoso, & Gramfort, 2018), using an exact
-2×2 block Hessian preconditioner with L-BFGS (`extended = true` separates mixed sub-/super-Gaussian sources).
-"""
-function picard_ica(
-    dat_ica::Matrix{Float64},
-    layout::Layout,
-    filename::String;
-    n_components::Int,
-    extended::Bool = false,
-    params::IcaPrms = IcaPrms(),
-    rng::AbstractRNG = Random.default_rng(),
-)
-    ext_str = extended ? "Extended-" : ""
-    @info "Running $(ext_str)Picard ICA (use_gpu=$(params.use_gpu)): $(size(dat_ica, 1)) channels x $(size(dat_ica, 2)) samples -> $n_components components"
-
-    prep = _ica_preprocess(dat_ica, n_components, params)
-
-    if prep.gpu_active
-        W_init = Matrix{Float32}(I, n_components, n_components)
-        converged, n_iter, signs_f32, grad_norm = _picard_optimize_gpu!(W_init, Float32.(prep.dat_sphered), prep.prms, extended)
-        W_final = Float64.(W_init)
-        signs = Float64.(signs_f32)
-    else
-        W_final = Matrix{Float64}(I, n_components, n_components)
-        converged, n_iter, signs, grad_norm = _picard_optimize_cpu!(W_final, prep.dat_sphered, prep.prms, extended)
-    end
-
-    if !converged
-        @minimal_warning "Picard ICA reached maximum iterations or stopped early at iteration $n_iter without meeting tolerance ($(prep.prms.default_stop)) (final gradient norm: $(round(grad_norm, sigdigits=4)))."
-    end
-
-    is_sub_gaussian = extended ? BitVector(signs .< 0.0) : falses(n_components)
-    return _ica_postprocess(
-        W_final,
-        prep.sphere,
-        prep.pca_components,
-        prep.scale,
-        prep.original_mean,
-        prep.n_samples,
-        n_components,
-        filename,
-        layout,
-        is_sub_gaussian,
-    )
-end
-
 function _picard_y_loss_gpu(
     Y_gpu::AbstractMatrix{T},
     signs_gpu::AbstractVector{T},
@@ -586,9 +600,9 @@ function _picard_optimize_gpu!(W_cpu::Matrix{Float32}, dat_ica_cpu::Matrix{Float
     ls_tries = params.picard_ls_tries
     max_iter = params.max_iter
 
-    dat_ica_gpu = gpu_array(copy(dat_ica_cpu))
+    dat_ica_gpu = _gpu_array(copy(dat_ica_cpu))
     Y = copy(dat_ica_gpu)
-    W = gpu_array(copy(W_cpu))
+    W = _gpu_array(copy(W_cpu))
 
     Y_new, W_new = similar(Y), similar(W)
     DY, DW = similar(Y), similar(W)
@@ -597,8 +611,8 @@ function _picard_optimize_gpu!(W_cpu::Matrix{Float32}, dat_ica_cpu::Matrix{Float
     G, G_old, h = similar(W), similar(W), similar(W)
     direction, q, y_diff = similar(W), similar(W), similar(W)
 
-    signs = gpu_array(ones(Float32, N))
-    I_diag = gpu_array(Matrix{Bool}(I, N, N))
+    signs = _gpu_array(ones(Float32, N))
+    I_diag = _gpu_array(Matrix{Bool}(I, N, N))
 
     h_cpu = zeros(Float32, N, N)
     G_cpu = zeros(Float32, N, N)
@@ -606,7 +620,7 @@ function _picard_optimize_gpu!(W_cpu::Matrix{Float32}, dat_ica_cpu::Matrix{Float
     transform_cpu = zeros(Float32, N, N)
     signs_cpu = extended ? ones(Float32, N) : Float32[]
     old_signs_cpu = extended ? ones(Float32, N) : Float32[]
-    mean_psid_gpu = extended ? gpu_array(zeros(Float32, N, 1)) : nothing
+    mean_psid_gpu = extended ? _gpu_array(zeros(Float32, N, 1)) : nothing
     mean_psid_cpu = extended ? zeros(Float32, N) : Float32[]
     C_cpu = extended ? zeros(Float32, N, N) : Matrix{Float32}(undef, 0, 0)
 
@@ -615,14 +629,14 @@ function _picard_optimize_gpu!(W_cpu::Matrix{Float32}, dat_ica_cpu::Matrix{Float
     current_loss = Float32(-logdetW + _picard_y_loss_gpu(Y, signs, extended, loss_tmp))
     gradient_norm = 0.0f0
 
-    C = extended ? similar(W) : gpu_array(zeros(Float32, 0, 0))
-    C_tmp = extended ? similar(W) : gpu_array(zeros(Float32, 0, 0))
+    C = extended ? similar(W) : _gpu_array(zeros(Float32, 0, 0))
+    C_tmp = extended ? similar(W) : _gpu_array(zeros(Float32, 0, 0))
     C_orig_cpu = extended ? zeros(Float32, N, N) : zeros(Float32, 0, 0)
     if extended
         mul!(C_orig_cpu, dat_ica_cpu, transpose(dat_ica_cpu))
         C_orig_cpu ./= Float32(T_len)
     end
-    C_orig = gpu_array(C_orig_cpu)
+    C_orig = _gpu_array(C_orig_cpu)
     if extended
         mul!(C_tmp, W, C_orig)
         mul!(C, C_tmp, transpose(W))

@@ -1,8 +1,29 @@
+# Channel removal utilities for continuous, epoched, ERP, and time-frequency data.
+
+######################################
+########### User Functions ###########
+######################################
+
+"""
+    channel_delete(dat, channels_to_delete)
+
+Return a copy of `dat` (or a `Vector` of `EegData`) with the specified channel(s) (`Symbol`, `String`,
+or vector thereof) removed from both data columns and layout rows (clearing cached layout neighbors if layout channels change).
+"""
+channel_delete(dat::EegData, channels_to_delete::AbstractVector{Symbol}) = channel_delete!(copy(dat), channels_to_delete)
+
+channel_delete(dat::EegData, channel::Symbol) = channel_delete(dat, [channel])
+
+channel_delete(dat::EegData, channel::AbstractString) = channel_delete(dat, [Symbol(channel)])
+
+channel_delete(dat::EegData, channels::AbstractVector{<:AbstractString}) = channel_delete(dat, Symbol.(channels))
+
+channel_delete(dat::AbstractVector{<:EegData}, channels_to_delete) = [channel_delete(d, channels_to_delete) for d in dat]
+
 """
     channel_delete!(dat::EegData, channels_to_delete) -> EegData
 
-Delete specified channel(s) (`Symbol`, `String`, or vector thereof) from `dat` in place, updating
-both data columns and layout rows (clearing cached layout neighbors if layout channels change).
+In-place mutating version of [`channel_delete`](@ref).
 """
 function channel_delete!(dat::EegData, channels_to_delete::AbstractVector{Symbol})
     to_del = Set(channels_to_delete)
@@ -28,8 +49,11 @@ function channel_delete!(dat::EegData, channels_to_delete::AbstractVector{Symbol
     @info "channel_delete!: Deleted $(length(channels_in_data)) channel(s): $(join(string.(channels_in_data), ", "))"
     return dat
 end
+
 channel_delete!(dat::EegData, channel::Symbol) = channel_delete!(dat, [channel])
+
 channel_delete!(dat::EegData, channel::AbstractString) = channel_delete!(dat, [Symbol(channel)])
+
 channel_delete!(dat::EegData, channels::AbstractVector{<:AbstractString}) = channel_delete!(dat, Symbol.(channels))
 
 function channel_delete!(dat::AbstractVector{<:EegData}, channels_to_delete)
@@ -38,6 +62,10 @@ function channel_delete!(dat::AbstractVector{<:EegData}, channels_to_delete)
     end
     return dat
 end
+
+######################################
+######### Internal Functions #########
+######################################
 
 function _delete_data_columns!(df::DataFrame, channels_to_delete::Set{Symbol})
     cols_to_remove = [c for c in propertynames(df) if c in channels_to_delete]
@@ -55,14 +83,3 @@ function _delete_data_columns!(dfs::AbstractVector{<:DataFrame}, channels_to_del
     end
     return nothing
 end
-
-"""
-    channel_delete(dat, channels_to_delete)
-
-Non-mutating version of [`channel_delete!`](@ref).
-"""
-channel_delete(dat::EegData, channels_to_delete::AbstractVector{Symbol}) = channel_delete!(copy(dat), channels_to_delete)
-channel_delete(dat::EegData, channel::Symbol) = channel_delete(dat, [channel])
-channel_delete(dat::EegData, channel::AbstractString) = channel_delete(dat, [Symbol(channel)])
-channel_delete(dat::EegData, channels::AbstractVector{<:AbstractString}) = channel_delete(dat, Symbol.(channels))
-channel_delete(dat::AbstractVector{<:EegData}, channels_to_delete) = [channel_delete(d, channels_to_delete) for d in dat]

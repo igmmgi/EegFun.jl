@@ -1,4 +1,8 @@
-# === StatsAPI Integration ===
+# StatsAPI.jl interface implementations for EegFun statistical result types.
+
+######################################
+########### User Functions ###########
+######################################
 
 """
     StatsAPI.coef(res::LmmStatsResult)
@@ -73,7 +77,6 @@ function StatsAPI.confint(res::LmmStatsResult; level::Real = 0.95)
 end
 
 # === Support for ERP and Time-Frequency Permutation/Analytic Tests ===
-
 """
     StatsAPI.coef(res::StatsResult)
     StatsAPI.coef(res::TFStatsResult)

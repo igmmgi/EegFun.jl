@@ -1,3 +1,9 @@
+# Interactive tonic SCL / phasic SCR electrodermal deconvolution demo.
+
+######################################
+########### User Functions ###########
+######################################
+
 """
     signal_example_eda_scr()
 

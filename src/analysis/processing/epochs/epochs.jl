@@ -1,63 +1,21 @@
+# Trigger-based epoch extraction, trial averaging, and epoch condition parsing.
+
+######################################
+######### Types & Constants ##########
+######################################
+
+const _TriggerSeqElem = Union{Int,Symbol,UnitRange{Int},Vector{Int}}
+
+######################################
+########### User Functions ###########
+######################################
+
 """
     condition_parse_epoch(config::Dict) -> Vector{EpochCondition}
     condition_parse_epoch(toml_file::String) -> Vector{EpochCondition}
 
-Parse epoch condition configurations from a TOML file path or a pre-parsed dictionary.
+Parse epoch condition configurations from a pre-parsed dictionary or a TOML file path.
 """
-condition_parse_epoch(toml_file::String) = condition_parse_epoch(TOML.parsefile(toml_file))
-
-_expand_arg(x::AbstractVector) = isempty(x) ? x : mapreduce(_expand_arg_element, vcat, x)
-_expand_arg(x::Union{Number,Symbol}) = [x]
-_expand_arg(x::UnitRange) = collect(x)
-_expand_arg(x) = x
-
-_expand_arg_element(v::UnitRange) = collect(v)
-_expand_arg_element(v) = [v]
-
-const _TriggerSeqElem = Union{Int,Symbol,UnitRange{Int},Vector{Int}}
-
-function allcomb(args...)
-    expanded_args = map(_expand_arg, args)
-    return vec([collect(_TriggerSeqElem, c) for c in Iterators.product(expanded_args...)])
-end
-
-function _parse_allcomb_string(condition_name::String, expr::String)
-    m = match(r"^allcomb\((.*)\)$"s, strip(expr))
-    isnothing(m) &&
-        @minimal_error("Invalid allcomb expression for condition '$condition_name': expected 'allcomb(arg1, arg2, ...)'. Got: '$expr'")
-
-    args = String[]
-    depth, buf = 0, IOBuffer()
-    for c in strip(m.captures[1])
-        if c in ('[', '(')
-            depth += 1
-            write(buf, c)
-        elseif c in (']', ')')
-            depth -= 1
-            write(buf, c)
-        elseif c == ',' && depth == 0
-            push!(args, strip(String(take!(buf))))
-        else
-            write(buf, c)
-        end
-    end
-    rem = strip(String(take!(buf)))
-    !isempty(rem) && push!(args, rem)
-    isempty(args) && @minimal_error("allcomb() called with no arguments for condition '$condition_name'")
-
-    parse_int(s) =
-        (n = tryparse(Int, strip(s)); isnothing(n) && @minimal_error("Cannot parse '$s' as integer in allcomb for '$condition_name'"); n)
-    parsed = map(args) do s
-        s = strip(s)
-        (m2 = match(r"^:([A-Za-z_]\w*)$", s); !isnothing(m2)) && return Symbol(m2.captures[1])
-        (m2 = match(r"^(-?\d+):(-?\d+)$", s); !isnothing(m2)) && return parse(Int, m2.captures[1]):parse(Int, m2.captures[2])
-        (m2 = match(r"^\[\[(.*)\]\]$", s); !isnothing(m2)) && return [parse_int.(split(m2.captures[1], ","))]
-        (m2 = match(r"^\[(.*)\]$", s); !isnothing(m2)) && return parse_int.(split(m2.captures[1], ","))
-        return parse_int(s)
-    end
-    return allcomb(parsed...)
-end
-
 function condition_parse_epoch(config::Dict)
     epochs_section = get(config, "epochs", Dict())
     conditions = EpochCondition[]
@@ -141,59 +99,16 @@ function condition_parse_epoch(config::Dict)
     return conditions
 end
 
-_interval_endpoints(interval::Tuple{Real,Real}) = (Float64(interval[1]), Float64(interval[2]))
-_interval_endpoints(interval::AbstractVector{<:Real}) =
-    length(interval) == 2 ? (Float64(interval[1]), Float64(interval[2])) :
-    @minimal_error("Epoch interval must have exactly 2 elements, got $(length(interval))")
-_interval_endpoints(interval::TimeSelection) = (interval.start, interval.stop)
-_interval_endpoints(interval) = @minimal_error("Epoch interval must be a Tuple, Vector, or TimeSelection, got $(typeof(interval))")
+condition_parse_epoch(toml_file::String) = condition_parse_epoch(TOML.parsefile(toml_file))
 
-function _validate_epoch_interval_params(dat::ContinuousData, epoch_interval)
-    t_start, t_end = _interval_endpoints(epoch_interval)
-    t_start <= t_end || @minimal_error("Epoch interval start ($t_start) must be less than or equal to end ($t_end)")
-    hasproperty(dat.data, :trigger) || @minimal_error("Data must have a trigger column")
-    hasproperty(dat.data, :time) || @minimal_error("Data must have a time column")
-    !isempty(dat.data.time) || @minimal_error("Time column cannot be empty")
-    !isempty(dat.data.trigger) || @minimal_error("Triggers column cannot be empty")
-    issorted(dat.data.time) || @minimal_error("Time column must be sorted in ascending order")
-    return nothing
-end
+"""
+    allcomb(args...) -> Vector{Vector}
 
-function _mark_windows_at_indices!(
-    dat::ContinuousData,
-    reference_indices::Vector{Int},
-    time_window::Union{Tuple{Real,Real},AbstractVector{<:Real},TimeSelection},
-    channel_out::Symbol,
-)::Int
-    times = dat.data.time
-    col_out = dat.data[!, channel_out]
-    n_samp = length(times)
-    w_start_offset, w_end_offset = _interval_endpoints(time_window)
-
-    n_marked = 0
-    for idx in reference_indices
-        if idx < 1 || idx > n_samp
-            @minimal_warning "Reference index $idx is out of bounds, skipping"
-            continue
-        end
-        ref_t = times[idx]
-        s_idx = searchsortedfirst(times, ref_t + w_start_offset)
-        e_idx = searchsortedlast(times, ref_t + w_end_offset)
-        if s_idx <= e_idx
-            @inbounds fill!(@view(col_out[s_idx:e_idx]), true)
-            n_marked += (e_idx - s_idx + 1)
-        end
-    end
-    return n_marked
-end
-
-function _init_bool_column!(df::DataFrame, col::Symbol)
-    if hasproperty(df, col) && df[!, col] isa Vector{Bool}
-        fill!(df[!, col], false)
-    else
-        df[!, col] = fill(false, nrow(df))
-    end
-    return nothing
+Expand the Cartesian product of trigger elements, ranges, `:any` wildcards, and trigger sets into explicit trigger sequences.
+"""
+function allcomb(args...)
+    expanded_args = map(_expand_arg, args)
+    return vec([collect(_TriggerSeqElem, c) for c in Iterators.product(expanded_args...)])
 end
 
 """
@@ -282,75 +197,6 @@ function mark_epoch_intervals!(
     return dat
 end
 
-function _apply_trigger_mask(triggers::Vector, condition::EpochCondition)
-    if isnothing(condition.mask_triggers) &&
-       isnothing(condition.mask_between_triggers) &&
-       isnothing(condition.mask_before_trigger) &&
-       isnothing(condition.mask_after_trigger)
-        return triggers, 1:length(triggers)
-    end
-
-    hidden = falses(length(triggers))
-    if !isnothing(condition.mask_triggers)
-        for t in condition.mask_triggers
-            @inbounds for i in eachindex(triggers)
-                triggers[i] == t && (hidden[i] = true)
-            end
-        end
-    end
-
-    if !isnothing(condition.mask_between_triggers)
-        for (start_t, end_t) in condition.mask_between_triggers
-            in_mask = false
-            @inbounds for i in eachindex(triggers)
-                if !in_mask
-                    if triggers[i] == start_t
-                        in_mask = true
-                        hidden[i] = true
-                    end
-                elseif triggers[i] == end_t
-                    in_mask = false
-                else
-                    hidden[i] = true
-                end
-            end
-        end
-    end
-
-    if !isnothing(condition.mask_before_trigger)
-        idx = findfirst(==(condition.mask_before_trigger), triggers)
-        !isnothing(idx) && (hidden[1:idx] .= true)
-    end
-
-    if !isnothing(condition.mask_after_trigger)
-        idx = findlast(==(condition.mask_after_trigger), triggers)
-        !isnothing(idx) && (hidden[idx:end] .= true)
-    end
-
-    valid_indices = findall(.!hidden)
-    return triggers[valid_indices], valid_indices
-end
-
-function _map_valid_indices(raw_matches::Vector{Vector{Int}}, valid_indices)
-    (valid_indices isa UnitRange && first(valid_indices) == 1) && return raw_matches
-    return [Int[valid_indices[i] for i in m] for m in raw_matches]
-end
-
-function _filter_matches(matches::Vector{Vector{Int}}, condition::EpochCondition, triggers, time_data)
-    if !isnothing(condition.timing_pairs) && !isnothing(condition.min_interval) && !isnothing(condition.max_interval)
-        min_int, max_int = condition.min_interval, condition.max_interval
-        pairs = condition.timing_pairs
-        matches = filter(matches) do m
-            for (start_idx, end_idx) in pairs
-                interval = time_data[m[end_idx]] - time_data[m[start_idx]]
-                (interval < min_int || interval > max_int) && return false
-            end
-            return true
-        end
-    end
-    return matches
-end
-
 function mark_epoch_intervals!(
     dat::ContinuousData,
     epoch_conditions::AbstractVector{<:EpochCondition},
@@ -401,31 +247,6 @@ mark_epoch_intervals!(
     time_window::Union{Tuple{Real,Real},AbstractVector{<:Real},TimeSelection};
     channel_out::Symbol = :epoch_interval,
 ) = mark_epoch_intervals!(dat, [epoch_condition], time_window; channel_out = channel_out)
-
-function _shifted_time_slice(time_col::Vector{Float64}, pre::Int, win_len::Int, zero_idx::Int)::Vector{Float64}
-    t0 = @inbounds time_col[zero_idx]
-    t_vec = Vector{Float64}(undef, win_len)
-    @inbounds @simd for i = 1:win_len
-        t_vec[i] = time_col[pre+i-1] - t0
-    end
-    return t_vec
-end
-
-function _shifted_time_slice(time_col::AbstractVector, pre::Int, win_len::Int, zero_idx::Int)::Vector{Float64}
-    t0 = Float64(time_col[zero_idx])
-    t_vec = Vector{Float64}(undef, win_len)
-    @inbounds for i = 1:win_len
-        t_vec[i] = Float64(time_col[pre+i-1]) - t0
-    end
-    return t_vec
-end
-
-@inline function _slice_col(src, rng::UnitRange{Int})::AbstractVector
-    src isa Vector{Float64} && return (src::Vector{Float64})[rng]
-    src isa Vector{Int} && return (src::Vector{Int})[rng]
-    src isa Vector{Bool} && return (src::Vector{Bool})[rng]
-    return src[rng]
-end
 
 """
     extract_epochs(dat::ContinuousData, condition::Integer, epoch_condition::EpochCondition, epoch_interval) -> EpochData
@@ -509,32 +330,6 @@ extract_epochs(dat::ContinuousData, epoch_conditions::AbstractVector{<:EpochCond
 extract_epochs(dat::ContinuousData, epoch_condition::EpochCondition, epoch_interval) =
     extract_epochs(dat, [epoch_condition], epoch_interval)
 
-function _accumulate_epoch_average!(
-    avg_cols::Vector{Vector{Float64}},
-    data::Vector{DataFrame},
-    ch_col_indices::Vector{Int},
-    n_timepoints::Int,
-)
-    n_ch = length(ch_col_indices)
-    for epoch in data
-        @inbounds for ch_idx = 1:n_ch
-            dst = avg_cols[ch_idx]
-            col = epoch[!, ch_col_indices[ch_idx]]
-            if col isa Vector{Float64}
-                col_f64 = col::Vector{Float64}
-                @simd for i = 1:n_timepoints
-                    dst[i] += col_f64[i]
-                end
-            else
-                for i = 1:n_timepoints
-                    dst[i] += col[i]
-                end
-            end
-        end
-    end
-    return nothing
-end
-
 """
     average_epochs(dat::EpochData) -> ErpData
     average_epochs(dat::AbstractVector{<:EpochData}) -> Vector{ErpData}
@@ -590,6 +385,55 @@ function average_epochs(dat::EpochData)
 end
 
 average_epochs(dat::AbstractVector{<:EpochData}) = average_epochs.(dat)
+
+function average_epochs(
+    file_pattern::String;
+    input_dir::String = pwd(),
+    participant_selection = participants(),
+    condition_selection = conditions(),
+    output_dir::Union{String,Nothing} = nothing,
+)
+    _with_batch_logging("epoch averaging", "average_epochs.log", input_dir, output_dir) do ctx
+        @log_call "average_epochs"
+        error_msg = _validate_epochs_pattern(file_pattern)
+        !isnothing(error_msg) && @minimal_error(error_msg)
+        output_dir = _prepare_output_dir!(ctx, _default_average_output_dir(input_dir, file_pattern))
+        process_fn = (input_path, output_path) -> _process_average_file(input_path, output_path, condition_selection)
+        batch_process(
+            process_fn,
+            file_pattern,
+            input_dir,
+            output_dir,
+            participant_selection,
+            "Averaging";
+            filename_modifier = fn -> replace(fn, "epochs" => "erps"),
+        )
+    end
+end
+
+"""
+    reject_epochs(dat::EpochData, info::EpochRejectionInfo) -> EpochData
+    reject_epochs(dat::AbstractVector{<:EpochData}, info::AbstractVector{<:EpochRejectionInfo}) -> Vector{EpochData}
+    reject_epochs(dat::EpochData, bad_columns::Union{Symbol,AbstractVector{Symbol}}) -> EpochData
+    reject_epochs(dat::AbstractVector{<:EpochData}, bad_columns::Union{Symbol,AbstractVector{Symbol}}) -> Vector{EpochData}
+
+Non-mutating version of [`reject_epochs!`](@ref).
+"""
+reject_epochs(dat::EpochData, info::EpochRejectionInfo)::EpochData = reject_epochs!(copy(dat), info)
+
+function reject_epochs(dat::AbstractVector{<:EpochData}, info::AbstractVector{<:EpochRejectionInfo})
+    length(dat) == length(info) ||
+        @minimal_error("Length of EpochData vector ($(length(dat))) must match EpochRejectionInfo vector ($(length(info)))")
+    return reject_epochs.(dat, info)
+end
+
+reject_epochs(dat::EpochData, bad_columns::AbstractVector{Symbol})::EpochData = reject_epochs!(copy(dat), bad_columns)
+
+reject_epochs(dat::EpochData, bad_column::Symbol) = reject_epochs(dat, [bad_column])
+
+reject_epochs(dat::AbstractVector{<:EpochData}, bad_column::Symbol) = [reject_epochs(d, bad_column) for d in dat]
+
+reject_epochs(dat::AbstractVector{<:EpochData}, bad_columns::AbstractVector{Symbol}) = [reject_epochs(d, bad_columns) for d in dat]
 
 """
     reject_epochs!(dat::EpochData, info::EpochRejectionInfo) -> EpochData
@@ -677,27 +521,6 @@ function reject_epochs!(dat::AbstractVector{<:EpochData}, bad_columns::AbstractV
 end
 
 """
-    reject_epochs(dat::EpochData, info::EpochRejectionInfo) -> EpochData
-    reject_epochs(dat::AbstractVector{<:EpochData}, info::AbstractVector{<:EpochRejectionInfo}) -> Vector{EpochData}
-    reject_epochs(dat::EpochData, bad_columns::Union{Symbol,AbstractVector{Symbol}}) -> EpochData
-    reject_epochs(dat::AbstractVector{<:EpochData}, bad_columns::Union{Symbol,AbstractVector{Symbol}}) -> Vector{EpochData}
-
-Non-mutating version of [`reject_epochs!`](@ref).
-"""
-reject_epochs(dat::EpochData, info::EpochRejectionInfo)::EpochData = reject_epochs!(copy(dat), info)
-
-function reject_epochs(dat::AbstractVector{<:EpochData}, info::AbstractVector{<:EpochRejectionInfo})
-    length(dat) == length(info) ||
-        @minimal_error("Length of EpochData vector ($(length(dat))) must match EpochRejectionInfo vector ($(length(info)))")
-    return reject_epochs.(dat, info)
-end
-
-reject_epochs(dat::EpochData, bad_columns::AbstractVector{Symbol})::EpochData = reject_epochs!(copy(dat), bad_columns)
-reject_epochs(dat::EpochData, bad_column::Symbol) = reject_epochs(dat, [bad_column])
-reject_epochs(dat::AbstractVector{<:EpochData}, bad_column::Symbol) = [reject_epochs(d, bad_column) for d in dat]
-reject_epochs(dat::AbstractVector{<:EpochData}, bad_columns::AbstractVector{Symbol}) = [reject_epochs(d, bad_columns) for d in dat]
-
-"""
     epochs_count(dat::ContinuousData, toml_file::String; print_table::Bool = true) -> DataFrame
     epochs_count(dat::ContinuousData, conditions::Vector{EpochCondition}; print_table::Bool = true) -> DataFrame
 
@@ -722,14 +545,6 @@ function epochs_count(dat::ContinuousData, conditions::Vector{EpochCondition}; p
     df = DataFrame(condition = collect(1:n_cond), condition_name = names, n_epochs = counts)
     print_table && pretty_table(stdout, df; alignment = [:l, :l, :r], title = "Dry Run: Epoch Counts")
     return df
-end
-
-function _build_base_epochs_df(epochs::AbstractVector{<:EpochData})::DataFrame
-    return DataFrame(
-        file = [filename(epoch) for epoch in epochs],
-        condition = [condition_number(epoch) for epoch in epochs],
-        condition_name = [condition_name(epoch) for epoch in epochs],
-    )
 end
 
 """
@@ -778,10 +593,249 @@ function log_epochs_table(epochs...; print_table::Bool = false, kwargs...)
     return df
 end
 
+######################################
+######### Internal Functions #########
+######################################
+
+_expand_arg(x::AbstractVector) = isempty(x) ? x : mapreduce(_expand_arg_element, vcat, x)
+
+_expand_arg(x::Union{Number,Symbol}) = [x]
+
+_expand_arg(x::UnitRange) = collect(x)
+
+_expand_arg(x) = x
+
+_expand_arg_element(v::UnitRange) = collect(v)
+
+_expand_arg_element(v) = [v]
+
+function _parse_allcomb_string(condition_name::String, expr::String)
+    m = match(r"^allcomb\((.*)\)$"s, strip(expr))
+    isnothing(m) &&
+        @minimal_error("Invalid allcomb expression for condition '$condition_name': expected 'allcomb(arg1, arg2, ...)'. Got: '$expr'")
+
+    args = String[]
+    depth, buf = 0, IOBuffer()
+    for c in strip(m.captures[1])
+        if c in ('[', '(')
+            depth += 1
+            write(buf, c)
+        elseif c in (']', ')')
+            depth -= 1
+            write(buf, c)
+        elseif c == ',' && depth == 0
+            push!(args, strip(String(take!(buf))))
+        else
+            write(buf, c)
+        end
+    end
+    rem = strip(String(take!(buf)))
+    !isempty(rem) && push!(args, rem)
+    isempty(args) && @minimal_error("allcomb() called with no arguments for condition '$condition_name'")
+
+    parse_int(s) =
+        (n = tryparse(Int, strip(s)); isnothing(n) && @minimal_error("Cannot parse '$s' as integer in allcomb for '$condition_name'"); n)
+    parsed = map(args) do s
+        s = strip(s)
+        (m2 = match(r"^:([A-Za-z_]\w*)$", s); !isnothing(m2)) && return Symbol(m2.captures[1])
+        (m2 = match(r"^(-?\d+):(-?\d+)$", s); !isnothing(m2)) && return parse(Int, m2.captures[1]):parse(Int, m2.captures[2])
+        (m2 = match(r"^\[\[(.*)\]\]$", s); !isnothing(m2)) && return [parse_int.(split(m2.captures[1], ","))]
+        (m2 = match(r"^\[(.*)\]$", s); !isnothing(m2)) && return parse_int.(split(m2.captures[1], ","))
+        return parse_int(s)
+    end
+    return allcomb(parsed...)
+end
+
+_interval_endpoints(interval::Tuple{Real,Real}) = (Float64(interval[1]), Float64(interval[2]))
+
+_interval_endpoints(interval::AbstractVector{<:Real}) =
+    length(interval) == 2 ? (Float64(interval[1]), Float64(interval[2])) :
+    @minimal_error("Epoch interval must have exactly 2 elements, got $(length(interval))")
+
+_interval_endpoints(interval::TimeSelection) = (interval.start, interval.stop)
+
+_interval_endpoints(interval) = @minimal_error("Epoch interval must be a Tuple, Vector, or TimeSelection, got $(typeof(interval))")
+
+function _validate_epoch_interval_params(dat::ContinuousData, epoch_interval)
+    t_start, t_end = _interval_endpoints(epoch_interval)
+    t_start <= t_end || @minimal_error("Epoch interval start ($t_start) must be less than or equal to end ($t_end)")
+    hasproperty(dat.data, :trigger) || @minimal_error("Data must have a trigger column")
+    hasproperty(dat.data, :time) || @minimal_error("Data must have a time column")
+    !isempty(dat.data.time) || @minimal_error("Time column cannot be empty")
+    !isempty(dat.data.trigger) || @minimal_error("Triggers column cannot be empty")
+    issorted(dat.data.time) || @minimal_error("Time column must be sorted in ascending order")
+    return nothing
+end
+
+function _mark_windows_at_indices!(
+    dat::ContinuousData,
+    reference_indices::Vector{Int},
+    time_window::Union{Tuple{Real,Real},AbstractVector{<:Real},TimeSelection},
+    channel_out::Symbol,
+)::Int
+    times = dat.data.time
+    col_out = dat.data[!, channel_out]
+    n_samp = length(times)
+    w_start_offset, w_end_offset = _interval_endpoints(time_window)
+
+    n_marked = 0
+    for idx in reference_indices
+        if idx < 1 || idx > n_samp
+            @minimal_warning "Reference index $idx is out of bounds, skipping"
+            continue
+        end
+        ref_t = times[idx]
+        s_idx = searchsortedfirst(times, ref_t + w_start_offset)
+        e_idx = searchsortedlast(times, ref_t + w_end_offset)
+        if s_idx <= e_idx
+            @inbounds fill!(@view(col_out[s_idx:e_idx]), true)
+            n_marked += (e_idx - s_idx + 1)
+        end
+    end
+    return n_marked
+end
+
+function _init_bool_column!(df::DataFrame, col::Symbol)
+    if hasproperty(df, col) && df[!, col] isa Vector{Bool}
+        fill!(df[!, col], false)
+    else
+        df[!, col] = fill(false, nrow(df))
+    end
+    return nothing
+end
+
+function _apply_trigger_mask(triggers::Vector, condition::EpochCondition)
+    if isnothing(condition.mask_triggers) &&
+       isnothing(condition.mask_between_triggers) &&
+       isnothing(condition.mask_before_trigger) &&
+       isnothing(condition.mask_after_trigger)
+        return triggers, 1:length(triggers)
+    end
+
+    hidden = falses(length(triggers))
+    if !isnothing(condition.mask_triggers)
+        for t in condition.mask_triggers
+            @inbounds for i in eachindex(triggers)
+                triggers[i] == t && (hidden[i] = true)
+            end
+        end
+    end
+
+    if !isnothing(condition.mask_between_triggers)
+        for (start_t, end_t) in condition.mask_between_triggers
+            in_mask = false
+            @inbounds for i in eachindex(triggers)
+                if !in_mask
+                    if triggers[i] == start_t
+                        in_mask = true
+                        hidden[i] = true
+                    end
+                elseif triggers[i] == end_t
+                    in_mask = false
+                else
+                    hidden[i] = true
+                end
+            end
+        end
+    end
+
+    if !isnothing(condition.mask_before_trigger)
+        idx = findfirst(==(condition.mask_before_trigger), triggers)
+        !isnothing(idx) && (hidden[1:idx] .= true)
+    end
+
+    if !isnothing(condition.mask_after_trigger)
+        idx = findlast(==(condition.mask_after_trigger), triggers)
+        !isnothing(idx) && (hidden[idx:end] .= true)
+    end
+
+    valid_indices = findall(.!hidden)
+    return triggers[valid_indices], valid_indices
+end
+
+function _map_valid_indices(raw_matches::Vector{Vector{Int}}, valid_indices)
+    (valid_indices isa UnitRange && first(valid_indices) == 1) && return raw_matches
+    return [Int[valid_indices[i] for i in m] for m in raw_matches]
+end
+
+function _filter_matches(matches::Vector{Vector{Int}}, condition::EpochCondition, triggers, time_data)
+    if !isnothing(condition.timing_pairs) && !isnothing(condition.min_interval) && !isnothing(condition.max_interval)
+        min_int, max_int = condition.min_interval, condition.max_interval
+        pairs = condition.timing_pairs
+        matches = filter(matches) do m
+            for (start_idx, end_idx) in pairs
+                interval = time_data[m[end_idx]] - time_data[m[start_idx]]
+                (interval < min_int || interval > max_int) && return false
+            end
+            return true
+        end
+    end
+    return matches
+end
+
+function _shifted_time_slice(time_col::Vector{Float64}, pre::Int, win_len::Int, zero_idx::Int)::Vector{Float64}
+    t0 = @inbounds time_col[zero_idx]
+    t_vec = Vector{Float64}(undef, win_len)
+    @inbounds @simd for i = 1:win_len
+        t_vec[i] = time_col[pre+i-1] - t0
+    end
+    return t_vec
+end
+
+function _shifted_time_slice(time_col::AbstractVector, pre::Int, win_len::Int, zero_idx::Int)::Vector{Float64}
+    t0 = Float64(time_col[zero_idx])
+    t_vec = Vector{Float64}(undef, win_len)
+    @inbounds for i = 1:win_len
+        t_vec[i] = Float64(time_col[pre+i-1]) - t0
+    end
+    return t_vec
+end
+
+@inline function _slice_col(src, rng::UnitRange{Int})::AbstractVector
+    src isa Vector{Float64} && return (src::Vector{Float64})[rng]
+    src isa Vector{Int} && return (src::Vector{Int})[rng]
+    src isa Vector{Bool} && return (src::Vector{Bool})[rng]
+    return src[rng]
+end
+
+function _accumulate_epoch_average!(
+    avg_cols::Vector{Vector{Float64}},
+    data::Vector{DataFrame},
+    ch_col_indices::Vector{Int},
+    n_timepoints::Int,
+)
+    n_ch = length(ch_col_indices)
+    for epoch in data
+        @inbounds for ch_idx = 1:n_ch
+            dst = avg_cols[ch_idx]
+            col = epoch[!, ch_col_indices[ch_idx]]
+            if col isa Vector{Float64}
+                col_f64 = col::Vector{Float64}
+                @simd for i = 1:n_timepoints
+                    dst[i] += col_f64[i]
+                end
+            else
+                for i = 1:n_timepoints
+                    dst[i] += col[i]
+                end
+            end
+        end
+    end
+    return nothing
+end
+
+function _build_base_epochs_df(epochs::AbstractVector{<:EpochData})::DataFrame
+    return DataFrame(
+        file = [filename(epoch) for epoch in epochs],
+        condition = [condition_number(epoch) for epoch in epochs],
+        condition_name = [condition_name(epoch) for epoch in epochs],
+    )
+end
+
 _validate_epochs_pattern(pattern::String) =
     contains(pattern, "epochs") ? nothing : "average_epochs only works with epoch data. File pattern must contain 'epochs', got: '$pattern'"
 
-_default_average_output_dir(input_dir::String, pattern::String) = joinpath(input_dir, "averaged_$(clean_pattern(pattern))")
+_default_average_output_dir(input_dir::String, pattern::String) = joinpath(input_dir, "averaged_$(_clean_pattern(pattern))")
 
 function _process_average_file(filepath::String, output_path::String, condition_selection::Function)
     filename = basename(filepath)
@@ -793,29 +847,4 @@ function _process_average_file(filepath::String, output_path::String, condition_
     erps_data = average_epochs.(epochs_data)
     jldsave(output_path; data = erps_data, format_version = EEGFUN_FORMAT_VERSION)
     return BatchResult(true, filename, "Averaged $(length(erps_data)) condition(s)")
-end
-
-function average_epochs(
-    file_pattern::String;
-    input_dir::String = pwd(),
-    participant_selection = participants(),
-    condition_selection = conditions(),
-    output_dir::Union{String,Nothing} = nothing,
-)
-    _with_batch_logging("epoch averaging", "average_epochs.log", input_dir, output_dir) do ctx
-        @log_call "average_epochs"
-        error_msg = _validate_epochs_pattern(file_pattern)
-        !isnothing(error_msg) && @minimal_error(error_msg)
-        output_dir = _prepare_output_dir!(ctx, _default_average_output_dir(input_dir, file_pattern))
-        process_fn = (input_path, output_path) -> _process_average_file(input_path, output_path, condition_selection)
-        batch_process(
-            process_fn,
-            file_pattern,
-            input_dir,
-            output_dir,
-            participant_selection,
-            "Averaging";
-            filename_modifier = fn -> replace(fn, "epochs" => "erps"),
-        )
-    end
 end

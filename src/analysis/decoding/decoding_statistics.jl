@@ -1,8 +1,22 @@
+# Group-level t-tests and cluster-based permutation statistics for MVPA decoding.
+
+######################################
+######### Types & Constants ##########
+######################################
+
 """
     TemporalCluster
 
 Stores information about a contiguous 1D temporal cluster in decoding results (`id`, `time_indices`,
 `time_range`, `cluster_stat`, `p_value`, `is_significant`).
+
+# Fields
+- `id::Int`: 1-based cluster identifier
+- `time_indices::Vector{Int}`: Contiguous sample indices belonging to the cluster
+- `time_range::Tuple{Float64,Float64}`: `(start_time, end_time)` of the cluster in seconds
+- `cluster_stat::Float64`: Summed t-statistic mass across `time_indices`
+- `p_value::Float64`: Permutation FWER-corrected cluster p-value
+- `is_significant::Bool`: `true` if `p_value < alpha`
 """
 struct TemporalCluster
     id::Int
@@ -18,6 +32,16 @@ end
 
 Stores statistical test results on multi-participant decoding accuracy (`times`, `t_statistics`,
 `p_values`, `significant_mask`, `df`, `alpha`, `correction_method`, `clusters`).
+
+# Fields
+- `times::Vector{Float64}`: Time points in seconds
+- `t_statistics::Vector{Float64}`: One-sample t-statistics against chance at each time point
+- `p_values::Vector{Float64}`: Pointwise (or corrected) p-values at each time point
+- `significant_mask::BitVector`: Boolean mask marking statistically significant time points
+- `df::Float64`: Degrees of freedom (`n_participants - 1`)
+- `alpha::Float64`: Significance threshold used
+- `correction_method::Symbol`: Multiple-comparison method (`:none`, `:bonferroni`, `:max`, or `:cluster`)
+- `clusters::Union{Vector{TemporalCluster},Nothing}`: Detected temporal clusters when `correction_method == :cluster`
 """
 struct DecodingStatisticsResult <: EegFunData
     times::Vector{Float64}
@@ -30,75 +54,9 @@ struct DecodingStatisticsResult <: EegFunData
     clusters::Union{Vector{TemporalCluster},Nothing}
 end
 
-function Base.show(io::IO, res::DecodingStatisticsResult)
-    t_str = isempty(res.times) ? "N/A" : "$(first(res.times)) to $(last(res.times)) s"
-    n_sig = count(res.significant_mask)
-    print(
-        io,
-        "DecodingStatisticsResult($(length(res.times)) time points [$t_str], df=$(round(Int, res.df)), " *
-        "alpha=$(res.alpha), correction=:$(res.correction_method), $n_sig significant)",
-    )
-end
-
-function _validate_and_extract_diffs(decoded_list::AbstractVector{<:DecodedData}, fn_name::AbstractString, alpha::Real)
-    isempty(decoded_list) && @minimal_error("Cannot test empty decoded data list")
-    length(decoded_list) < 2 && @minimal_error("$fn_name requires at least 2 participants, got $(length(decoded_list))")
-    alpha_f = Float64(alpha)
-    (alpha_f <= 0.0 || alpha_f >= 1.0) && @minimal_error("alpha must be between 0 and 1, got $alpha_f")
-
-    first_decoded = decoded_list[1]
-    first_times = first_decoded.times
-    chance_level = first_decoded.parameters.chance_level
-
-    for decoded in @view decoded_list[2:end]
-        decoded.times != first_times && @minimal_error("DecodedData objects have inconsistent time vectors")
-        decoded.parameters.chance_level != chance_level && @minimal_warning "DecodedData objects have different chance_level"
-    end
-
-    n_participants = length(decoded_list)
-    n_timepoints = length(first_times)
-    diffs = Matrix{Float64}(undef, n_participants, n_timepoints)
-    for (p_idx, decoded) in enumerate(decoded_list)
-        scores = decoded.average_score
-        @inbounds @simd for t_idx = 1:n_timepoints
-            diffs[p_idx, t_idx] = scores[t_idx] - chance_level
-        end
-    end
-
-    return diffs, first_times, alpha_f
-end
-
-function _onesample_ttest_right!(t_statistics::Vector{Float64}, p_values::Vector{Float64}, diffs::Matrix{Float64})
-    n_participants, n_timepoints = size(diffs)
-    df = Float64(n_participants - 1)
-    dist = TDist(df)
-
-    @inbounds for t_idx = 1:n_timepoints
-        sum_d = 0.0
-        @simd for p_idx = 1:n_participants
-            sum_d += diffs[p_idx, t_idx]
-        end
-        mean_d = sum_d / n_participants
-
-        ss_d = 0.0
-        @simd for p_idx = 1:n_participants
-            delta = diffs[p_idx, t_idx] - mean_d
-            ss_d += delta * delta
-        end
-        se = sqrt(max(ss_d / df, 0.0) / n_participants)
-        t_val = se == 0.0 ? (mean_d == 0.0 ? NaN : copysign(Inf, mean_d)) : (mean_d / se)
-        t_statistics[t_idx] = t_val
-        p_values[t_idx] = isnan(t_val) ? NaN : ccdf(dist, t_val)
-    end
-
-    return df
-end
-
-function _apply_correction(p_values::Vector{Float64}, alpha::Float64, method::Symbol, t_statistics::Vector{Float64} = Float64[])
-    method == :none && return .!isnan.(p_values) .& (p_values .<= alpha)
-    method == :bonferroni && return _apply_bonferroni_correction(p_values, alpha, t_statistics)
-    @minimal_error("Unknown correction method: $method. Must be :none or :bonferroni.")
-end
+######################################
+########### User Functions ###########
+######################################
 
 """
     test_against_chance(decoded_list::Vector{DecodedData}; alpha::Real = 0.05, correction_method::Symbol = :none)
@@ -124,49 +82,6 @@ function test_against_chance(decoded_list::Vector{DecodedData}; alpha::Real = 0.
     significant_mask = _apply_correction(p_values, alpha_f, correction_method, t_statistics)
 
     return DecodingStatisticsResult(first_times, t_statistics, p_values, significant_mask, df, alpha_f, correction_method, nothing)
-end
-
-function _find_temporal_clusters(mask::AbstractVector{Bool}, times::AbstractVector{Float64})
-    clusters = TemporalCluster[]
-    n = length(mask)
-    t = 1
-    id = 0
-    @inbounds while t <= n
-        if mask[t]
-            s = t
-            while t < n && mask[t+1]
-                t += 1
-            end
-            id += 1
-            push!(clusters, TemporalCluster(id, collect(s:t), (times[s], times[t]), 0.0, 1.0, false))
-        end
-        t += 1
-    end
-    return clusters
-end
-
-function _compute_cluster_statistics(clusters::Vector{TemporalCluster}, t_statistics::Vector{Float64}, statistic_type::Symbol = :sum)
-    isempty(clusters) && return Float64[]
-    cluster_stats = Vector{Float64}(undef, length(clusters))
-    @inbounds for (i, cluster) in enumerate(clusters)
-        if statistic_type == :sum
-            s = 0.0
-            for t_idx in cluster.time_indices
-                s += t_statistics[t_idx]
-            end
-            cluster_stats[i] = s
-        elseif statistic_type == :max
-            m = -Inf
-            for t_idx in cluster.time_indices
-                a = abs(t_statistics[t_idx])
-                a > m && (m = a)
-            end
-            cluster_stats[i] = m
-        else
-            @minimal_error("cluster_statistic must be :sum or :max, got :$statistic_type")
-        end
-    end
-    return cluster_stats
 end
 
 """
@@ -292,4 +207,121 @@ function test_against_chance_cluster(
         :cluster_permutation,
         observed_clusters,
     )
+end
+
+function Base.show(io::IO, res::DecodingStatisticsResult)
+    t_str = isempty(res.times) ? "N/A" : "$(first(res.times)) to $(last(res.times)) s"
+    n_sig = count(res.significant_mask)
+    print(
+        io,
+        "DecodingStatisticsResult($(length(res.times)) time points [$t_str], df=$(round(Int, res.df)), " *
+        "alpha=$(res.alpha), correction=:$(res.correction_method), $n_sig significant)",
+    )
+end
+
+######################################
+######### Internal Functions #########
+######################################
+
+function _validate_and_extract_diffs(decoded_list::AbstractVector{<:DecodedData}, fn_name::AbstractString, alpha::Real)
+    isempty(decoded_list) && @minimal_error("Cannot test empty decoded data list")
+    length(decoded_list) < 2 && @minimal_error("$fn_name requires at least 2 participants, got $(length(decoded_list))")
+    alpha_f = Float64(alpha)
+    (alpha_f <= 0.0 || alpha_f >= 1.0) && @minimal_error("alpha must be between 0 and 1, got $alpha_f")
+
+    first_decoded = decoded_list[1]
+    first_times = first_decoded.times
+    chance_level = first_decoded.parameters.chance_level
+
+    for decoded in @view decoded_list[2:end]
+        decoded.times != first_times && @minimal_error("DecodedData objects have inconsistent time vectors")
+        decoded.parameters.chance_level != chance_level && @minimal_warning "DecodedData objects have different chance_level"
+    end
+
+    n_participants = length(decoded_list)
+    n_timepoints = length(first_times)
+    diffs = Matrix{Float64}(undef, n_participants, n_timepoints)
+    for (p_idx, decoded) in enumerate(decoded_list)
+        scores = decoded.average_score
+        @inbounds @simd for t_idx = 1:n_timepoints
+            diffs[p_idx, t_idx] = scores[t_idx] - chance_level
+        end
+    end
+
+    return diffs, first_times, alpha_f
+end
+
+function _onesample_ttest_right!(t_statistics::Vector{Float64}, p_values::Vector{Float64}, diffs::Matrix{Float64})
+    n_participants, n_timepoints = size(diffs)
+    df = Float64(n_participants - 1)
+    dist = TDist(df)
+
+    @inbounds for t_idx = 1:n_timepoints
+        sum_d = 0.0
+        @simd for p_idx = 1:n_participants
+            sum_d += diffs[p_idx, t_idx]
+        end
+        mean_d = sum_d / n_participants
+
+        ss_d = 0.0
+        @simd for p_idx = 1:n_participants
+            delta = diffs[p_idx, t_idx] - mean_d
+            ss_d += delta * delta
+        end
+        se = sqrt(max(ss_d / df, 0.0) / n_participants)
+        t_val = se == 0.0 ? (mean_d == 0.0 ? NaN : copysign(Inf, mean_d)) : (mean_d / se)
+        t_statistics[t_idx] = t_val
+        p_values[t_idx] = isnan(t_val) ? NaN : ccdf(dist, t_val)
+    end
+
+    return df
+end
+
+function _apply_correction(p_values::Vector{Float64}, alpha::Float64, method::Symbol, t_statistics::Vector{Float64} = Float64[])
+    method == :none && return .!isnan.(p_values) .& (p_values .<= alpha)
+    method == :bonferroni && return _apply_bonferroni_correction(p_values, alpha, t_statistics)
+    @minimal_error("Unknown correction method: $method. Must be :none or :bonferroni.")
+end
+
+function _find_temporal_clusters(mask::AbstractVector{Bool}, times::AbstractVector{Float64})
+    clusters = TemporalCluster[]
+    n = length(mask)
+    t = 1
+    id = 0
+    @inbounds while t <= n
+        if mask[t]
+            s = t
+            while t < n && mask[t+1]
+                t += 1
+            end
+            id += 1
+            push!(clusters, TemporalCluster(id, collect(s:t), (times[s], times[t]), 0.0, 1.0, false))
+        end
+        t += 1
+    end
+    return clusters
+end
+
+function _compute_cluster_statistics(clusters::Vector{TemporalCluster}, t_statistics::Vector{Float64}, statistic_type::Symbol = :sum)
+    isempty(clusters) && return Float64[]
+    cluster_stats = Vector{Float64}(undef, length(clusters))
+    @inbounds for (i, cluster) in enumerate(clusters)
+        if statistic_type == :sum
+            s = 0.0
+            for t_idx in cluster.time_indices
+                s += t_statistics[t_idx]
+            end
+            cluster_stats[i] = s
+        elseif statistic_type == :max
+            m = -Inf
+            for t_idx in cluster.time_indices
+                a = abs(t_statistics[t_idx])
+                a > m && (m = a)
+            end
+            cluster_stats[i] = m
+        else
+            @minimal_error("cluster_statistic must be :sum or :max, got :$statistic_type")
+        end
+    end
+    return cluster_stats
 end

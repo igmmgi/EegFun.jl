@@ -19,6 +19,7 @@ public BaselineInfo
 public BatchResult
 public ChannelRepairInfo
 public CleanLineConfig
+public ConfigParameter
 public ContinuousData
 public ContinuousRepairInfo
 public DecodedData
@@ -66,6 +67,7 @@ public SingleDataFrameEeg
 public SpectrumData
 public StatisticalData
 public StatsResult
+public TemporalCluster
 public TFAnalyticResult
 public TFClusterPermutationResult
 public TFStatisticalData
@@ -99,10 +101,13 @@ public epochs_not
 public extra_data
 public extra_labels
 public file_name
+public filename
+public filter_info
 public frequency_vector
 public group_by_condition
 public has_channels
 public head
+public log_pretty_table
 public meta_data
 public meta_labels
 public n_channels
@@ -120,9 +125,10 @@ public samples_not
 public samples_or
 public samples_or_not
 public section
+public subsection
 public subset
 public subset_bad_data
-public subsection
+public subsubsection
 public tail
 public time_vector
 public times
@@ -130,6 +136,7 @@ public to_data_frame
 public viewer
 
 # === I/O ===
+public basename_without_ext
 public download_eegfun_datasets
 public export_bids
 public find_file
@@ -205,6 +212,8 @@ public unmirror
 public unmirror!
 
 # === Channel and condition operations ===
+public add_zscore_columns
+public add_zscore_columns!
 public channel_average
 public channel_average!
 public channel_delete
@@ -249,6 +258,7 @@ public create_epoch_repair_info
 public detect_bad_epochs_automatic
 public detect_bad_epochs_interactive
 public find_bridged_channels
+public get_rejected
 public get_rejected_epochs
 public identify_bad_channels
 public is_extreme_value
@@ -268,6 +278,8 @@ public repair_artifacts!
 public repair_channels
 public repair_channels!
 public summarize_electrode_repairs
+public unique_channels
+public unique_epochs
 public unique_rejections
 
 # === ICA ===
@@ -309,6 +321,7 @@ public global_dissimilarity
 public grand_average
 public jackknife_average
 public lrp
+public MEASUREMENT_TYPE_LABELS
 public realign
 public realign!
 public ride_decompose
@@ -316,6 +329,7 @@ public shift_matrix
 public shift_matrix!
 public shift_signal
 public shift_signal!
+public VALID_MEASUREMENT_TYPES
 public woody_filter
 
 # === Statistics ===
@@ -344,6 +358,8 @@ public test_against_chance
 public test_against_chance_cluster
 
 # === Triggers ===
+public allcomb
+public consecutive
 public search_sequence
 public trigger_count
 public trigger_info
@@ -352,6 +368,7 @@ public trigger_info
 public apply_analysis_settings
 public apply_analysis_settings!
 public batch_process
+public check_files_exist
 public check_raw_data
 public generate_config_template
 public generate_pipeline_template
@@ -427,8 +444,25 @@ public close_logging
 public setup_global_logging
 public setup_logging
 
-# === Synthetic signal generation ===
+# === Synthetic signal and test data generation ===
+public create_synthetic_epochs
+public create_test_batch_erp_data
+public create_test_continuous_data
+public create_test_continuous_data_empty_triggers
+public create_test_continuous_data_with_artifacts
+public create_test_continuous_data_with_triggers
+public create_test_epoch_data
+public create_test_epoch_data_vector
+public create_test_epoch_data_with_artifacts
+public create_test_erp_data
+public create_test_layout
+public create_test_lrp_data
+public create_test_summary_data
+public create_test_summary_data_with_epochs
+public create_test_tf_data
+public create_test_tf_epoch_data
 public generate_signal
+public signal_to_data
 
 # === Demos ===
 public signal_example_composition
@@ -453,4 +487,8 @@ public simulate_erp
 
 # === Misc ===
 public example_path
+public gpu_backend
+public gpu_device_name
+public is_gpu_available
+public is_gpu_fft_available
 public version_info

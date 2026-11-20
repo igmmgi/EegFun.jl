@@ -1,3 +1,5 @@
+# Main test runner for EegFun.jl mirroring the `src/` and `ext/` module hierarchy.
+
 using Test
 using CairoMakie
 using DimensionalData
@@ -22,93 +24,132 @@ end
 
 @testset "EegFun" begin
 
-    include("tests/apply.jl")
-    include("tests/artifact_detection.jl")
-    include("tests/autoreject.jl")
-    include("tests/baseline.jl")
-    include("tests/batch_utils.jl")
-    include("tests/channel_average.jl")
-    include("tests/channel_delete.jl")
-    include("tests/channel_difference.jl")
-    include("tests/channel_metrics.jl")
-    include("tests/channel_repair.jl")
-    include("tests/channel_summary.jl")
-    include("tests/condition_combine.jl")
-    include("tests/condition_average.jl")
-    include("tests/condition_difference.jl")
-    include("tests/config.jl")
-    include("tests/pipeline.jl")
-    include("tests/data.jl")
-    include("tests/eeglab_import.jl")
-    include("tests/bids_import.jl")
-    include("tests/xdf_import.jl")
-    include("tests/fieldtrip_import.jl")
-    include("tests/read_data.jl")
-    include("tests/epochs.jl")
-    include("tests/erp_measurements.jl")
-    include("tests/files.jl")
-    include("tests/filter.jl")
-    include("tests/gfp.jl")
-    include("tests/grand_average.jl")
-    include("tests/ica.jl")
-    include("tests/jackknife_average.jl")
-    include("tests/layout.jl")
-    include("tests/layout_system.jl")
-    include("tests/logging.jl")
-    include("tests/lrp.jl")
-    include("tests/mirror.jl")
-    include("tests/misc.jl")
-    include("tests/plot_channel_summary.jl")
-    include("tests/plot_layout.jl")
-    include("tests/plot_topography_3d.jl")
-    include("tests/plot_misc.jl")
-    include("tests/plot_triggers.jl")
-    include("tests/plot_erp.jl")
-    include("tests/plot_epochs.jl")
-    include("tests/plot_gfp.jl")
-    include("tests/plot_erp_image.jl")
-    include("tests/plot_erp_stats.jl")
-    include("tests/plot_artifacts.jl")
-    include("tests/plot_correlation_heatmap.jl")
-    include("tests/plot_filter.jl")
-    include("tests/plot_ica.jl")
-    include("tests/plot_decoding.jl")
-    include("tests/plot_rsa.jl")
-    include("tests/plot_power_spectrum.jl")
-    include("tests/plot_databrowser.jl")
-    include("tests/print.jl")
-    include("tests/realign.jl")
-    include("tests/rereference.jl")
-    include("tests/resample.jl")
-    include("tests/statistics_erp.jl")
-    include("tests/statistics_tf.jl")
-    include("tests/plots_tf.jl")
-    include("tests/decoding_tf.jl")
-    include("tests/decoding_erp.jl")
-    include("tests/decoding_statistics.jl")
-    include("tests/rsa.jl")
-    include("tests/subset.jl")
-    include("tests/time_frequency.jl")
-    include("tests/tf_utils.jl")
-    include("tests/triggers.jl")
-    include("tests/types.jl")
-    include("tests/utils.jl")
-    include("tests/tables.jl")
-    include("tests/bids_export.jl")
-    include("tests/mme_validation.jl")
-    include("tests/cleanline.jl")
-    include("tests/csd.jl")
-    include("tests/freq_spectrum.jl")
-    include("tests/ride.jl")
-    include("tests/decoding_preparation.jl")
-    include("tests/dimensional_data_ext.jl")
-    include("tests/makie_recipes.jl")
-    include("tests/plot_epochs_rejection.jl")
-    include("tests/plot_topography.jl")
-    include("tests/plot_topography_stats.jl")
-    include("tests/gpu_kernels_cpu.jl")
-    include("tests/integration_and_plotting.jl")
+    include("tests/code_organization.jl")
 
+    @testset "Types" begin
+        include("tests/types/types.jl")
+    end
+
+    @testset "Utilities" begin
+        include("tests/utils/batch_utils.jl")
+        include("tests/utils/data.jl")
+        include("tests/utils/files.jl")
+        include("tests/utils/gpu_kernels_cpu.jl")
+        include("tests/utils/logging.jl")
+        include("tests/utils/misc.jl")
+        include("tests/utils/print.jl")
+        include("tests/utils/subset.jl")
+        include("tests/utils/tables.jl")
+        include("tests/utils/utils.jl")
+    end
+
+    @testset "Layouts" begin
+        include("tests/layouts/layout.jl")
+    end
+
+    @testset "I/O" begin
+        include("tests/io/read_data.jl")
+        include("tests/io/eeglab_import.jl")
+        include("tests/io/bids_import.jl")
+        include("tests/io/bids_export.jl")
+        include("tests/io/xdf_import.jl")
+        include("tests/io/fieldtrip_import.jl")
+    end
+
+    @testset "Config & Pipelines" begin
+        include("tests/config/config.jl")
+        include("tests/pipelines/pipeline.jl")
+    end
+
+    @testset "Analysis — Processing" begin
+        include("tests/analysis/processing/artifact_detection/artifact_detection.jl")
+        include("tests/analysis/processing/artifact_detection/autoreject.jl")
+        include("tests/analysis/processing/signal/baseline.jl")
+        include("tests/analysis/processing/signal/filter.jl")
+        include("tests/analysis/processing/signal/cleanline.jl")
+        include("tests/analysis/processing/signal/mirror.jl")
+        include("tests/analysis/processing/signal/resample.jl")
+        include("tests/analysis/processing/channels/channel_average.jl")
+        include("tests/analysis/processing/channels/channel_delete.jl")
+        include("tests/analysis/processing/channels/channel_difference.jl")
+        include("tests/analysis/processing/channels/channel_metrics.jl")
+        include("tests/analysis/processing/channels/channel_repair.jl")
+        include("tests/analysis/processing/channels/channel_summary.jl")
+        include("tests/analysis/processing/channels/rereference.jl")
+        include("tests/analysis/processing/channels/csd.jl")
+        include("tests/analysis/processing/epochs/triggers.jl")
+        include("tests/analysis/processing/epochs/epochs.jl")
+        include("tests/analysis/processing/epochs/apply.jl")
+        include("tests/analysis/processing/conditions/condition_combine.jl")
+        include("tests/analysis/processing/conditions/condition_difference.jl")
+        include("tests/analysis/processing/conditions/condition_average.jl")
+        include("tests/analysis/processing/conditions/grand_average.jl")
+        include("tests/analysis/processing/ica/ica.jl")
+    end
+
+    @testset "Analysis — ERPs & RIDE" begin
+        include("tests/analysis/erps/erp_measurements.jl")
+        include("tests/analysis/erps/gfp.jl")
+        include("tests/analysis/erps/jackknife_average.jl")
+        include("tests/analysis/erps/lrp.jl")
+        include("tests/analysis/erps/realign.jl")
+        include("tests/analysis/ride/ride.jl")
+    end
+
+    @testset "Analysis — Statistics" begin
+        include("tests/analysis/statistics/statistics_erp.jl")
+        include("tests/analysis/statistics/statistics_tf.jl")
+    end
+
+    @testset "Analysis — Time-Frequency" begin
+        include("tests/analysis/time_frequency/freq_spectrum.jl")
+        include("tests/analysis/time_frequency/tf_utils.jl")
+        include("tests/analysis/time_frequency/time_frequency.jl")
+    end
+
+    @testset "Analysis — Decoding & RSA" begin
+        include("tests/analysis/decoding/decoding_preparation.jl")
+        include("tests/analysis/decoding/decoding_erp.jl")
+        include("tests/analysis/decoding/decoding_tf.jl")
+        include("tests/analysis/decoding/decoding_statistics.jl")
+        include("tests/analysis/rsa/rsa.jl")
+    end
+
+    @testset "Plotting" begin
+        include("tests/plots/utils/layout_system.jl")
+        include("tests/plots/utils/makie_recipes.jl")
+        include("tests/plots/utils/plot_misc.jl")
+        include("tests/plots/processing/plot_artifacts.jl")
+        include("tests/plots/processing/plot_channel_summary.jl")
+        include("tests/plots/processing/plot_correlation_heatmap.jl")
+        include("tests/plots/processing/plot_databrowser.jl")
+        include("tests/plots/processing/plot_filter.jl")
+        include("tests/plots/processing/plot_ica.jl")
+        include("tests/plots/processing/plot_layout.jl")
+        include("tests/plots/processing/plot_triggers.jl")
+        include("tests/plots/erps/plot_epochs.jl")
+        include("tests/plots/erps/plot_epochs_rejection.jl")
+        include("tests/plots/erps/plot_erp.jl")
+        include("tests/plots/erps/plot_erp_image.jl")
+        include("tests/plots/erps/plot_erp_stats.jl")
+        include("tests/plots/erps/plot_gfp.jl")
+        include("tests/plots/erps/plot_topography.jl")
+        include("tests/plots/erps/plot_topography_3d.jl")
+        include("tests/plots/erps/plot_topography_stats.jl")
+        include("tests/plots/time_frequency/plot_power_spectrum.jl")
+        include("tests/plots/time_frequency/plots_tf.jl")
+        include("tests/plots/decoding/plot_decoding.jl")
+        include("tests/plots/rsa/plot_rsa.jl")
+    end
+
+    @testset "Extensions" begin
+        include("tests/ext/dimensional_data_ext.jl")
+        include("tests/ext/mme_validation.jl")
+    end
+
+    @testset "Integration" begin
+        include("tests/integration_and_plotting.jl")
+    end
 
 end
 

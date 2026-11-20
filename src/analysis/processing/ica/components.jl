@@ -1,6 +1,115 @@
+# ICA component projection, subtraction, and reconstruction utilities.
+
+######################################
+######### Types & Constants ##########
+######################################
+
 const _IcaDataTarget = Union{DataFrame,Vector{DataFrame},ContinuousData,EpochData,AbstractVector{<:EpochData}}
 
+######################################
+########### User Functions ###########
+######################################
+
+"""
+    subtract_ica_components(dat, ica::InfoIca; component_selection = nothing) -> (cleaned_data, ica_updated)
+
+Remove selected ICA components from a copy of `dat` (`DataFrame`, `Vector{DataFrame}`, `ContinuousData`,
+`EpochData`, or `AbstractVector{<:EpochData}`) and `ica`, storing removed activations in `ica_updated.removed_activations`
+for exact restoration via [`add_ica_components`](@ref) and returning `(cleaned_data, ica_updated)`.
+
+An explicit `component_selection` (e.g. `components([1, 3])` or `components()`) is required.
+"""
+function subtract_ica_components(dat::_IcaDataTarget, ica::InfoIca; component_selection::Union{Function,Nothing} = nothing)
+    dat_out = _copy_ica_target(dat)
+    ica_out = copy(ica)
+    subtract_ica_components!(dat_out, ica_out; component_selection = component_selection)
+    return dat_out, ica_out
+end
+
+"""
+    subtract_ica_components!(dat, ica::InfoIca; component_selection = nothing)
+
+In-place mutating version of [`subtract_ica_components`](@ref); mutates `dat` and `ica.removed_activations` in place.
+"""
+function subtract_ica_components!(dat::DataFrame, ica::InfoIca; component_selection::Union{Function,Nothing} = nothing)
+    _subtract_ica_components!(dat, ica; component_selection = component_selection)
+    return dat
+end
+
+function subtract_ica_components!(dfs::Vector{DataFrame}, ica::InfoIca; component_selection::Union{Function,Nothing} = nothing)
+    _subtract_ica_components!(dfs, ica; component_selection = component_selection)
+    return dfs
+end
+
+function subtract_ica_components!(
+    dat::Union{ContinuousData,EpochData},
+    ica::InfoIca;
+    component_selection::Union{Function,Nothing} = nothing,
+)
+    actually_removed = _subtract_ica_components!(dat.data, ica; component_selection = component_selection)
+    dat.analysis_info.n_ica_components_removed += length(actually_removed)
+    return dat
+end
+
+function subtract_ica_components!(dats::AbstractVector{<:EpochData}, ica::InfoIca; component_selection::Union{Function,Nothing} = nothing)
+    isempty(dats) && return dats
+    actually_removed = _subtract_ica_components_multi!(dats, ica; component_selection = component_selection)
+    for d in dats
+        d.analysis_info.n_ica_components_removed += length(actually_removed)
+    end
+    return dats
+end
+
+"""
+    add_ica_components(dat, ica::InfoIca; component_selection = nothing) -> (restored_data, ica_updated)
+
+Restore previously subtracted ICA components on copies of `dat` and `ica` using activations stored in
+`ica.removed_activations` (restores all removed components when `component_selection === nothing`),
+returning `(restored_data, ica_updated)`.
+"""
+function add_ica_components(dat::_IcaDataTarget, ica::InfoIca; component_selection::Union{Function,Nothing} = nothing)
+    dat_out = _copy_ica_target(dat)
+    ica_out = copy(ica)
+    add_ica_components!(dat_out, ica_out; component_selection = component_selection)
+    return dat_out, ica_out
+end
+
+"""
+    add_ica_components!(dat, ica::InfoIca; component_selection = nothing)
+
+In-place mutating version of [`add_ica_components`](@ref); mutates `dat` and `ica.removed_activations` in place.
+"""
+function add_ica_components!(dat::DataFrame, ica::InfoIca; component_selection::Union{Function,Nothing} = nothing)
+    _add_ica_components!(dat, ica; component_selection = component_selection)
+    return dat
+end
+
+function add_ica_components!(dfs::Vector{DataFrame}, ica::InfoIca; component_selection::Union{Function,Nothing} = nothing)
+    _add_ica_components!(dfs, ica; component_selection = component_selection)
+    return dfs
+end
+
+function add_ica_components!(dat::Union{ContinuousData,EpochData}, ica::InfoIca; component_selection::Union{Function,Nothing} = nothing)
+    actually_added = _add_ica_components!(dat.data, ica; component_selection = component_selection)
+    dat.analysis_info.n_ica_components_removed -= length(actually_added)
+    return dat
+end
+
+function add_ica_components!(dats::AbstractVector{<:EpochData}, ica::InfoIca; component_selection::Union{Function,Nothing} = nothing)
+    isempty(dats) && return dats
+    actually_added = _add_ica_components_multi!(dats, ica; component_selection = component_selection)
+    for d in dats
+        d.analysis_info.n_ica_components_removed -= length(actually_added)
+    end
+    return dats
+end
+
+######################################
+######### Internal Functions #########
+######################################
+
 _copy_ica_target(dat::Union{DataFrame,ContinuousData,EpochData}) = copy(dat)
+
 _copy_ica_target(dats::AbstractVector) = [copy(d) for d in dats]
 
 @inline function _pack_col_segment!(col_out::AbstractVector{Float64}, offset::Int, src::AbstractVector)
@@ -249,99 +358,6 @@ _add_ica_components!(dfs::Vector{DataFrame}, ica::InfoIca; component_selection::
 function _add_ica_components_multi!(dats::AbstractVector{<:EpochData}, ica::InfoIca; component_selection::Union{Function,Nothing} = nothing)
     all_dfs = _collect_validated_epoch_dfs(dats)
     return _add_ica_components_dfs!(all_dfs, ica; component_selection = component_selection, require_equal_rows = false)
-end
-
-"""
-    subtract_ica_components!(dat, ica::InfoIca; component_selection = nothing)
-
-Remove selected ICA components in-place from a `DataFrame`, `Vector{DataFrame}`, `ContinuousData`,
-`EpochData`, or `AbstractVector{<:EpochData}`, storing removed activations in `ica.removed_activations`
-for exact restoration via [`add_ica_components!`](@ref).
-
-An explicit `component_selection` (e.g. `components([1, 3])` or `components()`) is required.
-"""
-function subtract_ica_components!(dat::DataFrame, ica::InfoIca; component_selection::Union{Function,Nothing} = nothing)
-    _subtract_ica_components!(dat, ica; component_selection = component_selection)
-    return dat
-end
-
-function subtract_ica_components!(dfs::Vector{DataFrame}, ica::InfoIca; component_selection::Union{Function,Nothing} = nothing)
-    _subtract_ica_components!(dfs, ica; component_selection = component_selection)
-    return dfs
-end
-
-function subtract_ica_components!(
-    dat::Union{ContinuousData,EpochData},
-    ica::InfoIca;
-    component_selection::Union{Function,Nothing} = nothing,
-)
-    actually_removed = _subtract_ica_components!(dat.data, ica; component_selection = component_selection)
-    dat.analysis_info.n_ica_components_removed += length(actually_removed)
-    return dat
-end
-
-function subtract_ica_components!(dats::AbstractVector{<:EpochData}, ica::InfoIca; component_selection::Union{Function,Nothing} = nothing)
-    isempty(dats) && return dats
-    actually_removed = _subtract_ica_components_multi!(dats, ica; component_selection = component_selection)
-    for d in dats
-        d.analysis_info.n_ica_components_removed += length(actually_removed)
-    end
-    return dats
-end
-
-"""
-    subtract_ica_components(dat, ica::InfoIca; component_selection = nothing) -> (cleaned_data, ica_updated)
-
-Non-mutating ICA component removal; copies both `dat` and `ica` and returns `(cleaned_data, ica_updated)`.
-"""
-function subtract_ica_components(dat::_IcaDataTarget, ica::InfoIca; component_selection::Union{Function,Nothing} = nothing)
-    dat_out = _copy_ica_target(dat)
-    ica_out = copy(ica)
-    subtract_ica_components!(dat_out, ica_out; component_selection = component_selection)
-    return dat_out, ica_out
-end
-
-"""
-    add_ica_components!(dat, ica::InfoIca; component_selection = nothing)
-
-Restore previously subtracted ICA components in-place using activations stored in
-`ica.removed_activations` (restores all removed components when `component_selection === nothing`).
-"""
-function add_ica_components!(dat::DataFrame, ica::InfoIca; component_selection::Union{Function,Nothing} = nothing)
-    _add_ica_components!(dat, ica; component_selection = component_selection)
-    return dat
-end
-
-function add_ica_components!(dfs::Vector{DataFrame}, ica::InfoIca; component_selection::Union{Function,Nothing} = nothing)
-    _add_ica_components!(dfs, ica; component_selection = component_selection)
-    return dfs
-end
-
-function add_ica_components!(dat::Union{ContinuousData,EpochData}, ica::InfoIca; component_selection::Union{Function,Nothing} = nothing)
-    actually_added = _add_ica_components!(dat.data, ica; component_selection = component_selection)
-    dat.analysis_info.n_ica_components_removed -= length(actually_added)
-    return dat
-end
-
-function add_ica_components!(dats::AbstractVector{<:EpochData}, ica::InfoIca; component_selection::Union{Function,Nothing} = nothing)
-    isempty(dats) && return dats
-    actually_added = _add_ica_components_multi!(dats, ica; component_selection = component_selection)
-    for d in dats
-        d.analysis_info.n_ica_components_removed -= length(actually_added)
-    end
-    return dats
-end
-
-"""
-    add_ica_components(dat, ica::InfoIca; component_selection = nothing) -> (restored_data, ica_updated)
-
-Non-mutating restoration of previously removed ICA components; returns `(restored_data, ica_updated)`.
-"""
-function add_ica_components(dat::_IcaDataTarget, ica::InfoIca; component_selection::Union{Function,Nothing} = nothing)
-    dat_out = _copy_ica_target(dat)
-    ica_out = copy(ica)
-    add_ica_components!(dat_out, ica_out; component_selection = component_selection)
-    return dat_out, ica_out
 end
 
 function _copy_col_to_matrix!(dst::Matrix{Float64}, col_idx::Int, src::AbstractVector, selected_samples::Vector{Int})

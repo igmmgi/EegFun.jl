@@ -1,9 +1,8 @@
-@inline function _copy_col_to_tensor!(tensor::Array{Float64,3}, c_idx::Int, t_idx::Int, col::AbstractVector)
-    @inbounds for s in axes(tensor, 1)
-        tensor[s, c_idx, t_idx] = Float64(col[s])
-    end
-    return nothing
-end
+# High-level `ride_decompose` and `extract_ride` user entry points.
+
+######################################
+########### User Functions ###########
+######################################
 
 """
     extract_ride(epochs::EpochData, comps::Vector{RideComponent}; kwargs...) -> Dict{Symbol, ErpData}
@@ -55,4 +54,15 @@ function extract_ride(epochs::EpochData, comps::Vector{RideComponent}; kwargs...
     end
 
     return results
+end
+
+######################################
+######### Internal Functions #########
+######################################
+
+@inline function _copy_col_to_tensor!(tensor::Array{Float64,3}, c_idx::Int, t_idx::Int, col::AbstractVector)
+    @inbounds for s in axes(tensor, 1)
+        tensor[s, c_idx, t_idx] = Float64(col[s])
+    end
+    return nothing
 end

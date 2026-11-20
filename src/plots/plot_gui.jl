@@ -1,3 +1,9 @@
+# Interactive dataset launcher GUI (`plot_gui`) for browsing EEG files.
+
+######################################
+######### Types & Constants ##########
+######################################
+
 const UI_STYLE = (label_font = 20, button_font = 18, textbox_font = 16, input_width = 160, input_height = 30)
 
 Base.@kwdef mutable struct GUIState
@@ -28,6 +34,49 @@ Base.@kwdef mutable struct GUIState
     channel_menu::Union{Nothing,Menu} = nothing
     ica_components::Observable{String} = Observable("")
 end
+
+######################################
+########### User Functions ###########
+######################################
+
+"""
+    plot_gui(; display_plot::Bool = true)
+
+Launch the interactive GUI for quick EEG data exploration and visualization.
+
+Provides file/directory browsing, plot-type selection (Data Browser, Epochs, ERP,
+Topography, ERP Image, Time-Frequency, ICA, ERP Analysis, and Diagnostic plots),
+participant/condition/epoch/channel filtering, and axis/baseline controls.
+
+# Examples
+```julia
+EegFun.plot_gui()
+```
+"""
+function plot_gui(; display_plot::Bool = true)
+    _set_window_title("PLOT GUI")
+    gui_fig = _eegfun_figure(size = (700, 600), title = "Plot GUI", backgroundcolor = :lightgrey, figure_padding = (20, 20, 20, 20))
+    main_layout = GridLayout(gui_fig[1, 1:3], rowgap = 2, colgap = 4)
+
+    channel_menu = _create_menu(main_layout[10, 2], options = ["Select"])
+    gui_state = GUIState(; channel_menu = channel_menu)
+
+    _build_file_column!(main_layout, gui_state)
+    _build_filter_column!(main_layout, gui_state)
+    _build_axis_column!(main_layout, gui_state)
+
+    colsize!(main_layout, 1, Fixed(UI_STYLE.input_width))
+    colsize!(main_layout, 2, Auto())
+    colsize!(main_layout, 3, Auto())
+
+    screen = display_plot ? _display_in_screen(gui_fig) : nothing
+    _set_window_title("Makie")
+    return (fig = gui_fig, axes = Axis[], screen = screen)
+end
+
+######################################
+######### Internal Functions #########
+######################################
 
 _create_select_button(parent, label) = Button(
     parent,
@@ -64,41 +113,6 @@ _create_menu(parent; options = ["Select"], width = nothing, height = nothing) = 
 _create_label(parent, text; fontsize = UI_STYLE.label_font, color = :black) = Label(parent, text, fontsize = fontsize, color = color)
 
 _truncate_path(path::String, max_length::Int = 20) = length(path) <= max_length ? path : "..." * path[(end-(max_length-4)):end]
-
-"""
-    plot_gui(; display_plot::Bool = true)
-
-Launch the interactive GUI for quick EEG data exploration and visualization.
-
-Provides file/directory browsing, plot-type selection (Data Browser, Epochs, ERP,
-Topography, ERP Image, Time-Frequency, ICA, ERP Analysis, and Diagnostic plots),
-participant/condition/epoch/channel filtering, and axis/baseline controls.
-
-# Examples
-```julia
-EegFun.plot_gui()
-```
-"""
-function plot_gui(; display_plot::Bool = true)
-    _set_window_title("PLOT GUI")
-    gui_fig = _eegfun_figure(size = (700, 600), title = "Plot GUI", backgroundcolor = :lightgrey, figure_padding = (20, 20, 20, 20))
-    main_layout = GridLayout(gui_fig[1, 1:3], rowgap = 2, colgap = 4)
-
-    channel_menu = _create_menu(main_layout[10, 2], options = ["Select"])
-    gui_state = GUIState(; channel_menu = channel_menu)
-
-    _build_file_column!(main_layout, gui_state)
-    _build_filter_column!(main_layout, gui_state)
-    _build_axis_column!(main_layout, gui_state)
-
-    colsize!(main_layout, 1, Fixed(UI_STYLE.input_width))
-    colsize!(main_layout, 2, Auto())
-    colsize!(main_layout, 3, Auto())
-
-    screen = display_plot ? _display_in_screen(gui_fig) : nothing
-    _set_window_title("Makie")
-    return (fig = gui_fig, axes = Axis[], screen = screen)
-end
 
 function _build_file_column!(main_layout, gui_state)
     directory_select_button = _create_select_button(main_layout[1, 1], "Select Directory")
@@ -233,9 +247,9 @@ function _build_filter_column!(main_layout, gui_state)
     selected_channels_text = Observable("Channels: ")
     _create_label(main_layout[11, 2], selected_channels_text, fontsize = UI_STYLE.textbox_font, color = :gray)
 
-    setup_multi_int_callback(participant_input, participant_bc, "Participant", gui_state.participant)
-    setup_multi_int_callback(condition_input, condition_bc, "Condition", gui_state.condition)
-    setup_multi_int_callback(epoch_input, epoch_bc, "Epoch", gui_state.epoch)
+    _setup_multi_int_callback(participant_input, participant_bc, "Participant", gui_state.participant)
+    _setup_multi_int_callback(condition_input, condition_bc, "Condition", gui_state.condition)
+    _setup_multi_int_callback(epoch_input, epoch_bc, "Epoch", gui_state.epoch)
 
     on(layout_dropdown.selection) do selection
         isnothing(selection) && return
@@ -303,9 +317,9 @@ function _build_axis_column!(main_layout, gui_state)
         height = 50,
     )
 
-    x_check = () -> check_range(gui_state.xlim, xmin_bc, xmax_bc, "X Limits")
-    y_check = () -> check_range(gui_state.ylim, ymin_bc, ymax_bc, "Y Limits")
-    z_check = () -> check_range(gui_state.zlim, zmin_bc, zmax_bc, "Z Limits")
+    x_check = () -> _check_range(gui_state.xlim, xmin_bc, xmax_bc, "X Limits")
+    y_check = () -> _check_range(gui_state.ylim, ymin_bc, ymax_bc, "Y Limits")
+    z_check = () -> _check_range(gui_state.zlim, zmin_bc, zmax_bc, "Z Limits")
     bl_check = () -> begin
         s, e = gui_state.baseline_start[], gui_state.baseline_end[]
         if !isnothing(s) && !isnothing(e) && s > e
@@ -315,14 +329,14 @@ function _build_axis_column!(main_layout, gui_state)
         end
     end
 
-    setup_numeric_callback(xmin_input, xmin_bc, "X min", v -> gui_state.xlim[] = (v, gui_state.xlim[][2]); range_check = x_check)
-    setup_numeric_callback(xmax_input, xmax_bc, "X max", v -> gui_state.xlim[] = (gui_state.xlim[][1], v); range_check = x_check)
-    setup_numeric_callback(ymin_input, ymin_bc, "Y min", v -> gui_state.ylim[] = (v, gui_state.ylim[][2]); range_check = y_check)
-    setup_numeric_callback(ymax_input, ymax_bc, "Y max", v -> gui_state.ylim[] = (gui_state.ylim[][1], v); range_check = y_check)
-    setup_numeric_callback(zmin_input, zmin_bc, "Z min", v -> gui_state.zlim[] = (v, gui_state.zlim[][2]); range_check = z_check)
-    setup_numeric_callback(zmax_input, zmax_bc, "Z max", v -> gui_state.zlim[] = (gui_state.zlim[][1], v); range_check = z_check)
-    setup_numeric_callback(baseline_start, bl_start_bc, "Baseline start", v -> gui_state.baseline_start[] = v; range_check = bl_check)
-    setup_numeric_callback(baseline_end, bl_end_bc, "Baseline end", v -> gui_state.baseline_end[] = v; range_check = bl_check)
+    _setup_numeric_callback(xmin_input, xmin_bc, "X min", v -> gui_state.xlim[] = (v, gui_state.xlim[][2]); range_check = x_check)
+    _setup_numeric_callback(xmax_input, xmax_bc, "X max", v -> gui_state.xlim[] = (gui_state.xlim[][1], v); range_check = x_check)
+    _setup_numeric_callback(ymin_input, ymin_bc, "Y min", v -> gui_state.ylim[] = (v, gui_state.ylim[][2]); range_check = y_check)
+    _setup_numeric_callback(ymax_input, ymax_bc, "Y max", v -> gui_state.ylim[] = (gui_state.ylim[][1], v); range_check = y_check)
+    _setup_numeric_callback(zmin_input, zmin_bc, "Z min", v -> gui_state.zlim[] = (v, gui_state.zlim[][2]); range_check = z_check)
+    _setup_numeric_callback(zmax_input, zmax_bc, "Z max", v -> gui_state.zlim[] = (gui_state.zlim[][1], v); range_check = z_check)
+    _setup_numeric_callback(baseline_start, bl_start_bc, "Baseline start", v -> gui_state.baseline_start[] = v; range_check = bl_check)
+    _setup_numeric_callback(baseline_end, bl_end_bc, "Baseline end", v -> gui_state.baseline_end[] = v; range_check = bl_check)
 
     on(baseline_type.selection) do selection
         !isnothing(selection) && selection != "Select" && (gui_state.baseline_type[] = selection)

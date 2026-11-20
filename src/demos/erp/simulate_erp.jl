@@ -1,3 +1,9 @@
+# Interactive synthetic single-trial EEG and averaged ERP simulation demo.
+
+######################################
+######### Types & Constants ##########
+######################################
+
 const _ERP_MEANPOWER = Float64[
     0.0015,
     0.0008,
@@ -11,156 +17,6 @@ const _ERP_MEANPOWER = Float64[
     fill(0.0001, 88)...,
 ]
 
-function _add_peak_vec!(
-    signal::Matrix{Float64},
-    trials::Int,
-    samples::Int,
-    sample_rate::Int,
-    peak_freq::Float64,
-    peak_amp::Float64,
-    peak_latency::Float64,
-    jitter_amp::Float64,
-    jitter_latency::Float64,
-)
-    trials == 0 && return signal
-    amp = Vector{Float64}(undef, trials)
-    @inbounds for tr = 1:trials
-        amp[tr] = jitter_amp == 0.0 ? peak_amp : muladd(randn(), jitter_amp, peak_amp)
-    end
-
-    phase_scale = 2π * peak_freq / sample_rate
-    half_pi = π / 2
-    half_width = half_pi / phase_scale
-
-    if jitter_latency == 0.0
-        s_lo = max(1, floor(Int, peak_latency - half_width))
-        s_hi = min(samples, ceil(Int, peak_latency + half_width))
-        @inbounds for s = s_lo:s_hi
-            ph = (Float64(s) - peak_latency) * phase_scale
-            if abs(ph) <= half_pi
-                c = cos(ph)
-                for tr = 1:trials
-                    signal[tr, s] = muladd(c, amp[tr], signal[tr, s])
-                end
-            end
-        end
-    else
-        pos = Vector{Float64}(undef, trials)
-        min_pos = Inf
-        max_pos = -Inf
-        @inbounds for tr = 1:trials
-            p = muladd(randn(), jitter_latency, peak_latency)
-            pos[tr] = p
-            min_pos = min(min_pos, p)
-            max_pos = max(max_pos, p)
-        end
-        s_lo = max(1, floor(Int, min_pos - half_width))
-        s_hi = min(samples, ceil(Int, max_pos + half_width))
-        @inbounds for s = s_lo:s_hi
-            sf = Float64(s)
-            for tr = 1:trials
-                ph = (sf - pos[tr]) * phase_scale
-                if abs(ph) <= half_pi
-                    signal[tr, s] = muladd(cos(ph), amp[tr], signal[tr, s])
-                end
-            end
-        end
-    end
-    return signal
-end
-
-function _noise_vec(trials::Int, samples::Int, sample_rate::Int, noise_amp::Float64)
-    noise_amp == 0.0 && return zeros(Float64, trials, samples)
-
-    n_mp = length(_ERP_MEANPOWER)
-    inv_mp1 = 1.0 / _ERP_MEANPOWER[1]
-    dt_2pi = 2π / sample_rate
-    sumsig = 50
-
-    out = Matrix{Float64}(undef, trials, samples)
-    col_buf = Vector{Float64}(undef, samples)
-
-    @inbounds for trial = 1:trials
-        fill!(col_buf, 0.0)
-        f_acc = 0.0
-        for _ = 1:sumsig
-            f_acc += rand() * 4.0
-            idx = min(max(1, ceil(Int, f_acc)), n_mp)
-            a = _ERP_MEANPOWER[idx] * inv_mp1
-            p = rand() * 2π
-            ω = dt_2pi * f_acc
-            sin_ω, cos_ω = sincos(ω)
-            s_cur, c_cur = sincos(p)
-            for s = 1:samples
-                s_next = muladd(s_cur, cos_ω, c_cur * sin_ω)
-                c_next = muladd(c_cur, cos_ω, -s_cur * sin_ω)
-                col_buf[s] = muladd(a, s_next, col_buf[s])
-                s_cur, c_cur = s_next, c_next
-            end
-        end
-        for s = 1:samples
-            out[trial, s] = col_buf[s] * noise_amp
-        end
-    end
-    return out
-end
-
-function _run_erp_simulation(
-    trials::Int,
-    comps::Matrix{Float64};
-    samp_freq::Int = 1000,
-    sig_length::Float64 = 1.0,
-    base_length::Float64 = 0.2,
-    noise_base::Union{Matrix{Float64},Nothing} = nothing,
-)
-    n_samples = Int(samp_freq * (sig_length + base_length))
-    noise_scale = comps[end, 6]
-    if noise_base !== nothing
-        my_signal = Matrix{Float64}(undef, trials, n_samples)
-        if noise_scale == 0.0
-            fill!(my_signal, 0.0)
-        else
-            @inbounds for s = 1:n_samples, tr = 1:trials
-                my_signal[tr, s] = noise_base[tr, s] * noise_scale
-            end
-        end
-    else
-        my_signal = _noise_vec(trials, n_samples, samp_freq, noise_scale)
-    end
-
-    n_components = size(comps, 1)
-    ms_to_samples = samp_freq / 1000.0
-    base_offset = base_length * samp_freq
-    for comp = 1:n_components
-        _add_peak_vec!(
-            my_signal,
-            trials,
-            n_samples,
-            samp_freq,
-            comps[comp, 1],
-            comps[comp, 2],
-            comps[comp, 3] * ms_to_samples + base_offset,
-            comps[comp, 4],
-            comps[comp, 5] * ms_to_samples,
-        )
-    end
-
-    avg = Vector{Float64}(undef, n_samples)
-    if trials > 0
-        inv_trials = 1.0 / trials
-        @inbounds for s = 1:n_samples
-            acc = 0.0
-            for tr = 1:trials
-                acc += my_signal[tr, s]
-            end
-            avg[s] = acc * inv_trials
-        end
-    else
-        fill!(avg, 0.0)
-    end
-    return avg, my_signal
-end
-
 mutable struct _SimulatedErpComponent
     active::Observable{Bool}
     freq::Observable{Float64}
@@ -169,6 +25,10 @@ mutable struct _SimulatedErpComponent
     jitter_amp::Observable{Float64}
     jitter_lat::Observable{Float64}
 end
+
+######################################
+########### User Functions ###########
+######################################
 
 """
     simulate_erp()
@@ -179,15 +39,15 @@ Generates synthetic EEG trials from up to 5 cosine-shaped ERP components (with c
 frequency, amplitude, latency, and trial-to-trial jitter) plus 1/f background noise, displaying
 individual trials (or a 95% confidence interval) alongside the trial-averaged ERP.
 
+# Returns
+- `fig::Figure`: The Makie figure object
+- `ax::Axis`: The main plot axis
+
 # Examples
 ```julia
 using GLMakie, EegFun
 EegFun.simulate_erp()
 ```
-
-# Returns
-- `fig::Figure`: The Makie figure object
-- `ax::Axis`: The main plot axis
 """
 function simulate_erp()
     _check_interactive_demo_backend("ERP Simulator demo") || return nothing
@@ -398,4 +258,158 @@ function simulate_erp()
     update_plot(zeros(0, n_samples), zeros(n_samples))
     _display_demo_figure(fig)
     return fig, ax
+end
+
+######################################
+######### Internal Functions #########
+######################################
+
+function _add_peak_vec!(
+    signal::Matrix{Float64},
+    trials::Int,
+    samples::Int,
+    sample_rate::Int,
+    peak_freq::Float64,
+    peak_amp::Float64,
+    peak_latency::Float64,
+    jitter_amp::Float64,
+    jitter_latency::Float64,
+)
+    trials == 0 && return signal
+    amp = Vector{Float64}(undef, trials)
+    @inbounds for tr = 1:trials
+        amp[tr] = jitter_amp == 0.0 ? peak_amp : muladd(randn(), jitter_amp, peak_amp)
+    end
+
+    phase_scale = 2π * peak_freq / sample_rate
+    half_pi = π / 2
+    half_width = half_pi / phase_scale
+
+    if jitter_latency == 0.0
+        s_lo = max(1, floor(Int, peak_latency - half_width))
+        s_hi = min(samples, ceil(Int, peak_latency + half_width))
+        @inbounds for s = s_lo:s_hi
+            ph = (Float64(s) - peak_latency) * phase_scale
+            if abs(ph) <= half_pi
+                c = cos(ph)
+                for tr = 1:trials
+                    signal[tr, s] = muladd(c, amp[tr], signal[tr, s])
+                end
+            end
+        end
+    else
+        pos = Vector{Float64}(undef, trials)
+        min_pos = Inf
+        max_pos = -Inf
+        @inbounds for tr = 1:trials
+            p = muladd(randn(), jitter_latency, peak_latency)
+            pos[tr] = p
+            min_pos = min(min_pos, p)
+            max_pos = max(max_pos, p)
+        end
+        s_lo = max(1, floor(Int, min_pos - half_width))
+        s_hi = min(samples, ceil(Int, max_pos + half_width))
+        @inbounds for s = s_lo:s_hi
+            sf = Float64(s)
+            for tr = 1:trials
+                ph = (sf - pos[tr]) * phase_scale
+                if abs(ph) <= half_pi
+                    signal[tr, s] = muladd(cos(ph), amp[tr], signal[tr, s])
+                end
+            end
+        end
+    end
+    return signal
+end
+
+function _noise_vec(trials::Int, samples::Int, sample_rate::Int, noise_amp::Float64)
+    noise_amp == 0.0 && return zeros(Float64, trials, samples)
+
+    n_mp = length(_ERP_MEANPOWER)
+    inv_mp1 = 1.0 / _ERP_MEANPOWER[1]
+    dt_2pi = 2π / sample_rate
+    sumsig = 50
+
+    out = Matrix{Float64}(undef, trials, samples)
+    col_buf = Vector{Float64}(undef, samples)
+
+    @inbounds for trial = 1:trials
+        fill!(col_buf, 0.0)
+        f_acc = 0.0
+        for _ = 1:sumsig
+            f_acc += rand() * 4.0
+            idx = min(max(1, ceil(Int, f_acc)), n_mp)
+            a = _ERP_MEANPOWER[idx] * inv_mp1
+            p = rand() * 2π
+            ω = dt_2pi * f_acc
+            sin_ω, cos_ω = sincos(ω)
+            s_cur, c_cur = sincos(p)
+            for s = 1:samples
+                s_next = muladd(s_cur, cos_ω, c_cur * sin_ω)
+                c_next = muladd(c_cur, cos_ω, -s_cur * sin_ω)
+                col_buf[s] = muladd(a, s_next, col_buf[s])
+                s_cur, c_cur = s_next, c_next
+            end
+        end
+        for s = 1:samples
+            out[trial, s] = col_buf[s] * noise_amp
+        end
+    end
+    return out
+end
+
+function _run_erp_simulation(
+    trials::Int,
+    comps::Matrix{Float64};
+    samp_freq::Int = 1000,
+    sig_length::Float64 = 1.0,
+    base_length::Float64 = 0.2,
+    noise_base::Union{Matrix{Float64},Nothing} = nothing,
+)
+    n_samples = Int(samp_freq * (sig_length + base_length))
+    noise_scale = comps[end, 6]
+    if noise_base !== nothing
+        my_signal = Matrix{Float64}(undef, trials, n_samples)
+        if noise_scale == 0.0
+            fill!(my_signal, 0.0)
+        else
+            @inbounds for s = 1:n_samples, tr = 1:trials
+                my_signal[tr, s] = noise_base[tr, s] * noise_scale
+            end
+        end
+    else
+        my_signal = _noise_vec(trials, n_samples, samp_freq, noise_scale)
+    end
+
+    n_components = size(comps, 1)
+    ms_to_samples = samp_freq / 1000.0
+    base_offset = base_length * samp_freq
+    for comp = 1:n_components
+        _add_peak_vec!(
+            my_signal,
+            trials,
+            n_samples,
+            samp_freq,
+            comps[comp, 1],
+            comps[comp, 2],
+            comps[comp, 3] * ms_to_samples + base_offset,
+            comps[comp, 4],
+            comps[comp, 5] * ms_to_samples,
+        )
+    end
+
+    avg = Vector{Float64}(undef, n_samples)
+    if trials > 0
+        inv_trials = 1.0 / trials
+        @inbounds for s = 1:n_samples
+            acc = 0.0
+            for tr = 1:trials
+                acc += my_signal[tr, s]
+            end
+            avg[s] = acc * inv_trials
+        end
+    else
+        fill!(avg, 0.0)
+    end
+    return avg, my_signal
 end

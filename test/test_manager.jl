@@ -1,31 +1,19 @@
-"""
-Test Runner and Coverage Analysis Tool for EegFun
-
-- Running tests with coverage
-- Coverage analysis and reporting
-- HTML report generation
-- Cleanup of .cov files
-- Interactive menu system
-
-Usage:
-    julia --project=. test/test_manager.jl [command] [options]
-
-Commands:
-    test                    - Run tests with coverage
-    summary                 - Show coverage summary
-    detailed                - Show detailed analysis
-    file FILENAME           - Analyze specific file
-    missed FILENAME         - Show missed code branches
-    html                    - Generate HTML report
-    clean                   - Remove all .cov files
-    all                     - Run complete workflow (test + summary + html)
-    interactive             - Show interactive menu
-    help                    - Show this help message
-
-If no command is provided, shows interactive menu.
-
-Run from root directory with: julia --project=. test/test_manager.jl
-"""
+# Interactive test runner and code coverage analysis CLI for EegFun.jl.
+#
+# Usage:
+#   julia --project=. test/test_manager.jl [command] [options]
+#
+# Commands:
+#   test         - Run tests with coverage
+#   summary      - Show coverage summary
+#   detailed     - Show detailed analysis
+#   file FILE    - Analyze specific file
+#   missed FILE  - Show missed code branches
+#   html         - Generate HTML report
+#   clean        - Remove all .cov files
+#   all          - Run complete workflow (test + summary + html)
+#   interactive  - Show interactive menu (default)
+#   help         - Show help message
 
 using Printf
 using Pkg
@@ -303,13 +291,13 @@ function show_interactive_menu()
         elseif choice == "3"
             show_detailed_analysis()
         elseif choice == "4"
-            print("Enter filename to analyze (e.g., analysis/processing/epochs.jl): ")
+            print("Enter filename to analyze (e.g., analysis/processing/epochs/epochs.jl): ")
             filename = readline()
             if !isempty(filename)
                 analyze_specific_file(filename)
             end
         elseif choice == "5"
-            print("Enter filename to show missed branches (e.g., analysis/processing/epochs.jl): ")
+            print("Enter filename to show missed branches (e.g., analysis/processing/epochs/epochs.jl): ")
             filename = readline()
             if !isempty(filename)
                 show_missed_branches(filename)
@@ -340,14 +328,14 @@ function main()
     elseif command == "file"
         if isempty(filename)
             print_colored(RED, "Error: Please specify a filename")
-            println("Usage: julia --project=. test/test_manager.jl file analysis/processing/epochs.jl")
+            println("Usage: julia --project=. test/test_manager.jl file analysis/processing/epochs/epochs.jl")
         else
             analyze_specific_file(filename)
         end
     elseif command == "missed"
         if isempty(filename)
             print_colored(RED, "Error: Please specify a filename")
-            println("Usage: julia --project=. test/test_manager.jl missed analysis/processing/epochs.jl")
+            println("Usage: julia --project=. test/test_manager.jl missed analysis/processing/epochs/epochs.jl")
         else
             show_missed_branches(filename)
         end

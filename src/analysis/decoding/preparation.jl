@@ -1,3 +1,9 @@
+# Trial balancing, temporal resampling, and pseudotrial preparation for MVPA decoding.
+
+######################################
+########### User Functions ###########
+######################################
+
 """
     prepare_decoding(epochs::AbstractVector{T}; condition_selection = conditions(),
                      channel_selection = channels(), interval_selection = times()) where {T<:MultiDataFrameEeg}

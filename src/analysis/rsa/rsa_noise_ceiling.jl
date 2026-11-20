@@ -1,18 +1,8 @@
 # Leave-one-out noise ceiling estimation for RSA (Nili et al., 2014).
 
-function _safe_pearson_centered(unit_x::Vector{Float64}, has_var_x::Bool, y::Vector{Float64})
-    (!has_var_x || length(unit_x) < 2) && return 0.0
-    μ_y = mean(y)
-    num = 0.0
-    norm_y_sq = 0.0
-    @inbounds @simd for k in eachindex(unit_x)
-        dy = y[k] - μ_y
-        num += unit_x[k] * dy
-        norm_y_sq += dy * dy
-    end
-    norm_y_sq <= 1e-30 && return 0.0
-    return clamp(num / sqrt(norm_y_sq), -1.0, 1.0)
-end
+######################################
+########### User Functions ###########
+######################################
 
 """
     compute_noise_ceiling(
@@ -94,6 +84,15 @@ function compute_noise_ceiling(rsa_data_list::AbstractVector{<:RsaData}; correla
 end
 
 """
+    add_noise_ceiling(rsa_data::RsaData, rsa_data_list::AbstractVector{<:RsaData}; correlation_method::Symbol = :spearman) -> RsaData
+
+Return a copy of `rsa_data` with the computed [`NoiseCeiling`](@ref) attached.
+"""
+function add_noise_ceiling(rsa_data::RsaData, rsa_data_list::AbstractVector{<:RsaData}; correlation_method::Symbol = :spearman)
+    return add_noise_ceiling!(copy(rsa_data), rsa_data_list; correlation_method = correlation_method)
+end
+
+"""
     add_noise_ceiling!(rsa_data::RsaData, rsa_data_list::AbstractVector{<:RsaData}; correlation_method::Symbol = :spearman) -> RsaData
 
 Compute and attach a [`NoiseCeiling`](@ref) to `rsa_data` in-place.
@@ -103,11 +102,20 @@ function add_noise_ceiling!(rsa_data::RsaData, rsa_data_list::AbstractVector{<:R
     return rsa_data
 end
 
-"""
-    add_noise_ceiling(rsa_data::RsaData, rsa_data_list::AbstractVector{<:RsaData}; correlation_method::Symbol = :spearman) -> RsaData
+######################################
+######### Internal Functions #########
+######################################
 
-Return a copy of `rsa_data` with the computed [`NoiseCeiling`](@ref) attached.
-"""
-function add_noise_ceiling(rsa_data::RsaData, rsa_data_list::AbstractVector{<:RsaData}; correlation_method::Symbol = :spearman)
-    return add_noise_ceiling!(copy(rsa_data), rsa_data_list; correlation_method = correlation_method)
+function _safe_pearson_centered(unit_x::Vector{Float64}, has_var_x::Bool, y::Vector{Float64})
+    (!has_var_x || length(unit_x) < 2) && return 0.0
+    μ_y = mean(y)
+    num = 0.0
+    norm_y_sq = 0.0
+    @inbounds @simd for k in eachindex(unit_x)
+        dy = y[k] - μ_y
+        num += unit_x[k] * dy
+        norm_y_sq += dy * dy
+    end
+    norm_y_sq <= 1e-30 && return 0.0
+    return clamp(num / sqrt(norm_y_sq), -1.0, 1.0)
 end

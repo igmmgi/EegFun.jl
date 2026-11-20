@@ -1,3 +1,9 @@
+# Residue Iteration Decomposition (RIDE) multi-component separation pipeline.
+
+######################################
+######### Types & Constants ##########
+######################################
+
 """
     RideComponent
 
@@ -30,8 +36,34 @@ struct RideComponent
     end
 end
 
-_normalize_ride_time_window(::Nothing) = nothing
-_normalize_ride_time_window(tw::Tuple{<:Real,<:Real}) = (Float64(tw[1]), Float64(tw[2]))
+"""
+    RideResult{T<:Real}
+
+Decomposed RIDE templates (`samples × channels × components`), centered single-trial `latencies`,
+`latency_offsets`, residual tensor `residue`, convergence flag, and outer iteration count.
+
+# Fields
+- `components::Vector{Symbol}`: Ordered component names (e.g., `[:s, :c, :r]`)
+- `templates::Array{T,3}`: Estimated component waveform templates (`samples × channels × components`)
+- `latencies::Matrix{Int}`: Centered single-trial latency shifts in samples (`trials × components`)
+- `latency_offsets::Vector{Int}`: Mean sample offset removed per component during centering
+- `residue::Array{T,3}`: Unexplained single-trial residual tensor (`samples × channels × trials`)
+- `converged::Bool`: `true` if outer alternating iteration met convergence tolerance
+- `iterations::Int`: Number of outer RIDE iterations executed
+"""
+struct RideResult{T<:Real}
+    components::Vector{Symbol}
+    templates::Array{T,3}
+    latencies::Matrix{Int}
+    latency_offsets::Vector{Int}
+    residue::Array{T,3}
+    converged::Bool
+    iterations::Int
+end
+
+######################################
+########### User Functions ###########
+######################################
 
 RideComponent(
     name::Symbol,
@@ -53,22 +85,6 @@ RideComponent(;
     time_window::Union{Nothing,Tuple{<:Real,<:Real}} = nothing,
 ) = RideComponent(name, isnothing(latencies) ? nothing : collect(Int, latencies), window_radius, _normalize_ride_time_window(time_window))
 
-"""
-    RideResult{T<:Real}
-
-Decomposed RIDE templates (`samples × channels × components`), centered single-trial `latencies`,
-`latency_offsets`, residual tensor `residue`, convergence flag, and outer iteration count.
-"""
-struct RideResult{T<:Real}
-    components::Vector{Symbol}
-    templates::Array{T,3}
-    latencies::Matrix{Int}
-    latency_offsets::Vector{Int}
-    residue::Array{T,3}
-    converged::Bool
-    iterations::Int
-end
-
 RideResult(
     components::Vector{Symbol},
     templates::Array{T,3},
@@ -77,58 +93,6 @@ RideResult(
     converged::Bool,
     iterations::Int,
 ) where {T<:Real} = RideResult(components, templates, latencies, zeros(Int, length(components)), residue, converged, iterations)
-
-function _resolve_ride_time_window(
-    time_window::Union{Nothing,Tuple{Float64,Float64}},
-    n_samples::Int,
-    times::Union{Nothing,AbstractVector{<:Real}},
-    sample_rate::Union{Nothing,Real},
-)::UnitRange{Int}
-    n_samples <= 0 && return 1:0
-    isnothing(time_window) && return 1:n_samples
-
-    t_start, t_end = time_window
-    if !isnothing(times) && length(times) == n_samples
-        s_start = findfirst(>=(t_start), times)
-        s_end = findlast(<=(t_end), times)
-        isnothing(s_start) && (s_start = argmin(abs.(times .- t_start)))
-        isnothing(s_end) && (s_end = argmin(abs.(times .- t_end)))
-        s_start = clamp(s_start, 1, n_samples)
-        return s_start:clamp(s_end, s_start, n_samples)
-    elseif !isnothing(sample_rate) && sample_rate > 0
-        s_start = clamp(round(Int, t_start * Float64(sample_rate)) + 1, 1, n_samples)
-        return s_start:clamp(round(Int, t_end*Float64(sample_rate))+1, s_start, n_samples)
-    elseif 0.0 <= t_start < t_end <= 1.0 && n_samples > 1
-        s_start = clamp(round(Int, t_start * (n_samples - 1)) + 1, 1, n_samples)
-        return s_start:clamp(round(Int, t_end*(n_samples-1))+1, s_start, n_samples)
-    else
-        s_start = clamp(round(Int, t_start), 1, n_samples)
-        return s_start:clamp(round(Int, t_end), s_start, n_samples)
-    end
-end
-
-function _compute_ride_residue!(
-    dest::Array{T,3},
-    data::AbstractArray{T,3},
-    templates::Array{T,3},
-    latencies::Matrix{Int};
-    skip_comp::Int = 0,
-) where {T<:Real}
-    _, n_channels, n_trials = size(data)
-    n_components = size(templates, 3)
-
-    _foreach_chunk(n_trials) do trial_range
-        @inbounds for t in trial_range, c = 1:n_channels
-            dest_col = view(dest, :, c, t)
-            copyto!(dest_col, view(data, :, c, t))
-            for j = 1:n_components
-                j == skip_comp && continue
-                _subtract_shifted!(dest_col, view(templates, :, c, j), latencies[t, j])
-            end
-        end
-    end
-    return dest
-end
 
 """
     ride_decompose(data, comps; outer_iters=4, inner_iters=50, inner_tol=1e-3,
@@ -202,7 +166,7 @@ function ride_decompose(
     for outer = 1:outer_iters
         actual_outer_iters = outer
 
-        ride_iteration!(
+        _ride_iteration!(
             templates,
             data,
             latencies;
@@ -243,7 +207,7 @@ function ride_decompose(
     end
 
     if has_estimated && !converged_outer && actual_outer_iters > 0
-        ride_iteration!(
+        _ride_iteration!(
             templates,
             data,
             latencies;
@@ -259,4 +223,64 @@ function ride_decompose(
 
     _compute_ride_residue!(residue, data, templates, latencies; skip_comp = 0)
     return RideResult([c.name for c in comps], templates, latencies, latency_offsets, residue, converged_outer, actual_outer_iters)
+end
+
+######################################
+######### Internal Functions #########
+######################################
+
+_normalize_ride_time_window(::Nothing) = nothing
+
+_normalize_ride_time_window(tw::Tuple{<:Real,<:Real}) = (Float64(tw[1]), Float64(tw[2]))
+
+function _resolve_ride_time_window(
+    time_window::Union{Nothing,Tuple{Float64,Float64}},
+    n_samples::Int,
+    times::Union{Nothing,AbstractVector{<:Real}},
+    sample_rate::Union{Nothing,Real},
+)::UnitRange{Int}
+    n_samples <= 0 && return 1:0
+    isnothing(time_window) && return 1:n_samples
+
+    t_start, t_end = time_window
+    if !isnothing(times) && length(times) == n_samples
+        s_start = findfirst(>=(t_start), times)
+        s_end = findlast(<=(t_end), times)
+        isnothing(s_start) && (s_start = argmin(abs.(times .- t_start)))
+        isnothing(s_end) && (s_end = argmin(abs.(times .- t_end)))
+        s_start = clamp(s_start, 1, n_samples)
+        return s_start:clamp(s_end, s_start, n_samples)
+    elseif !isnothing(sample_rate) && sample_rate > 0
+        s_start = clamp(round(Int, t_start * Float64(sample_rate)) + 1, 1, n_samples)
+        return s_start:clamp(round(Int, t_end*Float64(sample_rate))+1, s_start, n_samples)
+    elseif 0.0 <= t_start < t_end <= 1.0 && n_samples > 1
+        s_start = clamp(round(Int, t_start * (n_samples - 1)) + 1, 1, n_samples)
+        return s_start:clamp(round(Int, t_end*(n_samples-1))+1, s_start, n_samples)
+    else
+        s_start = clamp(round(Int, t_start), 1, n_samples)
+        return s_start:clamp(round(Int, t_end), s_start, n_samples)
+    end
+end
+
+function _compute_ride_residue!(
+    dest::Array{T,3},
+    data::AbstractArray{T,3},
+    templates::Array{T,3},
+    latencies::Matrix{Int};
+    skip_comp::Int = 0,
+) where {T<:Real}
+    _, n_channels, n_trials = size(data)
+    n_components = size(templates, 3)
+
+    _foreach_chunk(n_trials) do trial_range
+        @inbounds for t in trial_range, c = 1:n_channels
+            dest_col = view(dest, :, c, t)
+            copyto!(dest_col, view(data, :, c, t))
+            for j = 1:n_components
+                j == skip_comp && continue
+                _subtract_shifted!(dest_col, view(templates, :, c, j), latencies[t, j])
+            end
+        end
+    end
+    return dest
 end

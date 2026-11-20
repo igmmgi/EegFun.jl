@@ -1,5 +1,9 @@
 # Plotting functions for Representational Similarity Analysis (RSA) results.
 
+######################################
+######### Types & Constants ##########
+######################################
+
 const PLOT_RSA_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Display parameters
     :display_plot => (true, "Display the plot (true/false)"),
@@ -42,28 +46,12 @@ const PLOT_RSA_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 )
 
 const _RSA_PAIR_PALETTE = (:blue, :red, :green, :orange, :purple, :brown, :pink, :gray, :cyan, :magenta)
+
 const _RSA_MODEL_PALETTE = (:blue, :red, :green, :orange, :purple, :brown, :pink, :gray)
 
-function _rsa_title(plot_kwargs::Dict, default_title::String)
-    plot_kwargs[:show_title] || return ""
-    title_text = plot_kwargs[:plot_title]
-    return isnothing(title_text) ? default_title : title_text
-end
-
-@inline function _rsa_series_color(colors, palette::Tuple, idx::Int)
-    isnothing(colors) && return palette[mod1(idx, length(palette))]
-    colors isa Symbol && return colors
-    return colors[mod1(idx, length(colors))]
-end
-
-function _finalize_rsa_figure!(fig::Figure, plot_kwargs::Dict)
-    figure_title = plot_kwargs[:figure_title]
-    if !isempty(figure_title)
-        Label(fig[0, :], figure_title, fontsize = plot_kwargs[:figure_title_fontsize], font = :bold, tellwidth = false)
-    end
-    plot_kwargs[:display_plot] && _display_figure(fig)
-    return nothing
-end
+######################################
+########### User Functions ###########
+######################################
 
 """
     plot_rdm_heatmap(rsa_data::RsaData; time_point::Union{Float64, Int, Nothing} = nothing, kwargs...)
@@ -103,7 +91,7 @@ function plot_rdm_heatmap(rsa_data::RsaData; time_point::Union{Float64,Int,Nothi
         rdm_to_plot = @view rsa_data.rdm[time_point, :, :]
         time_label = "$(round(rsa_data.times[time_point], digits=3)) s"
     else
-        time_idx = find_closest_time_index(rsa_data.times, time_point)
+        time_idx = _find_closest_time_index(rsa_data.times, time_point)
         rdm_to_plot = @view rsa_data.rdm[time_idx, :, :]
         time_label = "$(round(rsa_data.times[time_idx], digits=3)) s"
     end
@@ -304,35 +292,32 @@ end
 
 """
     plot_rsa(rsa_data::RsaData; kwargs...)
-
-Main plotting function for RSA results.
-
-If model correlations are available, plots them. Otherwise, plots RDM heatmap at average time.
-
-# Arguments
-- `rsa_data::RsaData`: RSA results
-- `kwargs`: Additional keyword arguments (passed to plot_model_correlations or plot_rdm_heatmap)
-
-# Examples
-```julia
-# Plot RSA results (automatically chooses best visualization)
-plot_rsa(rsa_result)
-
-# Force RDM heatmap plot
-plot_rsa(rsa_result, plot_type=:rdm, time_point=0.3)
-```
-
     plot_rsa(filepath::String; input_dir=pwd(), participant_selection=participants(), kwargs...)
 
-Load RSA data and plot. Accepts either a `.jld2` filepath or a pattern
-to discover and plot all matching files (one plot per file).
+Main plotting function for RSA results (in-memory `RsaData` or `.jld2` filepath/pattern).
+Plots model correlations when available, or an RDM heatmap at average time otherwise (`plot_type = :rdm` or `:correlations`).
 
 # Examples
 ```julia
+plot_rsa(rsa_result)
+plot_rsa(rsa_result, plot_type=:rdm, time_point=0.3)
 plot_rsa("rsa_results.jld2")
-plot_rsa("rsa_results")
 ```
 """
+function plot_rsa(rsa_data::RsaData; kwargs...)
+    plot_type = get(kwargs, :plot_type, nothing)
+    if isnothing(plot_type)
+        return !isnothing(rsa_data.model_correlations) ? plot_model_correlations(rsa_data; kwargs...) :
+               plot_rdm_heatmap(rsa_data; kwargs...)
+    elseif plot_type == :rdm
+        return plot_rdm_heatmap(rsa_data; kwargs...)
+    elseif plot_type == :correlations
+        return plot_model_correlations(rsa_data; kwargs...)
+    else
+        @minimal_error("Unknown plot_type: $plot_type. Use :rdm or :correlations")
+    end
+end
+
 function plot_rsa(filepath::String; input_dir::String = pwd(), participant_selection = participants(), kwargs...)
     if endswith(filepath, ".jld2")
         resolved = _resolve_input_filepath(filepath, input_dir)
@@ -354,16 +339,27 @@ function plot_rsa(filepath::String; input_dir::String = pwd(), participant_selec
     return results
 end
 
-function plot_rsa(rsa_data::RsaData; kwargs...)
-    plot_type = get(kwargs, :plot_type, nothing)
-    if isnothing(plot_type)
-        return !isnothing(rsa_data.model_correlations) ? plot_model_correlations(rsa_data; kwargs...) :
-               plot_rdm_heatmap(rsa_data; kwargs...)
-    elseif plot_type == :rdm
-        return plot_rdm_heatmap(rsa_data; kwargs...)
-    elseif plot_type == :correlations
-        return plot_model_correlations(rsa_data; kwargs...)
-    else
-        @minimal_error("Unknown plot_type: $plot_type. Use :rdm or :correlations")
+######################################
+######### Internal Functions #########
+######################################
+
+function _rsa_title(plot_kwargs::Dict, default_title::String)
+    plot_kwargs[:show_title] || return ""
+    title_text = plot_kwargs[:plot_title]
+    return isnothing(title_text) ? default_title : title_text
+end
+
+@inline function _rsa_series_color(colors, palette::Tuple, idx::Int)
+    isnothing(colors) && return palette[mod1(idx, length(palette))]
+    colors isa Symbol && return colors
+    return colors[mod1(idx, length(colors))]
+end
+
+function _finalize_rsa_figure!(fig::Figure, plot_kwargs::Dict)
+    figure_title = plot_kwargs[:figure_title]
+    if !isempty(figure_title)
+        Label(fig[0, :], figure_title, fontsize = plot_kwargs[:figure_title_fontsize], font = :bold, tellwidth = false)
     end
+    plot_kwargs[:display_plot] && _display_figure(fig)
+    return nothing
 end

@@ -1,3 +1,9 @@
+# Interactive corneo-retinal dipole horizontal EOG saccade teaching demo.
+
+######################################
+########### User Functions ###########
+######################################
+
 """
     signal_example_heog()
 
@@ -5,16 +11,16 @@ Interactive Horizontal Electrooculography (hEOG) simulator illustrating corneo-r
 dipoles, volume-conducted electric fields, common-mode rejection (CMR), and bipolar outer-canthi
 derivation (\$V_{\\text{out}} = V_{(+)} - V_{(-)}\$).
 
-# Example
-```julia
-using GLMakie, EegFun
-signal_example_heog()
-```
-
 # Returns
 - `fig::Figure`: The Makie figure object containing the interactive GUI
 - `ax_eyes::Axis`: The anatomical dipole & circuit schematic axis
 - `ax_eog::Axis`: The potential vs. time signal recording axis
+
+# Examples
+```julia
+using GLMakie, EegFun
+signal_example_heog()
+```
 """
 function signal_example_heog()
     _check_interactive_demo_backend("Interactive hEOG demo") || return nothing

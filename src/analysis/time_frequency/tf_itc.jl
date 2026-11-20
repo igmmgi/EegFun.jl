@@ -1,11 +1,9 @@
 # Inter-trial phase coherence (ITC) helpers.
 # ITC from the decomposition kernels is requested with `tf_morlet(...; output = :itc)` / `tf_stft(...; output = :itc)`.
 
-# ITC results are ordinary TimeFreqData tagged via the `method` field (e.g. :wavelet_itc)
-_is_itc(tf::Union{TimeFreqData,TimeFreqEpochData}) = endswith(String(tf.method), "_itc")
-
-# Label for the quantity stored in `data_power` (used by colorbars and plot titles)
-_tf_quantity_label(tf::Union{TimeFreqData,TimeFreqEpochData}) = _is_itc(tf) ? "ITC" : "Power"
+######################################
+########### User Functions ###########
+######################################
 
 """
     tf_itc(tf::TimeFreqEpochData) -> TimeFreqData
@@ -90,3 +88,13 @@ function tf_itc(tf::TimeFreqEpochData)::TimeFreqData
 end
 
 tf_itc(tfs::AbstractVector{<:TimeFreqEpochData}) = [tf_itc(tf) for tf in tfs]
+
+######################################
+######### Internal Functions #########
+######################################
+
+# ITC results are ordinary TimeFreqData tagged via the `method` field (e.g. :wavelet_itc)
+_is_itc(tf::Union{TimeFreqData,TimeFreqEpochData}) = endswith(String(tf.method), "_itc")
+
+# Label for the quantity stored in `data_power` (used by colorbars and plot titles)
+_tf_quantity_label(tf::Union{TimeFreqData,TimeFreqEpochData}) = _is_itc(tf) ? "ITC" : "Power"

@@ -1,3 +1,9 @@
+# Interactive Einthoven triangle and cardiac dipole ECG teaching demo.
+
+######################################
+########### User Functions ###########
+######################################
+
 """
     signal_example_ecg_einthoven()
 

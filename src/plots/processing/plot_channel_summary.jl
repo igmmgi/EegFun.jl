@@ -1,4 +1,9 @@
-# === DEFAULT KEYWORD ARGUMENTS ===
+# Bar and summary plots for per-channel variance and artifact metrics.
+
+######################################
+######### Types & Constants ##########
+######################################
+
 const PLOT_CHANNEL_SUMMARY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :display_plot => (true, "Display plot."),
     :sort_values => (false, "Sort the bars by the values in the `col` column in descending order."),
@@ -27,6 +32,72 @@ const PLOT_CHANNEL_SUMMARY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :xminorgrid => (false, "Whether to show x-axis minor grid"),
     :yminorgrid => (false, "Whether to show y-axis minor grid"),
 )
+
+######################################
+########### User Functions ###########
+######################################
+
+"""
+    plot_channel_summary(dat::DataFrame, col; channel_selection = channels(), kwargs...) -> NamedTuple
+
+Plot per-channel summary bar charts (with optional `average_over` 95% CI error bars and multi-column grids) from a summary `DataFrame`.
+
+$(_generate_kwargs_doc(PLOT_CHANNEL_SUMMARY_KWARGS))
+"""
+function plot_channel_summary(dat::DataFrame, col::Union{Symbol,AbstractString}; channel_selection = channels(), kwargs...)
+    plot_kwargs = _merge_plot_kwargs(PLOT_CHANNEL_SUMMARY_KWARGS, kwargs)
+    fig = _eegfun_figure()
+    ax = Axis(fig[1, 1])
+    _plot_channel_summary_impl!(ax, dat, Symbol(col), channel_selection, plot_kwargs)
+    if plot_kwargs[:display_plot]
+        _set_window_title("Channel Summary")
+        _display_figure(fig)
+    end
+    return (fig = fig, axes = [ax])
+end
+
+plot_channel_summary(dat::AbstractVector{<:DataFrame}, col::Union{Symbol,AbstractString}; kwargs...) =
+    plot_channel_summary.(dat, Symbol(col); kwargs...)
+
+function plot_channel_summary(
+    dat::DataFrame,
+    col::AbstractVector{<:Union{Symbol,AbstractString}};
+    channel_selection = channels(),
+    kwargs...,
+)
+    plot_kwargs = _merge_plot_kwargs(PLOT_CHANNEL_SUMMARY_KWARGS, kwargs)
+    fig = _eegfun_figure()
+    axes = _plot_multiple_columns!(fig, dat, Symbol.(col), plot_kwargs; channel_selection = channel_selection)
+    if plot_kwargs[:display_plot]
+        _set_window_title("Channel Summary")
+        _display_figure(fig)
+    end
+    return (fig = fig, axes = axes)
+end
+
+plot_channel_summary(dat::AbstractVector{<:DataFrame}, col::AbstractVector{<:Union{Symbol,AbstractString}}; kwargs...) =
+    plot_channel_summary.(dat, Ref(Symbol.(col)); kwargs...)
+
+"""
+    plot_channel_summary!(fig::Figure, ax::Axis, dat::DataFrame, col; channel_selection = channels(), kwargs...) -> Axis
+
+In-place axis version of [`plot_channel_summary`](@ref), drawing onto `ax` and returning `ax`.
+"""
+function plot_channel_summary!(
+    fig::Figure,
+    ax::Axis,
+    dat::DataFrame,
+    col::Union{Symbol,AbstractString};
+    channel_selection = channels(),
+    kwargs...,
+)
+    plot_kwargs = _merge_plot_kwargs(PLOT_CHANNEL_SUMMARY_KWARGS, kwargs)
+    return _plot_channel_summary_impl!(ax, dat, Symbol(col), channel_selection, plot_kwargs)
+end
+
+######################################
+######### Internal Functions #########
+######################################
 
 function _configure_channel_summary_axis!(
     ax::Axis,
@@ -133,62 +204,3 @@ function _plot_multiple_columns!(
     end
     return axes
 end
-
-"""
-    plot_channel_summary!(fig::Figure, ax::Axis, dat::DataFrame, col; channel_selection=channels(), kwargs...) -> Axis
-    plot_channel_summary(dat::DataFrame, col; channel_selection=channels(), kwargs...) -> NamedTuple
-
-Plot per-channel summary bar charts (with optional `average_over` 95% CI error bars and multi-column grids) from a summary `DataFrame`.
-
-$(_generate_kwargs_doc(PLOT_CHANNEL_SUMMARY_KWARGS))
-"""
-function plot_channel_summary!(
-    fig::Figure,
-    ax::Axis,
-    dat::DataFrame,
-    col::Union{Symbol,AbstractString};
-    channel_selection = channels(),
-    kwargs...,
-)
-    plot_kwargs = _merge_plot_kwargs(PLOT_CHANNEL_SUMMARY_KWARGS, kwargs)
-    return _plot_channel_summary_impl!(ax, dat, Symbol(col), channel_selection, plot_kwargs)
-end
-
-"""
-    plot_channel_summary(dat::DataFrame, col; channel_selection=channels(), kwargs...) -> NamedTuple
-
-Create a figure and plot per-channel summary bar charts (single or multi-column). See [`plot_channel_summary!`](@ref) for keyword options.
-"""
-function plot_channel_summary(dat::DataFrame, col::Union{Symbol,AbstractString}; channel_selection = channels(), kwargs...)
-    plot_kwargs = _merge_plot_kwargs(PLOT_CHANNEL_SUMMARY_KWARGS, kwargs)
-    fig = _eegfun_figure()
-    ax = Axis(fig[1, 1])
-    _plot_channel_summary_impl!(ax, dat, Symbol(col), channel_selection, plot_kwargs)
-    if plot_kwargs[:display_plot]
-        _set_window_title("Channel Summary")
-        _display_figure(fig)
-    end
-    return (fig = fig, axes = [ax])
-end
-
-plot_channel_summary(dat::AbstractVector{<:DataFrame}, col::Union{Symbol,AbstractString}; kwargs...) =
-    plot_channel_summary.(dat, Symbol(col); kwargs...)
-
-function plot_channel_summary(
-    dat::DataFrame,
-    col::AbstractVector{<:Union{Symbol,AbstractString}};
-    channel_selection = channels(),
-    kwargs...,
-)
-    plot_kwargs = _merge_plot_kwargs(PLOT_CHANNEL_SUMMARY_KWARGS, kwargs)
-    fig = _eegfun_figure()
-    axes = _plot_multiple_columns!(fig, dat, Symbol.(col), plot_kwargs; channel_selection = channel_selection)
-    if plot_kwargs[:display_plot]
-        _set_window_title("Channel Summary")
-        _display_figure(fig)
-    end
-    return (fig = fig, axes = axes)
-end
-
-plot_channel_summary(dat::AbstractVector{<:DataFrame}, col::AbstractVector{<:Union{Symbol,AbstractString}}; kwargs...) =
-    plot_channel_summary.(dat, Ref(Symbol.(col)); kwargs...)

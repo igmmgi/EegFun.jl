@@ -1,18 +1,27 @@
-_to_repair_channels(ch::Symbol) = [ch]
-_to_repair_channels(ch::AbstractString) = [Symbol(ch)]
-_to_repair_channels(chans::AbstractVector{Symbol}) = collect(chans)
-_to_repair_channels(chans::AbstractVector{<:AbstractString}) = Symbol.(chans)
-_to_repair_channels(chans) = collect(chans)
+# Whole-recording bad-channel interpolation via neighbors or spherical splines.
+
+######################################
+########### User Functions ###########
+######################################
 
 """
-    repair_channels!(data, channels_to_repair; method::Symbol=:neighbor_interpolation, kwargs...)
+    repair_channels(data, channels_to_repair; method::Symbol = :neighbor_interpolation, kwargs...)
 
-Repair bad EEG channels in `ContinuousData`, `ErpData`, `EpochData`, or an `AbstractMatrix` in-place.
+Repair bad EEG channels in a copy of `ContinuousData`, `ErpData`, `EpochData`, or an `AbstractMatrix` without modifying `data`.
 
 # Keyword Arguments
 - `method::Symbol`: `:neighbor_interpolation` (default; uses `neighbors_dict` or `data.layout.neighbors`)
-  or `:spherical_spline` (accepts `m::Int=4`, `lambda::Real=1e-5`).
+  or `:spherical_spline` (accepts `m::Int = 4`, `lambda::Real = 1e-5`).
 - `epoch_selection`: Epoch selector for `EpochData` (default: `epochs()`).
+"""
+repair_channels(dat, args...; kwargs...) = repair_channels!(copy(dat), args...; kwargs...)
+
+repair_channels(dat::AbstractVector{<:EegData}, args...; kwargs...) = [repair_channels(d, args...; kwargs...) for d in dat]
+
+"""
+    repair_channels!(data, channels_to_repair; method::Symbol = :neighbor_interpolation, kwargs...)
+
+In-place mutating version of [`repair_channels`](@ref).
 """
 function repair_channels!(data, channels_to_repair; method::Symbol = :neighbor_interpolation, repair_info = nothing, kwargs...)
     chs = _to_repair_channels(channels_to_repair)
@@ -34,13 +43,6 @@ function repair_channels!(data, channels_to_repair; method::Symbol = :neighbor_i
     return data
 end
 
-"""
-    repair_channels(dat, args...; kwargs...)
-
-Non-mutating version of [`repair_channels!`](@ref).
-"""
-repair_channels(dat, args...; kwargs...) = repair_channels!(copy(dat), args...; kwargs...)
-
 function repair_channels!(dat::AbstractVector{<:EegData}, args...; kwargs...)
     for d in dat
         repair_channels!(d, args...; kwargs...)
@@ -48,9 +50,19 @@ function repair_channels!(dat::AbstractVector{<:EegData}, args...; kwargs...)
     return dat
 end
 
-repair_channels(dat::AbstractVector{<:EegData}, args...; kwargs...) = [repair_channels(d, args...; kwargs...) for d in dat]
+######################################
+######### Internal Functions #########
+######################################
 
-# --- Neighbor interpolation ---
+_to_repair_channels(ch::Symbol) = [ch]
+
+_to_repair_channels(ch::AbstractString) = [Symbol(ch)]
+
+_to_repair_channels(chans::AbstractVector{Symbol}) = collect(chans)
+
+_to_repair_channels(chans::AbstractVector{<:AbstractString}) = Symbol.(chans)
+
+_to_repair_channels(chans) = collect(chans)
 
 function _repair_channels_neighbor!(data, channels_to_repair; neighbors_dict = nothing, repair_info = nothing, kwargs...)
     if isnothing(neighbors_dict)
@@ -221,8 +233,6 @@ function _repair_channels_neighbor!(
     end
     return [bad_ch for (_, bad_ch, _, _, _) in plans]
 end
-
-# --- Spherical spline interpolation (Perrin et al., 1989) ---
 
 _g_factors(m::Int, nterms::Int) = [(2n + 1) / (float(n)^m * float(n + 1)^m * 4π) for n = 1:nterms]
 

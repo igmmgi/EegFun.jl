@@ -1,4 +1,10 @@
-function find_closest_time_index(times::AbstractVector{<:Real}, target::Real)
+# Time-index lookup and numeric data range helper functions.
+
+######################################
+######### Internal Functions #########
+######################################
+
+function _find_closest_time_index(times::AbstractVector{<:Real}, target::Real)
     isempty(times) && @minimal_error("Cannot find closest time index in an empty time vector")
     idx = searchsortedfirst(times, target)
     idx == 1 && return 1

@@ -1,15 +1,20 @@
+# Custom `EegFunError` exception and concise `@minimal_error` / `@minimal_warning` macros.
+
+######################################
+######### Types & Constants ##########
+######################################
+
 """
     EegFunError <: Exception
 
 User-facing exception raised by `@minimal_error` for invalid inputs, files, selections, or configurations.
+
+# Fields
+- `msg::String`: Human-readable error message
 """
 struct EegFunError <: Exception
     msg::String
 end
-
-Base.showerror(io::IO, e::EegFunError) = print(io, e.msg)
-
-_log_error(msg::AbstractString) = @error "Error: " * msg _module = nothing _file = nothing _line = nothing
 
 macro minimal_error(msg)
     quote
@@ -34,3 +39,15 @@ macro minimal_stacktrace(msg, e, max_lines = 5)
         @error $(esc(msg)) limited_msg _module = nothing _file = nothing _line = nothing
     end
 end
+
+######################################
+########### User Functions ###########
+######################################
+
+Base.showerror(io::IO, e::EegFunError) = print(io, e.msg)
+
+######################################
+######### Internal Functions #########
+######################################
+
+_log_error(msg::AbstractString) = @error "Error: " * msg _module = nothing _file = nothing _line = nothing

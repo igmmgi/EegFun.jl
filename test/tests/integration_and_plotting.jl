@@ -1,3 +1,5 @@
+# Tests for end-to-end preprocessing pipelines and headless Makie plotting.
+
 using Test
 using EegFun
 using CairoMakie

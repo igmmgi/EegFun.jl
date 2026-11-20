@@ -1,3 +1,146 @@
+# Region-of-interest (ROI) and multi-channel averaging operations.
+
+######################################
+########### User Functions ###########
+######################################
+
+"""
+    channel_average(dat, args...; kwargs...)
+    channel_average(file_pattern::String, channel_selections::AbstractVector;
+                    output_labels = nothing, input_dir::String = pwd(),
+                    participant_selection = participants(), condition_selection = conditions(),
+                    output_dir = nothing, reduce::Bool = false)
+
+Non-mutating version of [`channel_average!`](@ref), or batch-process matching JLD2 files into `output_dir`.
+"""
+channel_average(dat::EegData, args...; kwargs...) = channel_average!(copy(dat), args...; kwargs...)
+
+channel_average(dat::AbstractVector{<:EegData}; kwargs...) = [channel_average(d; kwargs...) for d in dat]
+
+"""
+    channel_average!(dat::EegData; channel_selections = [channels()], output_labels = nothing,
+                     include_extra::Bool = false, reduce::Bool = false) -> EegData
+
+Average each group of selected channels in `dat` (linearly for amplitude/power, circularly for TF phase).
+Output labels default to `:avg` when all channels are selected, or underscore-joined channel names otherwise.
+When `reduce = true`, keeps only metadata and the averaged channels in both data and layout.
+"""
+function channel_average!(
+    dat::EegData;
+    channel_selections = nothing,
+    channel_selection = nothing,
+    output_labels = nothing,
+    include_extra::Bool = false,
+    reduce::Bool = false,
+)
+    selections = if !isnothing(channel_selection)
+        [channel_selection]
+    elseif !isnothing(channel_selections)
+        if channel_selections isa AbstractVector{Symbol} ||
+           channel_selections isa AbstractVector{<:AbstractString} ||
+           channel_selections isa Function
+            [channel_selections]
+        else
+            channel_selections
+        end
+    else
+        [channels()]
+    end
+
+    if !isnothing(output_labels)
+        output_labels = output_labels isa Union{Symbol,AbstractString} ? [Symbol(output_labels)] : Symbol.(output_labels)
+    end
+
+    selected_channel_groups =
+        Vector{Symbol}[get_selected_channels(dat, sel; include_meta = false, include_extra = include_extra) for sel in selections]
+    if any(isempty, selected_channel_groups)
+        @minimal_error "Channel selections at indices $(findall(isempty, selected_channel_groups)) produced no channels"
+    end
+
+    if isnothing(output_labels)
+        original_channels = channel_labels(dat)
+        labels = Vector{Symbol}(undef, length(selected_channel_groups))
+        for (i, grp) in enumerate(selected_channel_groups)
+            is_all = !isempty(original_channels) && length(grp) == length(original_channels) && all(in(original_channels), grp)
+            labels[i] = is_all ? :avg : Symbol(join(string.(grp), "_"))
+        end
+    else
+        length(output_labels) == length(selected_channel_groups) ||
+            @minimal_error "N output_labels ($(length(output_labels))) must match N channel selections ($(length(selected_channel_groups)))"
+        labels = Symbol.(output_labels)
+    end
+
+    frames = _data_frames(dat)
+    is_tf = dat isa Union{TimeFreqData,TimeFreqEpochData}
+    orig_extra = reduce ? Symbol[] : extra_labels(dat)
+    first_extra = isempty(orig_extra) ? nothing : orig_extra[1]
+    avg_layout = _layout_from_groups(dat.layout, selected_channel_groups, labels; reduce = reduce)
+    layout_new_set = hasproperty(avg_layout.data, :label) ? Set{Symbol}(avg_layout.data.label) : Set{Symbol}()
+
+    existing = Set(all_labels(dat))
+    for (grp, lbl) in zip(selected_channel_groups, labels)
+        lbl in existing && @minimal_warning "Overwriting existing channel '$(lbl)'"
+        push!(existing, lbl)
+        @info "channel_average!: $(_print_vector(grp)) → :$(lbl)"
+        ins_before = (!reduce && lbl in layout_new_set) ? first_extra : nothing
+        if is_tf
+            _assign_group_mean!(frames[1], grp, lbl, false, ins_before)
+            _assign_group_mean!(frames[2], grp, lbl, true, ins_before)
+        else
+            for container in frames
+                _assign_group_mean!(container, grp, lbl, false, ins_before)
+            end
+        end
+    end
+
+    if reduce
+        meta_cols = meta_labels(dat)
+        _set_data_frames!(dat, map(container -> _map_df(df -> _reduced_df(df, meta_cols, labels), container), frames))
+        dat.layout = avg_layout
+    else
+        dat.layout = _append_layouts(dat.layout, avg_layout)
+    end
+    return dat
+end
+
+function channel_average!(dat::AbstractVector{<:EegData}; kwargs...)
+    for d in dat
+        channel_average!(d; kwargs...)
+    end
+    return dat
+end
+
+function channel_average(
+    file_pattern::String,
+    channel_selections::AbstractVector;
+    output_labels::Union{AbstractVector{Symbol},Nothing} = nothing,
+    input_dir::String = pwd(),
+    participant_selection = participants(),
+    condition_selection = conditions(),
+    output_dir::Union{String,Nothing} = nothing,
+    reduce::Bool = false,
+)
+    _with_batch_logging("channel averaging", "channel_average.log", input_dir, output_dir) do ctx
+        @log_call "channel_average"
+        if isnothing(output_labels)
+            output_labels = [Symbol("avg_$i") for i = 1:length(channel_selections)]
+        end
+        length(output_labels) == length(channel_selections) || @minimal_error(
+            "Number of output_labels ($(length(output_labels))) must match number of channel_selections ($(length(channel_selections)))"
+        )
+
+        output_dir = _prepare_output_dir!(ctx, _default_channel_average_output_dir(input_dir, file_pattern))
+        process_fn =
+            (input_path, output_path) ->
+                _process_channel_average_file(input_path, output_path, channel_selections, output_labels, condition_selection, reduce)
+        return batch_process(process_fn, file_pattern, input_dir, output_dir, participant_selection, "Averaging channels")
+    end
+end
+
+######################################
+######### Internal Functions #########
+######################################
+
 function _linear_colmeans_idx(df::DataFrame, idxs::Vector{Int})::Vector{Float64}
     n = nrow(df)
     isempty(idxs) && return Float64[]
@@ -104,112 +247,8 @@ function _assign_group_mean!(
     return nothing
 end
 
-"""
-    channel_average!(dat::EegData; channel_selections = [channels()], output_labels = nothing,
-                     include_extra::Bool = false, reduce::Bool = false) -> EegData
-
-Average each group of selected channels in `dat` (linearly for amplitude/power, circularly for TF phase).
-Output labels default to `:avg` when all channels are selected, or underscore-joined channel names otherwise.
-When `reduce = true`, keeps only metadata and the averaged channels in both data and layout.
-"""
-function channel_average!(
-    dat::EegData;
-    channel_selections = nothing,
-    channel_selection = nothing,
-    output_labels = nothing,
-    include_extra::Bool = false,
-    reduce::Bool = false,
-)
-    selections = if !isnothing(channel_selection)
-        [channel_selection]
-    elseif !isnothing(channel_selections)
-        if channel_selections isa AbstractVector{Symbol} ||
-           channel_selections isa AbstractVector{<:AbstractString} ||
-           channel_selections isa Function
-            [channel_selections]
-        else
-            channel_selections
-        end
-    else
-        [channels()]
-    end
-
-    if !isnothing(output_labels)
-        output_labels = output_labels isa Union{Symbol,AbstractString} ? [Symbol(output_labels)] : Symbol.(output_labels)
-    end
-
-    selected_channel_groups =
-        Vector{Symbol}[get_selected_channels(dat, sel; include_meta = false, include_extra = include_extra) for sel in selections]
-    if any(isempty, selected_channel_groups)
-        @minimal_error "Channel selections at indices $(findall(isempty, selected_channel_groups)) produced no channels"
-    end
-
-    if isnothing(output_labels)
-        original_channels = channel_labels(dat)
-        labels = Vector{Symbol}(undef, length(selected_channel_groups))
-        for (i, grp) in enumerate(selected_channel_groups)
-            is_all = !isempty(original_channels) && length(grp) == length(original_channels) && all(in(original_channels), grp)
-            labels[i] = is_all ? :avg : Symbol(join(string.(grp), "_"))
-        end
-    else
-        length(output_labels) == length(selected_channel_groups) ||
-            @minimal_error "N output_labels ($(length(output_labels))) must match N channel selections ($(length(selected_channel_groups)))"
-        labels = Symbol.(output_labels)
-    end
-
-    frames = _data_frames(dat)
-    is_tf = dat isa Union{TimeFreqData,TimeFreqEpochData}
-    orig_extra = reduce ? Symbol[] : extra_labels(dat)
-    first_extra = isempty(orig_extra) ? nothing : orig_extra[1]
-    avg_layout = _layout_from_groups(dat.layout, selected_channel_groups, labels; reduce = reduce)
-    layout_new_set = hasproperty(avg_layout.data, :label) ? Set{Symbol}(avg_layout.data.label) : Set{Symbol}()
-
-    existing = Set(all_labels(dat))
-    for (grp, lbl) in zip(selected_channel_groups, labels)
-        lbl in existing && @minimal_warning "Overwriting existing channel '$(lbl)'"
-        push!(existing, lbl)
-        @info "channel_average!: $(_print_vector(grp)) → :$(lbl)"
-        ins_before = (!reduce && lbl in layout_new_set) ? first_extra : nothing
-        if is_tf
-            _assign_group_mean!(frames[1], grp, lbl, false, ins_before)
-            _assign_group_mean!(frames[2], grp, lbl, true, ins_before)
-        else
-            for container in frames
-                _assign_group_mean!(container, grp, lbl, false, ins_before)
-            end
-        end
-    end
-
-    if reduce
-        meta_cols = meta_labels(dat)
-        _set_data_frames!(dat, map(container -> _map_df(df -> _reduced_df(df, meta_cols, labels), container), frames))
-        dat.layout = avg_layout
-    else
-        dat.layout = _append_layouts(dat.layout, avg_layout)
-    end
-    return dat
-end
-
-function channel_average!(dat::AbstractVector{<:EegData}; kwargs...)
-    for d in dat
-        channel_average!(d; kwargs...)
-    end
-    return dat
-end
-
-"""
-    channel_average(dat, args...; kwargs...)
-    channel_average(file_pattern::String, channel_selections::AbstractVector;
-                    output_labels = nothing, input_dir::String = pwd(),
-                    participant_selection = participants(), condition_selection = conditions(),
-                    output_dir = nothing, reduce::Bool = false)
-
-Non-mutating version of [`channel_average!`](@ref), or batch-process matching JLD2 files into `output_dir`.
-"""
-channel_average(dat::EegData, args...; kwargs...) = channel_average!(copy(dat), args...; kwargs...)
-channel_average(dat::AbstractVector{<:EegData}; kwargs...) = [channel_average(d; kwargs...) for d in dat]
-
-_default_channel_average_output_dir(input_dir::String, pattern::String) = joinpath(input_dir, "averaged_channels_$(clean_pattern(pattern))")
+_default_channel_average_output_dir(input_dir::String, pattern::String) =
+    joinpath(input_dir, "averaged_channels_$(_clean_pattern(pattern))")
 
 function _process_channel_average_file(
     filepath::String,
@@ -232,33 +271,6 @@ function _process_channel_average_file(
     end
     jldsave(output_path; data = data, format_version = EEGFUN_FORMAT_VERSION)
     return BatchResult(true, filename, "Averaged $(length(channel_selections)) channel group(s)")
-end
-
-function channel_average(
-    file_pattern::String,
-    channel_selections::AbstractVector;
-    output_labels::Union{AbstractVector{Symbol},Nothing} = nothing,
-    input_dir::String = pwd(),
-    participant_selection = participants(),
-    condition_selection = conditions(),
-    output_dir::Union{String,Nothing} = nothing,
-    reduce::Bool = false,
-)
-    _with_batch_logging("channel averaging", "channel_average.log", input_dir, output_dir) do ctx
-        @log_call "channel_average"
-        if isnothing(output_labels)
-            output_labels = [Symbol("avg_$i") for i = 1:length(channel_selections)]
-        end
-        length(output_labels) == length(channel_selections) || @minimal_error(
-            "Number of output_labels ($(length(output_labels))) must match number of channel_selections ($(length(channel_selections)))"
-        )
-
-        output_dir = _prepare_output_dir!(ctx, _default_channel_average_output_dir(input_dir, file_pattern))
-        process_fn =
-            (input_path, output_path) ->
-                _process_channel_average_file(input_path, output_path, channel_selections, output_labels, condition_selection, reduce)
-        return batch_process(process_fn, file_pattern, input_dir, output_dir, participant_selection, "Averaging channels")
-    end
 end
 
 function _reduced_df(df::DataFrame, meta_cols::AbstractVector{Symbol}, labels::AbstractVector{Symbol})

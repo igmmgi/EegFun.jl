@@ -1,5 +1,179 @@
 # Multivariate pattern classification (MVPA / decoding) for ERP and time-frequency epochs.
 
+######################################
+########### User Functions ###########
+######################################
+
+"""
+    decode_libsvm(epochs::AbstractVector{EpochData}; channel_selection = channels(),
+                  interval_selection = times(), n_iterations::Int = 100, n_folds::Int = 3,
+                  equalize_trials::Bool = true, cost::Real = 1.0,
+                  save_raw_predictions::Bool = true, show_progress::Bool = true,
+                  rng::AbstractRNG = Random.default_rng())
+    decode_libsvm(epochs::AbstractVector{TimeFreqEpochData}; kwargs...)
+    decode_libsvm(participant_epochs::AbstractVector{<:AbstractVector{<:MultiDataFrameEeg}}; kwargs...)
+
+Perform time-point-by-time-point cross-validated linear SVM decoding (`LIBLINEAR`) across
+conditions on `EpochData` (channel features) or `TimeFreqEpochData` (channel × frequency features).
+
+# Keyword Arguments
+- `channel_selection`: Channel selection predicate (default: `channels()`)
+- `interval_selection::Interval`: Time interval filter (default: `times()`)
+- `n_iterations::Int`: Random fold/subsample iterations (default: `100`)
+- `n_folds::Int`: Cross-validation folds (default: `3`)
+- `equalize_trials::Bool`: Subsample conditions to minimum trial count per iteration (default: `true`)
+- `cost::Real`: SVM regularization parameter `C > 0` (default: `1.0`)
+- `save_raw_predictions::Bool`: Store 4D prediction array in `DecodedData` (default: `true`)
+- `show_progress::Bool`: Show progress bar (default: `true`)
+- `rng::AbstractRNG`: Random number generator for reproducible splits
+
+# Returns
+- `DecodedData` (or `Vector{DecodedData}` for multi-participant batch input)
+"""
+function decode_libsvm(
+    epochs::AbstractVector{T};
+    channel_selection = channels(),
+    interval_selection::Interval = times(),
+    n_iterations::Int = 100,
+    n_folds::Int = 3,
+    equalize_trials::Bool = true,
+    cost::Real = 1.0,
+    save_raw_predictions::Bool = true,
+    show_progress::Bool = true,
+    rng::AbstractRNG = Random.default_rng(),
+) where {T<:MultiDataFrameEeg}
+    isempty(epochs) && @minimal_error("Cannot decode with empty epochs vector")
+    length(epochs) < 2 && @minimal_error("Need at least 2 conditions for decoding, got $(length(epochs))")
+    n_iterations < 1 && @minimal_error("n_iterations must be >= 1, got $n_iterations")
+    n_folds < 2 && @minimal_error("Need at least 2 folds for cross-validation, got $n_folds")
+    cost <= 0 && @minimal_error("SVM cost parameter must be positive, got $cost")
+    any(ep -> n_epochs(ep) == 0, epochs) && @minimal_error("Cannot decode condition with 0 epochs")
+    _have_same_structure(epochs) ||
+        @minimal_error("Conditions have inconsistent structure (sample rate, samples, channels, times, or frequencies)")
+
+    first_ep = epochs[1]
+    selected_channels = get_selected_channels(first_ep, channel_selection; include_meta = false, include_extra = false)
+    isempty(selected_channels) && @minimal_error("Channel selection produced no channels")
+
+    combined_sel = _combine_interval_sample(interval_selection, samples())
+    selected_rows = get_selected_samples(first_ep, combined_sel)
+    isempty(selected_rows) && @minimal_error("Interval selection produced no time points")
+
+    if T <: EpochData
+        time_points = _extract_selected_f64(first_ep.data[1][!, :time], selected_rows)
+        isempty(time_points) && @minimal_error("Interval selection produced no time points")
+        data_arrays, n_trials_per_condition = _extract_epoch_arrays(epochs, selected_channels, selected_rows)
+        @info "Starting decoding analysis" file = first_ep.file n_conditions = length(epochs) n_channels = length(selected_channels) n_timepoints =
+            length(time_points) time_range = (first(time_points), last(time_points)) n_iterations = n_iterations n_folds = n_folds trials_per_condition =
+            n_trials_per_condition
+        desc = "Decoding (iter × time): "
+    else
+        data_arrays, n_trials_per_condition, time_points, n_freqs = _extract_tf_epoch_arrays(epochs, selected_channels, selected_rows)
+        isempty(time_points) && @minimal_error("Interval selection produced no time points")
+        n_features = size(data_arrays[1], 1)
+        @info "Starting TF decoding analysis" file = first_ep.file n_conditions = length(epochs) n_channels = length(selected_channels) n_frequencies =
+            n_freqs n_features = n_features n_timepoints = length(time_points) time_range = (first(time_points), last(time_points)) n_iterations =
+            n_iterations n_folds = n_folds trials_per_condition = n_trials_per_condition
+        desc = "TF Decoding (iter × time): "
+    end
+
+    return _decode_core(
+        data_arrays,
+        n_trials_per_condition,
+        time_points,
+        selected_channels,
+        String[ep.condition_name for ep in epochs],
+        first_ep.file;
+        n_iterations,
+        n_folds,
+        equalize_trials,
+        cost,
+        save_raw_predictions,
+        show_progress,
+        progress_desc = desc,
+        rng = rng,
+    )
+end
+
+function decode_libsvm(participant_epochs::AbstractVector{<:AbstractVector{<:MultiDataFrameEeg}}; kwargs...)
+    return [decode_libsvm(epochs; kwargs...) for epochs in participant_epochs]
+end
+
+function grand_average(dat::AbstractVector{<:DecodedData})
+    isempty(dat) && @minimal_error("Cannot create grand average from empty decoded data list")
+    length(dat) == 1 && return copy(dat[1])
+
+    first_decoded = dat[1]
+    first_times = first_decoded.times
+    first_condition_names = first_decoded.condition_names
+    first_channels = first_decoded.channels
+    first_params = first_decoded.parameters
+
+    for decoded in @view dat[2:end]
+        decoded.times != first_times && @minimal_error("DecodedData objects have inconsistent time vectors")
+        decoded.condition_names != first_condition_names && @minimal_error("DecodedData objects have inconsistent condition names")
+        decoded.channels != first_channels && @minimal_error("DecodedData objects have inconsistent channels")
+        decoded.parameters.n_classes != first_params.n_classes && @minimal_error(
+            "DecodedData objects have inconsistent number of classes: $(first_params.n_classes) vs $(decoded.parameters.n_classes)"
+        )
+        decoded.parameters.n_iterations != first_params.n_iterations &&
+            @minimal_warning "DecodedData objects have different n_iterations: $(first_params.n_iterations) vs $(decoded.parameters.n_iterations)"
+        decoded.parameters.n_folds != first_params.n_folds &&
+            @minimal_warning "DecodedData objects have different n_folds: $(first_params.n_folds) vs $(decoded.parameters.n_folds)"
+        decoded.parameters.chance_level != first_params.chance_level &&
+            @minimal_warning "DecodedData objects have different chance_level: $(first_params.chance_level) vs $(decoded.parameters.chance_level)"
+    end
+
+    n_participants = length(dat)
+    n_times = length(first_times)
+    inv_n = 1.0 / n_participants
+    inv_sqrt_n = 1.0 / sqrt(n_participants)
+
+    grand_avg_accuracy = zeros(Float64, n_times)
+    for d in dat
+        grand_avg_accuracy .+= d.average_score
+    end
+    grand_avg_accuracy .*= inv_n
+
+    grand_avg_stderror = zeros(Float64, n_times)
+    @inbounds for t = 1:n_times
+        μ = grand_avg_accuracy[t]
+        ss = 0.0
+        for p = 1:n_participants
+            diff = dat[p].average_score[t] - μ
+            ss += diff * diff
+        end
+        grand_avg_stderror[t] = sqrt(ss / (n_participants - 1)) * inv_sqrt_n
+    end
+
+    grand_avg_confusion = if !isnothing(first_decoded.confusion_matrix)
+        acc_cm = zeros(Float64, size(first_decoded.confusion_matrix))
+        for d in dat
+            acc_cm .+= d.confusion_matrix::Array{Float64,3}
+        end
+        acc_cm .*= inv_n
+        acc_cm
+    else
+        nothing
+    end
+
+    return DecodedData(
+        "grand_average",
+        copy(first_condition_names),
+        copy(first_times),
+        grand_avg_accuracy,
+        copy(first_channels),
+        first_params;
+        stderror = grand_avg_stderror,
+        confusion_matrix = grand_avg_confusion,
+        raw_predictions = nothing,
+    )
+end
+
+######################################
+######### Internal Functions #########
+######################################
+
 function _copy_selected_col!(dest::Array{Float64,3}, ch_idx::Int, trial_idx::Int, col::Vector{Float64}, samples::UnitRange{Int})
     offset = first(samples) - 1
     @inbounds @simd for t = 1:length(samples)
@@ -473,7 +647,7 @@ function _decode_core(
     completed = show_progress ? Threads.Atomic{Int}(0) : nothing
     if show_progress
         progress = Progress(total_steps, desc = progress_desc, showspeed = true)
-        EegFun.track_progress_async(progress, completed::Threads.Atomic{Int}, total_steps)
+        EegFun._track_progress_async(progress, completed::Threads.Atomic{Int}, total_steps)
     end
 
     should_stop = Threads.Atomic{Bool}(false)
@@ -537,171 +711,5 @@ function _decode_core(
         stderror = stderror,
         confusion_matrix = confusion_matrices,
         raw_predictions = all_predictions,
-    )
-end
-
-"""
-    decode_libsvm(epochs::AbstractVector{EpochData}; channel_selection = channels(),
-                  interval_selection = times(), n_iterations::Int = 100, n_folds::Int = 3,
-                  equalize_trials::Bool = true, cost::Real = 1.0,
-                  save_raw_predictions::Bool = true, show_progress::Bool = true,
-                  rng::AbstractRNG = Random.default_rng())
-    decode_libsvm(epochs::AbstractVector{TimeFreqEpochData}; kwargs...)
-    decode_libsvm(participant_epochs::AbstractVector{<:AbstractVector{<:MultiDataFrameEeg}}; kwargs...)
-
-Perform time-point-by-time-point cross-validated linear SVM decoding (`LIBLINEAR`) across
-conditions on `EpochData` (channel features) or `TimeFreqEpochData` (channel × frequency features).
-
-# Keyword Arguments
-- `channel_selection`: Channel selection predicate (default: `channels()`)
-- `interval_selection::Interval`: Time interval filter (default: `times()`)
-- `n_iterations::Int`: Random fold/subsample iterations (default: `100`)
-- `n_folds::Int`: Cross-validation folds (default: `3`)
-- `equalize_trials::Bool`: Subsample conditions to minimum trial count per iteration (default: `true`)
-- `cost::Real`: SVM regularization parameter `C > 0` (default: `1.0`)
-- `save_raw_predictions::Bool`: Store 4D prediction array in `DecodedData` (default: `true`)
-- `show_progress::Bool`: Show progress bar (default: `true`)
-- `rng::AbstractRNG`: Random number generator for reproducible splits
-
-# Returns
-- `DecodedData` (or `Vector{DecodedData}` for multi-participant batch input)
-"""
-function decode_libsvm(
-    epochs::AbstractVector{T};
-    channel_selection = channels(),
-    interval_selection::Interval = times(),
-    n_iterations::Int = 100,
-    n_folds::Int = 3,
-    equalize_trials::Bool = true,
-    cost::Real = 1.0,
-    save_raw_predictions::Bool = true,
-    show_progress::Bool = true,
-    rng::AbstractRNG = Random.default_rng(),
-) where {T<:MultiDataFrameEeg}
-    isempty(epochs) && @minimal_error("Cannot decode with empty epochs vector")
-    length(epochs) < 2 && @minimal_error("Need at least 2 conditions for decoding, got $(length(epochs))")
-    n_iterations < 1 && @minimal_error("n_iterations must be >= 1, got $n_iterations")
-    n_folds < 2 && @minimal_error("Need at least 2 folds for cross-validation, got $n_folds")
-    cost <= 0 && @minimal_error("SVM cost parameter must be positive, got $cost")
-    any(ep -> n_epochs(ep) == 0, epochs) && @minimal_error("Cannot decode condition with 0 epochs")
-    _have_same_structure(epochs) ||
-        @minimal_error("Conditions have inconsistent structure (sample rate, samples, channels, times, or frequencies)")
-
-    first_ep = epochs[1]
-    selected_channels = get_selected_channels(first_ep, channel_selection; include_meta = false, include_extra = false)
-    isempty(selected_channels) && @minimal_error("Channel selection produced no channels")
-
-    combined_sel = _combine_interval_sample(interval_selection, samples())
-    selected_rows = get_selected_samples(first_ep, combined_sel)
-    isempty(selected_rows) && @minimal_error("Interval selection produced no time points")
-
-    if T <: EpochData
-        time_points = _extract_selected_f64(first_ep.data[1][!, :time], selected_rows)
-        isempty(time_points) && @minimal_error("Interval selection produced no time points")
-        data_arrays, n_trials_per_condition = _extract_epoch_arrays(epochs, selected_channels, selected_rows)
-        @info "Starting decoding analysis" file = first_ep.file n_conditions = length(epochs) n_channels = length(selected_channels) n_timepoints =
-            length(time_points) time_range = (first(time_points), last(time_points)) n_iterations = n_iterations n_folds = n_folds trials_per_condition =
-            n_trials_per_condition
-        desc = "Decoding (iter × time): "
-    else
-        data_arrays, n_trials_per_condition, time_points, n_freqs = _extract_tf_epoch_arrays(epochs, selected_channels, selected_rows)
-        isempty(time_points) && @minimal_error("Interval selection produced no time points")
-        n_features = size(data_arrays[1], 1)
-        @info "Starting TF decoding analysis" file = first_ep.file n_conditions = length(epochs) n_channels = length(selected_channels) n_frequencies =
-            n_freqs n_features = n_features n_timepoints = length(time_points) time_range = (first(time_points), last(time_points)) n_iterations =
-            n_iterations n_folds = n_folds trials_per_condition = n_trials_per_condition
-        desc = "TF Decoding (iter × time): "
-    end
-
-    return _decode_core(
-        data_arrays,
-        n_trials_per_condition,
-        time_points,
-        selected_channels,
-        String[ep.condition_name for ep in epochs],
-        first_ep.file;
-        n_iterations,
-        n_folds,
-        equalize_trials,
-        cost,
-        save_raw_predictions,
-        show_progress,
-        progress_desc = desc,
-        rng = rng,
-    )
-end
-
-function decode_libsvm(participant_epochs::AbstractVector{<:AbstractVector{<:MultiDataFrameEeg}}; kwargs...)
-    return [decode_libsvm(epochs; kwargs...) for epochs in participant_epochs]
-end
-
-function grand_average(dat::AbstractVector{<:DecodedData})
-    isempty(dat) && @minimal_error("Cannot create grand average from empty decoded data list")
-    length(dat) == 1 && return copy(dat[1])
-
-    first_decoded = dat[1]
-    first_times = first_decoded.times
-    first_condition_names = first_decoded.condition_names
-    first_channels = first_decoded.channels
-    first_params = first_decoded.parameters
-
-    for decoded in @view dat[2:end]
-        decoded.times != first_times && @minimal_error("DecodedData objects have inconsistent time vectors")
-        decoded.condition_names != first_condition_names && @minimal_error("DecodedData objects have inconsistent condition names")
-        decoded.channels != first_channels && @minimal_error("DecodedData objects have inconsistent channels")
-        decoded.parameters.n_classes != first_params.n_classes && @minimal_error(
-            "DecodedData objects have inconsistent number of classes: $(first_params.n_classes) vs $(decoded.parameters.n_classes)"
-        )
-        decoded.parameters.n_iterations != first_params.n_iterations &&
-            @minimal_warning "DecodedData objects have different n_iterations: $(first_params.n_iterations) vs $(decoded.parameters.n_iterations)"
-        decoded.parameters.n_folds != first_params.n_folds &&
-            @minimal_warning "DecodedData objects have different n_folds: $(first_params.n_folds) vs $(decoded.parameters.n_folds)"
-        decoded.parameters.chance_level != first_params.chance_level &&
-            @minimal_warning "DecodedData objects have different chance_level: $(first_params.chance_level) vs $(decoded.parameters.chance_level)"
-    end
-
-    n_participants = length(dat)
-    n_times = length(first_times)
-    inv_n = 1.0 / n_participants
-    inv_sqrt_n = 1.0 / sqrt(n_participants)
-
-    grand_avg_accuracy = zeros(Float64, n_times)
-    for d in dat
-        grand_avg_accuracy .+= d.average_score
-    end
-    grand_avg_accuracy .*= inv_n
-
-    grand_avg_stderror = zeros(Float64, n_times)
-    @inbounds for t = 1:n_times
-        μ = grand_avg_accuracy[t]
-        ss = 0.0
-        for p = 1:n_participants
-            diff = dat[p].average_score[t] - μ
-            ss += diff * diff
-        end
-        grand_avg_stderror[t] = sqrt(ss / (n_participants - 1)) * inv_sqrt_n
-    end
-
-    grand_avg_confusion = if !isnothing(first_decoded.confusion_matrix)
-        acc_cm = zeros(Float64, size(first_decoded.confusion_matrix))
-        for d in dat
-            acc_cm .+= d.confusion_matrix::Array{Float64,3}
-        end
-        acc_cm .*= inv_n
-        acc_cm
-    else
-        nothing
-    end
-
-    return DecodedData(
-        "grand_average",
-        copy(first_condition_names),
-        copy(first_times),
-        grand_avg_accuracy,
-        copy(first_channels),
-        first_params;
-        stderror = grand_avg_stderror,
-        confusion_matrix = grand_avg_confusion,
-        raw_predictions = nothing,
     )
 end

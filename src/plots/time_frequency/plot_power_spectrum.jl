@@ -1,5 +1,9 @@
 # Power spectrum plotting functions for channels, SpectrumData, and ICA components.
 
+######################################
+######### Types & Constants ##########
+######################################
+
 const PLOT_POWER_SPECTRUM_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Spectral analysis parameters
     :window_size => (1024, "Size of the FFT window for spectral estimation"),
@@ -50,7 +54,226 @@ const PLOT_POWER_SPECTRUM_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 )
 
 const _EEG_FREQ_BANDS = ("δ" => (0.5, 4.0), "θ" => (4.0, 8.0), "α" => (8.0, 13.0), "β" => (13.0, 30.0), "γ" => (30.0, 100.0))
+
 const _EEG_BAND_COLORS = (:lightblue, :lightgreen, :yellow, :orange, :lightcoral)
+
+######################################
+########### User Functions ###########
+######################################
+
+"""
+    plot_channel_spectrum(dat; kwargs...)
+
+Plot power spectrum for specified channels from EEG data with interactive controls.
+
+# Arguments
+- `dat::SingleDataFrameEeg`: The EEG data object
+
+# Keyword Arguments
+- `sample_selection::Function`: Function that returns boolean vector for sample filtering (default: samples() - all samples)
+- `channel_selection::Function`: Function that returns boolean vector for channel filtering (default: channels() - all channels)
+- `window_size::Int`: Size of the FFT window for spectral estimation (default: 1024)
+- `overlap::Real`: Overlap between windows for Welch's method (default: 0.5)
+- `max_freq::Real`: Maximum frequency to display in Hz (default: 200.0)
+- `xscale::Symbol`: Initial scale for x-axis, one of :linear or :log10 (default: :linear)
+- `yscale::Symbol`: Initial scale for y-axis, one of :linear or :log10 (default: :linear)
+- `unit::Symbol`: Power unit, one of :linear (μV²/Hz) or :dB (decibels) (default: :linear)
+- `window_function::Function`: Window function to use for spectral estimation (default: DSP.hanning)
+- `show_freq_bands::Bool`: Whether to show frequency band indicators (default: true)
+- `legend::Bool`: Whether to show the legend (default: true)
+- `display_plot::Bool`: Whether to display the plot (default: true)
+
+# Returns
+- `fig::Figure`: The Makie Figure containing the power spectrum plot
+- `ax::Axis`: The axis containing the plot
+
+# Notes
+- Interactive checkboxes to toggle between linear and log scales for both axes
+- Automatic multi-column legend for many channels
+- Frequency band indicators (δ, θ, α, β, γ) below the main plot
+- Responsive grid layout with controls in the top-right corner
+
+# Examples
+```julia
+# Basic usage with interactive controls
+fig, ax = plot_channel_spectrum(dat)
+
+# With specific channels
+fig, ax = plot_channel_spectrum(dat, 
+    channel_selection = channels([:Fp1, :Fp2]))
+
+# With log scales
+fig, ax = plot_channel_spectrum(dat, 
+    xscale = :log10, 
+    yscale = :log10)
+
+# With dB units (EEGLAB-style)
+fig, ax = plot_channel_spectrum(dat, unit = :dB)
+```
+"""
+function plot_channel_spectrum(
+    dat::SingleDataFrameEeg;
+    sample_selection = samples(),
+    interval_selection::Interval = times(),
+    channel_selection = channels(),
+    kwargs...,
+)
+    _set_window_title(_generate_window_title(dat))
+
+    plot_kwargs = _merge_plot_kwargs(PLOT_POWER_SPECTRUM_KWARGS, kwargs)
+
+    channels_to_plot = get_selected_channels(dat, channel_selection; include_meta = false, include_extra = false)
+
+    combined_sel = _combine_interval_sample(interval_selection, sample_selection)
+    n_rows = nrow(dat.data)
+    all_rows = combined_sel isa _AllSamples
+    selected_samples = all_rows ? (1:n_rows) : get_selected_samples(dat, combined_sel)
+
+    signals = if all_rows || selected_samples == 1:n_rows
+        [dat.data[!, ch] for ch in channels_to_plot]
+    else
+        [dat.data[!, ch][selected_samples] for ch in channels_to_plot]
+    end
+
+    fig = _eegfun_figure()
+    ax = Axis(fig[1, 1])
+
+    _plot_power_spectrum!(fig, ax, signals, channels_to_plot, sample_rate(dat); kwargs...)
+
+    if plot_kwargs[:legend] && !isempty(channels_to_plot)
+        n_channels = length(channels_to_plot)
+        axislegend(ax, nbanks = n_channels > 10 ? cld(n_channels, 20) : 1)
+    end
+
+    plot_kwargs[:display_plot] && _display_figure(fig)
+    _set_window_title("Makie")
+    return (fig = fig, axes = [ax])
+end
+
+"""
+    plot_channel_spectrum(dat::SpectrumData; kwargs...)
+
+Plot a pre-computed power spectrum with interactive controls.
+"""
+function plot_channel_spectrum(dat::SpectrumData; channel_selection = channels(), kwargs...)
+    _set_window_title(_generate_window_title(dat))
+
+    selected_channels = get_selected_channels(dat, channel_selection; include_meta = false, include_extra = false)
+    all_names = propertynames(dat.data)
+    valid_channels = [ch for ch in selected_channels if ch != :freq && ch in all_names]
+    isempty(valid_channels) && @minimal_error "No valid channels found in spectrum data."
+
+    shared_freq = Float64.(dat.data[!, :freq])
+    freq_data = fill(shared_freq, length(valid_channels))
+    power_raw_data = Vector{Float64}[Float64.(dat.data[!, ch]) for ch in valid_channels]
+
+    plot_kwargs = _merge_plot_kwargs(PLOT_POWER_SPECTRUM_KWARGS, kwargs)
+
+    fig = _eegfun_figure()
+    ax = Axis(fig[1, 1])
+
+    _plot_power_spectrum_data!(fig, ax, freq_data, power_raw_data, valid_channels; kwargs...)
+
+    if plot_kwargs[:legend]
+        n_channels = length(valid_channels)
+        axislegend(ax, nbanks = n_channels > 10 ? cld(n_channels, 20) : 1)
+    end
+
+    plot_kwargs[:display_plot] && _display_figure(fig)
+    _set_window_title("Makie")
+    return (fig = fig, axes = [ax])
+end
+
+"""
+    plot_ica_component_spectrum(dat::ContinuousData, ica_result::InfoIca; component_selection::Function = components(), kwargs...)
+
+Plot power spectrum of ICA component(s) with interactive controls for axis scaling.
+
+# Arguments
+- `dat::ContinuousData`: The continuous data.
+- `ica_result::InfoIca`: The ICA result object.
+- `component_selection::Function`: Function that returns boolean vector for component filtering (default: all components).
+
+# Keyword Arguments
+- `sample_selection::Function`: Function that returns boolean vector for sample filtering (default: samples() - all samples)
+- `window_size::Int`: Size of the FFT window for spectral estimation (default: 1024).
+- `overlap::Real`: Overlap between windows for Welch's method (default: 0.5).
+- `max_freq::Real`: Maximum frequency to display in Hz (default: 100.0).
+- `xscale::Symbol`: Initial scale for x-axis, one of :linear or :log10 (default: :linear).
+- `yscale::Symbol`: Initial scale for y-axis, one of :linear or :log10 (default: :linear).
+- `unit::Symbol`: Power unit, one of :linear (μV²/Hz) or :dB (decibels) (default: :linear).
+- `window_function::Function`: Window function to use for spectral estimation (default: DSP.hanning).
+- `show_freq_bands::Bool`: Whether to show frequency band indicators (default: true).
+- `legend::Bool`: Whether to show the legend with component variance percentages (default: true).
+- `display_plot::Bool`: Whether to display the plot (default: true).
+
+# Returns
+- Named tuple `(fig, axes)` containing the Makie `Figure` and `[ax]`.
+
+# Examples
+```julia
+plot_ica_component_spectrum(dat, ica_result)
+plot_ica_component_spectrum(dat, ica_result, component_selection = components([1, 3, 5]))
+plot_ica_component_spectrum(dat, ica_result, component_selection = components(1), unit = :dB)
+```
+"""
+function plot_ica_component_spectrum(
+    dat::ContinuousData,
+    ica_result::InfoIca;
+    sample_selection = samples(),
+    interval_selection::Interval = times(),
+    component_selection = components(),
+    kwargs...,
+)
+    plot_kwargs = _merge_plot_kwargs(PLOT_POWER_SPECTRUM_KWARGS, kwargs)
+
+    selected_components = get_selected_components(ica_result, component_selection)
+    if isempty(selected_components)
+        @minimal_warning "No components selected for ICA spectrum plot"
+        return (fig = _eegfun_figure(), axes = Axis[])
+    end
+
+    combined_sel = _combine_interval_sample(interval_selection, sample_selection)
+    n_rows = nrow(dat.data)
+    selected_samples = combined_sel isa _AllSamples ? (1:n_rows) : get_selected_samples(dat, combined_sel)
+
+    ica_labels = ica_result.layout.data[!, :label]
+    n_ica_ch = length(ica_labels)
+    dat_matrix = Matrix{Float64}(undef, n_ica_ch, length(selected_samples))
+    scale_val = ica_result.scale
+    for (ci, ch) in enumerate(ica_labels)
+        _fill_normalized_ica_row!(dat_matrix, ci, dat.data[!, ch], selected_samples, ica_result.mean[ci], scale_val)
+    end
+
+    proj = (@view ica_result.unmixing[selected_components, :]) * dat_matrix
+
+    n_sel = length(selected_components)
+    components_to_plot = Vector{Symbol}(undef, n_sel)
+    component_signals = Vector{Vector{Float64}}(undef, n_sel)
+    component_labels = Vector{String}(undef, n_sel)
+    for (i, comp_idx) in enumerate(selected_components)
+        components_to_plot[i] = Symbol("IC_", comp_idx)
+        component_signals[i] = proj[i, :]
+        component_labels[i] = @sprintf("IC %d (%.1f%%)", comp_idx, ica_result.variance[comp_idx] * 100)
+    end
+
+    fig = _eegfun_figure()
+    ax = Axis(fig[1, 1])
+
+    _plot_power_spectrum!(fig, ax, component_signals, components_to_plot, sample_rate(dat); line_labels = component_labels, kwargs...)
+
+    if plot_kwargs[:legend]
+        ncols = n_sel > 10 ? cld(n_sel, 10) : 1
+        axislegend(ax, nbanks = ncols)
+    end
+
+    plot_kwargs[:display_plot] && _display_figure(fig)
+    return (fig = fig, axes = [ax])
+end
+
+######################################
+######### Internal Functions #########
+######################################
 
 function _plot_power_spectrum!(
     fig,
@@ -291,95 +514,6 @@ function _plot_power_spectrum_data!(
     end
 end
 
-"""
-    plot_channel_spectrum(dat; kwargs...)
-
-Plot power spectrum for specified channels from EEG data with interactive controls.
-
-# Arguments
-- `dat::SingleDataFrameEeg`: The EEG data object
-
-# Keyword Arguments
-- `sample_selection::Function`: Function that returns boolean vector for sample filtering (default: samples() - all samples)
-- `channel_selection::Function`: Function that returns boolean vector for channel filtering (default: channels() - all channels)
-- `window_size::Int`: Size of the FFT window for spectral estimation (default: 1024)
-- `overlap::Real`: Overlap between windows for Welch's method (default: 0.5)
-- `max_freq::Real`: Maximum frequency to display in Hz (default: 200.0)
-- `xscale::Symbol`: Initial scale for x-axis, one of :linear or :log10 (default: :linear)
-- `yscale::Symbol`: Initial scale for y-axis, one of :linear or :log10 (default: :linear)
-- `unit::Symbol`: Power unit, one of :linear (μV²/Hz) or :dB (decibels) (default: :linear)
-- `window_function::Function`: Window function to use for spectral estimation (default: DSP.hanning)
-- `show_freq_bands::Bool`: Whether to show frequency band indicators (default: true)
-- `legend::Bool`: Whether to show the legend (default: true)
-- `display_plot::Bool`: Whether to display the plot (default: true)
-
-# Features
-- Interactive checkboxes to toggle between linear and log scales for both axes
-- Automatic multi-column legend for many channels
-- Frequency band indicators (δ, θ, α, β, γ) below the main plot
-- Responsive grid layout with controls in the top-right corner
-
-# Returns
-- `fig::Figure`: The Makie Figure containing the power spectrum plot
-- `ax::Axis`: The axis containing the plot
-
-# Examples
-```julia
-# Basic usage with interactive controls
-fig, ax = plot_channel_spectrum(dat)
-
-# With specific channels
-fig, ax = plot_channel_spectrum(dat, 
-    channel_selection = channels([:Fp1, :Fp2]))
-
-# With log scales
-fig, ax = plot_channel_spectrum(dat, 
-    xscale = :log10, 
-    yscale = :log10)
-
-# With dB units (EEGLAB-style)
-fig, ax = plot_channel_spectrum(dat, unit = :dB)
-```
-"""
-function plot_channel_spectrum(
-    dat::SingleDataFrameEeg;
-    sample_selection = samples(),
-    interval_selection::Interval = times(),
-    channel_selection = channels(),
-    kwargs...,
-)
-    _set_window_title(_generate_window_title(dat))
-
-    plot_kwargs = _merge_plot_kwargs(PLOT_POWER_SPECTRUM_KWARGS, kwargs)
-
-    channels_to_plot = get_selected_channels(dat, channel_selection; include_meta = false, include_extra = false)
-
-    combined_sel = _combine_interval_sample(interval_selection, sample_selection)
-    n_rows = nrow(dat.data)
-    all_rows = combined_sel isa _AllSamples
-    selected_samples = all_rows ? (1:n_rows) : get_selected_samples(dat, combined_sel)
-
-    signals = if all_rows || selected_samples == 1:n_rows
-        [dat.data[!, ch] for ch in channels_to_plot]
-    else
-        [dat.data[!, ch][selected_samples] for ch in channels_to_plot]
-    end
-
-    fig = _eegfun_figure()
-    ax = Axis(fig[1, 1])
-
-    _plot_power_spectrum!(fig, ax, signals, channels_to_plot, sample_rate(dat); kwargs...)
-
-    if plot_kwargs[:legend] && !isempty(channels_to_plot)
-        n_channels = length(channels_to_plot)
-        axislegend(ax, nbanks = n_channels > 10 ? cld(n_channels, 20) : 1)
-    end
-
-    plot_kwargs[:display_plot] && _display_figure(fig)
-    _set_window_title("Makie")
-    return (fig = fig, axes = [ax])
-end
-
 function _fill_normalized_ica_row!(
     dat_matrix::Matrix{Float64},
     row_idx::Int,
@@ -392,125 +526,4 @@ function _fill_normalized_ica_row!(
         dat_matrix[row_idx, j] = (Float64(col[selected_samples[j]]) - mean_c) / scale_c
     end
     return nothing
-end
-
-"""
-    plot_ica_component_spectrum(dat::ContinuousData, ica_result::InfoIca; component_selection::Function = components(), kwargs...)
-
-Plot power spectrum of ICA component(s) with interactive controls for axis scaling.
-
-# Arguments
-- `dat::ContinuousData`: The continuous data.
-- `ica_result::InfoIca`: The ICA result object.
-- `component_selection::Function`: Function that returns boolean vector for component filtering (default: all components).
-
-# Keyword Arguments
-- `sample_selection::Function`: Function that returns boolean vector for sample filtering (default: samples() - all samples)
-- `window_size::Int`: Size of the FFT window for spectral estimation (default: 1024).
-- `overlap::Real`: Overlap between windows for Welch's method (default: 0.5).
-- `max_freq::Real`: Maximum frequency to display in Hz (default: 100.0).
-- `xscale::Symbol`: Initial scale for x-axis, one of :linear or :log10 (default: :linear).
-- `yscale::Symbol`: Initial scale for y-axis, one of :linear or :log10 (default: :linear).
-- `unit::Symbol`: Power unit, one of :linear (μV²/Hz) or :dB (decibels) (default: :linear).
-- `window_function::Function`: Window function to use for spectral estimation (default: DSP.hanning).
-- `show_freq_bands::Bool`: Whether to show frequency band indicators (default: true).
-- `legend::Bool`: Whether to show the legend with component variance percentages (default: true).
-- `display_plot::Bool`: Whether to display the plot (default: true).
-
-# Returns
-- Named tuple `(fig, axes)` containing the Makie `Figure` and `[ax]`.
-
-# Examples
-```julia
-plot_ica_component_spectrum(dat, ica_result)
-plot_ica_component_spectrum(dat, ica_result, component_selection = components([1, 3, 5]))
-plot_ica_component_spectrum(dat, ica_result, component_selection = components(1), unit = :dB)
-```
-"""
-function plot_ica_component_spectrum(
-    dat::ContinuousData,
-    ica_result::InfoIca;
-    sample_selection = samples(),
-    interval_selection::Interval = times(),
-    component_selection = components(),
-    kwargs...,
-)
-    plot_kwargs = _merge_plot_kwargs(PLOT_POWER_SPECTRUM_KWARGS, kwargs)
-
-    selected_components = get_selected_components(ica_result, component_selection)
-    if isempty(selected_components)
-        @minimal_warning "No components selected for ICA spectrum plot"
-        return (fig = _eegfun_figure(), axes = Axis[])
-    end
-
-    combined_sel = _combine_interval_sample(interval_selection, sample_selection)
-    n_rows = nrow(dat.data)
-    selected_samples = combined_sel isa _AllSamples ? (1:n_rows) : get_selected_samples(dat, combined_sel)
-
-    ica_labels = ica_result.layout.data[!, :label]
-    n_ica_ch = length(ica_labels)
-    dat_matrix = Matrix{Float64}(undef, n_ica_ch, length(selected_samples))
-    scale_val = ica_result.scale
-    for (ci, ch) in enumerate(ica_labels)
-        _fill_normalized_ica_row!(dat_matrix, ci, dat.data[!, ch], selected_samples, ica_result.mean[ci], scale_val)
-    end
-
-    proj = (@view ica_result.unmixing[selected_components, :]) * dat_matrix
-
-    n_sel = length(selected_components)
-    components_to_plot = Vector{Symbol}(undef, n_sel)
-    component_signals = Vector{Vector{Float64}}(undef, n_sel)
-    component_labels = Vector{String}(undef, n_sel)
-    for (i, comp_idx) in enumerate(selected_components)
-        components_to_plot[i] = Symbol("IC_", comp_idx)
-        component_signals[i] = proj[i, :]
-        component_labels[i] = @sprintf("IC %d (%.1f%%)", comp_idx, ica_result.variance[comp_idx] * 100)
-    end
-
-    fig = _eegfun_figure()
-    ax = Axis(fig[1, 1])
-
-    _plot_power_spectrum!(fig, ax, component_signals, components_to_plot, sample_rate(dat); line_labels = component_labels, kwargs...)
-
-    if plot_kwargs[:legend]
-        ncols = n_sel > 10 ? cld(n_sel, 10) : 1
-        axislegend(ax, nbanks = ncols)
-    end
-
-    plot_kwargs[:display_plot] && _display_figure(fig)
-    return (fig = fig, axes = [ax])
-end
-
-"""
-    plot_channel_spectrum(dat::SpectrumData; kwargs...)
-
-Plot a pre-computed power spectrum with interactive controls.
-"""
-function plot_channel_spectrum(dat::SpectrumData; channel_selection = channels(), kwargs...)
-    _set_window_title(_generate_window_title(dat))
-
-    selected_channels = get_selected_channels(dat, channel_selection; include_meta = false, include_extra = false)
-    all_names = propertynames(dat.data)
-    valid_channels = [ch for ch in selected_channels if ch != :freq && ch in all_names]
-    isempty(valid_channels) && @minimal_error "No valid channels found in spectrum data."
-
-    shared_freq = Float64.(dat.data[!, :freq])
-    freq_data = fill(shared_freq, length(valid_channels))
-    power_raw_data = Vector{Float64}[Float64.(dat.data[!, ch]) for ch in valid_channels]
-
-    plot_kwargs = _merge_plot_kwargs(PLOT_POWER_SPECTRUM_KWARGS, kwargs)
-
-    fig = _eegfun_figure()
-    ax = Axis(fig[1, 1])
-
-    _plot_power_spectrum_data!(fig, ax, freq_data, power_raw_data, valid_channels; kwargs...)
-
-    if plot_kwargs[:legend]
-        n_channels = length(valid_channels)
-        axislegend(ax, nbanks = n_channels > 10 ? cld(n_channels, 20) : 1)
-    end
-
-    plot_kwargs[:display_plot] && _display_figure(fig)
-    _set_window_title("Makie")
-    return (fig = fig, axes = [ax])
 end

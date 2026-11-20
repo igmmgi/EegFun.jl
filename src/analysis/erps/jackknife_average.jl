@@ -1,3 +1,9 @@
+# Leave-one-out jackknife subaveraging for ERP latency and amplitude analysis.
+
+######################################
+######### Types & Constants ##########
+######################################
+
 const _JACKKNIFE_META_COLS = (
     :file,
     :participant,
@@ -11,105 +17,9 @@ const _JACKKNIFE_META_COLS = (
     :analysis_interval_end,
 )
 
-_default_jackknife_output_dir(input_dir::String, pattern::String) = joinpath(input_dir, "jackknife_$(clean_pattern(pattern))")
-
-function _create_jackknife_averages(erps::AbstractVector{<:ErpData}; pseudovalues::Bool = false)::Vector{ErpData}
-    n_participants = length(erps)
-    n_participants < 2 && @minimal_error("Need at least 2 participants for jackknife averaging, got $(n_participants)")
-
-    first_erp = erps[1]
-    meta_set = Set(meta_labels(first_erp))
-    all_cols = propertynames(first_erp.data)
-    eeg_channels = Symbol[c for c in all_cols if c ∉ meta_set]
-    ch_map = Dict{Symbol,Int}(ch => i for (i, ch) in enumerate(eeg_channels))
-    n_tp = n_samples(first_erp)
-
-    @info "Creating jackknife $(pseudovalues ? "pseudovalues" : "averages") for $n_participants participants"
-
-    sums = [zeros(Float64, n_tp) for _ in eeg_channels]
-    for (c, ch) in enumerate(eeg_channels)
-        s = sums[c]
-        for erp in erps
-            s .+= erp.data[!, ch]
-        end
-    end
-
-    total_epochs_all = sum(erp.n_epochs for erp in erps)
-    inv_n = 1.0 / n_participants
-    inv_nm1 = 1.0 / (n_participants - 1)
-    jackknife_erps = Vector{ErpData}(undef, n_participants)
-
-    for excluded_idx = 1:n_participants
-        excluded_erp = erps[excluded_idx]
-        @info "  Participant $excluded_idx: $(pseudovalues ? "computing pseudovalue from" : "averaging") $(n_participants - 1) other participants"
-
-        jackknife_data = DataFrame(; copycols = false)
-        for col in all_cols
-            c_idx = get(ch_map, col, 0)
-            if c_idx > 0
-                s = sums[c_idx]
-                x = excluded_erp.data[!, col]
-                out = Vector{Float64}(undef, n_tp)
-                if pseudovalues
-                    @. out = n_participants * (s * inv_n) - (n_participants - 1) * ((s - x) * inv_nm1)
-                else
-                    @. out = (s - x) * inv_nm1
-                end
-                jackknife_data[!, col] = out
-            elseif col === :file
-                jackknife_data[!, :file] = fill(excluded_erp.file, n_tp)
-            elseif col === :participant && hasproperty(excluded_erp.data, :participant) && !isempty(excluded_erp.data)
-                jackknife_data[!, :participant] = fill(excluded_erp.data[1, :participant], n_tp)
-            else
-                jackknife_data[!, col] = copy(first_erp.data[!, col])
-            end
-        end
-
-        cond_name = excluded_erp.condition_name
-        jk_name = pseudovalues ? "$(cond_name)_jackknife_pseudovalue_$(excluded_idx)" : "$(cond_name)_jackknife_$(excluded_idx)"
-        jackknife_erps[excluded_idx] = ErpData(
-            excluded_erp.file,
-            excluded_erp.condition,
-            jk_name,
-            jackknife_data,
-            copy(excluded_erp.layout),
-            excluded_erp.sample_rate,
-            copy(excluded_erp.analysis_info),
-            total_epochs_all - excluded_erp.n_epochs,
-        )
-    end
-
-    @info "Created $(length(jackknife_erps)) jackknife $(pseudovalues ? "pseudovalues" : "averages")"
-    return jackknife_erps
-end
-
-function _load_and_group_for_jackknife(files::Vector{String}, input_dir::String, condition_selection)
-    entries_by_condition = Dict{Int,Vector{Tuple{Int,String,ErpData}}}()
-    file_records = Tuple{Int,String}[]
-
-    for (i, file) in enumerate(files)
-        @info "Loading: $file ($i/$(length(files)))"
-        participant_id = _extract_participant_id(file)
-        push!(file_records, (participant_id, file))
-
-        data = read_data(joinpath(input_dir, file))
-        if isnothing(data)
-            @minimal_warning "No data variables found in $file. Skipping."
-            continue
-        elseif !(data isa Union{AbstractVector{<:ErpData},ErpData})
-            @minimal_warning "Invalid data type in $file: expected Vector{ErpData} or ErpData, got $(typeof(data)). Skipping."
-            continue
-        end
-
-        data_vec = data isa ErpData ? [data] : data
-        for idx in get_selected_conditions(data_vec, condition_selection)
-            erp = data_vec[idx]
-            push!(get!(() -> Tuple{Int,String,ErpData}[], entries_by_condition, erp.condition), (participant_id, file, erp))
-        end
-    end
-
-    return entries_by_condition, file_records
-end
+######################################
+########### User Functions ###########
+######################################
 
 """
     jackknife_average(erps::AbstractVector{<:ErpData}; condition_selection = conditions(), pseudovalues::Bool = false)::Vector{ErpData}
@@ -124,7 +34,9 @@ participants (excluding `i`). This technique is standard for nonlinear ERP/LRP l
 (e.g., fractional peak or fractional area onset latency) where single-participant waveforms have
 low signal-to-noise ratio.
 
-# Statistical Testing & Variance Correction
+# Details
+
+## Statistical Testing & Variance Correction
 Because leave-one-out subaverages `X̄_{-i}` share `N - 2` participants, their sample variance is
 compressed by `(N - 1)^2` relative to single-participant variance:
 - **Ulrich & Miller (2001) correction (`pseudovalues = false`)**: Divide `t`-statistics by `N - 1`
@@ -254,4 +166,108 @@ function jackknife_average(
         @info "Jackknife averaging complete!"
         @info "Output saved to: $output_dir"
     end
+end
+
+######################################
+######### Internal Functions #########
+######################################
+
+_default_jackknife_output_dir(input_dir::String, pattern::String) = joinpath(input_dir, "jackknife_$(_clean_pattern(pattern))")
+
+function _create_jackknife_averages(erps::AbstractVector{<:ErpData}; pseudovalues::Bool = false)::Vector{ErpData}
+    n_participants = length(erps)
+    n_participants < 2 && @minimal_error("Need at least 2 participants for jackknife averaging, got $(n_participants)")
+
+    first_erp = erps[1]
+    meta_set = Set(meta_labels(first_erp))
+    all_cols = propertynames(first_erp.data)
+    eeg_channels = Symbol[c for c in all_cols if c ∉ meta_set]
+    ch_map = Dict{Symbol,Int}(ch => i for (i, ch) in enumerate(eeg_channels))
+    n_tp = n_samples(first_erp)
+
+    @info "Creating jackknife $(pseudovalues ? "pseudovalues" : "averages") for $n_participants participants"
+
+    sums = [zeros(Float64, n_tp) for _ in eeg_channels]
+    for (c, ch) in enumerate(eeg_channels)
+        s = sums[c]
+        for erp in erps
+            s .+= erp.data[!, ch]
+        end
+    end
+
+    total_epochs_all = sum(erp.n_epochs for erp in erps)
+    inv_n = 1.0 / n_participants
+    inv_nm1 = 1.0 / (n_participants - 1)
+    jackknife_erps = Vector{ErpData}(undef, n_participants)
+
+    for excluded_idx = 1:n_participants
+        excluded_erp = erps[excluded_idx]
+        @info "  Participant $excluded_idx: $(pseudovalues ? "computing pseudovalue from" : "averaging") $(n_participants - 1) other participants"
+
+        jackknife_data = DataFrame(; copycols = false)
+        for col in all_cols
+            c_idx = get(ch_map, col, 0)
+            if c_idx > 0
+                s = sums[c_idx]
+                x = excluded_erp.data[!, col]
+                out = Vector{Float64}(undef, n_tp)
+                if pseudovalues
+                    @. out = n_participants * (s * inv_n) - (n_participants - 1) * ((s - x) * inv_nm1)
+                else
+                    @. out = (s - x) * inv_nm1
+                end
+                jackknife_data[!, col] = out
+            elseif col === :file
+                jackknife_data[!, :file] = fill(excluded_erp.file, n_tp)
+            elseif col === :participant && hasproperty(excluded_erp.data, :participant) && !isempty(excluded_erp.data)
+                jackknife_data[!, :participant] = fill(excluded_erp.data[1, :participant], n_tp)
+            else
+                jackknife_data[!, col] = copy(first_erp.data[!, col])
+            end
+        end
+
+        cond_name = excluded_erp.condition_name
+        jk_name = pseudovalues ? "$(cond_name)_jackknife_pseudovalue_$(excluded_idx)" : "$(cond_name)_jackknife_$(excluded_idx)"
+        jackknife_erps[excluded_idx] = ErpData(
+            excluded_erp.file,
+            excluded_erp.condition,
+            jk_name,
+            jackknife_data,
+            copy(excluded_erp.layout),
+            excluded_erp.sample_rate,
+            copy(excluded_erp.analysis_info),
+            total_epochs_all - excluded_erp.n_epochs,
+        )
+    end
+
+    @info "Created $(length(jackknife_erps)) jackknife $(pseudovalues ? "pseudovalues" : "averages")"
+    return jackknife_erps
+end
+
+function _load_and_group_for_jackknife(files::Vector{String}, input_dir::String, condition_selection)
+    entries_by_condition = Dict{Int,Vector{Tuple{Int,String,ErpData}}}()
+    file_records = Tuple{Int,String}[]
+
+    for (i, file) in enumerate(files)
+        @info "Loading: $file ($i/$(length(files)))"
+        participant_id = _extract_participant_id(file)
+        push!(file_records, (participant_id, file))
+
+        data = read_data(joinpath(input_dir, file))
+        if isnothing(data)
+            @minimal_warning "No data variables found in $file. Skipping."
+            continue
+        elseif !(data isa Union{AbstractVector{<:ErpData},ErpData})
+            @minimal_warning "Invalid data type in $file: expected Vector{ErpData} or ErpData, got $(typeof(data)). Skipping."
+            continue
+        end
+
+        data_vec = data isa ErpData ? [data] : data
+        for idx in get_selected_conditions(data_vec, condition_selection)
+            erp = data_vec[idx]
+            push!(get!(() -> Tuple{Int,String,ErpData}[], entries_by_condition, erp.condition), (participant_id, file, erp))
+        end
+    end
+
+    return entries_by_condition, file_records
 end

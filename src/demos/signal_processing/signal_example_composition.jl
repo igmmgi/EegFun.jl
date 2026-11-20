@@ -1,3 +1,9 @@
+# Interactive Fourier sine-wave superposition and signal composition demo.
+
+######################################
+########### User Functions ###########
+######################################
+
 """
     signal_example_composition()
 
@@ -7,15 +13,15 @@ Creates a GUI with three sine-wave generators, additive Gaussian noise, optional
 low-pass and high-pass filters, waveform presets (square, sawtooth, phase scramble), and a
 live power spectrum.
 
+# Returns
+- `fig::Figure`: The Makie figure object containing the interactive GUI
+- `axes::Vector{Axis}`: The six axis objects (rows 1–6)
+
 # Examples
 ```julia
 using GLMakie, EegFun
 EegFun.signal_example_composition()
 ```
-
-# Returns
-- `fig::Figure`: The Makie figure object containing the interactive GUI
-- `axes::Vector{Axis}`: The six axis objects (rows 1–6)
 """
 function signal_example_composition()
     _check_interactive_demo_backend("Signal Composition demo") || return nothing

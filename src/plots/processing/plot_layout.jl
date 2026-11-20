@@ -1,4 +1,9 @@
-# === DEFAULT KEYWORD ARGUMENTS ===
+# 2D and 3D electrode layout, neighbor graph, and scalp ROI visualizations.
+
+######################################
+######### Types & Constants ##########
+######################################
+
 const PLOT_LAYOUT_HEAD_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :head_color => (nothing, "Color of the head shape outline."),
     :head_linewidth => (2, "Line width of the head shape outline."),
@@ -55,84 +60,41 @@ end
 
 const _ROI_CIRCLE_UNIT = [Point2{Float64}(sin(θ), cos(θ)) for θ = 0:(2π/361):2π]
 
-@inline _layout_kw(kwargs, dict::Dict{Symbol,Tuple{Any,String}}, key::Symbol) = haskey(kwargs, key) ? kwargs[key] : dict[key][1]
-
-@inline _cross2d(o::Point2{Float64}, a::Point2{Float64}, b::Point2{Float64})::Float64 =
-    (a[1] - o[1]) * (b[2] - o[2]) - (a[2] - o[2]) * (b[1] - o[1])
-
-function _monotone_chain_hull!(pts::Vector{Point2{Float64}})::Vector{Point2{Float64}}
-    n = length(pts)
-    n <= 1 && return copy(pts)
-    sort!(pts; by = p -> (p[1], p[2]))
-
-    hull = Vector{Point2{Float64}}(undef, 2 * n)
-    k = 0
-    @inbounds for i = 1:n
-        p = pts[i]
-        while k >= 2 && _cross2d(hull[k-1], hull[k], p) <= 0.0
-            k -= 1
-        end
-        k += 1
-        hull[k] = p
-    end
-    t = k + 1
-    @inbounds for i = (n-1):-1:1
-        p = pts[i]
-        while k >= t && _cross2d(hull[k-1], hull[k], p) <= 0.0
-            k -= 1
-        end
-        k += 1
-        hull[k] = p
-    end
-    resize!(hull, max(1, k - 1))
-    return hull
-end
-
-function _convex_hull_with_border(xpos::AbstractVector{<:Real}, ypos::AbstractVector{<:Real}, border_size::Real)::Vector{Point2f}
-    centers = [Point2{Float64}(Float64(xpos[i]), Float64(ypos[i])) for i in eachindex(xpos)]
-    base_hull = _monotone_chain_hull!(centers)
-    r = abs(Float64(border_size))
-
-    if r == 0.0
-        n_b = length(base_hull)
-        out = Vector{Point2f}(undef, n_b + 1)
-        @inbounds for i = 1:n_b
-            out[i] = Point2f(base_hull[i][1], base_hull[i][2])
-        end
-        out[n_b+1] = out[1]
-        return out
-    end
-
-    n_unit = length(_ROI_CIRCLE_UNIT)
-    pts = Vector{Point2{Float64}}(undef, length(base_hull) * n_unit)
-    idx = 0
-    @inbounds for c in base_hull
-        cx, cy = c[1], c[2]
-        for u in _ROI_CIRCLE_UNIT
-            idx += 1
-            pts[idx] = Point2{Float64}(muladd(r, u[1], cx), muladd(r, u[2], cy))
-        end
-    end
-
-    hull = _monotone_chain_hull!(pts)
-    n_h = length(hull)
-    out = Vector{Point2f}(undef, n_h + 1)
-    @inbounds for i = 1:n_h
-        out[i] = Point2f(hull[i][1], hull[i][2])
-    end
-    out[n_h+1] = out[1]
-    return out
-end
+######################################
+########### User Functions ###########
+######################################
 
 """
-    plot_layout_2d!(fig::Figure, ax::Axis, layout::Layout; neighbors::Bool=false, correlation_matrix::Union{DataFrame,Nothing}=nothing, kwargs...) -> Axis
-    plot_layout_2d(layout::Layout; neighbors::Bool=false, correlation_matrix::Union{DataFrame,Nothing}=nothing, display_plot::Bool=true, kwargs...) -> NamedTuple
+    plot_layout_2d(layout::Layout; neighbors::Bool = false, correlation_matrix = nothing, display_plot::Bool = true, kwargs...) -> NamedTuple
+    plot_layout_2d(dat::EegFunData; kwargs...) -> NamedTuple
 
 Plot a 2D EEG electrode layout with customizable head outline, electrode markers, labels, and optional hover neighbor or correlation overlays.
 
 $(_generate_kwargs_doc(PLOT_LAYOUT_HEAD_KWARGS))
 $(_generate_kwargs_doc(PLOT_LAYOUT_POINT_KWARGS))
 $(_generate_kwargs_doc(PLOT_LAYOUT_LABEL_KWARGS))
+"""
+function plot_layout_2d(
+    layout::Layout;
+    neighbors::Bool = false,
+    correlation_matrix::Union{DataFrame,Nothing} = nothing,
+    display_plot::Bool = true,
+    kwargs...,
+)
+    fig = _eegfun_figure()
+    ax = Axis(fig[1, 1], aspect = DataAspect(), xautolimitmargin = (0.1, 0.15), yautolimitmargin = (0.1, 0.1))
+    plot_layout_2d!(fig, ax, layout; neighbors = neighbors, correlation_matrix = correlation_matrix, kwargs...)
+    _set_window_title("Layout 2D")
+    display_plot && _display_figure(fig)
+    return (fig = fig, axes = [ax])
+end
+
+plot_layout_2d(dat::EegFunData; kwargs...) = plot_layout_2d(dat.layout; kwargs...)
+
+"""
+    plot_layout_2d!(fig::Figure, ax::Axis, layout::Layout; neighbors::Bool = false, correlation_matrix = nothing, kwargs...) -> Axis
+
+In-place axis version of [`plot_layout_2d`](@ref), drawing onto `ax` and returning `ax`.
 """
 function plot_layout_2d!(
     fig::Figure,
@@ -219,28 +181,6 @@ end
 plot_layout_2d!(fig, ax, dat::EegFunData; kwargs...) = plot_layout_2d!(fig, ax, dat.layout; kwargs...)
 
 """
-    plot_layout_2d(layout::Layout; neighbors::Bool=false, correlation_matrix=nothing, display_plot::Bool=true, kwargs...) -> NamedTuple
-
-Create a figure and plot a 2D EEG electrode layout. See [`plot_layout_2d!`](@ref) for keyword options.
-"""
-function plot_layout_2d(
-    layout::Layout;
-    neighbors::Bool = false,
-    correlation_matrix::Union{DataFrame,Nothing} = nothing,
-    display_plot::Bool = true,
-    kwargs...,
-)
-    fig = _eegfun_figure()
-    ax = Axis(fig[1, 1], aspect = DataAspect(), xautolimitmargin = (0.1, 0.15), yautolimitmargin = (0.1, 0.1))
-    plot_layout_2d!(fig, ax, layout; neighbors = neighbors, correlation_matrix = correlation_matrix, kwargs...)
-    _set_window_title("Layout 2D")
-    display_plot && _display_figure(fig)
-    return (fig = fig, axes = [ax])
-end
-
-plot_layout_2d(dat::EegFunData; kwargs...) = plot_layout_2d(dat.layout; kwargs...)
-
-"""
     add_topo_rois!(ax::Axis, layout::Layout, rois::Vector{<:Vector{Symbol}}; kwargs...)
 
 Draw padded convex-hull region-of-interest (ROI) outlines or fills around groups of electrodes on `ax`.
@@ -297,14 +237,30 @@ function add_topo_rois!(ax::Axis, layout::Layout, rois::Vector{<:Vector{Symbol}}
 end
 
 """
-    plot_layout_3d!(fig::Figure, ax::Axis3, layout::Layout; neighbors::Bool=false, kwargs...) -> Axis3
-    plot_layout_3d(layout::Layout; neighbors::Bool=false, display_plot::Bool=true, kwargs...) -> NamedTuple
+    plot_layout_3d(layout::Layout; neighbors::Bool = false, display_plot::Bool = true, kwargs...) -> NamedTuple
+    plot_layout_3d(dat::EegFunData; kwargs...) -> NamedTuple
 
 Plot a 3D EEG electrode layout with electrode markers, labels, and optional hover neighbor connections.
 
 $(_generate_kwargs_doc(PLOT_LAYOUT_HEAD_KWARGS))
 $(_generate_kwargs_doc(PLOT_LAYOUT_POINT_KWARGS))
 $(_generate_kwargs_doc(PLOT_LAYOUT_LABEL_KWARGS))
+"""
+function plot_layout_3d(layout::Layout; neighbors::Bool = false, display_plot::Bool = true, kwargs...)
+    fig = _eegfun_figure()
+    ax = Axis3(fig[1, 1], xautolimitmargin = (0.1, 0.15), yautolimitmargin = (0.1, 0.1), zautolimitmargin = (0.1, 0.1))
+    plot_layout_3d!(fig, ax, layout; neighbors = neighbors, kwargs...)
+    _set_window_title("Layout 3D")
+    display_plot && _display_figure(fig)
+    return (fig = fig, axes = [ax], ax = ax)
+end
+
+plot_layout_3d(dat::EegFunData; kwargs...) = plot_layout_3d(dat.layout; kwargs...)
+
+"""
+    plot_layout_3d!(fig::Figure, ax::Axis3, layout::Layout; neighbors::Bool = false, kwargs...) -> Axis3
+
+In-place axis version of [`plot_layout_3d`](@ref), drawing onto `ax` and returning `ax`.
 """
 function plot_layout_3d!(fig::Figure, ax::Axis3, layout::Layout; neighbors::Bool = false, kwargs...)
     _ensure_coordinates_3d!(layout)
@@ -359,21 +315,78 @@ end
 
 plot_layout_3d!(fig, ax, dat::EegFunData; kwargs...) = plot_layout_3d!(fig, ax, dat.layout; kwargs...)
 
-"""
-    plot_layout_3d(layout::Layout; neighbors::Bool=false, display_plot::Bool=true, kwargs...) -> NamedTuple
+######################################
+######### Internal Functions #########
+######################################
 
-Create a figure and plot a 3D EEG electrode layout. See [`plot_layout_3d!`](@ref) for keyword options.
-"""
-function plot_layout_3d(layout::Layout; neighbors::Bool = false, display_plot::Bool = true, kwargs...)
-    fig = _eegfun_figure()
-    ax = Axis3(fig[1, 1], xautolimitmargin = (0.1, 0.15), yautolimitmargin = (0.1, 0.1), zautolimitmargin = (0.1, 0.1))
-    plot_layout_3d!(fig, ax, layout; neighbors = neighbors, kwargs...)
-    _set_window_title("Layout 3D")
-    display_plot && _display_figure(fig)
-    return (fig = fig, axes = [ax], ax = ax)
+@inline _layout_kw(kwargs, dict::Dict{Symbol,Tuple{Any,String}}, key::Symbol) = haskey(kwargs, key) ? kwargs[key] : dict[key][1]
+
+@inline _cross2d(o::Point2{Float64}, a::Point2{Float64}, b::Point2{Float64})::Float64 =
+    (a[1] - o[1]) * (b[2] - o[2]) - (a[2] - o[2]) * (b[1] - o[1])
+
+function _monotone_chain_hull!(pts::Vector{Point2{Float64}})::Vector{Point2{Float64}}
+    n = length(pts)
+    n <= 1 && return copy(pts)
+    sort!(pts; by = p -> (p[1], p[2]))
+
+    hull = Vector{Point2{Float64}}(undef, 2 * n)
+    k = 0
+    @inbounds for i = 1:n
+        p = pts[i]
+        while k >= 2 && _cross2d(hull[k-1], hull[k], p) <= 0.0
+            k -= 1
+        end
+        k += 1
+        hull[k] = p
+    end
+    t = k + 1
+    @inbounds for i = (n-1):-1:1
+        p = pts[i]
+        while k >= t && _cross2d(hull[k-1], hull[k], p) <= 0.0
+            k -= 1
+        end
+        k += 1
+        hull[k] = p
+    end
+    resize!(hull, max(1, k - 1))
+    return hull
 end
 
-plot_layout_3d(dat::EegFunData; kwargs...) = plot_layout_3d(dat.layout; kwargs...)
+function _convex_hull_with_border(xpos::AbstractVector{<:Real}, ypos::AbstractVector{<:Real}, border_size::Real)::Vector{Point2f}
+    centers = [Point2{Float64}(Float64(xpos[i]), Float64(ypos[i])) for i in eachindex(xpos)]
+    base_hull = _monotone_chain_hull!(centers)
+    r = abs(Float64(border_size))
+
+    if r == 0.0
+        n_b = length(base_hull)
+        out = Vector{Point2f}(undef, n_b + 1)
+        @inbounds for i = 1:n_b
+            out[i] = Point2f(base_hull[i][1], base_hull[i][2])
+        end
+        out[n_b+1] = out[1]
+        return out
+    end
+
+    n_unit = length(_ROI_CIRCLE_UNIT)
+    pts = Vector{Point2{Float64}}(undef, length(base_hull) * n_unit)
+    idx = 0
+    @inbounds for c in base_hull
+        cx, cy = c[1], c[2]
+        for u in _ROI_CIRCLE_UNIT
+            idx += 1
+            pts[idx] = Point2{Float64}(muladd(r, u[1], cx), muladd(r, u[2], cy))
+        end
+    end
+
+    hull = _monotone_chain_hull!(pts)
+    n_h = length(hull)
+    out = Vector{Point2f}(undef, n_h + 1)
+    @inbounds for i = 1:n_h
+        out[i] = Point2f(hull[i][1], hull[i][2])
+    end
+    out[n_h+1] = out[1]
+    return out
+end
 
 function _add_interactive_points!(
     fig::Figure,

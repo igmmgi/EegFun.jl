@@ -1,3 +1,9 @@
+# Single, grid, topographic, and custom multi-axis `PlotLayout` placement engine.
+
+######################################
+######### Types & Constants ##########
+######################################
+
 const LAYOUT_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :topo_plot_width => (0.10, "Width of individual plots in topo layout (as fraction of figure width)"),
     :topo_plot_height => (0.10, "Height of individual plots in topo layout (as fraction of figure height)"),
@@ -13,7 +19,14 @@ const LAYOUT_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 """
     PlotLayout
 
-A struct that defines how to arrange plots in a figure (`:single`, `:grid`, `:topo`, or `:custom`).
+Defines how multi-channel axes are arranged inside a Makie `Figure` (`:single`, `:grid`, `:topo`, or `:custom`).
+
+# Fields
+- `type::Symbol`: Layout mode (`:single`, `:grid`, `:topo`, or `:custom`)
+- `dims::AbstractVector{Int}`: `[rows, cols]` grid dimensions
+- `positions::Vector{Tuple{Float64,Float64}}`: Normalized `(x, y)` axis coordinates for `:topo`/`:custom` layouts
+- `channels::Vector{Symbol}`: Ordered channel symbols assigned to layout slots
+- `metadata::Dict{Symbol,Any}`: Layout sizing, spacing, and scale-bar placement options
 """
 struct PlotLayout
     type::Symbol
@@ -22,6 +35,62 @@ struct PlotLayout
     channels::Vector{Symbol}
     metadata::Dict{Symbol,Any}
 end
+
+######################################
+########### User Functions ###########
+######################################
+
+"""
+    create_layout(layout_spec, channels, eeg_layout; kwargs...)
+
+Create a `PlotLayout` object based on `layout_spec` (`:single`, `:grid`, `:topo`, or an existing `PlotLayout`).
+"""
+function create_layout(layout_spec::Union{Symbol,PlotLayout}, channels::Vector{Symbol}, eeg_layout::Union{Layout,Nothing}; kwargs...)
+    layout_spec === :single && return _create_single_layout(channels; kwargs...)
+    layout_spec === :grid && return _create_grid_layout(channels; kwargs...)
+    layout_spec === :topo && return _create_topo_layout(eeg_layout, channels; kwargs...)
+    layout_spec isa PlotLayout && return layout_spec
+    @minimal_error "Invalid layout specification: $layout_spec. Must be :single, :grid, :topo, or a PlotLayout object."
+end
+
+"""
+    create_custom_layout(positions::AbstractVector{<:Tuple{Integer,Integer}}, channels::Vector{Symbol}; kwargs...)
+    create_custom_layout(positions::AbstractVector{<:Tuple{Real,Real}}, channels::Vector{Symbol}; kwargs...)
+
+Create a custom `PlotLayout` placing each channel at either:
+- explicit positive `(row, col)` integer grid cells (e.g. `[(1, 2), (2, 1), (2, 3)]`), or
+- continuous `(x, y)` canvas coordinates (in `[0, 1]` or arbitrary coordinates normalized across channels).
+"""
+function create_custom_layout(positions::AbstractVector{<:Tuple{Integer,Integer}}, channels::Vector{Symbol}; kwargs...)
+    isempty(channels) && @minimal_error("Cannot create custom layout with empty channel list")
+    length(positions) == length(channels) ||
+        @minimal_error("n positions ($(length(positions))) must match n channels ($(length(channels)))")
+    all(p -> p[1] >= 1 && p[2] >= 1, positions) ||
+        @minimal_error("Grid positions must be positive (row, col) integer indices, got: $positions")
+
+    rows = maximum(Int(p[1]) for p in positions)
+    cols = maximum(Int(p[2]) for p in positions)
+    metadata = _merge_plot_kwargs(LAYOUT_KWARGS, kwargs; validate = false)
+    metadata[:custom_mode] = :grid
+    fpos = Tuple{Float64,Float64}[(Float64(p[1]), Float64(p[2])) for p in positions]
+    return PlotLayout(:custom, [rows, cols], fpos, copy(channels), metadata)
+end
+
+function create_custom_layout(positions::AbstractVector{<:Tuple{Real,Real}}, channels::Vector{Symbol}; kwargs...)
+    isempty(channels) && @minimal_error("Cannot create custom layout with empty channel list")
+    length(positions) == length(channels) ||
+        @minimal_error("n positions ($(length(positions))) must match n channels ($(length(channels)))")
+    all(p -> isfinite(p[1]) && isfinite(p[2]), positions) || @minimal_error("Canvas positions must be finite (x, y) coordinates")
+
+    metadata = _merge_plot_kwargs(LAYOUT_KWARGS, kwargs; validate = false)
+    metadata[:custom_mode] = :canvas
+    fpos = Tuple{Float64,Float64}[(Float64(p[1]), Float64(p[2])) for p in positions]
+    return PlotLayout(:custom, [1, 1], fpos, copy(channels), metadata)
+end
+
+######################################
+######### Internal Functions #########
+######################################
 
 function _create_axis(fig, position; kwargs...)
     return Axis(
@@ -148,54 +217,6 @@ function _create_topo_layout(layout::Layout, channels::Vector{Symbol}; kwargs...
     _ensure_coordinates_2d!(layout)
     positions = _compute_topo_positions(layout.data[!, :label], layout.data[!, :x2], layout.data[!, :y2], channels)
     return PlotLayout(:topo, [0, 0], positions, channels, topo_kwargs)
-end
-
-"""
-    create_layout(layout_spec, channels, eeg_layout; kwargs...)
-
-Create a `PlotLayout` object based on `layout_spec` (`:single`, `:grid`, `:topo`, or an existing `PlotLayout`).
-"""
-function create_layout(layout_spec::Union{Symbol,PlotLayout}, channels::Vector{Symbol}, eeg_layout::Union{Layout,Nothing}; kwargs...)
-    layout_spec === :single && return _create_single_layout(channels; kwargs...)
-    layout_spec === :grid && return _create_grid_layout(channels; kwargs...)
-    layout_spec === :topo && return _create_topo_layout(eeg_layout, channels; kwargs...)
-    layout_spec isa PlotLayout && return layout_spec
-    @minimal_error "Invalid layout specification: $layout_spec. Must be :single, :grid, :topo, or a PlotLayout object."
-end
-
-"""
-    create_custom_layout(positions::AbstractVector{<:Tuple{Integer,Integer}}, channels::Vector{Symbol}; kwargs...)
-    create_custom_layout(positions::AbstractVector{<:Tuple{Real,Real}}, channels::Vector{Symbol}; kwargs...)
-
-Create a custom `PlotLayout` placing each channel at either:
-- explicit positive `(row, col)` integer grid cells (e.g. `[(1, 2), (2, 1), (2, 3)]`), or
-- continuous `(x, y)` canvas coordinates (in `[0, 1]` or arbitrary coordinates normalized across channels).
-"""
-function create_custom_layout(positions::AbstractVector{<:Tuple{Integer,Integer}}, channels::Vector{Symbol}; kwargs...)
-    isempty(channels) && @minimal_error("Cannot create custom layout with empty channel list")
-    length(positions) == length(channels) ||
-        @minimal_error("n positions ($(length(positions))) must match n channels ($(length(channels)))")
-    all(p -> p[1] >= 1 && p[2] >= 1, positions) ||
-        @minimal_error("Grid positions must be positive (row, col) integer indices, got: $positions")
-
-    rows = maximum(Int(p[1]) for p in positions)
-    cols = maximum(Int(p[2]) for p in positions)
-    metadata = _merge_plot_kwargs(LAYOUT_KWARGS, kwargs; validate = false)
-    metadata[:custom_mode] = :grid
-    fpos = Tuple{Float64,Float64}[(Float64(p[1]), Float64(p[2])) for p in positions]
-    return PlotLayout(:custom, [rows, cols], fpos, copy(channels), metadata)
-end
-
-function create_custom_layout(positions::AbstractVector{<:Tuple{Real,Real}}, channels::Vector{Symbol}; kwargs...)
-    isempty(channels) && @minimal_error("Cannot create custom layout with empty channel list")
-    length(positions) == length(channels) ||
-        @minimal_error("n positions ($(length(positions))) must match n channels ($(length(channels)))")
-    all(p -> isfinite(p[1]) && isfinite(p[2]), positions) || @minimal_error("Canvas positions must be finite (x, y) coordinates")
-
-    metadata = _merge_plot_kwargs(LAYOUT_KWARGS, kwargs; validate = false)
-    metadata[:custom_mode] = :canvas
-    fpos = Tuple{Float64,Float64}[(Float64(p[1]), Float64(p[2])) for p in positions]
-    return PlotLayout(:custom, [1, 1], fpos, copy(channels), metadata)
 end
 
 function _validate_dims(dims, n_items::Int)

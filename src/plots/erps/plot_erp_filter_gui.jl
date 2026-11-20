@@ -1,3 +1,9 @@
+# Interactive real-time cutoff and order exploration GUI for ERP filtering.
+
+######################################
+########### User Functions ###########
+######################################
+
 """
     plot_erp_filter_gui(; channel = :Cz, kwargs...)
     plot_erp_filter_gui(filepath::String; kwargs...)
@@ -26,23 +32,8 @@ function plot_erp_filter_gui(; channel::Union{Symbol,Nothing} = :Cz, kwargs...)
     return plot_erp_filter_gui(data[1]; channel = channel, kwargs...)
 end
 
-function plot_erp_filter_gui(filepath::String; kwargs...)
-    data = read_data(filepath)
-    isnothing(data) && @minimal_error "No data found in file: $filepath"
-    return plot_erp_filter_gui(data; kwargs...)
-end
-
 plot_erp_filter_gui(erp::Union{ErpData,ContinuousData}; channel::Union{Symbol,Nothing} = nothing, kwargs...) =
     plot_erp_filter_gui([erp]; channel = channel, kwargs...)
-
-function _add_labeled_toggle!(grid::GridLayout, row::Int, label_text::String = "Enable")
-    hbox = GridLayout(grid[row, 1])
-    tog = Toggle(hbox[1, 1], active = false, halign = :left)
-    Label(hbox[1, 2], label_text, halign = :left)
-    colsize!(hbox, 1, Auto())
-    colsize!(hbox, 2, Auto())
-    return tog
-end
 
 function plot_erp_filter_gui(
     erp_vec::AbstractVector{<:Union{ErpData,ContinuousData}};
@@ -254,4 +245,23 @@ function plot_erp_filter_gui(
     screen = display_plot ? _display_figure(fig) : nothing
     _set_window_title("ERP Filter Tool")
     return (fig = fig, axes = axes, screen = screen)
+end
+
+function plot_erp_filter_gui(filepath::String; kwargs...)
+    data = read_data(filepath)
+    isnothing(data) && @minimal_error "No data found in file: $filepath"
+    return plot_erp_filter_gui(data; kwargs...)
+end
+
+######################################
+######### Internal Functions #########
+######################################
+
+function _add_labeled_toggle!(grid::GridLayout, row::Int, label_text::String = "Enable")
+    hbox = GridLayout(grid[row, 1])
+    tog = Toggle(hbox[1, 1], active = false, halign = :left)
+    Label(hbox[1, 2], label_text, halign = :left)
+    colsize!(hbox, 1, Auto())
+    colsize!(hbox, 2, Auto())
+    return tog
 end

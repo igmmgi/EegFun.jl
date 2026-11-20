@@ -1,54 +1,8 @@
 # Topographic visualizations for Time-Frequency data and TF statistical results.
 
-function _sorted_interval_bounds(iv)
-    raw = _normalize_interval(iv)
-    return (min(Float64(raw[1]), Float64(raw[2])), max(Float64(raw[1]), Float64(raw[2])))
-end
-
-function _tf_select_window_values(
-    all_freqs::Vector{Float64},
-    all_times::Vector{Float64},
-    freq_range::Interval,
-    interval_selection::Interval,
-)
-    fr = _sorted_interval_bounds(freq_range)
-    selected_freqs = [f for f in all_freqs if fr[1] <= f <= fr[2]]
-    isempty(selected_freqs) &&
-        @minimal_error("No frequencies found in range $(freq_range). Data range: $(first(all_freqs)) to $(last(all_freqs)) Hz")
-
-    if isnothing(interval_selection) || interval_selection isa AllSelection
-        selected_times = all_times
-    else
-        t_start = interval_selection isa TimeSelection ? interval_selection.start : interval_selection[1]
-        t_stop = interval_selection isa TimeSelection ? interval_selection.stop : interval_selection[2]
-        selected_times = [t for t in all_times if t_start <= t <= t_stop]
-    end
-    isempty(selected_times) && @minimal_error("No time points found in interval. Data range: $(first(all_times)) to $(last(all_times)) s")
-
-    return fr, selected_freqs, selected_times
-end
-
-function _prepare_tf_topo_layout(orig_layout::Layout, common_channels::Vector{Symbol}; need_3d::Bool = true)::Layout
-    orig_labels = orig_layout.data[!, :label]
-    layout = if length(common_channels) < length(orig_labels) || common_channels != orig_labels
-        subset_layout(orig_layout; channel_selection = channels(common_channels))
-    elseif !has_2d_coords(orig_layout) || (need_3d && !has_3d_coords(orig_layout))
-        copy(orig_layout)
-    else
-        orig_layout
-    end
-    has_valid_coordinates(layout) || @minimal_error("Cannot create topographic plot: layout has no spatial coordinates.")
-    _ensure_coordinates_2d!(layout)
-    need_3d && _ensure_coordinates_3d!(layout)
-    return layout
-end
-
-function _pop_unused_tf_topo_kwargs!(plot_kwargs::Dict)
-    pop!(plot_kwargs, :interactive, nothing)
-    pop!(plot_kwargs, :use_global_scale, nothing)
-    pop!(plot_kwargs, :component_selection, nothing)
-    return nothing
-end
+######################################
+########### User Functions ###########
+######################################
 
 """
     plot_topography(tf::TimeFreqData;
@@ -334,51 +288,6 @@ function plot_topography(
     return (fig = fig, axes = axes, colorbar = cb)
 end
 
-# === TOPO STATS FOR TF STATISTICAL RESULTS ===
-
-function _tf_bin_tvalue_means(
-    t_mat::Array{Float64,3},
-    elec_indices::Vector{Int},
-    freq_indices::Vector{Int},
-    bin_indices::AbstractVector{Int},
-)::Vector{Float64}
-    n_elec = length(elec_indices)
-    out = Vector{Float64}(undef, n_elec)
-    inv_n = 1.0 / (length(freq_indices) * length(bin_indices))
-    @inbounds for k = 1:n_elec
-        ei = elec_indices[k]
-        s = 0.0
-        for ti in bin_indices, fi in freq_indices
-            s += t_mat[ei, fi, ti]
-        end
-        m = s * inv_n
-        out[k] = isfinite(m) ? m : 0.0
-    end
-    return out
-end
-
-function _tf_bin_sig_mask(
-    pos::AbstractArray{Bool,3},
-    neg::AbstractArray{Bool,3},
-    elec_indices::Vector{Int},
-    freq_indices::Vector{Int},
-    bin_indices::AbstractVector{Int},
-    threshold::Real,
-)::BitVector
-    n_elec = length(elec_indices)
-    mask = BitVector(undef, n_elec)
-    inv_n = 1.0 / (length(freq_indices) * length(bin_indices))
-    @inbounds for k = 1:n_elec
-        ei = elec_indices[k]
-        cnt = 0
-        for ti in bin_indices, fi in freq_indices
-            cnt += (pos[ei, fi, ti] | neg[ei, fi, ti])
-        end
-        mask[k] = (cnt * inv_n) >= threshold
-    end
-    return mask
-end
-
 """
     plot_topography_stats(result::TFStatsResult;
                      freq_range::Tuple{Real, Real},
@@ -638,7 +547,102 @@ function plot_topography_stats(
     return (fig = fig, axes = axes, colorbar = cb)
 end
 
-# === TF TOPOGRAPHY EXTRACTION HELPERS ===
+######################################
+######### Internal Functions #########
+######################################
+
+function _sorted_interval_bounds(iv)
+    raw = _normalize_interval(iv)
+    return (min(Float64(raw[1]), Float64(raw[2])), max(Float64(raw[1]), Float64(raw[2])))
+end
+
+function _tf_select_window_values(
+    all_freqs::Vector{Float64},
+    all_times::Vector{Float64},
+    freq_range::Interval,
+    interval_selection::Interval,
+)
+    fr = _sorted_interval_bounds(freq_range)
+    selected_freqs = [f for f in all_freqs if fr[1] <= f <= fr[2]]
+    isempty(selected_freqs) &&
+        @minimal_error("No frequencies found in range $(freq_range). Data range: $(first(all_freqs)) to $(last(all_freqs)) Hz")
+
+    if isnothing(interval_selection) || interval_selection isa AllSelection
+        selected_times = all_times
+    else
+        t_start = interval_selection isa TimeSelection ? interval_selection.start : interval_selection[1]
+        t_stop = interval_selection isa TimeSelection ? interval_selection.stop : interval_selection[2]
+        selected_times = [t for t in all_times if t_start <= t <= t_stop]
+    end
+    isempty(selected_times) && @minimal_error("No time points found in interval. Data range: $(first(all_times)) to $(last(all_times)) s")
+
+    return fr, selected_freqs, selected_times
+end
+
+function _prepare_tf_topo_layout(orig_layout::Layout, common_channels::Vector{Symbol}; need_3d::Bool = true)::Layout
+    orig_labels = orig_layout.data[!, :label]
+    layout = if length(common_channels) < length(orig_labels) || common_channels != orig_labels
+        subset_layout(orig_layout; channel_selection = channels(common_channels))
+    elseif !has_2d_coords(orig_layout) || (need_3d && !has_3d_coords(orig_layout))
+        copy(orig_layout)
+    else
+        orig_layout
+    end
+    has_valid_coordinates(layout) || @minimal_error("Cannot create topographic plot: layout has no spatial coordinates.")
+    _ensure_coordinates_2d!(layout)
+    need_3d && _ensure_coordinates_3d!(layout)
+    return layout
+end
+
+function _pop_unused_tf_topo_kwargs!(plot_kwargs::Dict)
+    pop!(plot_kwargs, :interactive, nothing)
+    pop!(plot_kwargs, :use_global_scale, nothing)
+    pop!(plot_kwargs, :component_selection, nothing)
+    return nothing
+end
+
+function _tf_bin_tvalue_means(
+    t_mat::Array{Float64,3},
+    elec_indices::Vector{Int},
+    freq_indices::Vector{Int},
+    bin_indices::AbstractVector{Int},
+)::Vector{Float64}
+    n_elec = length(elec_indices)
+    out = Vector{Float64}(undef, n_elec)
+    inv_n = 1.0 / (length(freq_indices) * length(bin_indices))
+    @inbounds for k = 1:n_elec
+        ei = elec_indices[k]
+        s = 0.0
+        for ti in bin_indices, fi in freq_indices
+            s += t_mat[ei, fi, ti]
+        end
+        m = s * inv_n
+        out[k] = isfinite(m) ? m : 0.0
+    end
+    return out
+end
+
+function _tf_bin_sig_mask(
+    pos::AbstractArray{Bool,3},
+    neg::AbstractArray{Bool,3},
+    elec_indices::Vector{Int},
+    freq_indices::Vector{Int},
+    bin_indices::AbstractVector{Int},
+    threshold::Real,
+)::BitVector
+    n_elec = length(elec_indices)
+    mask = BitVector(undef, n_elec)
+    inv_n = 1.0 / (length(freq_indices) * length(bin_indices))
+    @inbounds for k = 1:n_elec
+        ei = elec_indices[k]
+        cnt = 0
+        for ti in bin_indices, fi in freq_indices
+            cnt += (pos[ei, fi, ti] | neg[ei, fi, ti])
+        end
+        mask[k] = (cnt * inv_n) >= threshold
+    end
+    return mask
+end
 
 function _tf_filter_rows_typed(
     times::AbstractVector,

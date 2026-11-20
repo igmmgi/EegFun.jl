@@ -1,3 +1,9 @@
+# FieldTrip `.mat` data structure import functionality.
+
+######################################
+########### User Functions ###########
+######################################
+
 """
     read_fieldtrip(filepath::String, layout::Layout)
 
@@ -49,6 +55,10 @@ function read_fieldtrip(filepath::String, layout::Layout)
     @info "Detected epoched data with $n_trials trials"
     return _fieldtrip_to_epochdata(ft, filepath, layout, sample_rate)
 end
+
+######################################
+######### Internal Functions #########
+######################################
 
 function _extract_ft_channel_names(ch_labels::AbstractVector)::Vector{Symbol}
     if !isempty(ch_labels) && lowercase(string(ch_labels[end])) == "status"
@@ -172,7 +182,7 @@ function _fieldtrip_to_epochdata(ft::AbstractDict, filepath::String, layout::Lay
     trial_triggers = has_ti ? vec(ft["trialinfo"]) : nothing
 
     epoch_dataframes = Vector{DataFrame}(undef, n_trials)
-    time_zero_idx = find_closest_time_index(times, 0.0)
+    time_zero_idx = _find_closest_time_index(times, 0.0)
     col_names = vcat([:time, :sample, :epoch, :trigger, :trigger_info], ch_names)
     sample_template = collect(1:n_timepoints)
 

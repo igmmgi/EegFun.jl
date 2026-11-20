@@ -1,10 +1,8 @@
-function _print_vector(v::AbstractVector; max_length::Int = 10, n_ends::Int = 5)
-    isempty(v) && return "[]"
-    if length(v) > max_length
-        v = vcat(first(v, n_ends), "...", last(v, n_ends))
-    end
-    return join((string(x) for x in v), ", ")
-end
+# Formatted console and TOML printing for configurations, layouts, and tables.
+
+######################################
+########### User Functions ###########
+######################################
 
 """
     print_config(config, [io::IO = stdout])
@@ -43,6 +41,11 @@ function version_info()
     )
 end
 
+"""
+    log_pretty_table(df::DataFrame; log_level::Symbol = :info, kwargs...)
+
+Format `df` with `PrettyTables.pretty_table` and emit it through the active Julia logger at `log_level`.
+"""
 function log_pretty_table(df::DataFrame; log_level::Symbol = :info, kwargs...)
     table_output = sprint() do output_io
         io_context = IOContext(output_io, :displaysize => (2000, 2000), :color => true)
@@ -57,4 +60,16 @@ function log_pretty_table(df::DataFrame; log_level::Symbol = :info, kwargs...)
     lvl = get(LOG_LEVEL_MAP, log_level, Logging.Info)
     @logmsg lvl "\n\n$table_output\n" _module = nothing _file = nothing _line = nothing
     return nothing
+end
+
+######################################
+######### Internal Functions #########
+######################################
+
+function _print_vector(v::AbstractVector; max_length::Int = 10, n_ends::Int = 5)
+    isempty(v) && return "[]"
+    if length(v) > max_length
+        v = vcat(first(v, n_ends), "...", last(v, n_ends))
+    end
+    return join((string(x) for x in v), ", ")
 end

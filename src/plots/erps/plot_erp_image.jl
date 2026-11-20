@@ -1,3 +1,9 @@
+# Trial-stacked smoothed single-trial ERP image heatmaps.
+
+######################################
+######### Types & Constants ##########
+######################################
+
 const PLOT_ERP_IMAGE_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Display parameters
     :display_plot => (true, "Display the plot (true/false)"),
@@ -61,50 +67,30 @@ const PLOT_ERP_IMAGE_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :figure_padding => ((10, 30, 10, 10), "Padding around entire figure as (left, right, bottom, top) tuple (in pixels)"),
 )
 
-"""
-    plot_erp_image(filepath::String; input_dir = pwd(), participant_selection = participants(), kwargs...)
-    plot_erp_image(dat::EpochData;
-                   layout::Union{Symbol, PlotLayout} = :single,
-                   channel_selection = channels(),
-                   channel_plot_order = nothing,
-                   sample_selection = samples(),
-                   interval_selection::Interval = times(),
-                   kwargs...)
-    plot_erp_image(data::AbstractVector{<:EpochData}; kwargs...)
+######################################
+########### User Functions ###########
+######################################
 
-Plot single-trial ERP image heatmaps across epochs for specified channels and samples.
+"""
+    plot_erp_image(dat::EpochData; layout::Union{Symbol, PlotLayout} = :single, channel_selection = channels(), channel_plot_order = nothing, sample_selection = samples(), interval_selection::Interval = times(), kwargs...)
+    plot_erp_image(data::AbstractVector{<:EpochData}; kwargs...)
+    plot_erp_image(filepath::String; input_dir = pwd(), participant_selection = participants(), kwargs...)
+
+Plot single-trial ERP image heatmaps across epochs for specified channels and samples
+(from in-memory `EpochData` or a `.jld2` filepath / filename pattern).
 
 # Arguments
-- `dat::EpochData`: Epoch data structure (or `.jld2` filepath / filename pattern)
-- `layout`: `:single` (default), `:grid`, `:topo`, or `PlotLayout`
-- `channel_selection`: Channel selection predicate or symbol/vector (default: `channels()`)
-- `sample_selection`: Sample selection predicate (default: `samples()`)
-- `interval_selection`: Time interval filter (default: `times()`)
+- `dat` / `data` / `filepath`: `EpochData`, vector of `EpochData`, or `.jld2` filepath / filename pattern.
+- `layout`: `:single` (default), `:grid`, `:topo`, or `PlotLayout`.
+- `channel_selection`: Channel selection predicate or symbol/vector (default: `channels()`).
+- `sample_selection`: Sample selection predicate (default: `samples()`).
+- `interval_selection`: Time interval filter (default: `times()`).
 
 $(_generate_kwargs_doc(PLOT_ERP_IMAGE_KWARGS))
 
 # Returns
-- `NamedTuple` `(fig = fig, axes = axes)` (or vector of `NamedTuple`s for multi-condition/pattern inputs)
+- `NamedTuple` `(fig = fig, axes = axes)` (or vector of `NamedTuple`s for multi-condition/pattern inputs).
 """
-function plot_erp_image(filepath::String; input_dir::String = pwd(), participant_selection = participants(), kwargs...)
-    if endswith(filepath, ".jld2")
-        resolved = _resolve_input_filepath(filepath, input_dir)
-        data = read_data(resolved)
-        isnothing(data) && @minimal_error "No data found in file: $resolved"
-        return plot_erp_image(data; kwargs...)
-    end
-
-    files = _require_batch_files(filepath, input_dir, participant_selection)
-    results = NamedTuple[]
-    for file in files
-        @info "Plotting: $file"
-        data = read_data(joinpath(input_dir, file))
-        isnothing(data) && continue
-        push!(results, plot_erp_image(data; kwargs...))
-    end
-    return results
-end
-
 function plot_erp_image(
     dat::EpochData;
     layout::Union{Symbol,PlotLayout} = :single,
@@ -333,6 +319,29 @@ function plot_erp_image(data::AbstractVector{<:EpochData}; kwargs...)
     results = plot_erp_image.(data; kwargs...)
     return length(results) == 1 ? only(results) : results
 end
+
+function plot_erp_image(filepath::String; input_dir::String = pwd(), participant_selection = participants(), kwargs...)
+    if endswith(filepath, ".jld2")
+        resolved = _resolve_input_filepath(filepath, input_dir)
+        data = read_data(resolved)
+        isnothing(data) && @minimal_error "No data found in file: $resolved"
+        return plot_erp_image(data; kwargs...)
+    end
+
+    files = _require_batch_files(filepath, input_dir, participant_selection)
+    results = NamedTuple[]
+    for file in files
+        @info "Plotting: $file"
+        data = read_data(joinpath(input_dir, file))
+        isnothing(data) && continue
+        push!(results, plot_erp_image(data; kwargs...))
+    end
+    return results
+end
+
+######################################
+######### Internal Functions #########
+######################################
 
 function _setup_erp_image_interactivity!(fig::Figure, axes::Vector{Axis}, heatmaps::Vector; zoom_step::Float64 = 0.2)
     _setup_keyboard_tracking(fig)

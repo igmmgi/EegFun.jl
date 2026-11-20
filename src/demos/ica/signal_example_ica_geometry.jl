@@ -1,3 +1,9 @@
+# Interactive 2D scatter geometry of independent vs. mixed sources demo.
+
+######################################
+########### User Functions ###########
+######################################
+
 """
     signal_example_ica_geometry()
 
@@ -5,10 +11,8 @@ Interactive 3-source / 3-sensor ICA blind source separation demo illustrating pa
 rotations, joint-distribution scatter geometry, excess kurtosis, and Infomax / Extended Infomax
 unmixing.
 
-## See Also
-- [`signal_example_ica_mixture`](@ref), [`signal_example_ica_separation`](@ref),
-  [`signal_example_ica_clt`](@ref), [`signal_example_ica_sphering`](@ref),
-  [`signal_example_ica_optimization`](@ref)
+# Returns
+- `fig::Figure`: The Makie figure object
 
 # Examples
 ```julia
@@ -16,8 +20,10 @@ using GLMakie, EegFun
 EegFun.signal_example_ica_geometry()
 ```
 
-# Returns
-- `fig::Figure`: The Makie figure object
+# See Also
+- [`signal_example_ica_mixture`](@ref), [`signal_example_ica_separation`](@ref),
+  [`signal_example_ica_clt`](@ref), [`signal_example_ica_sphering`](@ref),
+  [`signal_example_ica_optimization`](@ref)
 """
 function signal_example_ica_geometry()
     _check_interactive_demo_backend("ICA Geometry demo") || return nothing

@@ -1,31 +1,8 @@
-function _validate_epochs_pattern_combine(pattern::String)
-    if !contains(lowercase(pattern), "epoch") && occursin(r"(?:^|[^a-zA-Z])erps?(?:[^a-zA-Z]|$)"i, pattern)
-        return "condition_combine only works with epoch data, not ERP files (got pattern: '$pattern'). Use condition_average for ERPs."
-    end
-    return nothing
-end
+# Pooling and concatenation of epoched trials across experimental conditions.
 
-function _condition_combine_default_output_dir(input_dir::String, pattern::String, groups::AbstractVector{<:AbstractVector{<:Integer}})
-    groups_str = join([join(group, "-") for group in groups], "_")
-    return joinpath(input_dir, "combined_$(clean_pattern(pattern))_$(groups_str)")
-end
-
-function _condition_combine_process_file(
-    filepath::String,
-    output_path::String,
-    condition_groups::AbstractVector{<:AbstractVector{<:Integer}},
-)
-    filename = basename(filepath)
-    data = read_data(filepath)
-    isnothing(data) && return BatchResult(false, filename, "No data variables found")
-    !(data isa Vector{<:EpochData}) && return BatchResult(false, filename, "Invalid data type: expected Vector{EpochData}")
-
-    combined_data = condition_combine(data, condition_groups)
-    jldsave(output_path; data = combined_data, format_version = EEGFUN_FORMAT_VERSION)
-
-    total_epochs = sum(n_epochs(cond) for cond in combined_data)
-    return BatchResult(true, filename, "Combined into $(length(condition_groups)) group(s) with $total_epochs total epochs")
-end
+######################################
+########### User Functions ###########
+######################################
 
 """
     condition_combine(data::AbstractVector{<:EpochData}, condition_groups)::Vector{EpochData}
@@ -166,3 +143,36 @@ end
 
 condition_combine(file_pattern::String, condition_group::AbstractVector{<:Integer}; kwargs...) =
     condition_combine(file_pattern, [collect(Int, condition_group)]; kwargs...)
+
+######################################
+######### Internal Functions #########
+######################################
+
+function _validate_epochs_pattern_combine(pattern::String)
+    if !contains(lowercase(pattern), "epoch") && occursin(r"(?:^|[^a-zA-Z])erps?(?:[^a-zA-Z]|$)"i, pattern)
+        return "condition_combine only works with epoch data, not ERP files (got pattern: '$pattern'). Use condition_average for ERPs."
+    end
+    return nothing
+end
+
+function _condition_combine_default_output_dir(input_dir::String, pattern::String, groups::AbstractVector{<:AbstractVector{<:Integer}})
+    groups_str = join([join(group, "-") for group in groups], "_")
+    return joinpath(input_dir, "combined_$(_clean_pattern(pattern))_$(groups_str)")
+end
+
+function _condition_combine_process_file(
+    filepath::String,
+    output_path::String,
+    condition_groups::AbstractVector{<:AbstractVector{<:Integer}},
+)
+    filename = basename(filepath)
+    data = read_data(filepath)
+    isnothing(data) && return BatchResult(false, filename, "No data variables found")
+    !(data isa Vector{<:EpochData}) && return BatchResult(false, filename, "Invalid data type: expected Vector{EpochData}")
+
+    combined_data = condition_combine(data, condition_groups)
+    jldsave(output_path; data = combined_data, format_version = EEGFUN_FORMAT_VERSION)
+
+    total_epochs = sum(n_epochs(cond) for cond in combined_data)
+    return BatchResult(true, filename, "Combined into $(length(condition_groups)) group(s) with $total_epochs total epochs")
+end

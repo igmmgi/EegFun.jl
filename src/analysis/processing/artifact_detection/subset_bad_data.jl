@@ -1,25 +1,8 @@
-function _matches_participant_file(filename::AbstractString, participant_id)
-    if filename in (
-        "epoch_summary.jld2",
-        "epoch_summary_subset.jld2",
-        "file_summary.jld2",
-        "file_summary_subset.jld2",
-        "config.toml",
-        "neighbors.toml",
-    ) || startswith(filename, "preprocess_log_")
-        return false
-    end
+# Extraction and subsetting of artifact-flagged epochs and channels.
 
-    pid_raw = strip(string(participant_id))
-    isempty(pid_raw) && return false
-    pid_stem = replace(pid_raw, r"\.(bdf|edf|vhdr|eeg|fif|xdf|set|mat|jld2|csv|txt)$"i => "")
-    isempty(pid_stem) && return false
-
-    escaped = replace(pid_stem, r"([.^$*+?()\[\]{}|\\])" => s"\\\1")
-    left_boundary = isdigit(first(pid_stem)) ? "(?:^|[^0-9])" : "(?:^|[^A-Za-z0-9])"
-    pat = Regex(left_boundary * escaped * "(?:[^A-Za-z0-9]|\$)")
-    return occursin(pat, filename)
-end
+######################################
+########### User Functions ###########
+######################################
 
 """
     subset_bad_data(data_path::String, threshold::Real; subset_directory::String="excluded")
@@ -62,4 +45,31 @@ function subset_bad_data(data_path::String, threshold::Real; subset_directory::S
             isfile(src_path) && mv(src_path, joinpath(subset_dir_path, filename); force = true)
         end
     end
+end
+
+######################################
+######### Internal Functions #########
+######################################
+
+function _matches_participant_file(filename::AbstractString, participant_id)
+    if filename in (
+        "epoch_summary.jld2",
+        "epoch_summary_subset.jld2",
+        "file_summary.jld2",
+        "file_summary_subset.jld2",
+        "config.toml",
+        "neighbors.toml",
+    ) || startswith(filename, "preprocess_log_")
+        return false
+    end
+
+    pid_raw = strip(string(participant_id))
+    isempty(pid_raw) && return false
+    pid_stem = replace(pid_raw, r"\.(bdf|edf|vhdr|eeg|fif|xdf|set|mat|jld2|csv|txt)$"i => "")
+    isempty(pid_stem) && return false
+
+    escaped = replace(pid_stem, r"([.^$*+?()\[\]{}|\\])" => s"\\\1")
+    left_boundary = isdigit(first(pid_stem)) ? "(?:^|[^0-9])" : "(?:^|[^A-Za-z0-9])"
+    pat = Regex(left_boundary * escaped * "(?:[^A-Za-z0-9]|\$)")
+    return occursin(pat, filename)
 end

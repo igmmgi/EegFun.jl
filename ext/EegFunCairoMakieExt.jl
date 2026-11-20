@@ -1,7 +1,14 @@
+# CairoMakie.jl backend extension for high-quality vector figure export.
+
 module EegFunCairoMakieExt
 
 using EegFun
+
 using CairoMakie
+
+######################################
+######### Internal Functions #########
+######################################
 
 function __init__()
     EegFun.MAKIE_EXT_STATE.save_vector =

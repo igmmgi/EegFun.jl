@@ -1,3 +1,118 @@
+# Bipolar and hemispheric channel difference wave calculations.
+
+######################################
+########### User Functions ###########
+######################################
+
+"""
+    channel_difference(dat; channel_selection1 = channels(), channel_selection2 = channels(), channel_out = :diff)
+
+Compute `mean(channel_selection1) - mean(channel_selection2)` and store it as `channel_out` on a copy of `dat`.
+"""
+channel_difference(dat::EegData, args...; kwargs...) = channel_difference!(copy(dat), args...; kwargs...)
+
+channel_difference(dat::AbstractVector{<:EegData}, args...; kwargs...) = [channel_difference(d, args...; kwargs...) for d in dat]
+
+"""
+    channel_difference!(dat::EegData; channel_selection1 = channels(),
+                        channel_selection2 = channels(), channel_out = :diff) -> EegData
+
+In-place mutating version of [`channel_difference`](@ref).
+"""
+function channel_difference!(
+    dat::EegData;
+    channel_selection1 = channels(),
+    channel_selection2 = channels(),
+    channel_out::Union{Symbol,AbstractString} = :diff,
+)
+    out_sym = Symbol(channel_out)
+    chs1 = get_selected_channels(dat, channel_selection1; include_meta = false)
+    chs2 = get_selected_channels(dat, channel_selection2; include_meta = false)
+
+    isempty(chs1) && @minimal_error "No channels selected by channel_selection1"
+    isempty(chs2) && @minimal_error "No channels selected by channel_selection2"
+
+    @info "Channel sets: $(chs1) vs. $(chs2) -> $(out_sym)"
+
+    existing = Set(all_labels(dat))
+    out_sym ∈ existing && @minimal_warning "Overwriting existing channel '$(out_sym)'"
+    if out_sym ∈ chs1 || out_sym ∈ chs2
+        @minimal_warning "Output channel '$(out_sym)' is also in the input channel sets. This may cause unexpected behavior."
+    end
+
+    for container in _data_frames(dat)
+        _calculate_channel_difference!(container, chs1, chs2, out_sym)
+    end
+    return dat
+end
+
+function channel_difference!(dat::AbstractVector{<:EegData}, args...; kwargs...)
+    for d in dat
+        channel_difference!(d, args...; kwargs...)
+    end
+    return dat
+end
+
+"""
+    calculate_eog_channels(dat, eog_cfg::Union{EogConfig, Dict})
+
+Compute vertical and horizontal bipolar EOG channels according to `eog_cfg` on a copy of `dat`.
+"""
+calculate_eog_channels(dat::EegData, args...; kwargs...) = calculate_eog_channels!(copy(dat), args...; kwargs...)
+
+calculate_eog_channels(dat::AbstractVector{<:EegData}, args...; kwargs...) = [calculate_eog_channels(d, args...; kwargs...) for d in dat]
+
+"""
+    calculate_eog_channels!(dat::EegData, eog_cfg::Union{EogConfig, Dict}) -> EegData
+
+In-place mutating version of [`calculate_eog_channels`](@ref).
+"""
+function calculate_eog_channels!(dat::EegData, eog_cfg::EogConfig)
+    v_cfg = eog_cfg.vEOG_channels
+    channel_difference!(
+        dat;
+        channel_selection1 = channels(Symbol.(v_cfg[1])),
+        channel_selection2 = channels(Symbol.(v_cfg[2])),
+        channel_out = Symbol(v_cfg[3][1]),
+    )
+
+    h_cfg = eog_cfg.hEOG_channels
+    channel_difference!(
+        dat;
+        channel_selection1 = channels(Symbol.(h_cfg[1])),
+        channel_selection2 = channels(Symbol.(h_cfg[2])),
+        channel_out = Symbol(h_cfg[3][1]),
+    )
+    return dat
+end
+
+calculate_eog_channels!(dat::EegData, eog_cfg::Dict) = calculate_eog_channels!(dat, EogConfig(eog_cfg))
+
+function calculate_eog_channels!(dat::AbstractVector{<:EegData}, eog_cfg)
+    for d in dat
+        calculate_eog_channels!(d, eog_cfg)
+    end
+    return dat
+end
+
+"""
+    detect_eog_onsets!(dat::EegData, eog_cfg::EogConfig) -> EegData
+
+Detect vertical and horizontal EOG step onsets in place using the criteria and channel names in `eog_cfg`.
+"""
+function detect_eog_onsets!(dat::EegData, eog_cfg::EogConfig)
+    v_out = eog_cfg.vEOG_channels[3][1]
+    detect_eog_onsets!(dat, eog_cfg.vEOG_criterion, Symbol(v_out), Symbol("is_" * v_out))
+
+    h_out = eog_cfg.hEOG_channels[3][1]
+    detect_eog_onsets!(dat, eog_cfg.hEOG_criterion, Symbol(h_out), Symbol("is_" * h_out))
+    return dat
+end
+
+######################################
+######### Internal Functions #########
+######################################
+
 function _channel_diff_col(df::DataFrame, idx1::Vector{Int}, idx2::Vector{Int})::Vector{Float64}
     n = nrow(df)
     out = Vector{Float64}(undef, n)
@@ -71,108 +186,4 @@ function _calculate_channel_difference!(
         end
     end
     return nothing
-end
-
-"""
-    channel_difference!(dat::EegData; channel_selection1 = channels(),
-                        channel_selection2 = channels(), channel_out = :diff) -> EegData
-
-Compute `mean(channel_selection1) - mean(channel_selection2)` and store it as `channel_out` in `dat`.
-"""
-function channel_difference!(
-    dat::EegData;
-    channel_selection1 = channels(),
-    channel_selection2 = channels(),
-    channel_out::Union{Symbol,AbstractString} = :diff,
-)
-    out_sym = Symbol(channel_out)
-    chs1 = get_selected_channels(dat, channel_selection1; include_meta = false)
-    chs2 = get_selected_channels(dat, channel_selection2; include_meta = false)
-
-    isempty(chs1) && @minimal_error "No channels selected by channel_selection1"
-    isempty(chs2) && @minimal_error "No channels selected by channel_selection2"
-
-    @info "Channel sets: $(chs1) vs. $(chs2) -> $(out_sym)"
-
-    existing = Set(all_labels(dat))
-    out_sym ∈ existing && @minimal_warning "Overwriting existing channel '$(out_sym)'"
-    if out_sym ∈ chs1 || out_sym ∈ chs2
-        @minimal_warning "Output channel '$(out_sym)' is also in the input channel sets. This may cause unexpected behavior."
-    end
-
-    for container in _data_frames(dat)
-        _calculate_channel_difference!(container, chs1, chs2, out_sym)
-    end
-    return dat
-end
-
-"""
-    channel_difference(dat, args...; kwargs...)
-
-Non-mutating version of [`channel_difference!`](@ref).
-"""
-channel_difference(dat::EegData, args...; kwargs...) = channel_difference!(copy(dat), args...; kwargs...)
-
-function channel_difference!(dat::AbstractVector{<:EegData}, args...; kwargs...)
-    for d in dat
-        channel_difference!(d, args...; kwargs...)
-    end
-    return dat
-end
-
-channel_difference(dat::AbstractVector{<:EegData}, args...; kwargs...) = [channel_difference(d, args...; kwargs...) for d in dat]
-
-"""
-    calculate_eog_channels!(dat::EegData, eog_cfg::Union{EogConfig, Dict}) -> EegData
-
-Compute vertical and horizontal bipolar EOG channels in place according to `eog_cfg`.
-"""
-function calculate_eog_channels!(dat::EegData, eog_cfg::EogConfig)
-    v_cfg = eog_cfg.vEOG_channels
-    channel_difference!(
-        dat;
-        channel_selection1 = channels(Symbol.(v_cfg[1])),
-        channel_selection2 = channels(Symbol.(v_cfg[2])),
-        channel_out = Symbol(v_cfg[3][1]),
-    )
-
-    h_cfg = eog_cfg.hEOG_channels
-    channel_difference!(
-        dat;
-        channel_selection1 = channels(Symbol.(h_cfg[1])),
-        channel_selection2 = channels(Symbol.(h_cfg[2])),
-        channel_out = Symbol(h_cfg[3][1]),
-    )
-    return dat
-end
-
-calculate_eog_channels!(dat::EegData, eog_cfg::Dict) = calculate_eog_channels!(dat, EogConfig(eog_cfg))
-
-function calculate_eog_channels!(dat::AbstractVector{<:EegData}, eog_cfg)
-    for d in dat
-        calculate_eog_channels!(d, eog_cfg)
-    end
-    return dat
-end
-
-"""
-    calculate_eog_channels(dat, eog_cfg)
-
-Non-mutating version of [`calculate_eog_channels!`](@ref).
-"""
-calculate_eog_channels(dat::EegData, args...; kwargs...) = calculate_eog_channels!(copy(dat), args...; kwargs...)
-calculate_eog_channels(dat::AbstractVector{<:EegData}, args...; kwargs...) = [calculate_eog_channels(d, args...; kwargs...) for d in dat]
-
-"""
-    detect_eog_onsets!(dat::EegData, eog_cfg::EogConfig) -> EegData
-
-Detect vertical and horizontal EOG step onsets in place using the criteria and channel names in `eog_cfg`.
-"""
-function detect_eog_onsets!(dat::EegData, eog_cfg::EogConfig)
-    v_out = eog_cfg.vEOG_channels[3][1]
-    detect_eog_onsets!(dat, eog_cfg.vEOG_criterion, Symbol(v_out), Symbol("is_" * v_out))
-
-    h_out = eog_cfg.hEOG_channels[3][1]
-    detect_eog_onsets!(dat, eog_cfg.hEOG_criterion, Symbol(h_out), Symbol("is_" * h_out))
-    return dat
 end

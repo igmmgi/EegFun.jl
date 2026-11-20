@@ -1,3 +1,9 @@
+# File discovery, regex pattern matching, and dataset download helpers.
+
+######################################
+########### User Functions ###########
+######################################
+
 """
     get_files(directory::String, files::String; recursive::Bool = false)
     get_files(directory::String, files::Vector{String}; recursive::Bool = false)
@@ -26,13 +32,6 @@ function get_files(directory::String, files::Vector{String}; recursive::Bool = f
     return [joinpath(directory, file) for file in files]
 end
 
-function clean_pattern(pattern::String)
-    base = basename(rstrip(pattern, ('/', '\\')))
-    isempty(base) && return ""
-    stem, ext = splitext(base)
-    return lowercase(ext) in (".jld2", ".bdf", ".edf", ".vhdr", ".fif", ".fiff", ".set", ".xdf", ".csv") ? stem : base
-end
-
 """
     find_file(filename::String, search_dir::String;
               recursive::Bool = true, extensions::Vector{String} = String[]) -> Union{String, Nothing}
@@ -59,7 +58,18 @@ function find_file(filename::String, search_dir::String; recursive::Bool = true,
     return nothing
 end
 
-function get_file_extension(filename::String)
+######################################
+######### Internal Functions #########
+######################################
+
+function _clean_pattern(pattern::String)
+    base = basename(rstrip(pattern, ('/', '\\')))
+    isempty(base) && return ""
+    stem, ext = splitext(base)
+    return lowercase(ext) in (".jld2", ".bdf", ".edf", ".vhdr", ".fif", ".fiff", ".set", ".xdf", ".csv") ? stem : base
+end
+
+function _get_file_extension(filename::String)
     endswith(lowercase(filename), ".xdf.gz") && return ".xdf.gz"
     return lowercase(splitext(filename)[2])
 end

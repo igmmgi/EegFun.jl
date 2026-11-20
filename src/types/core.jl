@@ -1,3 +1,9 @@
+# Core EEG, ERP, epoch, time-frequency, layout, and metadata types.
+
+######################################
+######### Types & Constants ##########
+######################################
+
 """
     EegFunData
 
@@ -76,25 +82,6 @@ Interactive preprocessing settings recorded from the databrowser.
     reference_channels::Vector{Symbol} = Symbol[]
 end
 
-AnalysisSettings(
-    hp_filter::Real,
-    lp_filter::Real,
-    reference::Symbol,
-    repaired_channels::Vector{Symbol},
-    repair_method::Symbol,
-    selected_regions::Vector{Tuple{Float64,Float64}},
-    removed_ica_components::Vector{Int},
-) = AnalysisSettings(
-    Float64(hp_filter),
-    Float64(lp_filter),
-    reference,
-    repaired_channels,
-    repair_method,
-    selected_regions,
-    removed_ica_components,
-    Symbol[],
-)
-
 """
     Neighbors
 
@@ -127,17 +114,6 @@ mutable struct Layout
     neighbors::Union{Nothing,Dict{Symbol,Neighbors}}
     criterion::Union{Nothing,Float64}
     criterion_type::Union{Nothing,Symbol}
-end
-
-Layout() = Layout(DataFrame(label = Symbol[], inc = Float64[], azi = Float64[]), nothing, nothing, nothing)
-
-function Base.copy(layout::Layout)::Layout
-    neighbors_copy = if isnothing(layout.neighbors)
-        nothing
-    else
-        Dict{Symbol,Neighbors}(k => Neighbors(copy(v.channels), copy(v.distances), copy(v.weights)) for (k, v) in layout.neighbors)
-    end
-    return Layout(copy(layout.data; copycols = true), neighbors_copy, layout.criterion, layout.criterion_type)
 end
 
 """
@@ -214,6 +190,10 @@ end
     BaselineInfo
 
 Baseline correction parameters applied to time-frequency data (`method` and `(start, stop)` `window` in seconds).
+
+# Fields
+- `method::Symbol`: Baseline normalization method (`:db`, `:percent`, `:relchange`, `:normchange`, `:zscore`, or `:absolute`)
+- `window::Tuple{Float64,Float64}`: Baseline `(start, stop)` time window in seconds
 """
 @kwdef struct BaselineInfo
     method::Symbol
@@ -250,24 +230,6 @@ mutable struct TimeFreqData <: SingleDataFrameEeg
     analysis_info::AnalysisInfo
 end
 
-Base.getproperty(tf_data::TimeFreqData, name::Symbol) = name === :data ? getfield(tf_data, :data_power) : getfield(tf_data, name)
-Base.propertynames(tf::TimeFreqData, private::Bool = false) = (fieldnames(typeof(tf))..., :data)
-
-function Base.copy(tf_data::TimeFreqData)::TimeFreqData
-    return TimeFreqData(
-        tf_data.file,
-        tf_data.condition,
-        tf_data.condition_name,
-        copy(tf_data.data_power; copycols = true),
-        copy(tf_data.data_phase; copycols = true),
-        copy(tf_data.layout),
-        tf_data.sample_rate,
-        tf_data.method,
-        tf_data.baseline,
-        copy(tf_data.analysis_info),
-    )
-end
-
 """
     TimeFreqEpochData <: MultiDataFrameEeg
 
@@ -298,24 +260,6 @@ mutable struct TimeFreqEpochData <: MultiDataFrameEeg
     analysis_info::AnalysisInfo
 end
 
-Base.getproperty(tf_data::TimeFreqEpochData, name::Symbol) = name === :data ? getfield(tf_data, :data_power) : getfield(tf_data, name)
-Base.propertynames(tf::TimeFreqEpochData, private::Bool = false) = (fieldnames(typeof(tf))..., :data)
-
-function Base.copy(tf_data::TimeFreqEpochData)::TimeFreqEpochData
-    return TimeFreqEpochData(
-        tf_data.file,
-        tf_data.condition,
-        tf_data.condition_name,
-        [copy(df; copycols = true) for df in tf_data.data_power],
-        [copy(df; copycols = true) for df in tf_data.data_phase],
-        copy(tf_data.layout),
-        tf_data.sample_rate,
-        tf_data.method,
-        tf_data.baseline,
-        copy(tf_data.analysis_info),
-    )
-end
-
 """
     SpectrumData <: SingleDataFrameEeg
 
@@ -342,24 +286,29 @@ mutable struct SpectrumData <: SingleDataFrameEeg
     analysis_info::AnalysisInfo
 end
 
-function Base.copy(spectrum_data::SpectrumData)::SpectrumData
-    return SpectrumData(
-        spectrum_data.file,
-        spectrum_data.condition,
-        spectrum_data.condition_name,
-        copy(spectrum_data.data; copycols = true),
-        copy(spectrum_data.layout),
-        spectrum_data.sample_rate,
-        spectrum_data.method,
-        copy(spectrum_data.analysis_info),
-    )
-end
+const _TimeDomainEegData = Union{ContinuousData,ErpData,EpochData}
 
 abstract type AbstractSelection end
+
+"""
+    TimeSelection <: AbstractSelection
+
+Closed time-window selector (`[start, stop]` in seconds), constructed via [`times`](@ref).
+
+# Fields
+- `start::Float64`: Window start time in seconds (inclusive)
+- `stop::Float64`: Window end time in seconds (inclusive)
+"""
 struct TimeSelection <: AbstractSelection
     start::Float64
     stop::Float64
 end
+
+"""
+    AllSelection <: AbstractSelection
+
+Full-range time selector matching all samples, constructed via `times()`.
+"""
 struct AllSelection <: AbstractSelection end
 
 """
@@ -441,6 +390,26 @@ end
     IcaPrms
 
 Algorithm hyperparameters for Infomax, Picard, and AMICA ICA decomposition.
+
+# Fields
+- `l_rate::Float64 = 0.001`: Initial Infomax learning rate
+- `max_iter::Int = 512`: Maximum optimization iterations for Infomax/Picard
+- `w_change::Float64 = 1e-6`: Weight-change convergence threshold
+- `anneal_deg::Float64 = 60.0`: Angle threshold (degrees) triggering learning-rate annealing
+- `anneal_step::Float64 = 0.9`: Multiplicative learning-rate annealing factor
+- `blowup::Float64 = 1e15`: Weight-norm divergence threshold
+- `blowup_fac::Float64 = 0.8`: Learning-rate reduction factor after blowup
+- `max_weight::Float64 = 1e8`: Maximum allowed weight magnitude
+- `restart_factor::Float64 = 0.9`: Learning-rate reduction factor on restart
+- `degconst::Float64 = 180.0 / π`: Radians-to-degrees conversion constant
+- `default_stop::Float64 = 1e-6`: Default gradient/step stopping tolerance
+- `use_gpu::Bool = false`: Enable GPU acceleration when available
+- `picard_m::Int = 7`: L-BFGS memory size for Picard
+- `picard_lambda_min::Float64 = 0.01`: Minimum Hessian eigenvalue regularization for Picard
+- `picard_ls_tries::Int = 10`: Maximum backtracking line-search attempts per Picard step
+- `amica_lrate::Float64 = 0.1`: Initial natural-gradient learning rate for AMICA
+- `amica_max_iter::Int = 2000`: Maximum EM/natural-gradient iterations for AMICA
+- `amica_m::Int = 3`: Number of generalized Gaussian mixture components per source in AMICA
 """
 @kwdef mutable struct IcaPrms
     l_rate::Float64 = 0.001
@@ -499,6 +468,12 @@ end
     ErpMeasurementsResult <: EegFunData
 
 Tabular ERP amplitude/latency measurements bundled with their `analysis_type` and time intervals.
+
+# Fields
+- `data::DataFrame`: Extracted per-channel/condition measurement table
+- `analysis_type::String`: Measurement type identifier (see [`VALID_MEASUREMENT_TYPES`](@ref))
+- `analysis_interval::Union{Interval,Nothing}`: Time interval over which measurements were computed
+- `baseline_interval::Union{Interval,Nothing}`: Optional baseline correction interval applied prior to measurement
 """
 struct ErpMeasurementsResult <: EegFunData
     data::DataFrame
@@ -511,12 +486,115 @@ end
     TriggerInfo
 
 Wrapper around a trigger-count `DataFrame` for formatted display.
+
+# Fields
+- `data::DataFrame`: Trigger code summary table (`:trigger`, `:count`, and optional label columns)
 """
 struct TriggerInfo
     data::DataFrame
 end
 
-# === DISPLAY & FILENAME HELPERS ===
+######################################
+########### User Functions ###########
+######################################
+
+AnalysisSettings(
+    hp_filter::Real,
+    lp_filter::Real,
+    reference::Symbol,
+    repaired_channels::Vector{Symbol},
+    repair_method::Symbol,
+    selected_regions::Vector{Tuple{Float64,Float64}},
+    removed_ica_components::Vector{Int},
+) = AnalysisSettings(
+    Float64(hp_filter),
+    Float64(lp_filter),
+    reference,
+    repaired_channels,
+    repair_method,
+    selected_regions,
+    removed_ica_components,
+    Symbol[],
+)
+
+Layout() = Layout(DataFrame(label = Symbol[], inc = Float64[], azi = Float64[]), nothing, nothing, nothing)
+
+"""
+    filename(dat) -> String
+
+Return the recording filename stem associated with raw EEG data or an `EegData` container.
+"""
+filename(
+    dat::Union{
+        BiosemiDataFormat.BiosemiData,
+        EuropeanDataFormat.EdfData,
+        BrainVisionDataFormat.BrainVisionData,
+        FunctionalImageFormat.FifData,
+        ExtensibleDataFormat.XdfData,
+    },
+)::String = basename_without_ext(dat.filename)
+
+filename(dat::EegData)::String = dat.file
+
+function Base.copy(layout::Layout)::Layout
+    neighbors_copy = if isnothing(layout.neighbors)
+        nothing
+    else
+        Dict{Symbol,Neighbors}(k => Neighbors(copy(v.channels), copy(v.distances), copy(v.weights)) for (k, v) in layout.neighbors)
+    end
+    return Layout(copy(layout.data; copycols = true), neighbors_copy, layout.criterion, layout.criterion_type)
+end
+
+Base.getproperty(tf_data::TimeFreqData, name::Symbol) = name === :data ? getfield(tf_data, :data_power) : getfield(tf_data, name)
+
+Base.propertynames(tf::TimeFreqData, private::Bool = false) = (fieldnames(typeof(tf))..., :data)
+
+function Base.copy(tf_data::TimeFreqData)::TimeFreqData
+    return TimeFreqData(
+        tf_data.file,
+        tf_data.condition,
+        tf_data.condition_name,
+        copy(tf_data.data_power; copycols = true),
+        copy(tf_data.data_phase; copycols = true),
+        copy(tf_data.layout),
+        tf_data.sample_rate,
+        tf_data.method,
+        tf_data.baseline,
+        copy(tf_data.analysis_info),
+    )
+end
+
+Base.getproperty(tf_data::TimeFreqEpochData, name::Symbol) = name === :data ? getfield(tf_data, :data_power) : getfield(tf_data, name)
+
+Base.propertynames(tf::TimeFreqEpochData, private::Bool = false) = (fieldnames(typeof(tf))..., :data)
+
+function Base.copy(tf_data::TimeFreqEpochData)::TimeFreqEpochData
+    return TimeFreqEpochData(
+        tf_data.file,
+        tf_data.condition,
+        tf_data.condition_name,
+        [copy(df; copycols = true) for df in tf_data.data_power],
+        [copy(df; copycols = true) for df in tf_data.data_phase],
+        copy(tf_data.layout),
+        tf_data.sample_rate,
+        tf_data.method,
+        tf_data.baseline,
+        copy(tf_data.analysis_info),
+    )
+end
+
+function Base.copy(spectrum_data::SpectrumData)::SpectrumData
+    return SpectrumData(
+        spectrum_data.file,
+        spectrum_data.condition,
+        spectrum_data.condition_name,
+        copy(spectrum_data.data; copycols = true),
+        copy(spectrum_data.layout),
+        spectrum_data.sample_rate,
+        spectrum_data.method,
+        copy(spectrum_data.analysis_info),
+    )
+end
 
 function Base.show(io::IO, result::ErpMeasurementsResult)
     println(io, "ErpMeasurementsResult")
@@ -557,15 +635,6 @@ function Base.show(io::IO, cond::EpochCondition)
         end
         !isnothing(cond.mask_before_trigger) && println(io, "   └─ Before trigger: $(cond.mask_before_trigger)")
     end
-end
-
-function _format_layout_rows(df::DataFrame)
-    out = DataFrame()
-    for col in names(df)
-        vals = df[!, col]
-        out[!, col] = eltype(vals) <: Number ? [@sprintf("%.2f", v) for v in vals] : vals
-    end
-    return out
 end
 
 function Base.show(io::IO, layout::Layout)
@@ -622,17 +691,6 @@ function Base.show(io::IO, ::MIME"text/plain", neighbors_dict::Dict{Symbol,Neigh
         println(io, "[showing first 3 and last 3 of $n_electrodes electrodes]")
     end
 end
-
-filename(
-    dat::Union{
-        BiosemiDataFormat.BiosemiData,
-        EuropeanDataFormat.EdfData,
-        BrainVisionDataFormat.BrainVisionData,
-        FunctionalImageFormat.FifData,
-        ExtensibleDataFormat.XdfData,
-    },
-)::String = basename_without_ext(dat.filename)
-filename(dat::EegData)::String = dat.file
 
 function Base.show(io::IO, dat::MultiDataFrameEeg)
     n_rows = isempty(dat.data) ? 0 : nrow(dat.data[1])
@@ -704,4 +762,17 @@ function Base.copy(ica::InfoIca)::InfoIca
         copy(ica.layout),
         copy(ica.is_sub_gaussian),
     )
+end
+
+######################################
+######### Internal Functions #########
+######################################
+
+function _format_layout_rows(df::DataFrame)
+    out = DataFrame()
+    for col in names(df)
+        vals = df[!, col]
+        out[!, col] = eltype(vals) <: Number ? [@sprintf("%.2f", v) for v in vals] : vals
+    end
+    return out
 end

@@ -1,4 +1,9 @@
-# === DEFAULT KEYWORD ARGUMENTS ===
+# Frequency magnitude, phase, impulse, and step response plots for digital filters.
+
+######################################
+######### Types & Constants ##########
+######################################
+
 const PLOT_FILTER_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :ylim => ((-100, 5), "Y-axis limits in dB as (min, max) tuple"),
     :xlim => (nothing, "X-axis limits in Hz as (min, max) tuple. If nothing, automatically determined"),
@@ -28,51 +33,9 @@ const PLOT_FILTER_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :xscale => (Makie.Symlog10(10.0), "X-axis scale type"),
 )
 
-function _build_freq_grid(n_points::Int, fs::Float64)
-    freqs = Vector{Float64}(undef, n_points + 1)
-    w = Vector{Float64}(undef, n_points + 1)
-    freqs[1] = 0.0
-    w[1] = 0.0
-    log_grid = range(log10(0.01), log10(fs / 2); length = n_points)
-    w_scale = 2π / fs
-    @inbounds for i = 1:n_points
-        f = exp10(log_grid[i])
-        freqs[i+1] = f
-        w[i+1] = f * w_scale
-    end
-    return freqs, w
-end
-
-function _fir_mag_db(b::Vector{Float64}, w::Vector{Float64}, is_filtfilt::Bool)::Vector{Float64}
-    n_w = length(w)
-    n_taps = length(b)
-    mag_db = Vector{Float64}(undef, n_w)
-    @inbounds for i = 1:n_w
-        w_k = w[i]
-        acc_re = 0.0
-        acc_im = 0.0
-        for k = 1:n_taps
-            c = cis(-w_k * (k - 1))
-            bk = b[k]
-            acc_re = muladd(bk, real(c), acc_re)
-            acc_im = muladd(bk, imag(c), acc_im)
-        end
-        m = hypot(acc_re, acc_im)
-        is_filtfilt && (m *= m)
-        mag_db[i] = 20.0 * log10(m)
-    end
-    return mag_db
-end
-
-function _complex_to_db(resp::AbstractVector, is_filtfilt::Bool)::Vector{Float64}
-    mag_db = Vector{Float64}(undef, length(resp))
-    @inbounds for i in eachindex(resp)
-        m = abs(resp[i])
-        is_filtfilt && (m *= m)
-        mag_db[i] = 20.0 * log10(m)
-    end
-    return mag_db
-end
+######################################
+########### User Functions ###########
+######################################
 
 """
     plot_filter_response(filter_info::FilterInfo; filter_func::Union{Symbol,Function} = filtfilt, kwargs...) -> NamedTuple
@@ -179,4 +142,54 @@ function plot_filter_response(filter_info::FilterInfo; filter_func::Union{Symbol
     plot_kwargs[:display_plot] && _display_figure(fig)
     _set_window_title("Makie")
     return (fig = fig, axes = [ax_db, ax_imp])
+end
+
+######################################
+######### Internal Functions #########
+######################################
+
+function _build_freq_grid(n_points::Int, fs::Float64)
+    freqs = Vector{Float64}(undef, n_points + 1)
+    w = Vector{Float64}(undef, n_points + 1)
+    freqs[1] = 0.0
+    w[1] = 0.0
+    log_grid = range(log10(0.01), log10(fs / 2); length = n_points)
+    w_scale = 2π / fs
+    @inbounds for i = 1:n_points
+        f = exp10(log_grid[i])
+        freqs[i+1] = f
+        w[i+1] = f * w_scale
+    end
+    return freqs, w
+end
+
+function _fir_mag_db(b::Vector{Float64}, w::Vector{Float64}, is_filtfilt::Bool)::Vector{Float64}
+    n_w = length(w)
+    n_taps = length(b)
+    mag_db = Vector{Float64}(undef, n_w)
+    @inbounds for i = 1:n_w
+        w_k = w[i]
+        acc_re = 0.0
+        acc_im = 0.0
+        for k = 1:n_taps
+            c = cis(-w_k * (k - 1))
+            bk = b[k]
+            acc_re = muladd(bk, real(c), acc_re)
+            acc_im = muladd(bk, imag(c), acc_im)
+        end
+        m = hypot(acc_re, acc_im)
+        is_filtfilt && (m *= m)
+        mag_db[i] = 20.0 * log10(m)
+    end
+    return mag_db
+end
+
+function _complex_to_db(resp::AbstractVector, is_filtfilt::Bool)::Vector{Float64}
+    mag_db = Vector{Float64}(undef, length(resp))
+    @inbounds for i in eachindex(resp)
+        m = abs(resp[i])
+        is_filtfilt && (m *= m)
+        mag_db[i] = 20.0 * log10(m)
+    end
+    return mag_db
 end

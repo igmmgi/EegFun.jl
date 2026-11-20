@@ -1,3 +1,64 @@
+# Linear and constant detrending for continuous, epoched, and ERP signals.
+
+######################################
+########### User Functions ###########
+######################################
+
+"""
+    detrend(dat::Union{ContinuousData,ErpData,EpochData}; channel_selection = channels(), interval_selection = times(), type = :linear)
+    detrend(dat::AbstractVector{<:Union{ContinuousData,ErpData,EpochData}}; channel_selection = channels(), interval_selection = times(), type = :linear)
+
+Remove the least-squares linear trend (`type = :linear`) or constant offset (`type = :constant`) estimated over
+`interval_selection` from each selected channel without modifying `dat`. Passing `interval_selection = nothing` returns a copy unchanged.
+"""
+detrend(dat::_TimeDomainEegData; kwargs...) = detrend!(copy(dat); kwargs...)
+
+detrend(dat::AbstractVector{<:_TimeDomainEegData}; kwargs...) = [detrend(d; kwargs...) for d in dat]
+
+"""
+    detrend!(dat::Union{ContinuousData,ErpData,EpochData}; channel_selection = channels(), interval_selection = times(), type = :linear)
+    detrend!(dat::AbstractVector{<:Union{ContinuousData,ErpData,EpochData}}; channel_selection = channels(), interval_selection = times(), type = :linear)
+
+In-place mutating version of [`detrend`](@ref).
+"""
+function detrend!(dat::_TimeDomainEegData; channel_selection = channels(), interval_selection::Interval = times(), type::Symbol = :linear)
+    isnothing(interval_selection) && return dat
+    type in (:linear, :constant, :mean) || @minimal_error("Unknown detrend type :$type. Use :linear or :constant.")
+    dat isa EpochData && isempty(dat.data) && return dat
+    n_samples(dat) == 0 && return dat
+
+    idx_interval = _validate_baseline_interval(dat, interval_selection)
+    if type === :linear && (idx_interval[2] - idx_interval[1] + 1) < 2
+        @minimal_error("Linear detrending requires at least 2 samples in interval_selection")
+    end
+
+    selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
+    if isempty(selected_channels)
+        @minimal_warning "No channels selected for detrending"
+        return dat
+    end
+
+    _apply_detrend!(dat.data, selected_channels, idx_interval, type)
+    return dat
+end
+
+function detrend!(
+    dat::AbstractVector{<:_TimeDomainEegData};
+    channel_selection = channels(),
+    interval_selection::Interval = times(),
+    type::Symbol = :linear,
+)
+    isnothing(interval_selection) && return dat
+    for d in dat
+        detrend!(d; channel_selection = channel_selection, interval_selection = interval_selection, type = type)
+    end
+    return dat
+end
+
+######################################
+######### Internal Functions #########
+######################################
+
 function _detrend_precompute(time::AbstractVector, idx_interval::Tuple{Int,Int})
     start_idx, end_idx = idx_interval
     k = end_idx - start_idx + 1
@@ -89,53 +150,3 @@ function _apply_detrend!(dat::AbstractVector{DataFrame}, channels::AbstractVecto
     end
     return nothing
 end
-
-"""
-    detrend!(dat::Union{ContinuousData,ErpData,EpochData}; channel_selection = channels(), interval_selection = times(), type = :linear)
-    detrend!(dat::AbstractVector{<:Union{ContinuousData,ErpData,EpochData}}; channel_selection = channels(), interval_selection = times(), type = :linear)
-
-Remove the least-squares linear trend (`type = :linear`) or constant offset (`type = :constant`) estimated over
-`interval_selection` from each selected channel in-place. Passing `interval_selection = nothing` leaves `dat` unchanged.
-"""
-function detrend!(dat::_TimeDomainEegData; channel_selection = channels(), interval_selection::Interval = times(), type::Symbol = :linear)
-    isnothing(interval_selection) && return dat
-    type in (:linear, :constant, :mean) || @minimal_error("Unknown detrend type :$type. Use :linear or :constant.")
-    dat isa EpochData && isempty(dat.data) && return dat
-    n_samples(dat) == 0 && return dat
-
-    idx_interval = _validate_baseline_interval(dat, interval_selection)
-    if type === :linear && (idx_interval[2] - idx_interval[1] + 1) < 2
-        @minimal_error("Linear detrending requires at least 2 samples in interval_selection")
-    end
-
-    selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
-    if isempty(selected_channels)
-        @minimal_warning "No channels selected for detrending"
-        return dat
-    end
-
-    _apply_detrend!(dat.data, selected_channels, idx_interval, type)
-    return dat
-end
-
-function detrend!(
-    dat::AbstractVector{<:_TimeDomainEegData};
-    channel_selection = channels(),
-    interval_selection::Interval = times(),
-    type::Symbol = :linear,
-)
-    isnothing(interval_selection) && return dat
-    for d in dat
-        detrend!(d; channel_selection = channel_selection, interval_selection = interval_selection, type = type)
-    end
-    return dat
-end
-
-"""
-    detrend(dat::Union{ContinuousData,ErpData,EpochData}; channel_selection = channels(), interval_selection = times(), type = :linear)
-    detrend(dat::AbstractVector{<:Union{ContinuousData,ErpData,EpochData}}; channel_selection = channels(), interval_selection = times(), type = :linear)
-
-Non-mutating version of [`detrend!`](@ref).
-"""
-detrend(dat::_TimeDomainEegData; kwargs...) = detrend!(copy(dat); kwargs...)
-detrend(dat::AbstractVector{<:_TimeDomainEegData}; kwargs...) = [detrend(d; kwargs...) for d in dat]

@@ -1,3 +1,9 @@
+# Interactive electrodermal habituation and stimulus-locked EDA demo.
+
+######################################
+########### User Functions ###########
+######################################
+
 """
     signal_example_eda_habituation()
 

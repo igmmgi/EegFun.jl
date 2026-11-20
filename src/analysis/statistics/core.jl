@@ -1,5 +1,95 @@
 # Core data preparation and t-statistic kernels for EEG/ERP statistical testing.
 
+######################################
+########### User Functions ###########
+######################################
+
+"""
+    prepare_stats(erps::AbstractVector{<:ErpData}; design::Symbol = :paired, condition_selection = conditions(), channel_selection = channels(), interval_selection::Interval = times(), baseline_interval::Interval = nothing, analysis_interval::Interval = times())
+
+Prepare `ErpData` for comparing two conditions in statistical tests (permutation and analytic tests).
+
+Organizes `ErpData` into `participant × electrode × time` arrays, computes grand averages and
+standard errors over the display interval, and optionally narrows the statistical testing window via `analysis_interval`.
+
+# Returns
+- `StatisticalData`: Prepared data structure ready for statistical testing
+"""
+function prepare_stats(
+    erps::AbstractVector{<:ErpData};
+    design::Symbol = :paired,
+    condition_selection = conditions(),
+    channel_selection = channels(),
+    interval_selection::Interval = times(),
+    baseline_interval::Interval = nothing,
+    analysis_interval::Interval = times(),
+)
+    condition1, condition2, selected_cond_nums = _select_two_conditions(erps, design, condition_selection, "ERPs")
+
+    sample_sel = _interval_to_samples(interval_selection)
+    ref1 = subset(condition1[1]; channel_selection = channel_selection, sample_selection = sample_sel)
+    ref2 = subset(condition2[1]; channel_selection = channel_selection, sample_selection = sample_sel)
+
+    display_electrodes = channel_labels(ref1)
+    display_rows = findall(_to_sample_func(sample_sel)(condition1[1].data))
+    (isempty(display_electrodes) || isempty(display_rows)) && @minimal_error "No data matched the selection criteria!"
+
+    bl_range = isnothing(baseline_interval) ? nothing : _validate_baseline_interval(condition1[1], baseline_interval)
+
+    cond1_stacked = _extract_baselined_erp_array(condition1, display_electrodes, display_rows, bl_range)
+    cond2_stacked = _extract_baselined_erp_array(condition2, display_electrodes, display_rows, bl_range)
+
+    epochs1 = sum(erp.n_epochs for erp in condition1)
+    epochs2 = sum(erp.n_epochs for erp in condition2)
+    condition1_avg = _grand_avg_from_stacked!(ref1, cond1_stacked, display_electrodes, selected_cond_nums[1], epochs1)
+    condition2_avg = _grand_avg_from_stacked!(ref2, cond2_stacked, display_electrodes, selected_cond_nums[2], epochs2)
+
+    se_cond1, se_cond2, se_diff = _compute_display_se(cond1_stacked, cond2_stacked, design)
+
+    if isnothing(analysis_interval) || analysis_interval isa AllSelection
+        time_points = copy(condition1_avg.data[!, :time])
+        condition1_array = cond1_stacked
+        condition2_array = cond2_stacked
+    else
+        analysis_mask = _to_sample_func(_interval_to_samples(analysis_interval))(condition1_avg.data)
+        any(analysis_mask) || @minimal_error "No data matched the analysis interval criteria!"
+        time_points = condition1_avg.data[analysis_mask, :time]
+        condition1_array = cond1_stacked[:, :, analysis_mask]
+        condition2_array = cond2_stacked[:, :, analysis_mask]
+    end
+
+    return StatisticalData(
+        [condition1_avg, condition2_avg],
+        AnalysisData(design, [condition1_array, condition2_array], time_points),
+        se_cond1,
+        se_cond2,
+        se_diff,
+    )
+end
+
+"""
+    prepare_stats(file_pattern::String, design::Symbol; input_dir::String = pwd(), participant_selection = participants(), kwargs...) -> Union{StatisticalData,TimeFreqStatisticalData}
+
+Load ERP or time-frequency `.jld2` files matching `file_pattern` and forward to the typed `prepare_stats` method.
+"""
+function prepare_stats(file_pattern::String, design::Symbol; input_dir::String = pwd(), participant_selection = participants(), kwargs...)
+    all_data = read_all_data(joinpath(input_dir, file_pattern), participant_selection)
+    isempty(all_data) && @minimal_error "No valid data found matching pattern '$file_pattern' in $input_dir"
+
+    first_item = first(all_data)
+    if first_item isa TimeFreqData
+        return prepare_stats(Vector{TimeFreqData}(all_data); design = design, kwargs...)
+    elseif first_item isa ErpData
+        return prepare_stats(Vector{ErpData}(all_data); design = design, kwargs...)
+    else
+        @minimal_error "Unsupported data type: $(typeof(first_item)). Expected ErpData or TimeFreqData."
+    end
+end
+
+######################################
+######### Internal Functions #########
+######################################
+
 function _select_two_conditions(items::AbstractVector, design::Symbol, condition_selection, label::String)
     design ∈ (:paired, :independent) || @minimal_error "design must be :paired or :independent, got :$design"
     isempty(items) && @minimal_error "Cannot prepare stats from empty $label"
@@ -181,84 +271,6 @@ function _compute_display_se(cond1::Array{Float64,3}, cond2::Array{Float64,3}, d
     return se1, se2, se_diff
 end
 
-"""
-    prepare_stats(erps::AbstractVector{<:ErpData}; design::Symbol = :paired, condition_selection = conditions(), channel_selection = channels(), interval_selection::Interval = times(), baseline_interval::Interval = nothing, analysis_interval::Interval = times())
-
-Prepare `ErpData` for comparing two conditions in statistical tests (permutation and analytic tests).
-
-Organizes `ErpData` into `participant × electrode × time` arrays, computes grand averages and
-standard errors over the display interval, and optionally narrows the statistical testing window via `analysis_interval`.
-
-# Returns
-- `StatisticalData`: Prepared data structure ready for statistical testing
-"""
-function prepare_stats(
-    erps::AbstractVector{<:ErpData};
-    design::Symbol = :paired,
-    condition_selection = conditions(),
-    channel_selection = channels(),
-    interval_selection::Interval = times(),
-    baseline_interval::Interval = nothing,
-    analysis_interval::Interval = times(),
-)
-    condition1, condition2, selected_cond_nums = _select_two_conditions(erps, design, condition_selection, "ERPs")
-
-    sample_sel = _interval_to_samples(interval_selection)
-    ref1 = subset(condition1[1]; channel_selection = channel_selection, sample_selection = sample_sel)
-    ref2 = subset(condition2[1]; channel_selection = channel_selection, sample_selection = sample_sel)
-
-    display_electrodes = channel_labels(ref1)
-    display_rows = findall(_to_sample_func(sample_sel)(condition1[1].data))
-    (isempty(display_electrodes) || isempty(display_rows)) && @minimal_error "No data matched the selection criteria!"
-
-    bl_range = isnothing(baseline_interval) ? nothing : _validate_baseline_interval(condition1[1], baseline_interval)
-
-    cond1_stacked = _extract_baselined_erp_array(condition1, display_electrodes, display_rows, bl_range)
-    cond2_stacked = _extract_baselined_erp_array(condition2, display_electrodes, display_rows, bl_range)
-
-    epochs1 = sum(erp.n_epochs for erp in condition1)
-    epochs2 = sum(erp.n_epochs for erp in condition2)
-    condition1_avg = _grand_avg_from_stacked!(ref1, cond1_stacked, display_electrodes, selected_cond_nums[1], epochs1)
-    condition2_avg = _grand_avg_from_stacked!(ref2, cond2_stacked, display_electrodes, selected_cond_nums[2], epochs2)
-
-    se_cond1, se_cond2, se_diff = _compute_display_se(cond1_stacked, cond2_stacked, design)
-
-    if isnothing(analysis_interval) || analysis_interval isa AllSelection
-        time_points = copy(condition1_avg.data[!, :time])
-        condition1_array = cond1_stacked
-        condition2_array = cond2_stacked
-    else
-        analysis_mask = _to_sample_func(_interval_to_samples(analysis_interval))(condition1_avg.data)
-        any(analysis_mask) || @minimal_error "No data matched the analysis interval criteria!"
-        time_points = condition1_avg.data[analysis_mask, :time]
-        condition1_array = cond1_stacked[:, :, analysis_mask]
-        condition2_array = cond2_stacked[:, :, analysis_mask]
-    end
-
-    return StatisticalData(
-        [condition1_avg, condition2_avg],
-        AnalysisData(design, [condition1_array, condition2_array], time_points),
-        se_cond1,
-        se_cond2,
-        se_diff,
-    )
-end
-
-"""Load ERP/TF files by pattern and call the typed `prepare_stats` method."""
-function prepare_stats(file_pattern::String, design::Symbol; input_dir::String = pwd(), participant_selection = participants(), kwargs...)
-    all_data = read_all_data(joinpath(input_dir, file_pattern), participant_selection)
-    isempty(all_data) && @minimal_error "No valid data found matching pattern '$file_pattern' in $input_dir"
-
-    first_item = first(all_data)
-    if first_item isa TimeFreqData
-        return prepare_stats(Vector{TimeFreqData}(all_data); design = design, kwargs...)
-    elseif first_item isa ErpData
-        return prepare_stats(Vector{ErpData}(all_data); design = design, kwargs...)
-    else
-        @minimal_error "Unsupported data type: $(typeof(first_item)). Expected ErpData or TimeFreqData."
-    end
-end
-
 function _validate_permutation_inputs(
     prepared::StatisticalData,
     n_permutations::Int,
@@ -279,8 +291,6 @@ function _validate_permutation_inputs(
     end
     return nothing
 end
-
-# === UNIFIED N-D T-STATISTIC KERNELS ===
 
 function _t_stat_kernel!(
     t_flat::AbstractVector{Float64},

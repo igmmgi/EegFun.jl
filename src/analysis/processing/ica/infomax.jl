@@ -1,3 +1,86 @@
+# Standard and extended Infomax ICA solvers for CPU and GPU.
+
+######################################
+########### User Functions ###########
+######################################
+
+"""
+    infomax_ica(dat_ica, layout, filename; n_components, params = IcaPrms(), rng = Random.default_rng()) -> InfoIca
+
+Standard natural-gradient Infomax ICA decomposition (super-Gaussian sources).
+"""
+function infomax_ica(
+    dat_ica::Matrix{Float64},
+    layout::Layout,
+    filename::String;
+    n_components::Int,
+    params::IcaPrms = IcaPrms(),
+    rng::AbstractRNG = Random.default_rng(),
+)
+    prep = _ica_preprocess(dat_ica, n_components, params)
+    if prep.gpu_active
+        _infomax_optimize_gpu!(prep.work, prep.dat_sphered, prep.prms, prep.block, nothing, rng)
+    else
+        _infomax_optimize_cpu!(prep.work, prep.dat_sphered, prep.prms, prep.block, nothing, rng)
+    end
+    return _ica_postprocess(
+        prep.work,
+        prep.sphere,
+        prep.pca_components,
+        prep.scale,
+        prep.original_mean,
+        prep.n_samples,
+        n_components,
+        filename,
+        layout,
+        falses(n_components),
+    )
+end
+
+"""
+    infomax_extended_ica(dat_ica, layout, filename; n_components, params = IcaPrms(), rng = Random.default_rng()) -> InfoIca
+
+Extended Infomax ICA decomposition separating mixed super-Gaussian and sub-Gaussian sources via
+kurtosis-based sign switching (Lee, Girolami, & Sejnowski, 1999).
+"""
+function infomax_extended_ica(
+    dat_ica::Matrix{Float64},
+    layout::Layout,
+    filename::String;
+    n_components::Int,
+    params::IcaPrms = IcaPrms(),
+    rng::AbstractRNG = Random.default_rng(),
+)
+    prep = _ica_preprocess(dat_ica, n_components, params)
+    is_sub_gaussian = falses(n_components)
+
+    if prep.gpu_active
+        _infomax_optimize_gpu!(prep.work, prep.dat_sphered, prep.prms, prep.block, is_sub_gaussian, rng)
+    else
+        _infomax_optimize_cpu!(prep.work, prep.dat_sphered, prep.prms, prep.block, is_sub_gaussian, rng)
+    end
+
+    n_sub_final = count(is_sub_gaussian)
+    @info "Extended Infomax completed: sup/sub-gauss ($(n_components - n_sub_final)/$n_sub_final)"
+
+    return _ica_postprocess(
+        prep.work,
+        prep.sphere,
+        prep.pca_components,
+        prep.scale,
+        prep.original_mean,
+        prep.n_samples,
+        n_components,
+        filename,
+        layout,
+        is_sub_gaussian,
+    )
+end
+
+######################################
+######### Internal Functions #########
+######################################
+
 function _ica_preprocess(dat_ica::Matrix{Float64}, n_components::Int, params::IcaPrms)
     n_channels, n_samples = size(dat_ica)
 
@@ -85,7 +168,7 @@ function _ica_preprocess(dat_ica::Matrix{Float64}, n_components::Int, params::Ic
     else
         block = cpu_block
     end
-    work = create_work_arrays(n_components, block)
+    work = _create_work_arrays(n_components, block)
 
     return (
         dat_sphered = dat_sphered,
@@ -148,79 +231,6 @@ _ica_postprocess(
     layout::Layout,
     is_sub_gaussian::BitVector,
 ) = _ica_postprocess(work.weights, sphere, pca_components, scale, original_mean, n_samples, n_components, filename, layout, is_sub_gaussian)
-
-"""
-    infomax_ica(dat_ica, layout, filename; n_components, params = IcaPrms(), rng = Random.default_rng()) -> InfoIca
-
-Standard natural-gradient Infomax ICA decomposition (super-Gaussian sources).
-"""
-function infomax_ica(
-    dat_ica::Matrix{Float64},
-    layout::Layout,
-    filename::String;
-    n_components::Int,
-    params::IcaPrms = IcaPrms(),
-    rng::AbstractRNG = Random.default_rng(),
-)
-    prep = _ica_preprocess(dat_ica, n_components, params)
-    if prep.gpu_active
-        _infomax_optimize_gpu!(prep.work, prep.dat_sphered, prep.prms, prep.block, nothing, rng)
-    else
-        _infomax_optimize_cpu!(prep.work, prep.dat_sphered, prep.prms, prep.block, nothing, rng)
-    end
-    return _ica_postprocess(
-        prep.work,
-        prep.sphere,
-        prep.pca_components,
-        prep.scale,
-        prep.original_mean,
-        prep.n_samples,
-        n_components,
-        filename,
-        layout,
-        falses(n_components),
-    )
-end
-
-"""
-    infomax_extended_ica(dat_ica, layout, filename; n_components, params = IcaPrms(), rng = Random.default_rng()) -> InfoIca
-
-Extended Infomax ICA decomposition separating mixed super-Gaussian and sub-Gaussian sources via
-kurtosis-based sign switching (Lee, Girolami, & Sejnowski, 1999).
-"""
-function infomax_extended_ica(
-    dat_ica::Matrix{Float64},
-    layout::Layout,
-    filename::String;
-    n_components::Int,
-    params::IcaPrms = IcaPrms(),
-    rng::AbstractRNG = Random.default_rng(),
-)
-    prep = _ica_preprocess(dat_ica, n_components, params)
-    is_sub_gaussian = falses(n_components)
-
-    if prep.gpu_active
-        _infomax_optimize_gpu!(prep.work, prep.dat_sphered, prep.prms, prep.block, is_sub_gaussian, rng)
-    else
-        _infomax_optimize_cpu!(prep.work, prep.dat_sphered, prep.prms, prep.block, is_sub_gaussian, rng)
-    end
-
-    n_sub_final = count(is_sub_gaussian)
-    @info "Extended Infomax completed: sup/sub-gauss ($(n_components - n_sub_final)/$n_sub_final)"
-
-    return _ica_postprocess(
-        prep.work,
-        prep.sphere,
-        prep.pca_components,
-        prep.scale,
-        prep.original_mean,
-        prep.n_samples,
-        n_components,
-        filename,
-        layout,
-        is_sub_gaussian,
-    )
-end
 
 @inline function _update_extended_kurtosis_signs!(
     is_sub_gaussian::BitVector,
@@ -502,27 +512,27 @@ function _infomax_optimize_gpu!(
     converged = false
 
     permute_indices = Vector{Int}(undef, n_samples)
-    perm_gpu = gpu_array(zeros(Int, n_samples))
+    perm_gpu = _gpu_array(zeros(Int, n_samples))
 
-    dat_ica_gpu = gpu_array(Float32.(dat_ica))
-    dat_ica_gpu_shuffled = gpu_array(zeros(Float32, n_channels, n_samples))
-    weights_gpu = gpu_array(Float32.(work.weights))
+    dat_ica_gpu = _gpu_array(Float32.(dat_ica))
+    dat_ica_gpu_shuffled = _gpu_array(zeros(Float32, n_channels, n_samples))
+    weights_gpu = _gpu_array(Float32.(work.weights))
     weights_f32_cpu = Matrix{Float32}(undef, n_channels, n_channels)
     startweights_f32 = Float32.(work.startweights)
 
-    u_gpu = gpu_array(zeros(Float32, n_channels, block))
-    y_gpu = gpu_array(zeros(Float32, n_channels, block))
-    wu_gpu = gpu_array(zeros(Float32, n_channels, n_channels))
-    wtemp_gpu = gpu_array(zeros(Float32, n_channels, n_channels))
+    u_gpu = _gpu_array(zeros(Float32, n_channels, block))
+    y_gpu = _gpu_array(zeros(Float32, n_channels, block))
+    wu_gpu = _gpu_array(zeros(Float32, n_channels, n_channels))
+    wtemp_gpu = _gpu_array(zeros(Float32, n_channels, n_channels))
 
     old_kurtosis = extended ? zeros(Float64, n_channels) : Float64[]
     signs_cpu = extended ? Float32[(is_sub_gaussian::BitVector)[i] ? -1.0f0 : 1.0f0 for i = 1:n_channels] : Float32[]
-    signs_gpu = extended ? gpu_array(reshape(signs_cpu, n_channels, 1)) : nothing
+    signs_gpu = extended ? _gpu_array(reshape(signs_cpu, n_channels, 1)) : nothing
     kurtsize = extended ? min(6000, n_samples) : 0
-    activations_gpu = extended ? gpu_array(zeros(Float32, n_channels, kurtsize)) : nothing
-    act_sq = extended ? gpu_array(zeros(Float32, n_channels, kurtsize)) : nothing
-    u2_sum = extended ? gpu_array(zeros(Float32, n_channels, 1)) : nothing
-    u4_sum = extended ? gpu_array(zeros(Float32, n_channels, 1)) : nothing
+    activations_gpu = extended ? _gpu_array(zeros(Float32, n_channels, kurtsize)) : nothing
+    act_sq = extended ? _gpu_array(zeros(Float32, n_channels, kurtsize)) : nothing
+    u2_sum = extended ? _gpu_array(zeros(Float32, n_channels, 1)) : nothing
+    u4_sum = extended ? _gpu_array(zeros(Float32, n_channels, 1)) : nothing
     u2_mean_sq_cpu = extended ? Vector{Float32}(undef, n_channels) : Float32[]
     u4_mean_cpu = extended ? Vector{Float32}(undef, n_channels) : Float32[]
     inv_kurtsize = extended ? 1.0f0 / Float32(kurtsize) : 0.0f0

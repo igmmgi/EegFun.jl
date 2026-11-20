@@ -1,18 +1,14 @@
-_generate_channel_labels(n_channels::Int) = [Symbol("Ch$i") for i = 1:n_channels]
+# Synthetic EEG, ERP, epoch, layout, and time-frequency test data generators.
 
-function _with_seed(f, seed::Union{Integer,Nothing})
-    isnothing(seed) && return f()
-    saved = copy(Random.default_rng())
-    Random.seed!(seed)
-    try
-        return f()
-    finally
-        copy!(Random.default_rng(), saved)
-    end
-end
+######################################
+########### User Functions ###########
+######################################
 
-_synthetic_signal(t; freq = 10.0, amp = 1.0, noise = 0.1) = amp .* sin.(2π .* freq .* t) .+ noise .* randn(length(t))
+"""
+    create_test_continuous_data(; n = 2000, fs = 1000, n_channels = 3, seed = nothing) -> ContinuousData
 
+Generate synthetic multi-channel `ContinuousData` with sinusoidal activity and Gaussian noise.
+"""
 function create_test_continuous_data(; n = 2000, fs = 1000, n_channels = 3, seed::Union{Int,Nothing} = nothing)
     return _with_seed(seed) do
         t = collect(0:(n-1)) ./ fs
@@ -24,6 +20,11 @@ function create_test_continuous_data(; n = 2000, fs = 1000, n_channels = 3, seed
     end
 end
 
+"""
+    create_test_epoch_data(; n = 2000, fs = 1000, condition = 1, n_epochs = 10, n_channels = 3, seed = nothing) -> EpochData
+
+Generate synthetic single-condition `EpochData` with `n_epochs` trials and `n_channels` channels.
+"""
 function create_test_epoch_data(; n = 2000, fs = 1000, condition = 1, n_epochs = 10, n_channels = 3, seed::Union{Int,Nothing} = nothing)
     return _with_seed(seed) do
         t = collect(0:(n-1)) ./ fs
@@ -41,6 +42,11 @@ function create_test_epoch_data(; n = 2000, fs = 1000, condition = 1, n_epochs =
     end
 end
 
+"""
+    create_test_epoch_data_vector(; conditions = 1:2, n_epochs = 10, n_channels = 3, fs = 1000, n = 2000, seed = nothing) -> Vector{EpochData}
+
+Generate a multi-condition `Vector{EpochData}` for synthetic testing and tutorials.
+"""
 function create_test_epoch_data_vector(;
     conditions = 1:2,
     n_epochs = 10,
@@ -54,6 +60,11 @@ function create_test_epoch_data_vector(;
     end
 end
 
+"""
+    create_test_erp_data(; participant = 1, condition = 1, fs = 1000, n_channels = 3, seed = nothing) -> ErpData
+
+Generate synthetic single-condition `ErpData` spanning `-0.5` to `2.0` s.
+"""
 function create_test_erp_data(; participant = 1, condition = 1, fs = 1000, n_channels = 3, seed::Union{Int,Nothing} = nothing)
     return _with_seed(seed) do
         time = collect(-0.5:(1/fs):2.0)
@@ -74,12 +85,22 @@ function create_test_erp_data(; participant = 1, condition = 1, fs = 1000, n_cha
     end
 end
 
+"""
+    create_test_batch_erp_data(; n_conditions = 2, fs = 1000, n_channels = 3, seed = nothing) -> Vector{ErpData}
+
+Generate a multi-condition `Vector{ErpData}` for batch and condition-operation tests.
+"""
 function create_test_batch_erp_data(; n_conditions = 2, fs = 1000, n_channels = 3, seed::Union{Int,Nothing} = nothing)
     return _with_seed(seed) do
         [create_test_erp_data(condition = c, fs = fs, n_channels = n_channels) for c = 1:n_conditions]
     end
 end
 
+"""
+    create_test_continuous_data_with_triggers(; n = 1000, fs = 1000, seed = nothing) -> ContinuousData
+
+Generate synthetic `ContinuousData` containing multi-code trigger sequences for trigger-matching tests.
+"""
 function create_test_continuous_data_with_triggers(; n = 1000, fs = 1000, seed::Union{Int,Nothing} = nothing)
     return _with_seed(seed) do
         t = collect(0:(n-1)) ./ fs
@@ -97,6 +118,11 @@ function create_test_continuous_data_with_triggers(; n = 1000, fs = 1000, seed::
     end
 end
 
+"""
+    create_test_continuous_data_with_artifacts(; n = 1000, fs = 1000) -> ContinuousData
+
+Generate two-channel `ContinuousData` (`:Ch1` clean, `:Ch2` injected with high-amplitude step/spike artifacts).
+"""
 function create_test_continuous_data_with_artifacts(; n::Int = 1000, fs::Int = 1000)
     t = collect(0:(n-1)) ./ fs
     clean_signal = sin.(2π .* 10 .* t) .* 20
@@ -109,6 +135,11 @@ function create_test_continuous_data_with_artifacts(; n::Int = 1000, fs::Int = 1
     return ContinuousData("test_data", df, layout, fs, AnalysisInfo(sample_rate = fs))
 end
 
+"""
+    create_test_continuous_data_empty_triggers(; n_samples = 1000, fs = 1000, seed = nothing) -> ContinuousData
+
+Generate synthetic `ContinuousData` whose `:trigger` column contains all zeros.
+"""
 function create_test_continuous_data_empty_triggers(; n_samples = 1000, fs = 1000, seed::Union{Int,Nothing} = nothing)
     return _with_seed(seed) do
         t = collect(0:(n_samples-1)) ./ fs
@@ -118,6 +149,11 @@ function create_test_continuous_data_empty_triggers(; n_samples = 1000, fs = 100
     end
 end
 
+"""
+    create_test_lrp_data(; participant = 1, condition = 1, n_timepoints = 100, signal_scale = 1.0, fs = 250, seed = nothing) -> ErpData
+
+Generate synthetic homologous-pair (`C3`/`C4`, `C1`/`C2`, `Fp1`/`Fp2`, `Fz`) `ErpData` for LRP tests.
+"""
 function create_test_lrp_data(;
     participant = 1,
     condition = 1,
@@ -147,6 +183,11 @@ function create_test_lrp_data(;
     end
 end
 
+"""
+    create_test_layout(; n_channels = 4, layout_type = :grid) -> Layout
+
+Generate a synthetic `Layout` (`:grid` 2D coordinates for `n_channels` or `:topo` 6-electrode 2D/3D layout).
+"""
 function create_test_layout(; n_channels::Int = 4, layout_type::Symbol = :grid)
     if layout_type == :grid
         rows = ceil(Int, sqrt(max(n_channels, 1)))
@@ -186,6 +227,11 @@ function create_test_layout(; n_channels::Int = 4, layout_type::Symbol = :grid)
     end
 end
 
+"""
+    create_test_summary_data() -> DataFrame
+
+Generate a synthetic 5-channel summary `DataFrame` (`:min`, `:max`, `:std`, `:var`, `:range`, `:zvar`).
+"""
 function create_test_summary_data()
     return DataFrame(
         channel = [:Ch1, :Ch2, :Ch3, :Ch4, :Ch5],
@@ -198,6 +244,11 @@ function create_test_summary_data()
     )
 end
 
+"""
+    create_test_summary_data_with_epochs() -> DataFrame
+
+Generate a synthetic per-epoch channel summary `DataFrame` across 3 channels and 3 epochs.
+"""
 function create_test_summary_data_with_epochs()
     return DataFrame(
         channel = repeat([:Ch1, :Ch2, :Ch3], 3),
@@ -211,6 +262,11 @@ function create_test_summary_data_with_epochs()
     )
 end
 
+"""
+    create_test_epoch_data_with_artifacts(; participant = 1, condition = 1, n_epochs = 10, n_timepoints = 100, n_channels = 3, fs = 1000, n_bad_epochs = 1, seed = nothing) -> (EpochData, Vector{Int})
+
+Generate synthetic `EpochData` with high-amplitude artifacts in the first `n_bad_epochs` epochs, returning `(epoch_data, bad_indices)`.
+"""
 function create_test_epoch_data_with_artifacts(;
     participant = 1,
     condition = 1,
@@ -276,7 +332,7 @@ function generate_signal(
     dt = 1 / sample_rate
     x_time = range(time_window[1], time_window[2] - dt, step = dt)
     n_samples = length(x_time)
-    time_zero = x_time[find_closest_time_index(x_time, 0.0)]
+    time_zero = x_time[_find_closest_time_index(x_time, 0.0)]
 
     base_signal = zeros(Float64, n_samples)
     for (freq, amp, times) in zip(signal_freqs, signal_amps, signal_times)
@@ -309,6 +365,11 @@ function generate_signal(
     return x_time, signal_trials
 end
 
+"""
+    signal_to_data(times, signal, channel_name::Symbol, sample_rate::Real; file = "synthetic", condition = 1, condition_name = "test") -> Union{ErpData, EpochData}
+
+Wrap a `1D` vector or `(n_samples × n_trials)` matrix `signal` into an `ErpData` (`n_trials == 1`) or `EpochData` (`n_trials > 1`).
+"""
 function signal_to_data(
     times,
     signal,
@@ -335,6 +396,11 @@ function signal_to_data(
     return EpochData(file, condition, condition_name, trial_dfs, layout, fs_int, analysis_info)
 end
 
+"""
+    create_test_tf_data(; participant = 1, file = "participant\$participant", condition = 1, condition_name = "condition_\$condition", n_channels = 3, frequencies = [4.0, 8.0, 12.0, 16.0], time_points = [0.0, 0.1, 0.2, 0.3, 0.4], power_offset = 0.0, noise = 0.1, fs = 256) -> TimeFreqData
+
+Generate synthetic trial-averaged `TimeFreqData` for time-frequency and statistical tests.
+"""
 function create_test_tf_data(;
     participant::Int = 1,
     file::String = "participant$participant",
@@ -375,6 +441,11 @@ function create_test_tf_data(;
     )
 end
 
+"""
+    create_test_tf_epoch_data(; participant = 1, file = "participant\$participant", condition = 1, condition_name = "condition_\$condition", n_channels = 3, n_epochs = 10, frequencies = [4.0, 8.0, 12.0, 16.0], time_points = [0.0, 0.1, 0.2, 0.3, 0.4], power_offset = 0.0, noise = 0.1, fs = 256) -> TimeFreqEpochData
+
+Generate synthetic single-trial `TimeFreqEpochData` across `n_epochs` epochs.
+"""
 function create_test_tf_epoch_data(;
     participant::Int = 1,
     file::String = "participant$participant",
@@ -423,6 +494,11 @@ function create_test_tf_epoch_data(;
     )
 end
 
+"""
+    create_synthetic_epochs(participant_id, condition_id, condition_name, n_epochs; n_timepoints = 500, channels = [:Fz, :Cz, :Pz], signal_strength = 1.0, noise_level = 0.3, sample_rate = nothing, seed = nothing) -> EpochData
+
+Generate synthetic `EpochData` with a condition-modulated Gaussian ERP component centered at `0.2` s for decoding and statistical tutorials.
+"""
 function create_synthetic_epochs(
     participant_id,
     condition_id,
@@ -487,3 +563,22 @@ function create_synthetic_epochs(
         )
     end
 end
+
+######################################
+######### Internal Functions #########
+######################################
+
+_generate_channel_labels(n_channels::Int) = [Symbol("Ch$i") for i = 1:n_channels]
+
+function _with_seed(f, seed::Union{Integer,Nothing})
+    isnothing(seed) && return f()
+    saved = copy(Random.default_rng())
+    Random.seed!(seed)
+    try
+        return f()
+    finally
+        copy!(Random.default_rng(), saved)
+    end
+end
+
+_synthetic_signal(t; freq = 10.0, amp = 1.0, noise = 0.1) = amp .* sin.(2π .* freq .* t) .+ noise .* randn(length(t))

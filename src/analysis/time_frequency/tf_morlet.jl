@@ -1,3 +1,9 @@
+# Complex Morlet wavelet time-frequency decomposition.
+
+######################################
+########### User Functions ###########
+######################################
+
 """
     tf_morlet(dat::EpochData;
               channel_selection=channels(),
@@ -154,7 +160,7 @@ function tf_morlet(
 )
     _with_batch_logging("tf_morlet", "tf_morlet.log", input_dir, output_dir) do ctx
         @log_call "tf_morlet"
-        output_dir = _prepare_output_dir!(ctx, joinpath(input_dir, "tf_morlet_$(clean_pattern(file_pattern))"))
+        output_dir = _prepare_output_dir!(ctx, joinpath(input_dir, "tf_morlet_$(_clean_pattern(file_pattern))"))
         process_fn = _tf_batch_worker(tf_morlet, "morlet", condition_selection, kwargs)
         batch_process(process_fn, file_pattern, input_dir, output_dir, participant_selection, "TF morlet")
     end

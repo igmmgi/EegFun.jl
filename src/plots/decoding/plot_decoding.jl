@@ -1,5 +1,9 @@
 # Plotting functions for MVPA/decoding results.
 
+######################################
+######### Types & Constants ##########
+######################################
+
 const PLOT_DECODING_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Display parameters
     :display_plot => (true, "Display the plot (true/false)"),
@@ -61,159 +65,28 @@ const PLOT_DECODING_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :figure_padding => ((10, 30, 10, 10), "Padding around entire figure as (left, right, bottom, top) tuple (in pixels)"),
 )
 
-function _decoding_ylim_bounds(accuracy::Vector{Float64}, stderror::Union{Vector{Float64},Nothing}, show_error::Bool)
-    y_min = Inf
-    y_max = -Inf
-    if show_error && !isnothing(stderror)
-        @inbounds for i in eachindex(accuracy, stderror)
-            a = accuracy[i]
-            s = stderror[i]
-            y_min = min(y_min, a - s)
-            y_max = max(y_max, a + s)
-        end
-    else
-        @inbounds for i in eachindex(accuracy)
-            a = accuracy[i]
-            y_min = min(y_min, a)
-            y_max = max(y_max, a)
-        end
-    end
-    return y_min, y_max
-end
-
-function _decoding_auto_ylim(accuracy::Vector{Float64}, stderror::Union{Vector{Float64},Nothing}, show_error::Bool)
-    y_min, y_max = _decoding_ylim_bounds(accuracy, stderror, show_error)
-    y_range = y_max - y_min
-    pad = y_range == 0 ? 0.05 : 0.05 * y_range
-    return (y_min - pad, y_max + pad)
-end
-
-function _add_decoding_origin_lines!(ax::Axis, chance_level::Float64, plot_kwargs::Dict)
-    vlines!(ax, 0, color = :black, linewidth = 1, linestyle = :solid)
-    hlines!(
-        ax,
-        chance_level,
-        color = plot_kwargs[:chance_color],
-        linewidth = plot_kwargs[:chance_linewidth],
-        linestyle = plot_kwargs[:chance_linestyle],
-        label = "Chance ($(round(chance_level, digits = 3)))",
-    )
-end
-
-function _plot_error_band!(
-    ax::Axis,
-    times::Vector{Float64},
-    accuracy::Vector{Float64},
-    stderror::Union{Vector{Float64},Nothing},
-    plot_kwargs::Dict,
-)
-    band!(ax, times, accuracy .- stderror, accuracy .+ stderror, color = (plot_kwargs[:error_color], plot_kwargs[:error_alpha]))
-end
-
-function _plot_accuracy_curve!(ax::Axis, times::Vector{Float64}, accuracy::Vector{Float64}, plot_kwargs::Dict; label::String = "Accuracy")
-    line_color = _resolve_theme_linecolor(ax, plot_kwargs[:color])
-    line_style = isnothing(plot_kwargs[:linestyle]) ? :solid : plot_kwargs[:linestyle]
-    lines!(ax, times, accuracy, color = line_color, linewidth = plot_kwargs[:linewidth], linestyle = line_style, label = label)
-end
-
-function _setup_axis_limits!(
-    ax::Axis,
-    times::Vector{Float64},
-    accuracy::Vector{Float64},
-    stderror::Union{Vector{Float64},Nothing},
-    plot_kwargs::Dict,
-)
-    xlim_val = plot_kwargs[:xlim]
-    xlims!(ax, isnothing(xlim_val) ? (times[1], times[end]) : xlim_val)
-
-    ylim_val = plot_kwargs[:ylim]
-    ylims!(ax, isnothing(ylim_val) ? _decoding_auto_ylim(accuracy, stderror, Bool(plot_kwargs[:show_error])) : ylim_val)
-end
-
-function _plot_decoding_to_axis!(
-    ax::Axis,
-    times::Vector{Float64},
-    accuracy::Vector{Float64},
-    stderror::Union{Vector{Float64},Nothing},
-    chance_level::Float64,
-    plot_kwargs::Dict;
-    set_limits::Bool = true,
-)
-    set_limits && _setup_axis_limits!(ax, times, accuracy, stderror, plot_kwargs)
-    plot_kwargs[:add_xy_origin] && _add_decoding_origin_lines!(ax, chance_level, plot_kwargs)
-    (plot_kwargs[:show_error] && !isnothing(stderror)) && _plot_error_band!(ax, times, accuracy, stderror, plot_kwargs)
-    _plot_accuracy_curve!(ax, times, accuracy, plot_kwargs)
-    get(plot_kwargs, :legend, false) && axislegend(ax, position = :rt)
-end
-
-function _finalize_decoding_figure!(fig::Figure, plot_kwargs::Dict, window_title::String; display_plot::Bool = plot_kwargs[:display_plot])
-    if !isempty(plot_kwargs[:figure_title])
-        Label(fig[0, :], plot_kwargs[:figure_title], fontsize = plot_kwargs[:figure_title_fontsize], font = :bold, tellwidth = false)
-    end
-    _set_window_title(window_title)
-    display_plot && _display_figure(fig)
-    _set_window_title("Makie")
-    return nothing
-end
+######################################
+########### User Functions ###########
+######################################
 
 """
     plot_decoding(decoded::DecodedData; kwargs...)
+    plot_decoding(decoded_list::AbstractVector{<:DecodedData}; kwargs...)
+    plot_decoding(decoded::DecodedData, stats::DecodingStatisticsResult; kwargs...)
+    plot_decoding(filepath::String; input_dir = pwd(), participant_selection = participants(), kwargs...)
 
-Plot decoding accuracy over time.
-
-Creates a line plot showing classification accuracy at each time point,
-with optional error bars and chance level reference line.
-
-# Arguments
-- `decoded::DecodedData`: DecodedData object containing decoding results
-- `kwargs`: Additional keyword arguments (see PLOT_DECODING_KWARGS)
+Plot time-resolved MVPA decoding accuracy with optional SEM error ribbons, statistical significance shading,
+and chance-level reference line (from in-memory `DecodedData` or a `.jld2` filepath / filename pattern).
 
 $(_generate_kwargs_doc(PLOT_DECODING_KWARGS))
 
 # Examples
 ```julia
-# Basic plot
 plot_decoding(decoded)
-
-# Custom styling
-plot_decoding(decoded, color=:red, linewidth=3, show_error=false)
-
-# With custom title
-plot_decoding(decoded, plot_title="Face vs. Object Decoding")
-```
-
-    plot_decoding(filepath::String; input_dir=pwd(), participant_selection=participants(), kwargs...)
-
-Load decoded data and plot. Accepts either a `.jld2` filepath or a pattern
-to discover and plot all matching files (one plot per file).
-
-# Examples
-```julia
+plot_decoding(decoded, color = :red, linewidth = 3, show_error = false)
 plot_decoding("decoded.jld2")
-plot_decoding("decoded")
 ```
 """
-function plot_decoding(filepath::String; input_dir::String = pwd(), participant_selection = participants(), kwargs...)
-    if endswith(filepath, ".jld2")
-        resolved = _resolve_input_filepath(filepath, input_dir)
-        data = read_data(resolved)
-        isnothing(data) && @minimal_error "No data found in file: $resolved"
-        return plot_decoding(data; kwargs...)
-    end
-
-    files = _find_batch_files(filepath, input_dir, participant_selection)
-    isempty(files) && @minimal_error "No files matching pattern '$filepath' in $input_dir"
-
-    results = NamedTuple[]
-    for file in sort(files, by = _natural_sort_key)
-        @info "Plotting: $file"
-        data = read_data(joinpath(input_dir, file))
-        isnothing(data) && continue
-        push!(results, plot_decoding(data; kwargs...))
-    end
-    return results
-end
-
 function plot_decoding(decoded::DecodedData; kwargs...)
     plot_kwargs = _merge_plot_kwargs(PLOT_DECODING_KWARGS, kwargs)
     title_text = plot_kwargs[:plot_title]
@@ -364,6 +237,27 @@ function plot_decoding(decoded::DecodedData, stats::DecodingStatisticsResult; kw
     return (fig = fig, axes = [ax])
 end
 
+function plot_decoding(filepath::String; input_dir::String = pwd(), participant_selection = participants(), kwargs...)
+    if endswith(filepath, ".jld2")
+        resolved = _resolve_input_filepath(filepath, input_dir)
+        data = read_data(resolved)
+        isnothing(data) && @minimal_error "No data found in file: $resolved"
+        return plot_decoding(data; kwargs...)
+    end
+
+    files = _find_batch_files(filepath, input_dir, participant_selection)
+    isempty(files) && @minimal_error "No files matching pattern '$filepath' in $input_dir"
+
+    results = NamedTuple[]
+    for file in sort(files, by = _natural_sort_key)
+        @info "Plotting: $file"
+        data = read_data(joinpath(input_dir, file))
+        isnothing(data) && continue
+        push!(results, plot_decoding(data; kwargs...))
+    end
+    return results
+end
+
 """
     plot_confusion_matrix(decoded::DecodedData; time_point::Union{Float64, Int, Nothing} = nothing, kwargs...)
 
@@ -394,7 +288,7 @@ function plot_confusion_matrix(decoded::DecodedData; time_point::Union{Float64,I
         confusion = dropdims(mean(cm, dims = 1), dims = 1)
         default_title = "Average Confusion Matrix"
     elseif time_point isa Float64
-        time_idx = find_closest_time_index(decoded.times, time_point)
+        time_idx = _find_closest_time_index(decoded.times, time_point)
         confusion = @view cm[time_idx, :, :]
         default_title = "Confusion Matrix at $(round(time_point, digits=3)) s"
     else
@@ -428,4 +322,103 @@ function plot_confusion_matrix(decoded::DecodedData; time_point::Union{Float64,I
 
     _finalize_decoding_figure!(fig, plot_kwargs, "Confusion Matrix")
     return (fig = fig, axes = [ax])
+end
+
+######################################
+######### Internal Functions #########
+######################################
+
+function _decoding_ylim_bounds(accuracy::Vector{Float64}, stderror::Union{Vector{Float64},Nothing}, show_error::Bool)
+    y_min = Inf
+    y_max = -Inf
+    if show_error && !isnothing(stderror)
+        @inbounds for i in eachindex(accuracy, stderror)
+            a = accuracy[i]
+            s = stderror[i]
+            y_min = min(y_min, a - s)
+            y_max = max(y_max, a + s)
+        end
+    else
+        @inbounds for i in eachindex(accuracy)
+            a = accuracy[i]
+            y_min = min(y_min, a)
+            y_max = max(y_max, a)
+        end
+    end
+    return y_min, y_max
+end
+
+function _decoding_auto_ylim(accuracy::Vector{Float64}, stderror::Union{Vector{Float64},Nothing}, show_error::Bool)
+    y_min, y_max = _decoding_ylim_bounds(accuracy, stderror, show_error)
+    y_range = y_max - y_min
+    pad = y_range == 0 ? 0.05 : 0.05 * y_range
+    return (y_min - pad, y_max + pad)
+end
+
+function _add_decoding_origin_lines!(ax::Axis, chance_level::Float64, plot_kwargs::Dict)
+    vlines!(ax, 0, color = :black, linewidth = 1, linestyle = :solid)
+    hlines!(
+        ax,
+        chance_level,
+        color = plot_kwargs[:chance_color],
+        linewidth = plot_kwargs[:chance_linewidth],
+        linestyle = plot_kwargs[:chance_linestyle],
+        label = "Chance ($(round(chance_level, digits = 3)))",
+    )
+end
+
+function _plot_error_band!(
+    ax::Axis,
+    times::Vector{Float64},
+    accuracy::Vector{Float64},
+    stderror::Union{Vector{Float64},Nothing},
+    plot_kwargs::Dict,
+)
+    band!(ax, times, accuracy .- stderror, accuracy .+ stderror, color = (plot_kwargs[:error_color], plot_kwargs[:error_alpha]))
+end
+
+function _plot_accuracy_curve!(ax::Axis, times::Vector{Float64}, accuracy::Vector{Float64}, plot_kwargs::Dict; label::String = "Accuracy")
+    line_color = _resolve_theme_linecolor(ax, plot_kwargs[:color])
+    line_style = isnothing(plot_kwargs[:linestyle]) ? :solid : plot_kwargs[:linestyle]
+    lines!(ax, times, accuracy, color = line_color, linewidth = plot_kwargs[:linewidth], linestyle = line_style, label = label)
+end
+
+function _setup_axis_limits!(
+    ax::Axis,
+    times::Vector{Float64},
+    accuracy::Vector{Float64},
+    stderror::Union{Vector{Float64},Nothing},
+    plot_kwargs::Dict,
+)
+    xlim_val = plot_kwargs[:xlim]
+    xlims!(ax, isnothing(xlim_val) ? (times[1], times[end]) : xlim_val)
+
+    ylim_val = plot_kwargs[:ylim]
+    ylims!(ax, isnothing(ylim_val) ? _decoding_auto_ylim(accuracy, stderror, Bool(plot_kwargs[:show_error])) : ylim_val)
+end
+
+function _plot_decoding_to_axis!(
+    ax::Axis,
+    times::Vector{Float64},
+    accuracy::Vector{Float64},
+    stderror::Union{Vector{Float64},Nothing},
+    chance_level::Float64,
+    plot_kwargs::Dict;
+    set_limits::Bool = true,
+)
+    set_limits && _setup_axis_limits!(ax, times, accuracy, stderror, plot_kwargs)
+    plot_kwargs[:add_xy_origin] && _add_decoding_origin_lines!(ax, chance_level, plot_kwargs)
+    (plot_kwargs[:show_error] && !isnothing(stderror)) && _plot_error_band!(ax, times, accuracy, stderror, plot_kwargs)
+    _plot_accuracy_curve!(ax, times, accuracy, plot_kwargs)
+    get(plot_kwargs, :legend, false) && axislegend(ax, position = :rt)
+end
+
+function _finalize_decoding_figure!(fig::Figure, plot_kwargs::Dict, window_title::String; display_plot::Bool = plot_kwargs[:display_plot])
+    if !isempty(plot_kwargs[:figure_title])
+        Label(fig[0, :], plot_kwargs[:figure_title], fontsize = plot_kwargs[:figure_title_fontsize], font = :bold, tellwidth = false)
+    end
+    _set_window_title(window_title)
+    display_plot && _display_figure(fig)
+    _set_window_title("Makie")
+    return nothing
 end

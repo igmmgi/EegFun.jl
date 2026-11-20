@@ -1,7 +1,20 @@
+# Customizable Julia preprocessing pipeline script generator.
+
+######################################
+######### Types & Constants ##########
+######################################
+
 """
     PipelineTemplateOptions
 
 Options for [`generate_pipeline_template`](@ref) (`num_steps`, `subsections_per_step`, `include_usage_example`, `include_setup`, `include_summary`).
+
+# Fields
+- `num_steps::Int = 5`: Number of numbered preprocessing step sections to scaffold
+- `subsections_per_step::Int = 2`: Number of subsections generated inside each step
+- `include_usage_example::Bool = true`: Append single-file and batch execution usage examples
+- `include_setup::Bool = true`: Include config validation and directory/logging setup boilerplate
+- `include_summary::Bool = true`: Include final artifact/summary reporting boilerplate
 """
 @kwdef struct PipelineTemplateOptions
     num_steps::Int = 5
@@ -10,6 +23,33 @@ Options for [`generate_pipeline_template`](@ref) (`num_steps`, `subsections_per_
     include_setup::Bool = true
     include_summary::Bool = true
 end
+
+######################################
+########### User Functions ###########
+######################################
+
+"""
+    generate_pipeline_template(output_file = "custom_pipeline.jl", function_name = "custom_preprocess"; options = PipelineTemplateOptions()) -> String
+
+Generate a ready-to-customize EEG preprocessing pipeline script with setup, per-file logging, error handling, and summary boilerplate.
+"""
+function generate_pipeline_template(
+    output_file::String = "custom_pipeline.jl",
+    function_name::String = "custom_preprocess";
+    options::PipelineTemplateOptions = PipelineTemplateOptions(),
+)
+    buf = IOBuffer(; sizehint = 4096)
+    _write_pipeline_template(buf, function_name, options)
+    write(output_file, take!(buf))
+
+    @info "Pipeline template generated: $output_file"
+    @info "Edit the template to add your custom processing steps"
+    return output_file
+end
+
+######################################
+######### Internal Functions #########
+######################################
 
 function _write_pipeline_template(io::IO, function_name::String, options::PipelineTemplateOptions)
     write(
@@ -163,23 +203,4 @@ function _write_pipeline_template(io::IO, function_name::String, options::Pipeli
             """,
         )
     end
-end
-
-"""
-    generate_pipeline_template(output_file = "custom_pipeline.jl", function_name = "custom_preprocess"; options = PipelineTemplateOptions()) -> String
-
-Generate a ready-to-customize EEG preprocessing pipeline script with setup, per-file logging, error handling, and summary boilerplate.
-"""
-function generate_pipeline_template(
-    output_file::String = "custom_pipeline.jl",
-    function_name::String = "custom_preprocess";
-    options::PipelineTemplateOptions = PipelineTemplateOptions(),
-)
-    buf = IOBuffer(; sizehint = 4096)
-    _write_pipeline_template(buf, function_name, options)
-    write(output_file, take!(buf))
-
-    @info "Pipeline template generated: $output_file"
-    @info "Edit the template to add your custom processing steps"
-    return output_file
 end

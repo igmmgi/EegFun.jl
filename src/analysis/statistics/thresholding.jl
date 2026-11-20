@@ -1,5 +1,9 @@
 # Parametric (t-distribution) and non-parametric (permutation-quantile) thresholding.
 
+######################################
+######### Internal Functions #########
+######################################
+
 function _threshold_t_matrix_parametric!(
     mask_positive::BitArray{N},
     mask_negative::BitArray{N},
@@ -257,7 +261,11 @@ function _threshold_t_matrix_nonparametric(
 end
 
 const _threshold_t_matrix_parametric_tf! = _threshold_t_matrix_parametric!
+
 const _threshold_t_matrix_parametric_tf = _threshold_t_matrix_parametric
+
 const _compute_nonparametric_threshold_common_tf = _compute_nonparametric_threshold_common
+
 const _compute_nonparametric_threshold_individual_tf = _compute_nonparametric_threshold_individual
+
 const _threshold_t_matrix_nonparametric_tf! = _threshold_t_matrix_nonparametric!

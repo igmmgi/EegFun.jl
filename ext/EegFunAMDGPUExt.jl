@@ -1,7 +1,14 @@
+# AMDGPU.jl backend extension for EegFun GPU acceleration.
+
 module EegFunAMDGPUExt
 
 using EegFun
+
 using AMDGPU
+
+######################################
+######### Internal Functions #########
+######################################
 
 function __init__()
     if AMDGPU.functional()
@@ -10,7 +17,7 @@ function __init__()
         catch
             "AMD GPU"
         end
-        EegFun.register_gpu_backend!(:AMDGPU, dev_name, AMDGPU.ROCBackend(), AMDGPU.ROCArray)
+        EegFun._register_gpu_backend!(:AMDGPU, dev_name, AMDGPU.ROCBackend(), AMDGPU.ROCArray)
     end
 end
 

@@ -1,17 +1,26 @@
-function _align_bids_layout!(dat::EegData, layout::Layout)
-    df = _first_df(dat)
-    if isnothing(df)
-        dat.layout = copy(layout)
-        return dat
-    end
-    present = _channel_cols(layout.data[!, :label], df)
-    if !isempty(present)
-        dat.layout = present == layout.data[!, :label] ? copy(layout) : subset_layout(layout; channel_selection = channels(present))
-    end
-    return dat
-end
+# Brain Imaging Data Structure (BIDS-EEG) dataset and derivative export.
 
-_align_bids_layout!(dats::AbstractVector{<:EegData}, layout::Layout) = (foreach(d -> _align_bids_layout!(d, layout), dats); dats)
+######################################
+######### Types & Constants ##########
+######################################
+
+const _BIDS_DERIVATIVE_SUFFIXES = OrderedDict(
+    "_continuous_raw" => "continuousRaw",
+    "_continuous_corrected" => "continuousCorrected",
+    "_continuous" => "continuous",
+    "_epochs_raw" => "epochsRaw",
+    "_epochs_corrected" => "epochsCorrected",
+    "_epochs" => "epochs",
+    "_erps_raw" => "erpsRaw",
+    "_erps_corrected" => "erpsCorrected",
+    "_erps" => "erps",
+    "_ica" => "ica",
+    "_artifact_info" => "artifactInfo",
+)
+
+######################################
+########### User Functions ###########
+######################################
 
 """
     export_bids(; task, raw_dir = ".", raw_pattern = "\\\\.bdf", derivatives_dir = "",
@@ -112,7 +121,7 @@ function export_bids(;
 
     for raw_file in raw_files
         base = basename_without_ext(raw_file)
-        raw_ext = get_file_extension(raw_file)
+        raw_ext = _get_file_extension(raw_file)
         sub_id = pmap[base]
         sub_eeg_dir = joinpath(output_dir, sub_id, "eeg")
         mkpath(sub_eeg_dir)
@@ -157,6 +166,25 @@ function export_bids(;
     @info "BIDS export complete: $output_dir"
     @info "Validate your dataset at: https://bids-standard.github.io/bids-validator/"
 end
+
+######################################
+######### Internal Functions #########
+######################################
+
+function _align_bids_layout!(dat::EegData, layout::Layout)
+    df = _first_df(dat)
+    if isnothing(df)
+        dat.layout = copy(layout)
+        return dat
+    end
+    present = _channel_cols(layout.data[!, :label], df)
+    if !isempty(present)
+        dat.layout = present == layout.data[!, :label] ? copy(layout) : subset_layout(layout; channel_selection = channels(present))
+    end
+    return dat
+end
+
+_align_bids_layout!(dats::AbstractVector{<:EegData}, layout::Layout) = (foreach(d -> _align_bids_layout!(d, layout), dats); dats)
 
 function _bids_write_readme(output_dir::String, dataset_name::String)
     name = isempty(dataset_name) ? "Untitled Dataset" : dataset_name
@@ -405,20 +433,6 @@ function _bids_write_coordsystem_json(dir::String, prefix::String)
     _bids_write_json(joinpath(dir, "$(prefix)_coordsystem.json"), coord)
 end
 
-const _BIDS_DERIVATIVE_SUFFIXES = OrderedDict(
-    "_continuous_raw" => "continuousRaw",
-    "_continuous_corrected" => "continuousCorrected",
-    "_continuous" => "continuous",
-    "_epochs_raw" => "epochsRaw",
-    "_epochs_corrected" => "epochsCorrected",
-    "_epochs" => "epochs",
-    "_erps_raw" => "erpsRaw",
-    "_erps_corrected" => "erpsCorrected",
-    "_erps" => "erps",
-    "_ica" => "ica",
-    "_artifact_info" => "artifactInfo",
-)
-
 function _bids_copy_derivatives(
     output_dir::String,
     deriv_dir::String,
@@ -537,7 +551,11 @@ function _json_print(io::IO, data::AbstractString, _::Int)
     escaped = replace(data, "\\" => "\\\\", "\"" => "\\\"", "\n" => "\\n", "\t" => "\\t", "\r" => "\\r")
     print(io, '"', escaped, '"')
 end
+
 _json_print(io::IO, data::Bool, _::Int) = print(io, data ? "true" : "false")
+
 _json_print(io::IO, data::Number, _::Int) = print(io, data)
+
 _json_print(io::IO, data::Symbol, _::Int) = print(io, '"', data, '"')
+
 _json_print(io::IO, ::Nothing, _::Int) = print(io, "null")

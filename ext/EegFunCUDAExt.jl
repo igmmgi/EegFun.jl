@@ -1,7 +1,14 @@
+# CUDA.jl backend extension for EegFun GPU acceleration.
+
 module EegFunCUDAExt
 
 using EegFun
+
 using CUDA
+
+######################################
+######### Internal Functions #########
+######################################
 
 function __init__()
     if CUDA.functional()
@@ -10,7 +17,7 @@ function __init__()
         catch
             "NVIDIA GPU"
         end
-        EegFun.register_gpu_backend!(:CUDA, dev_name, CUDA.CUDABackend(), CUDA.CuArray)
+        EegFun._register_gpu_backend!(:CUDA, dev_name, CUDA.CUDABackend(), CUDA.CuArray)
     end
 end
 

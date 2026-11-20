@@ -1,25 +1,14 @@
 # Time-frequency (4D: participants × electrodes × frequencies × time) statistical preparation and helpers.
 
-function _filter_axis_interval(values::Vector{Float64}, sel::Interval, empty_msg::String)
-    (isnothing(sel) || sel isa AllSelection) && return values, nothing
-    lo, hi = sel isa TimeSelection ? (sel.start, sel.stop) : (sel[1], sel[2])
-    mask = (values .>= lo) .& (values .<= hi)
-    filtered = values[mask]
-    isempty(filtered) && @minimal_error(empty_msg)
-    return filtered, mask
-end
+######################################
+######### Types & Constants ##########
+######################################
 
-function _baseline_tf_4d!(data::Array{Float64,4}, base_range::UnitRange{Int}, method::Symbol)
-    n_p, n_e, _, _ = size(data)
-    _foreach_chunk(n_p * n_e) do idx_range
-        for idx in idx_range
-            p = mod1(idx, n_p)
-            e = cld(idx, n_p)
-            _tf_baseline_grid!(@view(data[p, e, :, :]), base_range, method)
-        end
-    end
-    return data
-end
+const _compute_critical_t_values_tf = _compute_critical_t_values
+
+######################################
+########### User Functions ###########
+######################################
 
 """
     prepare_stats(tfs::AbstractVector{<:TimeFreqData}; design = :paired, condition_selection = conditions(), channel_selection = channels(), frequency_selection = nothing, interval_selection = nothing, baseline_interval = nothing, baseline_method = :db, analysis_interval = nothing)
@@ -125,6 +114,31 @@ function prepare_stats(
     all_tfs = read_all_data(TimeFreqData, joinpath(input_dir, file_pattern), participant_selection)
     isempty(all_tfs) && @minimal_error "No valid TF data found matching pattern '$file_pattern' in $input_dir"
     return prepare_stats(all_tfs; design = design, kwargs...)
+end
+
+######################################
+######### Internal Functions #########
+######################################
+
+function _filter_axis_interval(values::Vector{Float64}, sel::Interval, empty_msg::String)
+    (isnothing(sel) || sel isa AllSelection) && return values, nothing
+    lo, hi = sel isa TimeSelection ? (sel.start, sel.stop) : (sel[1], sel[2])
+    mask = (values .>= lo) .& (values .<= hi)
+    filtered = values[mask]
+    isempty(filtered) && @minimal_error(empty_msg)
+    return filtered, mask
+end
+
+function _baseline_tf_4d!(data::Array{Float64,4}, base_range::UnitRange{Int}, method::Symbol)
+    n_p, n_e, _, _ = size(data)
+    _foreach_chunk(n_p * n_e) do idx_range
+        for idx in idx_range
+            p = mod1(idx, n_p)
+            e = cld(idx, n_p)
+            _tf_baseline_grid!(@view(data[p, e, :, :]), base_range, method)
+        end
+    end
+    return data
 end
 
 function _extract_tf_array(
@@ -285,5 +299,3 @@ function _compute_t_matrix_tf(prepared::TFStatisticalData; tail::Symbol = :both,
         compute_p_values = compute_p_values,
     )
 end
-
-const _compute_critical_t_values_tf = _compute_critical_t_values

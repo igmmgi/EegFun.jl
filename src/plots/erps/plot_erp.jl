@@ -1,186 +1,35 @@
-const PLOT_ERP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
-    # Display parameters
-    :display_plot => (true, "Display the plot (true/false)"),
-    :window_title => ("", "Title for the OS plot window. If empty, it's generated automatically."),
-    :figure_title => ("", "Title drawn at the top of the entire figure canvas"),
-    :figure_title_fontsize => (24, "Font size for figure title"),
-    :interactive => (true, "Enable interactive features (true/false)"),
-    :zoom_step => (0.2, "Fractional zoom step for arrow keys (e.g. 0.2 means 20% zoom in/out)"),
-    :selection_color => (:blue, "Color for interactive selection rectangles"),
-    :selection_alpha => (0.3, "Alpha (transparency) for interactive selection rectangles"),
-    :theme_fontsize => (nothing, "Font size for theme"),
+# Single-channel, grid, and topographic ERP waveform plotting functions.
 
-    # Axis limits and labels
-    :xlim => (nothing, "X-axis limits as (min, max) tuple. If nothing, automatically determined"),
-    :ylim => (nothing, "Y-axis limits as (min, max) tuple. If nothing, automatically determined"),
-    :xlabel => ("Time (s)", "Label for x-axis"),
-    :ylabel => ("μV", "Label for y-axis"),
-    :yreversed => (false, "Whether to reverse the y-axis"),
-    :xticks => (nothing, "X-axis tick positions (e.g., -0.1:0.1:0.8 or [0, 0.2, 0.4]). If nothing, automatically determined"),
-    :yticks => (nothing, "Y-axis tick positions (e.g., -4:2:4 or [-2, 0, 2]). If nothing, automatically determined"),
-    :time_unit => (
-        :s,
-        "Time unit for x-axis display (:s or :ms). Only affects axis labels and tick formatting — all intervals remain in seconds.",
-    ),
-
-    # Title
-    :plot_title => (nothing, "Plot title"),
-    :show_title => (true, "Show plot title (true/false)"),
-    :plot_title_fontsize => (16, "Font size for plot titles"),
-    :plot_title_position => (
-        nothing,
-        "Relative (x, y) coordinates for the plot title (e.g., (0.5, 0.95)). If provided, the title is drawn inside the axis.",
-    ),
-    :plot_title_align => ((:center, :top), "Alignment of the inner plot title"),
-
-    # Line styling
-    :linewidth => (nothing, "Line width for ERPs"),
-    :color => (nothing, "Color for ERPs (single color or a vector of colors, one per dataset)"),
-    :linestyle => (nothing, "Line style for ERPs (single style or a vector of styles, one per dataset)"),
-    :colormap => (nothing, "Colormap for multi-channel plots"),
-
-    # Plot configuration
-    :average_channels => (false, "Average across channels (true/false)"),
-    :error_bars => (:none, "Error bars type to plot: :none, :sem, :within_sem, :ci95"),
-
-    # Legend parameters
-    :legend_kwargs => (
-        NamedTuple(),
-        "Additional kwargs passed directly to the Makie Legend block (see Makie's [Legend documentation](https://docs.makie.org/stable/reference/blocks/legend/) for available attributes).",
-    ),
-    :legend => (true, "Show the legend (true/false)"),
-    :legend_label => ("", "Title for the legend"),
-    :legend_framevisible => (true, "Legend frame visible (true/false)"),
-    :legend_position => (:lt, "Legend position (:lt, :rt, :lb, :rb, or tuple like (:left, :top), or (0.5, 0.5))"),
-    :legend_channel => ([], "Which channel to put the legend on."),
-    :legend_labels => ([], "Legend labels."),
-    :legend_nbanks => (nothing, "Number of legend columns."),
-
-    # Individual axes grids
-    :xgrid => (false, "Show x-axis grid (true/false)"),
-    :ygrid => (false, "Show y-axis grid (true/false)"),
-    :xminorgrid => (false, "Show x-axis minor grid (true/false)"),
-    :yminorgrid => (false, "Show y-axis minor grid (true/false)"),
-
-    # Origin lines and scale indicator
-    :add_xy_origin => (true, "Add origin lines at x=0 and y=0 (true/false)"),
-    :axis_type => (:standard, "Type of axis to draw (:standard or :origin)"),
-    :scale_x_value => (nothing, "X-axis scale value/step size (e.g. 0.1 for 100 ms)"),
-    :scale_y_value => (nothing, "Y-axis scale value/step size (e.g. 5.0 for 5 μV)"),
-
-    # Layout parameters
-    :layout_kwargs => (
-        NamedTuple(),
-        "Additional parameters to configure grid or topographical layouts (e.g., grid_dims, topo_plot_width, grid_rowgap)",
-    ),
-    :figure_padding => ((10, 30, 10, 10), "Padding around entire figure as (left, right, bottom, top) tuple (in pixels)"),
-
-    # Highlight regions
-    :highlight_regions => (
-        nothing,
-        "Highlight regions as a NamedTuple or Vector of NamedTuples. Each region: (x1, x2, y1=-Inf, y2=Inf, color=:gray, alpha=0.3)",
-    ),
-)
-
-function _order_plot_channels(selected_channels, all_channels, channel_plot_order)
-    plot_chs = [ch for ch in selected_channels if ch in all_channels]
-    if !isnothing(channel_plot_order)
-        ordered = Symbol[Symbol(ch) for ch in channel_plot_order if Symbol(ch) in plot_chs]
-        !isempty(ordered) && (plot_chs = ordered)
-    end
-    return plot_chs
-end
+######################################
+########### User Functions ###########
+######################################
 
 """
-    plot_erp(filepath::String;
-             input_dir::String = pwd(),
-             participant_selection::Function = participants(),
-             layout::Union{Symbol, PlotLayout} = :single,
-             condition_selection::Function = conditions(),
-             channel_selection::Function = channels(),
-             channel_plot_order::Union{Nothing, Vector{Symbol}} = nothing,
-             sample_selection::Function = samples(),
-             interval_selection::Interval = times(),
-             baseline_interval::Interval = nothing,
-             kwargs...)
+    plot_erp(dat::ErpData; kwargs...)
+    plot_erp(datasets::AbstractVector{<:ErpData}; condition_selection = conditions(), kwargs...)
+    plot_erp(filepath::String; input_dir = pwd(), participant_selection = participants(), kwargs...)
 
-Load ERP data and create plots. Accepts either a direct `.jld2` filepath or a filename
-pattern to discover and plot all matching files.
+Plot ERP waveforms across `:single`, `:grid`, `:topo`, or custom `PlotLayout` layouts from in-memory `ErpData`
+or a `.jld2` filepath / filename pattern.
 
 # Arguments
-- `filepath::String`: Either a `.jld2` file path, or a pattern string (e.g. `"erps_final"`)
-  to match against files in `input_dir`
-- `input_dir::String`: Directory to search for pattern-matched files (default: `pwd()`)
-- `participant_selection::Function`: Participant filter for pattern mode (default: `participants()`)
-- `layout`: Layout specification (see main plot_erp documentation)
-- `channel_selection::Function`: Function that returns boolean vector for channel filtering
-- `sample_selection::Function`: Function that returns boolean vector for sample filtering
-- `kwargs`: Additional keyword arguments
+- `dat` / `datasets` / `filepath`: `ErpData`, vector of `ErpData`, `.jld2` file path, or filename pattern in `input_dir`.
+- `layout::Union{Symbol,PlotLayout} = :single`: Layout specification (`:single`, `:grid`, `:topo`, or `PlotLayout`).
+- `condition_selection = conditions()`: Predicate filtering conditions.
+- `channel_selection = channels()`: Predicate or channel symbol(s) filtering channels.
+- `channel_plot_order = nothing`: Optional explicit channel plot order.
+- `sample_selection = samples()`, `interval_selection::Interval = times()`: Sample/time range selectors.
+- `baseline_interval::Interval = nothing`: Optional baseline subtraction window `(start, stop)` in seconds.
 
 $(_generate_kwargs_doc(PLOT_ERP_KWARGS))
 
 # Examples
 ```julia
+plot_erp(erps, channel_selection = channels([:PO7, :PO8]), layout = :grid)
 plot_erp("grand_average_erps_final.jld2")
-plot_erp("erps_final")
 plot_erp("erps_final", participant_selection = participants(1))
-plot_erp("erps_final", channel_selection = channels([:PO7, :PO8]), layout = :grid)
 ```
 """
-function plot_erp(
-    filepath::String;
-    input_dir::String = pwd(),
-    participant_selection = participants(),
-    layout::Union{Symbol,PlotLayout} = :single,
-    condition_selection = conditions(),
-    channel_selection = channels(),
-    channel_plot_order::Union{Nothing,AbstractVector} = nothing,
-    sample_selection = samples(),
-    interval_selection::Interval = times(),
-    baseline_interval::Interval = nothing,
-    kwargs...,
-)
-    if endswith(filepath, ".jld2")
-        resolved = _resolve_input_filepath(filepath, input_dir)
-        data = read_data(resolved)
-        isnothing(data) && @minimal_error "No data found in file: $resolved"
-        return plot_erp(
-            data;
-            layout = layout,
-            condition_selection = condition_selection,
-            channel_selection = channel_selection,
-            channel_plot_order = channel_plot_order,
-            sample_selection = sample_selection,
-            interval_selection = interval_selection,
-            baseline_interval = baseline_interval,
-            kwargs...,
-        )
-    end
-
-    files = _require_batch_files(filepath, input_dir, participant_selection; kind = "ERP")
-    results = NamedTuple[]
-    for file in files
-        @info "Plotting: $file"
-        data = read_data(joinpath(input_dir, file))
-        isnothing(data) && continue
-        push!(
-            results,
-            plot_erp(
-                data;
-                layout = layout,
-                condition_selection = condition_selection,
-                channel_selection = channel_selection,
-                channel_plot_order = channel_plot_order,
-                sample_selection = sample_selection,
-                interval_selection = interval_selection,
-                baseline_interval = baseline_interval,
-                kwargs...,
-            ),
-        )
-    end
-    return results
-end
-
 function plot_erp(
     dat::ErpData;
     layout::Union{Symbol,PlotLayout} = :single,
@@ -258,13 +107,17 @@ function plot_erp(
 end
 
 """
-    plot_erp_errorbar(filepath::String; kwargs...)
-    plot_erp_errorbar(dataset::ErpData; kwargs...)
-    plot_erp_errorbar(datasets::AbstractVector{<:ErpData}; kwargs...)
+    plot_erp!(fig::Figure, ax::Axis, dat::ErpData; kwargs...)
+    plot_erp!(fig::Figure, ax::Axis, datasets::AbstractVector{<:ErpData}; kwargs...)
 
-Plot grand-averaged ERP waveforms with across-participant error ribbons (`:sem`, `:within_sem`, or `:ci95`).
+Plot ERP data on an existing axis, mutating the figure and axis. Returns `ax`.
 """
-function plot_erp_errorbar(
+plot_erp!(fig::Figure, ax::Axis, dat::ErpData; kwargs...) = plot_erp!(fig, ax, [dat]; kwargs...)
+
+plot_erp!(fig::Figure, ax::Axis, datasets::AbstractVector{<:ErpData}; kwargs...) =
+    _plot_erp_on_existing_axis!(ax, datasets; dynamic_grand_avg = false, kwargs...)
+
+function plot_erp(
     filepath::String;
     input_dir::String = pwd(),
     participant_selection = participants(),
@@ -281,9 +134,8 @@ function plot_erp_errorbar(
         resolved = _resolve_input_filepath(filepath, input_dir)
         data = read_data(resolved)
         isnothing(data) && @minimal_error "No data found in file: $resolved"
-        datasets = data isa ErpData ? [data] : data
-        return plot_erp_errorbar(
-            datasets;
+        return plot_erp(
+            data;
             layout = layout,
             condition_selection = condition_selection,
             channel_selection = channel_selection,
@@ -296,28 +148,36 @@ function plot_erp_errorbar(
     end
 
     files = _require_batch_files(filepath, input_dir, participant_selection; kind = "ERP")
-    datasets = ErpData[]
+    results = NamedTuple[]
     for file in files
-        @info "Loading: $file"
+        @info "Plotting: $file"
         data = read_data(joinpath(input_dir, file))
         isnothing(data) && continue
-        data isa Vector{ErpData} ? append!(datasets, data) : push!(datasets, data)
+        push!(
+            results,
+            plot_erp(
+                data;
+                layout = layout,
+                condition_selection = condition_selection,
+                channel_selection = channel_selection,
+                channel_plot_order = channel_plot_order,
+                sample_selection = sample_selection,
+                interval_selection = interval_selection,
+                baseline_interval = baseline_interval,
+                kwargs...,
+            ),
+        )
     end
-    isempty(datasets) && @minimal_error "No data loaded from pattern: $filepath"
-
-    return plot_erp_errorbar(
-        datasets;
-        layout = layout,
-        condition_selection = condition_selection,
-        channel_selection = channel_selection,
-        channel_plot_order = channel_plot_order,
-        sample_selection = sample_selection,
-        interval_selection = interval_selection,
-        baseline_interval = baseline_interval,
-        kwargs...,
-    )
+    return results
 end
 
+"""
+    plot_erp_errorbar(dataset::ErpData; kwargs...)
+    plot_erp_errorbar(datasets::AbstractVector{<:ErpData}; kwargs...)
+    plot_erp_errorbar(filepath::String; kwargs...)
+
+Plot grand-averaged ERP waveforms with across-participant error ribbons (`:sem`, `:within_sem`, or `:ci95`).
+"""
 function plot_erp_errorbar(
     dat::ErpData;
     layout::Union{Symbol,PlotLayout} = :single,
@@ -378,6 +238,84 @@ function plot_erp_errorbar(
         baseline_interval,
         channel_plot_order,
     )
+end
+
+"""
+    plot_erp_errorbar!(fig::Figure, ax::Axis, dat::ErpData; kwargs...)
+    plot_erp_errorbar!(fig::Figure, ax::Axis, datasets::AbstractVector{<:ErpData}; kwargs...)
+
+Plot grand-averaged ERP data with error ribbons on an existing axis, mutating the figure and axis. Returns `ax`.
+"""
+plot_erp_errorbar!(fig::Figure, ax::Axis, dat::ErpData; kwargs...) = plot_erp_errorbar!(fig, ax, [dat]; kwargs...)
+
+plot_erp_errorbar!(fig::Figure, ax::Axis, datasets::AbstractVector{<:ErpData}; kwargs...) =
+    _plot_erp_on_existing_axis!(ax, datasets; dynamic_grand_avg = true, kwargs...)
+
+function plot_erp_errorbar(
+    filepath::String;
+    input_dir::String = pwd(),
+    participant_selection = participants(),
+    layout::Union{Symbol,PlotLayout} = :single,
+    condition_selection = conditions(),
+    channel_selection = channels(),
+    channel_plot_order::Union{Nothing,AbstractVector} = nothing,
+    sample_selection = samples(),
+    interval_selection::Interval = times(),
+    baseline_interval::Interval = nothing,
+    kwargs...,
+)
+    if endswith(filepath, ".jld2")
+        resolved = _resolve_input_filepath(filepath, input_dir)
+        data = read_data(resolved)
+        isnothing(data) && @minimal_error "No data found in file: $resolved"
+        datasets = data isa ErpData ? [data] : data
+        return plot_erp_errorbar(
+            datasets;
+            layout = layout,
+            condition_selection = condition_selection,
+            channel_selection = channel_selection,
+            channel_plot_order = channel_plot_order,
+            sample_selection = sample_selection,
+            interval_selection = interval_selection,
+            baseline_interval = baseline_interval,
+            kwargs...,
+        )
+    end
+
+    files = _require_batch_files(filepath, input_dir, participant_selection; kind = "ERP")
+    datasets = ErpData[]
+    for file in files
+        @info "Loading: $file"
+        data = read_data(joinpath(input_dir, file))
+        isnothing(data) && continue
+        data isa Vector{ErpData} ? append!(datasets, data) : push!(datasets, data)
+    end
+    isempty(datasets) && @minimal_error "No data loaded from pattern: $filepath"
+
+    return plot_erp_errorbar(
+        datasets;
+        layout = layout,
+        condition_selection = condition_selection,
+        channel_selection = channel_selection,
+        channel_plot_order = channel_plot_order,
+        sample_selection = sample_selection,
+        interval_selection = interval_selection,
+        baseline_interval = baseline_interval,
+        kwargs...,
+    )
+end
+
+######################################
+######### Internal Functions #########
+######################################
+
+function _order_plot_channels(selected_channels, all_channels, channel_plot_order)
+    plot_chs = [ch for ch in selected_channels if ch in all_channels]
+    if !isnothing(channel_plot_order)
+        ordered = Symbol[Symbol(ch) for ch in channel_plot_order if Symbol(ch) in plot_chs]
+        !isempty(ordered) && (plot_chs = ordered)
+    end
+    return plot_chs
 end
 
 function _plot_erp_core(
@@ -531,26 +469,6 @@ function _plot_erp_on_existing_axis!(ax::Axis, datasets::AbstractVector{<:ErpDat
     _plot_erp!(ax, dat_subset, all_plot_channels, plot_kwargs; user_provided_color = user_provided_color, variances_dict = variances_dict)
     return ax
 end
-
-"""
-    plot_erp!(fig::Figure, ax::Axis, dat::ErpData; kwargs...)
-    plot_erp!(fig::Figure, ax::Axis, datasets::AbstractVector{<:ErpData}; kwargs...)
-
-Plot ERP data on an existing axis, mutating the figure and axis. Returns `ax`.
-"""
-plot_erp!(fig::Figure, ax::Axis, dat::ErpData; kwargs...) = plot_erp!(fig, ax, [dat]; kwargs...)
-plot_erp!(fig::Figure, ax::Axis, datasets::AbstractVector{<:ErpData}; kwargs...) =
-    _plot_erp_on_existing_axis!(ax, datasets; dynamic_grand_avg = false, kwargs...)
-
-"""
-    plot_erp_errorbar!(fig::Figure, ax::Axis, dat::ErpData; kwargs...)
-    plot_erp_errorbar!(fig::Figure, ax::Axis, datasets::AbstractVector{<:ErpData}; kwargs...)
-
-Plot grand-averaged ERP data with error ribbons on an existing axis, mutating the figure and axis. Returns `ax`.
-"""
-plot_erp_errorbar!(fig::Figure, ax::Axis, dat::ErpData; kwargs...) = plot_erp_errorbar!(fig, ax, [dat]; kwargs...)
-plot_erp_errorbar!(fig::Figure, ax::Axis, datasets::AbstractVector{<:ErpData}; kwargs...) =
-    _plot_erp_on_existing_axis!(ax, datasets; dynamic_grand_avg = true, kwargs...)
 
 function _plot_erp!(
     ax::Axis,

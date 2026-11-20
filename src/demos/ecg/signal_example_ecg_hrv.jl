@@ -1,3 +1,9 @@
+# Interactive heart-rate variability (HRV) and R-R tachogram teaching demo.
+
+######################################
+########### User Functions ###########
+######################################
+
 """
     signal_example_ecg_hrv()
 

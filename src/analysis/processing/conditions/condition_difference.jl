@@ -1,10 +1,81 @@
+# Pairwise condition difference waves for ERP and time-frequency data.
+
+######################################
+########### User Functions ###########
+######################################
+
+"""
+    condition_difference(data::AbstractVector{<:Union{ErpData, TimeFreqData}}, condition_pairs) -> Vector
+    condition_difference(file_pattern::String, condition_pairs; input_dir = pwd(),
+                         participant_selection = participants(), output_dir = nothing)
+
+Create condition difference waves (`a - b` for each `(a, b)` in `condition_pairs`, wrapping TF phase
+differences onto `[-π, π]`), or batch-process matching JLD2 files.
+"""
+function condition_difference(data::AbstractVector{T}, condition_pairs) where {T<:ConditionAverageData}
+    pairs =
+        if condition_pairs isa Tuple ||
+           (condition_pairs isa AbstractVector && !isempty(condition_pairs) && first(condition_pairs) isa Integer)
+            [condition_pairs]
+        else
+            condition_pairs
+        end
+    error_msg = _validate_condition_pairs(pairs)
+    !isnothing(error_msg) && @minimal_error(error_msg)
+
+    tag = _kind_tag(T)
+    @info "Creating $(tag)condition difference waves..."
+
+    difference_waves = T[]
+    part_groups = _group_by_participant_file(data)
+    if !isnothing(part_groups)
+        for pg in part_groups
+            _condition_difference_single!(difference_waves, pg, pairs)
+        end
+    else
+        _condition_difference_single!(difference_waves, data, pairs)
+    end
+
+    isempty(difference_waves) && @minimal_error("No valid condition pairs found")
+    @info "Created $(length(difference_waves)) $(tag)difference wave(s)"
+    return difference_waves
+end
+
+function condition_difference(
+    file_pattern::String,
+    condition_pairs::Union{AbstractVector{<:Tuple{Integer,Integer}},AbstractVector{<:AbstractVector{<:Integer}}};
+    input_dir::String = pwd(),
+    participant_selection = participants(),
+    output_dir::Union{String,Nothing} = nothing,
+)
+    _with_batch_logging("condition differencing", "condition_difference.log", input_dir, output_dir) do ctx
+        @log_call "condition_difference"
+        error_msg = _validate_condition_pairs(condition_pairs)
+        !isnothing(error_msg) && @minimal_error(error_msg)
+
+        output_dir = _prepare_output_dir!(ctx, _condition_difference_default_output_dir(input_dir, file_pattern, condition_pairs))
+        process_fn = (input_path, output_path) -> _condition_difference_process_file(input_path, output_path, condition_pairs)
+        return batch_process(process_fn, file_pattern, input_dir, output_dir, participant_selection, "Creating differences")
+    end
+end
+
+condition_difference(file_pattern::String, condition_pair::Tuple{Integer,Integer}; kwargs...) =
+    condition_difference(file_pattern, [condition_pair]; kwargs...)
+
+condition_difference(file_pattern::String, condition_pair::AbstractVector{<:Integer}; kwargs...) =
+    condition_difference(file_pattern, [collect(Int, condition_pair)]; kwargs...)
+
+######################################
+######### Internal Functions #########
+######################################
+
 function _condition_difference_default_output_dir(
     input_dir::String,
     pattern::String,
     pairs::Union{AbstractVector{<:Tuple{Integer,Integer}},AbstractVector{<:AbstractVector{<:Integer}}},
 )
     pairs_str = join([join(pair, "-") for pair in pairs], "_")
-    return joinpath(input_dir, "differences_$(clean_pattern(pattern))_$(pairs_str)")
+    return joinpath(input_dir, "differences_$(_clean_pattern(pattern))_$(pairs_str)")
 end
 
 function _subtract_df(df1::DataFrame, df2::DataFrame, cond_chs::Set{Symbol})::DataFrame
@@ -91,63 +162,3 @@ function _condition_difference_single!(difference_waves::Vector{T}, data::Abstra
     end
     return difference_waves
 end
-
-"""
-    condition_difference(data::AbstractVector{<:Union{ErpData, TimeFreqData}}, condition_pairs) -> Vector
-    condition_difference(file_pattern::String, condition_pairs; input_dir = pwd(),
-                         participant_selection = participants(), output_dir = nothing)
-
-Create condition difference waves (`a - b` for each `(a, b)` in `condition_pairs`, wrapping TF phase
-differences onto `[-π, π]`), or batch-process matching JLD2 files.
-"""
-function condition_difference(data::AbstractVector{T}, condition_pairs) where {T<:ConditionAverageData}
-    pairs =
-        if condition_pairs isa Tuple ||
-           (condition_pairs isa AbstractVector && !isempty(condition_pairs) && first(condition_pairs) isa Integer)
-            [condition_pairs]
-        else
-            condition_pairs
-        end
-    error_msg = _validate_condition_pairs(pairs)
-    !isnothing(error_msg) && @minimal_error(error_msg)
-
-    tag = _kind_tag(T)
-    @info "Creating $(tag)condition difference waves..."
-
-    difference_waves = T[]
-    part_groups = _group_by_participant_file(data)
-    if !isnothing(part_groups)
-        for pg in part_groups
-            _condition_difference_single!(difference_waves, pg, pairs)
-        end
-    else
-        _condition_difference_single!(difference_waves, data, pairs)
-    end
-
-    isempty(difference_waves) && @minimal_error("No valid condition pairs found")
-    @info "Created $(length(difference_waves)) $(tag)difference wave(s)"
-    return difference_waves
-end
-
-function condition_difference(
-    file_pattern::String,
-    condition_pairs::Union{AbstractVector{<:Tuple{Integer,Integer}},AbstractVector{<:AbstractVector{<:Integer}}};
-    input_dir::String = pwd(),
-    participant_selection = participants(),
-    output_dir::Union{String,Nothing} = nothing,
-)
-    _with_batch_logging("condition differencing", "condition_difference.log", input_dir, output_dir) do ctx
-        @log_call "condition_difference"
-        error_msg = _validate_condition_pairs(condition_pairs)
-        !isnothing(error_msg) && @minimal_error(error_msg)
-
-        output_dir = _prepare_output_dir!(ctx, _condition_difference_default_output_dir(input_dir, file_pattern, condition_pairs))
-        process_fn = (input_path, output_path) -> _condition_difference_process_file(input_path, output_path, condition_pairs)
-        return batch_process(process_fn, file_pattern, input_dir, output_dir, participant_selection, "Creating differences")
-    end
-end
-
-condition_difference(file_pattern::String, condition_pair::Tuple{Integer,Integer}; kwargs...) =
-    condition_difference(file_pattern, [condition_pair]; kwargs...)
-condition_difference(file_pattern::String, condition_pair::AbstractVector{<:Integer}; kwargs...) =
-    condition_difference(file_pattern, [collect(Int, condition_pair)]; kwargs...)

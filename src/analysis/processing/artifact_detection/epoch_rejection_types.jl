@@ -1,14 +1,86 @@
+# Data structures and summary accessors for epoch artifact rejection.
+
+######################################
+######### Types & Constants ##########
+######################################
+
 """
     Rejection(channel::Symbol, epoch::Int)
 
 Rejected channel-epoch pair from artifact detection.
+
+# Fields
+- `channel::Symbol`: Flagged electrode symbol
+- `epoch::Int`: 1-based flagged epoch index
 """
 struct Rejection
     channel::Symbol
     epoch::Int
 end
 
-Base.show(io::IO, r::Rejection) = print(io, "Rejection(:$(r.channel), $(r.epoch))")
+struct EpochInfo
+    number::Int
+    name::String
+    n::Int
+end
+
+"""
+    ZScoreRejectionInfo
+
+Per-measure z-score rejection lists (`:variance`, `:max`, `:min`, `:abs`, `:range`, `:kurtosis`).
+
+# Fields
+- `z_measures::Vector{Symbol}`: Active z-score metric names evaluated during detection
+- `z_variance::Vector{Rejection}`: Channel-epoch pairs exceeding the variance z-threshold
+- `z_max::Vector{Rejection}`: Channel-epoch pairs exceeding the maximum-amplitude z-threshold
+- `z_min::Vector{Rejection}`: Channel-epoch pairs exceeding the minimum-amplitude z-threshold
+- `z_abs::Vector{Rejection}`: Channel-epoch pairs exceeding the peak-absolute-amplitude z-threshold
+- `z_range::Vector{Rejection}`: Channel-epoch pairs exceeding the peak-to-peak range z-threshold
+- `z_kurtosis::Vector{Rejection}`: Channel-epoch pairs exceeding the kurtosis z-threshold
+"""
+struct ZScoreRejectionInfo
+    z_measures::Vector{Symbol}
+    z_variance::Vector{Rejection}
+    z_max::Vector{Rejection}
+    z_min::Vector{Rejection}
+    z_abs::Vector{Rejection}
+    z_range::Vector{Rejection}
+    z_kurtosis::Vector{Rejection}
+end
+
+"""
+    EpochRejectionInfo
+
+Stores epoch rejection criteria, per-channel/epoch rejections, and optional channel repair tracking (`repaired`, `skipped`).
+
+# Fields
+- `name::String`: Detector or stage label
+- `info::EpochInfo`: Condition number, condition name, and initial epoch count
+- `n_artifacts::Int`: Total number of flagged channel-epoch artifact instances
+- `abs_criterion::Real`: Absolute voltage threshold (μV) used (`0` if disabled)
+- `abs_rejections::Union{Vector{Rejection},Nothing}`: Rejections triggered by `abs_criterion`
+- `z_criterion::Real`: Z-score threshold used (`0` if disabled)
+- `z_rejections::Union{ZScoreRejectionInfo,Nothing}`: Per-metric rejections triggered by `z_criterion`
+- `rejected::Vector{Rejection}`: Combined list of rejected `(channel, epoch)` pairs
+- `repaired::Union{OrderedDict{Int,Vector{Symbol}},Nothing}`: Channels repaired per epoch, if repair was run
+- `skipped::Union{OrderedDict{Int,Vector{Symbol}},Nothing}`: Bad channels skipped per epoch when unrepairable
+"""
+mutable struct EpochRejectionInfo
+    name::String
+    info::EpochInfo
+    n_artifacts::Int
+    abs_criterion::Real
+    abs_rejections::Union{Vector{Rejection},Nothing}
+    z_criterion::Real
+    z_rejections::Union{ZScoreRejectionInfo,Nothing}
+    rejected::Vector{Rejection}
+    repaired::Union{OrderedDict{Int,Vector{Symbol}},Nothing}
+    skipped::Union{OrderedDict{Int,Vector{Symbol}},Nothing}
+end
+
+######################################
+########### User Functions ###########
+######################################
 
 """
     unique_rejections(rejections)
@@ -28,83 +100,38 @@ function unique_rejections(rejections::Vector{Rejection})
     return out
 end
 
-unique_channels(rejections::Vector{Rejection}) = unique(map(r -> r.channel, rejections))
-unique_epochs(rejections::Vector{Rejection}) = unique(map(r -> r.epoch, rejections))
-
-struct EpochInfo
-    number::Int
-    name::String
-    n::Int
-end
-
-"""
-    ZScoreRejectionInfo
-
-Per-measure z-score rejection lists (`:variance`, `:max`, `:min`, `:abs`, `:range`, `:kurtosis`).
-"""
-struct ZScoreRejectionInfo
-    z_measures::Vector{Symbol}
-    z_variance::Vector{Rejection}
-    z_max::Vector{Rejection}
-    z_min::Vector{Rejection}
-    z_abs::Vector{Rejection}
-    z_range::Vector{Rejection}
-    z_kurtosis::Vector{Rejection}
-end
-
-Base.copy(z::ZScoreRejectionInfo) = ZScoreRejectionInfo(
-    copy(z.z_measures),
-    copy(z.z_variance),
-    copy(z.z_max),
-    copy(z.z_min),
-    copy(z.z_abs),
-    copy(z.z_range),
-    copy(z.z_kurtosis),
-)
-
-"""
-    EpochRejectionInfo
-
-Stores epoch rejection criteria, per-channel/epoch rejections, and optional channel repair tracking (`repaired`, `skipped`).
-"""
-mutable struct EpochRejectionInfo
-    name::String
-    info::EpochInfo
-    n_artifacts::Int
-    abs_criterion::Real
-    abs_rejections::Union{Vector{Rejection},Nothing}
-    z_criterion::Real
-    z_rejections::Union{ZScoreRejectionInfo,Nothing}
-    rejected::Vector{Rejection}
-    repaired::Union{OrderedDict{Int,Vector{Symbol}},Nothing}
-    skipped::Union{OrderedDict{Int,Vector{Symbol}},Nothing}
-end
-
-function Base.copy(info::EpochRejectionInfo)
-    return EpochRejectionInfo(
-        info.name,
-        info.info,
-        info.n_artifacts,
-        info.abs_criterion,
-        isnothing(info.abs_rejections) ? nothing : copy(info.abs_rejections),
-        info.z_criterion,
-        isnothing(info.z_rejections) ? nothing : copy(info.z_rejections),
-        copy(info.rejected),
-        isnothing(info.repaired) ? nothing : OrderedDict{Int,Vector{Symbol}}(k => copy(v) for (k, v) in info.repaired),
-        isnothing(info.skipped) ? nothing : OrderedDict{Int,Vector{Symbol}}(k => copy(v) for (k, v) in info.skipped),
-    )
-end
-
 unique_rejections(info::EpochRejectionInfo) = unique_rejections(info.rejected)
+
 unique_rejections(infos::Vector{EpochRejectionInfo}) = unique_rejections.(infos)
 
+"""
+    unique_channels(info) -> Vector{Symbol}
+
+Return the unique channel symbols flagged in a `Vector{Rejection}` or `EpochRejectionInfo` (or per-condition vector thereof).
+"""
+unique_channels(rejections::Vector{Rejection}) = unique(map(r -> r.channel, rejections))
+
 unique_channels(info::EpochRejectionInfo) = unique_channels(info.rejected)
+
 unique_channels(infos::Vector{EpochRejectionInfo}) = unique_channels.(infos)
 
+"""
+    unique_epochs(info) -> Vector{Int}
+
+Return the unique epoch indices flagged in a `Vector{Rejection}` or `EpochRejectionInfo` (or per-condition vector thereof).
+"""
+unique_epochs(rejections::Vector{Rejection}) = unique(map(r -> r.epoch, rejections))
+
 unique_epochs(info::EpochRejectionInfo) = unique_epochs(info.rejected)
+
 unique_epochs(infos::Vector{EpochRejectionInfo}) = unique_epochs.(infos)
 
-"""Flatten all rejection data (abs + z-score) into a single `DataFrame` with reason tags."""
+"""
+    all_data(info::EpochRejectionInfo) -> DataFrame
+    all_data(infos::Vector{EpochRejectionInfo}) -> DataFrame
+
+Flatten all rejection data (absolute threshold and per-measure z-score) into a single `DataFrame` with `:reason` tags.
+"""
 function all_data(info::EpochRejectionInfo)::DataFrame
     rows = NamedTuple{(:condition_number, :condition_name, :epoch, :channel, :reason),Tuple{Int,String,Int,Symbol,Symbol}}[]
     cnum, cname = info.info.number, info.info.name
@@ -128,7 +155,35 @@ function all_data(info::EpochRejectionInfo)::DataFrame
     end
     return DataFrame(rows)
 end
+
 all_data(infos::Vector{EpochRejectionInfo})::DataFrame = vcat(all_data.(infos)...)
+
+Base.show(io::IO, r::Rejection) = print(io, "Rejection(:$(r.channel), $(r.epoch))")
+
+Base.copy(z::ZScoreRejectionInfo) = ZScoreRejectionInfo(
+    copy(z.z_measures),
+    copy(z.z_variance),
+    copy(z.z_max),
+    copy(z.z_min),
+    copy(z.z_abs),
+    copy(z.z_range),
+    copy(z.z_kurtosis),
+)
+
+function Base.copy(info::EpochRejectionInfo)
+    return EpochRejectionInfo(
+        info.name,
+        info.info,
+        info.n_artifacts,
+        info.abs_criterion,
+        isnothing(info.abs_rejections) ? nothing : copy(info.abs_rejections),
+        info.z_criterion,
+        isnothing(info.z_rejections) ? nothing : copy(info.z_rejections),
+        copy(info.rejected),
+        isnothing(info.repaired) ? nothing : OrderedDict{Int,Vector{Symbol}}(k => copy(v) for (k, v) in info.repaired),
+        isnothing(info.skipped) ? nothing : OrderedDict{Int,Vector{Symbol}}(k => copy(v) for (k, v) in info.skipped),
+    )
+end
 
 function Base.show(io::IO, info::EpochRejectionInfo)
     println(io, "EpochRejectionInfo: $(info.name)")

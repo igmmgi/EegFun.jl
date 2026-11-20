@@ -1,0 +1,1018 @@
+# Tests for analytic, cluster-permutation, and TFCE statistical testing on ERPs.
+
+using Test
+using EegFun
+using Random
+using SparseArrays
+using DataFrames
+using Statistics
+
+# ============================================================
+# Helper: build a Vector{ErpData} with N participants × 2 conditions
+# Each participant gets a unique file name so prepare_stats can match them
+# ============================================================
+function _build_erp_test_data(;
+    n_participants = 6,
+    n_channels = 3,
+    fs = 256,
+    offset_cond1 = 2.0,
+    offset_cond2 = 0.0,
+    noise = 0.05,
+    signal_freq = 10.0,
+)
+    erps = EegFun.ErpData[]
+    time = collect(-0.2:(1/fs):0.8)
+    n_time = length(time)
+
+    for p = 1:n_participants
+        for (cond, offset) in [(1, offset_cond1), (2, offset_cond2)]
+            df = DataFrame(
+                time = time,
+                sample = 1:n_time,
+                condition = fill(cond, n_time),
+                condition_name = fill("condition_$cond", n_time),
+                participant = fill(p, n_time),
+            )
+
+            channel_labels = [Symbol("Ch$i") for i = 1:n_channels]
+            Random.seed!(100 * p + 10 * cond)
+            for ch in channel_labels
+                # Each channel gets a sinusoidal signal with condition-dependent amplitude + noise
+                # This survives baseline correction because the signal varies over time
+                df[!, ch] = offset .* sin.(2π * signal_freq .* time) .+ noise .* randn(n_time)
+            end
+
+            layout = EegFun.create_test_layout(n_channels = n_channels)
+            erp = EegFun.ErpData("participant$p", cond, "condition_$cond", df, layout, fs, EegFun.AnalysisInfo(), 20)
+            push!(erps, erp)
+        end
+    end
+    return erps
+end
+
+function _build_erp_independent_test_data(;
+    n_group1 = 4,
+    n_group2 = 5,
+    n_channels = 3,
+    fs = 256,
+    offset_g1 = 2.0,
+    offset_g2 = 0.0,
+    noise = 0.05,
+    signal_freq = 10.0,
+)
+    erps = EegFun.ErpData[]
+    time = collect(-0.2:(1/fs):0.8)
+    n_time = length(time)
+    layout = EegFun.create_test_layout(n_channels = n_channels)
+    channel_labels = [Symbol("Ch$i") for i = 1:n_channels]
+
+    # Group 1: condition 1
+    for p = 1:n_group1
+        df = DataFrame(
+            time = time,
+            sample = 1:n_time,
+            condition = fill(1, n_time),
+            condition_name = fill("condition_1", n_time),
+            participant = fill(p, n_time),
+        )
+        Random.seed!(100 * p + 1)
+        for ch in channel_labels
+            df[!, ch] = offset_g1 .* sin.(2π * signal_freq .* time) .+ noise .* randn(n_time)
+        end
+        push!(erps, EegFun.ErpData("participant$p", 1, "condition_1", df, layout, fs, EegFun.AnalysisInfo(), 20))
+    end
+
+    # Group 2: condition 2
+    for p = (n_group1+1):(n_group1+n_group2)
+        df = DataFrame(
+            time = time,
+            sample = 1:n_time,
+            condition = fill(2, n_time),
+            condition_name = fill("condition_2", n_time),
+            participant = fill(p, n_time),
+        )
+        Random.seed!(100 * p + 2)
+        for ch in channel_labels
+            df[!, ch] = offset_g2 .* sin.(2π * signal_freq .* time) .+ noise .* randn(n_time)
+        end
+        push!(erps, EegFun.ErpData("participant$p", 2, "condition_2", df, layout, fs, EegFun.AnalysisInfo(), 20))
+    end
+    return erps
+end
+
+# ============================================================
+@testset "ERP Statistics" begin
+    # ============================================================
+
+    # ────────────────────────────────────────────────────────────
+    # 1. prepare_stats (ERP)
+    # ────────────────────────────────────────────────────────────
+    @testset "prepare_stats" begin
+        Random.seed!(42)
+        n_participants = 6
+        n_channels = 3
+
+        erps = _build_erp_test_data(n_participants = n_participants, n_channels = n_channels)
+
+        prepared = EegFun.prepare_stats(erps; design = :paired)
+
+        @test prepared isa EegFun.StatisticalData
+        @test length(prepared.data) == 2
+        @test prepared.data[1] isa EegFun.ErpData
+        @test prepared.data[2] isa EegFun.ErpData
+
+        # 3D data arrays: [participants × electrodes × time]
+        @test size(prepared.analysis.data[1], 1) == n_participants
+        @test size(prepared.analysis.data[1], 2) == n_channels
+        @test size(prepared.analysis.data[2]) == size(prepared.analysis.data[1])
+
+        @test prepared.analysis.design == :paired
+
+        # Condition 1 should have larger amplitude (more variance) than condition 2
+        var1 = sum(prepared.analysis.data[1] .^ 2) / length(prepared.analysis.data[1])
+        var2 = sum(prepared.analysis.data[2] .^ 2) / length(prepared.analysis.data[2])
+        @test var1 > var2
+
+        # Grand averages should reflect condition names (prefixed with grand_avg_)
+        @test contains(prepared.data[1].condition_name, "condition_1")
+        @test contains(prepared.data[2].condition_name, "condition_2")
+
+        # Per-condition SE should be computed over full display interval
+        n_display_time = nrow(prepared.data[1].data)
+        @test size(prepared.se_cond1) == (n_channels, n_display_time)
+        @test size(prepared.se_cond2) == (n_channels, n_display_time)
+        @test all(x -> x >= 0, prepared.se_cond1)
+        @test all(x -> x >= 0, prepared.se_cond2)
+    end
+
+    @testset "prepare_stats - requires 2 conditions" begin
+        Random.seed!(43)
+        # Build data with only 1 condition
+        erps_one = [EegFun.create_test_erp_data(participant = i, condition = 1) for i = 1:4]
+        @test_throws Exception EegFun.prepare_stats(erps_one; design = :paired)
+    end
+
+    @testset "prepare_stats - channel selection" begin
+        Random.seed!(44)
+        erps = _build_erp_test_data(n_channels = 5)
+
+        # Select only first 2 channels
+        prepared = EegFun.prepare_stats(erps; design = :paired, channel_selection = EegFun.channels([:Ch1, :Ch2]))
+
+        @test size(prepared.analysis.data[1], 2) == 2  # only 2 channels
+
+        # baseline_interval = nothing preserves constant offset (no full-epoch subtraction)
+        erps_dc = deepcopy(erps)
+        for erp in erps_dc
+            erp.data.Ch1 .= erp.condition == 1 ? 5.0 : 0.0
+        end
+        prep_nobl = EegFun.prepare_stats(erps_dc; design = :paired, baseline_interval = nothing)
+        @test all(≈(5.0), prep_nobl.data[1].data.Ch1)
+        @test all(≈(0.0), prep_nobl.data[2].data.Ch1)
+
+        # baseline_interval outside cropped interval_selection validates against pre-cropped ERP
+        prep_bl = EegFun.prepare_stats(erps; design = :paired, interval_selection = (0.3, 0.5), baseline_interval = (-0.2, 0.0))
+        @test first(prep_bl.data[1].data.time) >= 0.3 - 1e-6
+    end
+
+
+    # ────────────────────────────────────────────────────────────
+    # 2. _compute_t_matrix (ERP)
+    # ────────────────────────────────────────────────────────────
+    @testset "_compute_t_matrix - paired" begin
+        Random.seed!(46)
+        n_participants = 8
+        n_electrodes = 2
+        n_time = 5
+
+        # Condition A: constant 5.0, Condition B: constant 3.0 → large positive t
+        data1 = fill(5.0, n_participants, n_electrodes, n_time) .+ 0.01 .* randn(n_participants, n_electrodes, n_time)
+        data2 = fill(3.0, n_participants, n_electrodes, n_time) .+ 0.01 .* randn(n_participants, n_electrodes, n_time)
+
+        t_matrix, df, p_matrix, se_matrix = EegFun._compute_t_matrix(data1, data2, :paired)
+
+        # Dimensions: [electrodes × time]
+        @test size(t_matrix) == (n_electrodes, n_time)
+        @test size(p_matrix) == (n_electrodes, n_time)
+        @test size(se_matrix) == (n_electrodes, n_time)
+
+        # df for paired = n_participants - 1
+        @test df == Float64(n_participants - 1)
+
+        # All t-values should be large and positive (cond A > cond B)
+        @test all(t_matrix .> 10.0)
+
+        # All p-values should be very small
+        @test all(p_matrix .< 0.001)
+
+        # SE should be positive
+        @test all(se_matrix .> 0)
+    end
+
+    @testset "_compute_t_matrix - no difference" begin
+        Random.seed!(47)
+        n = 10
+        data_same = fill(5.0, n, 3, 4)
+
+        t_matrix, df, p_matrix, se_matrix = EegFun._compute_t_matrix(data_same, data_same, :paired)
+
+        # Zero difference → NaN t-values (0/0)
+        @test all(isnan, t_matrix)
+
+        # SE should be zero (no variability in differences)
+        @test all(se_matrix .== 0.0)
+    end
+
+    @testset "_compute_t_matrix - SE correctness" begin
+        # Known data: 4 participants, 1 electrode, 1 time point
+        # Differences: [2, 4, 6, 8] → mean=5, std=sqrt(20/3), se=std/sqrt(4)
+        using Statistics: std as std_func
+        data1 = reshape([12.0, 14.0, 16.0, 18.0], 4, 1, 1)
+        data2 = reshape([10.0, 10.0, 10.0, 10.0], 4, 1, 1)
+
+        t_matrix, df, p_matrix, se_matrix = EegFun._compute_t_matrix(data1, data2, :paired)
+
+        diffs = [2.0, 4.0, 6.0, 8.0]
+        expected_se = std_func(diffs) / sqrt(4)
+        @test se_matrix[1, 1] ≈ expected_se
+        @test t_matrix[1, 1] ≈ mean(diffs) / expected_se
+    end
+
+    @testset "_compute_t_matrix - prepared dispatch" begin
+        Random.seed!(48)
+        erps = _build_erp_test_data(n_participants = 5, n_channels = 3)
+        prepared = EegFun.prepare_stats(erps; design = :paired)
+
+        t_matrix, df, p_matrix, se_matrix = EegFun._compute_t_matrix(prepared)
+
+        @test size(t_matrix, 1) == 3   # n_channels
+        @test df == 4.0                # 5 participants - 1
+        @test size(t_matrix) == size(p_matrix)
+        @test size(se_matrix) == size(t_matrix)
+    end
+
+
+    # ────────────────────────────────────────────────────────────
+    # 3. Thresholding (ERP)
+    # ────────────────────────────────────────────────────────────
+    @testset "parametric thresholding" begin
+        t_matrix = zeros(3, 5)
+        t_matrix[1, 1] = 3.0    # large positive
+        t_matrix[2, 3] = -3.0   # large negative
+        t_matrix[3, 5] = 1.5    # moderate positive
+
+        critical_t = fill(2.0, 3, 5)
+
+        mask_pos, mask_neg = EegFun._threshold_t_matrix_parametric(t_matrix, critical_t, :both)
+
+        @test mask_pos[1, 1] == true    # 3.0 > 2.0
+        @test mask_neg[2, 3] == true    # -3.0 < -2.0
+        @test mask_pos[3, 5] == false   # 1.5 < 2.0
+        @test count(mask_pos) == 1
+        @test count(mask_neg) == 1
+    end
+
+    @testset "parametric thresholding - right tail" begin
+        t_matrix = zeros(2, 2)
+        t_matrix[1, 1] = 3.0
+        t_matrix[2, 2] = -3.0
+
+        critical_t = fill(2.0, 2, 2)
+        mask_pos, mask_neg = EegFun._threshold_t_matrix_parametric(t_matrix, critical_t, :right)
+
+        @test mask_pos[1, 1] == true
+        @test mask_neg[2, 2] == false   # ignored for right tail
+        @test count(mask_neg) == 0
+    end
+
+    @testset "parametric thresholding - left tail" begin
+        t_matrix = zeros(2, 2)
+        t_matrix[1, 1] = 3.0
+        t_matrix[2, 2] = -3.0
+
+        critical_t = fill(-2.0, 2, 2)
+        mask_pos, mask_neg = EegFun._threshold_t_matrix_parametric(t_matrix, critical_t, :left)
+
+        @test mask_pos[1, 1] == false
+        @test mask_neg[2, 2] == true
+        @test count(mask_pos) == 0
+    end
+
+    @testset "parametric thresholding - in-place" begin
+        t_matrix = zeros(2, 3)
+        t_matrix[1, 1] = 5.0
+        t_matrix[2, 3] = -5.0
+
+        critical_t = fill(2.0, 2, 3)
+        mask_pos = falses(2, 3)
+        mask_neg = falses(2, 3)
+
+        EegFun._threshold_t_matrix_parametric!(mask_pos, mask_neg, t_matrix, critical_t, :both)
+
+        @test mask_pos[1, 1] == true
+        @test mask_neg[2, 3] == true
+    end
+
+    @testset "critical t-values" begin
+        # With df=9, alpha=0.05, two-tailed: critical t ≈ 2.262
+        crit = EegFun._compute_critical_t_values(9.0, (3, 5), 0.05, :both)
+
+        @test size(crit) == (3, 5)
+        @test all(crit .≈ crit[1, 1])   # uniform
+        @test 2.2 < crit[1, 1] < 2.4    # ~2.262
+
+        # Invalid df
+        crit_nan = EegFun._compute_critical_t_values(NaN, (3, 5))
+        @test all(isnan, crit_nan)
+    end
+
+
+    # ────────────────────────────────────────────────────────────
+    # 4. Clustering (ERP - 2D)
+    # ────────────────────────────────────────────────────────────
+    @testset "2D BFS clustering - temporal" begin
+        # 3 electrodes × 5 time points
+        mask = falses(3, 5)
+        # Create a cluster connected in time at electrode 1
+        mask[1, 2] = true
+        mask[1, 3] = true
+        mask[1, 4] = true
+        # Create an isolated point
+        mask[3, 1] = true
+
+        electrodes = [:Ch1, :Ch2, :Ch3]
+        time_points = [0.0, 0.1, 0.2, 0.3, 0.4]
+        spatial_conn = sparse(Int[], Int[], Bool[], 3, 3)
+
+        clusters = EegFun._find_clusters_connected_components(mask, electrodes, time_points, spatial_conn, :temporal)
+
+        @test length(clusters) == 2  # two separate clusters
+
+        # Find the larger cluster (3 points)
+        big = findfirst(c -> length(c.time_indices) == 3, clusters)
+        @test !isnothing(big)
+
+        # The isolated point is its own cluster
+        small = findfirst(c -> length(c.time_indices) == 1, clusters)
+        @test !isnothing(small)
+    end
+
+    @testset "2D BFS clustering - spatiotemporal" begin
+        # 2 electrodes × 3 time points
+        mask = falses(2, 3)
+        mask[1, 1] = true
+        mask[2, 1] = true   # spatial neighbor at same time
+        mask[1, 2] = true   # temporal neighbor
+
+        electrodes = [:Ch1, :Ch2]
+        time_points = [0.0, 0.1, 0.2]
+        # Ch1 and Ch2 are spatial neighbors
+        spatial_conn = sparse([1, 2], [2, 1], true, 2, 2)
+
+        clusters = EegFun._find_clusters_connected_components(mask, electrodes, time_points, spatial_conn, :spatiotemporal)
+
+        # All 3 points should form one connected cluster
+        @test length(clusters) == 1
+    end
+
+    @testset "_find_clusters (positive + negative)" begin
+        mask_pos = falses(2, 3)
+        mask_neg = falses(2, 3)
+        mask_pos[1, 1] = true
+        mask_pos[1, 2] = true
+        mask_neg[2, 3] = true
+
+        electrodes = [:Ch1, :Ch2]
+        time_points = [0.0, 0.1, 0.2]
+        spatial_conn = sparse(Int[], Int[], Bool[], 2, 2)
+
+        pos_clusters, neg_clusters = EegFun._find_clusters(mask_pos, mask_neg, electrodes, time_points, spatial_conn, :temporal)
+
+        @test length(pos_clusters) == 1
+        @test pos_clusters[1].polarity == :positive
+        @test length(neg_clusters) == 1
+        @test neg_clusters[1].polarity == :negative
+    end
+
+    @testset "_compute_cluster_statistics" begin
+        # Create a simple t_matrix and cluster
+        t_matrix = ones(2, 3) .* 2.0  # all t-values = 2.0
+
+        cluster = EegFun.Cluster(
+            1,                      # id
+            [:Ch1],                 # electrodes
+            [1, 2, 3],             # time_indices
+            (0.0, 0.2),           # time_range
+            0.0,                   # cluster_stat (placeholder)
+            1.0,                   # p_value (placeholder)
+            false,                 # is_significant
+            :positive,             # polarity
+            [(1, 1), (1, 2), (1, 3)],  # members: Ch1 at t=1,2,3
+        )
+
+        updated, stats = EegFun._compute_cluster_statistics([cluster], t_matrix)
+
+        @test length(stats) == 1
+        @test stats[1] ≈ 6.0   # 3 member points × 2.0
+        @test updated[1].cluster_stat ≈ 6.0
+    end
+
+    @testset "empty mask produces no clusters" begin
+        mask = falses(2, 5)
+        electrodes = [:Ch1, :Ch2]
+        time_points = [0.0, 0.1, 0.2, 0.3, 0.4]
+        spatial_conn = sparse(Int[], Int[], Bool[], 2, 2)
+
+        clusters = EegFun._find_clusters_connected_components(mask, electrodes, time_points, spatial_conn, :temporal)
+        @test isempty(clusters)
+    end
+
+    @testset "_prefilter_mask_by_neighbors" begin
+        # 3 electrodes × 3 time points
+        mask = trues(3, 3)
+
+        # Ch1-Ch2 connected, Ch3 isolated
+        spatial_conn = sparse([1, 2], [2, 1], true, 3, 3)
+
+        filtered = EegFun._prefilter_mask_by_neighbors(mask, spatial_conn, 1)
+
+        # Ch3 has no spatial neighbors → removed
+        @test all(filtered[3, :] .== false)
+        # Ch1 and Ch2 each have 1 neighbor → survive (>= 1)
+        @test all(filtered[1, :] .== true)
+        @test all(filtered[2, :] .== true)
+    end
+
+
+    # ────────────────────────────────────────────────────────────
+    # 5. Inference helpers
+    # ────────────────────────────────────────────────────────────
+    @testset "_compute_cluster_pvalues" begin
+        cluster = EegFun.Cluster(1, [:Ch1], [1, 2], (0.0, 0.1), 5.0, 1.0, false, :positive, [(1, 1), (1, 2)])
+        # With permutation max values all < 5.0, p should be very small
+        perm_max = [1.0, 2.0, 3.0, 4.0, 2.5]
+
+        updated = EegFun._compute_cluster_pvalues([cluster], [5.0], perm_max, 5, 0.05)
+
+        @test length(updated) == 1
+        @test updated[1].p_value < 0.5
+        @test updated[1].p_value > 0.0
+    end
+
+    @testset "_create_significance_mask" begin
+        p_matrix = [0.01 0.06 NaN; 0.04 0.10 0.001]
+
+        mask = EegFun._create_significance_mask(p_matrix, 0.05, :no)
+        @test mask[1, 1] == true    # 0.01 < 0.05
+        @test mask[1, 2] == false   # 0.06 > 0.05
+        @test mask[1, 3] == false   # NaN
+        @test mask[2, 1] == true    # 0.04 < 0.05
+        @test mask[2, 2] == false   # 0.10 > 0.05
+        @test mask[2, 3] == true    # 0.001 < 0.05
+    end
+
+    @testset "_apply_bonferroni_correction" begin
+        p_values = [0.001, 0.01, 0.04, 0.06]
+        t_stats = [3.0, 2.5, 2.0, 1.5]
+
+        mask = EegFun._apply_bonferroni_correction(p_values, 0.05, t_stats)
+
+        # corrected alpha = 0.05/4 = 0.0125
+        @test mask[1] == true    # 0.001 < 0.0125
+        @test mask[2] == true    # 0.01 < 0.0125
+        @test mask[3] == false   # 0.04 > 0.0125
+        @test mask[4] == false   # 0.06 > 0.0125
+    end
+
+
+    # ────────────────────────────────────────────────────────────
+    # 6. Nonparametric thresholding (ERP)
+    # ────────────────────────────────────────────────────────────
+    @testset "nonparametric threshold common" begin
+        Random.seed!(80)
+        # 3 electrodes × 5 time × 100 permutations
+        perm_t = randn(3, 5, 100)
+
+        thresh_pos, thresh_neg = EegFun._compute_nonparametric_threshold_common(perm_t, 0.05, :both)
+
+        @test thresh_pos > 0
+        @test thresh_neg > 0
+        @test thresh_pos == thresh_neg  # symmetric for :both
+    end
+
+    @testset "nonparametric threshold individual" begin
+        Random.seed!(81)
+        perm_t = randn(3, 5, 50)
+
+        # Both tails
+        thresh_pos, thresh_neg = EegFun._compute_nonparametric_threshold_individual(perm_t, 0.05, :both)
+        @test size(thresh_pos) == (3, 5)
+        @test size(thresh_neg) == (3, 5)
+        @test all(thresh_pos .> 0)
+        @test thresh_pos == thresh_neg
+
+        # Right tail
+        thresh_pos_r, thresh_neg_r = EegFun._compute_nonparametric_threshold_individual(perm_t, 0.05, :right)
+        @test all(isfinite.(thresh_pos_r))
+        @test all(isnan.(thresh_neg_r))
+
+        # Left tail
+        thresh_pos_l, thresh_neg_l = EegFun._compute_nonparametric_threshold_individual(perm_t, 0.05, :left)
+        @test all(isnan.(thresh_pos_l))
+        @test all(isfinite.(thresh_neg_l))
+
+        # Test thresholding with individual matrix thresholds
+        t_mat = zeros(3, 5)
+        t_mat[1, 1] = 100.0
+        t_mat[3, 5] = -100.0
+        m_pos, m_neg = EegFun._threshold_t_matrix_nonparametric(t_mat, thresh_pos, thresh_neg, :both)
+        @test m_pos[1, 1] == true
+        @test m_neg[3, 5] == true
+
+        # Invalid tail error
+        @test_throws EegFun.EegFunError EegFun._compute_nonparametric_threshold_individual(perm_t, 0.05, :invalid)
+    end
+
+    @testset "nonparametric thresholding in-place" begin
+        t_matrix = zeros(2, 3)
+        t_matrix[1, 1] = 5.0
+        t_matrix[2, 3] = -5.0
+
+        mask_pos = falses(2, 3)
+        mask_neg = falses(2, 3)
+
+        EegFun._threshold_t_matrix_nonparametric!(mask_pos, mask_neg, t_matrix, 2.0, 2.0, :both)
+
+        @test mask_pos[1, 1] == true    # 5.0 > 2.0
+        @test mask_neg[2, 3] == true    # -5.0 < -2.0
+        @test count(mask_pos) == 1
+        @test count(mask_neg) == 1
+    end
+
+
+    # ────────────────────────────────────────────────────────────
+    # 7. analytic_test (ERP)
+    # ────────────────────────────────────────────────────────────
+    @testset "analytic_test" begin
+        Random.seed!(50)
+        erps = _build_erp_test_data(n_participants = 8, offset_cond1 = 2.0, offset_cond2 = 0.0, noise = 0.05)
+        prepared = EegFun.prepare_stats(erps; design = :paired)
+
+        result = EegFun.analytic_test(prepared; alpha = 0.05)
+
+        @test result isa EegFun.AnalyticResult
+        @test result.test_info.type == :paired
+        @test result.test_info.alpha == 0.05
+        @test result.test_info.tail == :both
+        @test result.test_info.correction_method == :none
+
+        # Dimensions
+        @test size(result.stat_matrix.t, 1) == 3   # n_channels
+        @test size(result.stat_matrix.p) == size(result.stat_matrix.t)
+        @test size(result.masks.positive) == size(result.stat_matrix.t)
+        @test size(result.masks.negative) == size(result.stat_matrix.t)
+
+        # With sinusoidal signal at different amplitudes, there should be significant differences
+        @test count(result.masks.positive) + count(result.masks.negative) > 0
+
+        # Critical t should be positive
+        @test result.critical_t > 0
+
+        # SE should have correct dimensions and be positive
+        @test size(result.se) == size(result.stat_matrix.t)
+        @test all(x -> x > 0 || isnan(x), result.se)
+
+        # Per-condition SE should cover full display interval
+        n_display_time = nrow(result.data[1].data)
+        @test size(result.se_cond1) == (3, n_display_time)
+        @test size(result.se_cond2) == (3, n_display_time)
+
+        # Electrodes and time_points
+        @test length(result.electrodes) == 3
+    end
+
+    @testset "analytic_test - Bonferroni" begin
+        Random.seed!(51)
+        erps = _build_erp_test_data(n_participants = 8, offset_cond1 = 2.0, offset_cond2 = 0.0, noise = 0.05)
+        prepared = EegFun.prepare_stats(erps; design = :paired)
+
+        result_no = EegFun.analytic_test(prepared; alpha = 0.05, correction_method = :no)
+        result_bf = EegFun.analytic_test(prepared; alpha = 0.05, correction_method = :bonferroni)
+
+        # Bonferroni should have equal or fewer significant points
+        @test count(result_bf.masks.positive) <= count(result_no.masks.positive)
+    end
+
+    @testset "analytic_test - right tail" begin
+        Random.seed!(52)
+        erps = _build_erp_test_data(n_participants = 8, offset_cond1 = 2.0, offset_cond2 = 0.0, noise = 0.05)
+        prepared = EegFun.prepare_stats(erps; design = :paired)
+
+        result = EegFun.analytic_test(prepared; tail = :right)
+
+        # Right tail: can have positive significance but no negative
+        @test count(result.masks.negative) == 0
+    end
+
+    @testset "analytic_test - left tail" begin
+        Random.seed!(53)
+        erps = _build_erp_test_data(n_participants = 8, offset_cond1 = 2.0, offset_cond2 = 0.0, noise = 0.05)
+        prepared = EegFun.prepare_stats(erps; design = :paired)
+
+        result = EegFun.analytic_test(prepared; tail = :left)
+
+        # Left tail with cond1 > cond2: no significance expected
+        @test count(result.masks.positive) == 0
+    end
+
+    @testset "analytic_test - invalid args" begin
+        Random.seed!(54)
+        erps = _build_erp_test_data(n_participants = 5)
+        prepared = EegFun.prepare_stats(erps; design = :paired)
+
+        @test_throws Exception EegFun.analytic_test(prepared; correction_method = :invalid)
+        @test_throws Exception EegFun.analytic_test(prepared; tail = :invalid)
+    end
+
+
+    # ────────────────────────────────────────────────────────────
+    # 8. permutation_test (ERP)
+    # ────────────────────────────────────────────────────────────
+    @testset "permutation_test - basic" begin
+        Random.seed!(60)
+        erps = _build_erp_test_data(n_participants = 6, offset_cond1 = 2.0, offset_cond2 = 0.0, noise = 0.05)
+        prepared = EegFun.prepare_stats(erps; design = :paired)
+
+        result = EegFun.permutation_test(prepared; n_permutations = 50, cluster_type = :temporal)
+
+        @test result isa EegFun.PermutationResult
+        @test result.test_info.type == :paired
+        @test result.test_info.cluster_info.cluster_type == :temporal
+        @test result.test_info.cluster_info.n_permutations == 50
+
+        # Check dimensions
+        @test size(result.stat_matrix.t, 1) == 3   # n_channels
+        @test size(result.masks.positive) == size(result.stat_matrix.t)
+        @test size(result.masks.negative) == size(result.stat_matrix.t)
+
+        # Permutation distribution should have 50 entries
+        @test length(result.permutation_distribution.positive) == 50
+        @test length(result.permutation_distribution.negative) == 50
+
+        # Result metadata
+        @test length(result.electrodes) == 3
+
+        # SE should have correct dimensions
+        @test size(result.se) == size(result.stat_matrix.t)
+        @test all(x -> x > 0 || isnan(x), result.se)
+
+        # Clusters should be Cluster vectors
+        @test result.clusters.positive isa Vector{EegFun.Cluster}
+        @test result.clusters.negative isa Vector{EegFun.Cluster}
+    end
+
+    @testset "permutation_test - spatiotemporal" begin
+        Random.seed!(61)
+        erps = _build_erp_test_data(n_participants = 6, offset_cond1 = 2.0, offset_cond2 = 0.0, noise = 0.05)
+        prepared = EegFun.prepare_stats(erps; design = :paired)
+
+        result = EegFun.permutation_test(prepared; n_permutations = 30, cluster_type = :spatiotemporal)
+
+        @test result isa EegFun.PermutationResult
+        @test result.test_info.cluster_info.cluster_type == :spatiotemporal
+    end
+
+    @testset "permutation_test - no effect" begin
+        Random.seed!(62)
+        # Both conditions have same offset → no real effect
+        erps = _build_erp_test_data(n_participants = 6, offset_cond1 = 2.0, offset_cond2 = 2.0, noise = 0.5)
+        prepared = EegFun.prepare_stats(erps; design = :paired)
+
+        result = EegFun.permutation_test(prepared; n_permutations = 30, cluster_type = :temporal)
+
+        @test result isa EegFun.PermutationResult
+        # With no effect, significant clusters should be rare/nonexistent
+        n_sig = count(c -> c.is_significant, result.clusters.positive) + count(c -> c.is_significant, result.clusters.negative)
+        @test n_sig == 0
+    end
+
+    @testset "permutation_test - nonparametric common" begin
+        Random.seed!(63)
+        erps = _build_erp_test_data(n_participants = 6, offset_cond1 = 2.0, offset_cond2 = 0.0, noise = 0.05)
+        prepared = EegFun.prepare_stats(erps; design = :paired)
+
+        result = EegFun.permutation_test(prepared; n_permutations = 30, threshold_method = :nonparametric_common, cluster_type = :temporal)
+
+        @test result isa EegFun.PermutationResult
+        @test result.test_info.cluster_info.threshold_method == :nonparametric_common
+    end
+
+
+    # ────────────────────────────────────────────────────────────
+    # 9. Type show methods
+    # ────────────────────────────────────────────────────────────
+    @testset "StatisticalData show" begin
+        Random.seed!(70)
+        erps = _build_erp_test_data(n_participants = 4)
+        prepared = EegFun.prepare_stats(erps; design = :paired)
+
+        io = IOBuffer()
+        show(io, prepared)
+        output = String(take!(io))
+
+        @test contains(output, "StatisticalData")
+        @test contains(output, "paired")
+    end
+
+    @testset "PermutationResult show" begin
+        Random.seed!(71)
+        erps = _build_erp_test_data(n_participants = 4, offset_cond1 = 2.0, offset_cond2 = 0.0, noise = 0.05)
+        prepared = EegFun.prepare_stats(erps; design = :paired)
+        result = EegFun.permutation_test(prepared; n_permutations = 20, cluster_type = :temporal)
+
+        io = IOBuffer()
+        show(io, result)
+        output = String(take!(io))
+
+        @test contains(output, "PermutationResult")
+        @test contains(output, "paired")
+    end
+
+    @testset "AnalyticResult show" begin
+        Random.seed!(72)
+        erps = _build_erp_test_data(n_participants = 4, offset_cond1 = 2.0, offset_cond2 = 0.0, noise = 0.05)
+        prepared = EegFun.prepare_stats(erps; design = :paired)
+        result = EegFun.analytic_test(prepared)
+
+        io = IOBuffer()
+        show(io, result)
+        output = String(take!(io))
+
+        @test contains(output, "AnalyticResult")
+    end
+
+
+    # ────────────────────────────────────────────────────────────
+    # 10. Independent Design (ERP)
+    # ────────────────────────────────────────────────────────────
+    @testset "Independent Design - ERP Statistics" begin
+        Random.seed!(80)
+        n_group1 = 4
+        n_group2 = 5
+        erps = _build_erp_independent_test_data(n_group1 = n_group1, n_group2 = n_group2, n_channels = 3)
+
+        # Basic preparation
+        prepared = EegFun.prepare_stats(erps; design = :independent)
+        @test prepared isa EegFun.StatisticalData
+        @test prepared.analysis.design == :independent
+        @test length(prepared.data) == 2
+        @test size(prepared.analysis.data[1], 1) == n_group1
+        @test size(prepared.analysis.data[2], 1) == n_group2
+
+        # Validation: invalid design symbol
+        @test_throws EegFun.EegFunError EegFun.prepare_stats(erps; design = :invalid)
+
+        # Validation: < 2 participants in a group
+        erps_too_few = filter(erp -> erp.file in ["participant1", "participant5", "participant6"], erps)
+        @test_throws EegFun.EegFunError EegFun.prepare_stats(erps_too_few; design = :independent)
+
+        # _compute_t_matrix with independent design
+        t_mat, df, p_mat, se_diff =
+            EegFun._compute_t_matrix(prepared.analysis.data[1], prepared.analysis.data[2], :independent; compute_p_values = true)
+        expected_df = Float64(n_group1 + n_group2 - 2)
+        @test df == expected_df
+        @test size(t_mat) == (3, length(prepared.analysis.time_points))
+        @test size(p_mat) == size(t_mat)
+        @test all(0.0 .<= p_mat .<= 1.0)
+        @test all(se_diff .> 0.0)
+
+        # Analytic test
+        res_an = EegFun.analytic_test(prepared)
+        @test res_an isa EegFun.AnalyticResult
+        @test res_an.test_info.df == expected_df
+        @test size(res_an.masks.positive) == (3, length(prepared.analysis.time_points))
+
+        # Permutation test
+        res_perm = EegFun.permutation_test(prepared; n_permutations = 25, cluster_type = :temporal)
+        @test res_perm isa EegFun.PermutationResult
+        @test res_perm.test_info.df == expected_df
+    end
+
+
+    # ────────────────────────────────────────────────────────────
+    # 11. Nonparametric thresholding - tails and matrix thresholds
+    # ────────────────────────────────────────────────────────────
+    @testset "Nonparametric thresholding - tails and matrix thresholds" begin
+        Random.seed!(81)
+        perm_t = randn(2, 3, 50)
+
+        # _compute_nonparametric_threshold_individual: :right tail
+        thresh_pos_r, thresh_neg_r = EegFun._compute_nonparametric_threshold_individual(perm_t, 0.05, :right)
+        @test size(thresh_pos_r) == (2, 3)
+        @test all(!isnan, thresh_pos_r)
+        @test all(isnan, thresh_neg_r)
+
+        # _compute_nonparametric_threshold_individual: :left tail
+        thresh_pos_l, thresh_neg_l = EegFun._compute_nonparametric_threshold_individual(perm_t, 0.05, :left)
+        @test size(thresh_neg_l) == (2, 3)
+        @test all(!isnan, thresh_neg_l)
+        @test all(isnan, thresh_pos_l)
+
+        # _compute_nonparametric_threshold_individual: invalid tail
+        @test_throws EegFun.EegFunError EegFun._compute_nonparametric_threshold_individual(perm_t, 0.05, :invalid)
+
+        # Matrix thresholding in-place
+        t_matrix = [3.0 -3.0; -4.0 4.0]
+        pos_mat = fill(2.0, 2, 2)
+        neg_mat = fill(2.0, 2, 2)
+
+        # :right tail with matrix thresholds
+        m_pos_r, m_neg_r = EegFun._threshold_t_matrix_nonparametric(t_matrix, pos_mat, neg_mat, :right)
+        @test m_pos_r[1, 1] == true
+        @test m_pos_r[1, 2] == false
+        @test all(.!m_neg_r)
+
+        # :left tail with matrix thresholds
+        m_pos_l, m_neg_l = EegFun._threshold_t_matrix_nonparametric(t_matrix, pos_mat, neg_mat, :left)
+        @test m_neg_l[1, 2] == true
+        @test m_neg_l[1, 1] == false
+        @test all(.!m_pos_l)
+
+        # Invalid tail error
+        @test_throws EegFun.EegFunError EegFun._threshold_t_matrix_nonparametric(t_matrix, pos_mat, neg_mat, :invalid)
+
+        # Permutation tests with one-tailed non-parametric thresholding
+        erps = _build_erp_test_data(n_participants = 4, offset_cond1 = 3.0, offset_cond2 = 0.0, noise = 0.05)
+        prepared = EegFun.prepare_stats(erps; design = :paired)
+
+        res_right = EegFun.permutation_test(
+            prepared;
+            threshold_method = :nonparametric_common,
+            tail = :right,
+            n_permutations = 20,
+            cluster_type = :temporal,
+        )
+        @test res_right isa EegFun.PermutationResult
+        @test res_right.test_info.tail == :right
+
+        res_left = EegFun.permutation_test(
+            prepared;
+            threshold_method = :nonparametric_common,
+            tail = :left,
+            n_permutations = 20,
+            cluster_type = :temporal,
+        )
+        @test res_left isa EegFun.PermutationResult
+        @test res_left.test_info.tail == :left
+    end
+
+    # ────────────────────────────────────────────────────────────
+    # Reproducibility & threading
+    # ────────────────────────────────────────────────────────────
+    @testset "permutation_test - reproducible via rng" begin
+        erps = _build_erp_test_data(n_participants = 6, n_channels = 3)
+        prepared = EegFun.prepare_stats(erps; design = :paired)
+        kw = (n_permutations = 50, show_progress = false)
+
+        r1 = EegFun.permutation_test(prepared; kw..., rng = Random.Xoshiro(7))
+        r2 = EegFun.permutation_test(prepared; kw..., rng = Random.Xoshiro(7))
+        @test r1.permutation_distribution.positive == r2.permutation_distribution.positive
+        @test r1.permutation_distribution.negative == r2.permutation_distribution.negative
+
+        # non-parametric thresholds reuse the same permutations and are reproducible too
+        n1 = EegFun.permutation_test(prepared; kw..., threshold_method = :nonparametric_individual, rng = Random.Xoshiro(7))
+        n2 = EegFun.permutation_test(prepared; kw..., threshold_method = :nonparametric_individual, rng = Random.Xoshiro(7))
+        @test n1.critical_t == n2.critical_t
+        @test n1.permutation_distribution.positive == n2.permutation_distribution.positive
+
+        # independent design
+        erps_ind = _build_erp_independent_test_data()
+        prep_ind = EegFun.prepare_stats(erps_ind; design = :independent)
+        i1 = EegFun.permutation_test(prep_ind; kw..., rng = Random.Xoshiro(3))
+        i2 = EegFun.permutation_test(prep_ind; kw..., rng = Random.Xoshiro(3))
+        @test i1.permutation_distribution.positive == i2.permutation_distribution.positive
+    end
+
+    @testset "permutation loops - independent of chunking" begin
+        erps = _build_erp_test_data(n_participants = 6, n_channels = 3)
+        prepared = EegFun.prepare_stats(erps; design = :paired)
+        plan = EegFun._draw_permutation_plan(Random.Xoshiro(11), prepared, 40)
+
+        # Serial reference computed one permutation at a time
+        A = similar(prepared.analysis.data[1])
+        B = similar(prepared.analysis.data[2])
+        ref = map(1:size(plan, 2)) do p
+            EegFun._shuffle_labels!(A, B, prepared.analysis.data[1], prepared.analysis.data[2], :paired, view(plan, :, p))
+            copy(first(EegFun._compute_t_matrix(A, B, :paired; compute_p_values = false, compute_se = false)))
+        end
+        threaded = EegFun._collect_permutation_t_matrices(prepared, plan, false)
+        @test all(p -> threaded[:, :, p] ≈ ref[p], 1:size(plan, 2))
+    end
+
+    @testset "_draw_permutation_plan" begin
+        paired = EegFun._draw_permutation_plan(Random.Xoshiro(1), :paired, 5, 5, 20)
+        @test size(paired) == (5, 20)
+        @test eltype(paired) == Bool
+        ind = EegFun._draw_permutation_plan(Random.Xoshiro(1), :independent, 3, 4, 20)
+        @test size(ind) == (7, 20)
+        @test all(p -> sort(ind[:, p]) == 1:7, 1:20)
+        @test ind == EegFun._draw_permutation_plan(Random.Xoshiro(1), :independent, 3, 4, 20)
+        @test_throws EegFun.EegFunError EegFun._draw_permutation_plan(Random.Xoshiro(1), :bogus, 3, 4, 2)
+    end
+
+    @testset "_foreach_chunk" begin
+        for n in (0, 1, 7, 100), ntasks in (1, 3, 16)
+            hits = zeros(Int, n)
+            EegFun._foreach_chunk(n; ntasks = ntasks) do r
+                for i in r
+                    hits[i] += 1
+                end
+            end
+            @test all(==(1), hits)  # every index visited exactly once
+        end
+        @test_throws TaskFailedException EegFun._foreach_chunk(_ -> error("boom"), 10; ntasks = 2)
+    end
+
+    @testset "Split alpha & cluster_alpha, two-sided cluster p-values, and centered variance" begin
+        # 1. Centered two-pass variance resists catastrophic cancellation at large DC offsets
+        diffs = [1.0, 2.0, 3.0, 4.0, 5.0]
+        big = 1e9
+        d1 = reshape(big .+ diffs, 5, 1, 1)
+        d2 = fill(big, 5, 1, 1)
+        t_mat, _, _, se_mat = EegFun._compute_t_matrix(d1, d2, :paired)
+        @test se_mat[1, 1] ≈ std(diffs) / sqrt(5) rtol = 1e-8
+        @test t_mat[1, 1] ≈ mean(diffs) / (std(diffs) / sqrt(5)) rtol = 1e-8
+
+        # Indep design large offset
+        g1 = reshape(big .+ [1.0, 2.0, 3.0, 4.0], 4, 1, 1)
+        g2 = reshape(big .+ [0.0, 1.0, 2.0, 3.0], 4, 1, 1)
+        t_ind, _, _, _ = EegFun._compute_t_matrix(g1, g2, :independent)
+        @test t_ind[1, 1] ≈ 1.0 / sqrt(2 * var([1.0, 2.0, 3.0, 4.0]) / 4) rtol = 1e-8
+
+        # 2. Split alpha and cluster_alpha + two-sided cluster p-values
+        erps = _build_erp_test_data(n_participants = 6, offset_cond1 = 2.5, offset_cond2 = 0.0, noise = 0.05)
+        prepared = EegFun.prepare_stats(erps; design = :paired)
+        res = EegFun.permutation_test(
+            prepared;
+            alpha = 0.01,
+            cluster_alpha = 0.05,
+            n_permutations = 40,
+            cluster_type = :temporal,
+            rng = Random.Xoshiro(99),
+        )
+        @test res.test_info.alpha == 0.01
+        @test res.test_info.cluster_info.cluster_alpha == 0.05
+        @test !isempty(vcat(res.clusters.positive, res.clusters.negative))
+        for c in vcat(res.clusters.positive, res.clusters.negative)
+            @test c.is_significant == (c.p_value <= res.test_info.alpha)
+        end
+
+        # ClusterInfo 4-arg constructor
+        @test_throws MethodError EegFun.ClusterInfo(:parametric, :temporal, 100)
+        ci4 = EegFun.ClusterInfo(:parametric, :temporal, 100, 0.01)
+        @test ci4.cluster_alpha == 0.01
+
+        # Bonferroni NaN p-values are never marked significant even when t > 0
+        mask_nan = EegFun._apply_bonferroni_correction([NaN, 0.001], 0.05, [5.0, 5.0])
+        @test mask_nan == [false, true]
+
+        # Named condition_selection, reversed order, out-of-order paired participants, and 1-participant guard
+        erps_named = _build_erp_test_data(n_participants = 4, offset_cond1 = 3.0, offset_cond2 = 0.0, noise = 0.01)
+        prep_rev =
+            EegFun.prepare_stats(erps_named; design = :paired, condition_selection = EegFun.conditions(["condition_2", "condition_1"]))
+        @test prep_rev.data[1].condition == 2
+        @test prep_rev.data[2].condition == 1
+
+        c1_only = filter(x -> x.condition == 1, erps_named)
+        c2_shuffled = reverse(filter(x -> x.condition == 2, erps_named))
+        prep_aligned = EegFun.prepare_stats(vcat(c1_only, c2_shuffled); design = :paired)
+        prep_orig = EegFun.prepare_stats(erps_named; design = :paired)
+        @test prep_aligned.analysis.data[1] ≈ prep_orig.analysis.data[1]
+        @test prep_aligned.analysis.data[2] ≈ prep_orig.analysis.data[2]
+
+        erps_1p = _build_erp_test_data(n_participants = 1)
+        @test_throws EegFun.EegFunError EegFun.prepare_stats(erps_1p; design = :paired)
+
+        # StatsAPI.stderror aligns with analysis_interval (matching StatsAPI.coef and stat_matrix.t)
+        prep_win = EegFun.prepare_stats(erps_named; design = :paired, analysis_interval = (0.1, 0.3))
+        for res_w in (
+            EegFun.analytic_test(prep_win),
+            EegFun.permutation_test(prep_win; n_permutations = 10, cluster_type = :temporal, rng = Random.Xoshiro(7)),
+        )
+            cf = EegFun.StatsAPI.coef(res_w)
+            se_w = EegFun.StatsAPI.stderror(res_w)
+            @test size(se_w) == size(cf) == size(res_w.stat_matrix.t)
+            @test isapprox(cf ./ se_w, res_w.stat_matrix.t; rtol = 1e-8)
+        end
+
+        # In-memory ERPs sharing placeholder .file ("test_data") resolve participant identity via :participant column
+        inmem_c1 = [EegFun.create_test_erp_data(participant = p, condition = 1, fs = 100, seed = 10 + p) for p = 1:3]
+        inmem_c2 = [EegFun.create_test_erp_data(participant = p, condition = 2, fs = 100, seed = 20 + p) for p = 1:3]
+        prep_inmem_ord = EegFun.prepare_stats(vcat(inmem_c1, inmem_c2); design = :paired)
+        prep_inmem_shuf = EegFun.prepare_stats(vcat(inmem_c1, reverse(inmem_c2)); design = :paired)
+        @test prep_inmem_shuf.analysis.data[2] ≈ prep_inmem_ord.analysis.data[2]
+        inmem_c2_mismatch = [inmem_c2[1], inmem_c2[2], EegFun.create_test_erp_data(participant = 99, condition = 2, fs = 100, seed = 99)]
+        @test_throws EegFun.EegFunError EegFun.prepare_stats(vcat(inmem_c1, inmem_c2_mismatch); design = :paired)
+    end
+
+end # @testset "ERP Statistics"

@@ -1,108 +1,16 @@
 # Public statistical testing entry points: `permutation_test` and `analytic_test` (ERP and TF).
 
+######################################
+######### Types & Constants ##########
+######################################
+
 const _VALID_THRESHOLD_METHODS = (:parametric, :nonparametric_common, :nonparametric_individual)
 
-function _resolve_erp_thresholds(
-    prepared::StatisticalData,
-    t_matrix::Matrix{Float64},
-    df::Float64,
-    plan::AbstractMatrix,
-    threshold_method::Symbol,
-    cluster_alpha_f::Float64,
-    tail::Symbol,
-    show_progress::Bool,
-    permutation_t_matrices::Union{Nothing,Array{Float64,3}},
-)
-    if threshold_method == :parametric
-        @debug "Computing parametric critical t-values..."
-        crit = _compute_critical_t_values(df, size(t_matrix), cluster_alpha_f, tail)
-        @debug "Thresholding observed data (parametric)..."
-        mask_pos, mask_neg = _threshold_t_matrix_parametric(t_matrix, crit, tail)
-        return crit, crit, mask_pos, mask_neg, permutation_t_matrices
-    end
+const _compute_tf_cluster_pvalues = _compute_cluster_pvalues
 
-    if isnothing(permutation_t_matrices)
-        @debug "Collecting permutation t-matrices for $(threshold_method) thresholding..."
-        permutation_t_matrices = _collect_permutation_t_matrices(prepared, plan, show_progress)
-    end
-
-    if threshold_method == :nonparametric_common
-        @debug "Computing non-parametric common threshold..."
-        thresh_pos, thresh_neg = _compute_nonparametric_threshold_common(permutation_t_matrices, cluster_alpha_f, tail)
-        @debug "Thresholding observed data (non-parametric common)..."
-        mask_pos, mask_neg = _threshold_t_matrix_nonparametric(t_matrix, thresh_pos, thresh_neg, tail)
-        return (thresh_pos, -thresh_neg), (thresh_pos, thresh_neg), mask_pos, mask_neg, permutation_t_matrices
-    else
-        @debug "Computing non-parametric individual thresholds..."
-        thresh_pos_mat, thresh_neg_mat = _compute_nonparametric_threshold_individual(permutation_t_matrices, cluster_alpha_f, tail)
-        @debug "Thresholding observed data (non-parametric individual)..."
-        mask_pos, mask_neg = _threshold_t_matrix_nonparametric(t_matrix, thresh_pos_mat, thresh_neg_mat, tail)
-        return (thresh_pos_mat, -thresh_neg_mat), (thresh_pos_mat, thresh_neg_mat), mask_pos, mask_neg, permutation_t_matrices
-    end
-end
-
-function _resolve_tf_thresholds(
-    prepared::TFStatisticalData,
-    t_matrix::Array{Float64,3},
-    df::Float64,
-    plan::AbstractMatrix,
-    threshold_method::Symbol,
-    cluster_alpha_f::Float64,
-    tail::Symbol,
-    show_progress::Bool,
-)
-    if threshold_method == :parametric
-        @debug "Computing parametric critical t-values..."
-        crit = _compute_critical_t_values_tf(df, size(t_matrix), cluster_alpha_f, tail)
-        @debug "Thresholding observed data (parametric)..."
-        mask_pos, mask_neg = _threshold_t_matrix_parametric_tf(t_matrix, crit, tail)
-        return crit, mask_pos, mask_neg, nothing
-    end
-
-    total_floats = length(t_matrix) * size(plan, 2)
-    permutation_t_matrices = nothing
-
-    if threshold_method == :nonparametric_common
-        if total_floats <= _TF_PERM_CACHE_MAX_FLOATS
-            @debug "Collecting TF permutation t-matrices in parallel..."
-            permutation_t_matrices = _collect_permutation_t_matrices_tf(
-                prepared.analysis.data[1],
-                prepared.analysis.data[2],
-                prepared.analysis.design,
-                plan,
-                show_progress,
-            )
-            @debug "Computing non-parametric common threshold..."
-            thresh_pos, thresh_neg = _compute_nonparametric_threshold_common_tf(permutation_t_matrices, cluster_alpha_f, tail)
-        else
-            @debug "Streaming non-parametric common threshold across chunks (avoiding large 4D allocation)..."
-            thresh_pos, thresh_neg = _stream_nonparametric_threshold_common_tf(prepared, plan, cluster_alpha_f, tail, show_progress)
-        end
-        @debug "Thresholding observed data (non-parametric common)..."
-        mask_pos, mask_neg = _threshold_t_matrix_nonparametric(t_matrix, thresh_pos, thresh_neg, tail)
-        return (thresh_pos, thresh_neg), mask_pos, mask_neg, permutation_t_matrices
-    else
-        if total_floats <= _TF_PERM_CACHE_MAX_FLOATS
-            @debug "Collecting TF permutation t-matrices in parallel..."
-            permutation_t_matrices = _collect_permutation_t_matrices_tf(
-                prepared.analysis.data[1],
-                prepared.analysis.data[2],
-                prepared.analysis.design,
-                plan,
-                show_progress,
-            )
-            @debug "Computing non-parametric individual thresholds..."
-            thresh_pos_mat, thresh_neg_mat = _compute_nonparametric_threshold_individual_tf(permutation_t_matrices, cluster_alpha_f, tail)
-        else
-            @debug "Streaming non-parametric individual thresholds per electrode (avoiding large 4D allocation)..."
-            thresh_pos_mat, thresh_neg_mat =
-                _stream_nonparametric_threshold_individual_tf(prepared, plan, cluster_alpha_f, tail, show_progress)
-        end
-        @debug "Thresholding observed data (non-parametric individual)..."
-        mask_pos, mask_neg = _threshold_t_matrix_nonparametric(t_matrix, thresh_pos_mat, thresh_neg_mat, tail)
-        return (thresh_pos_mat, thresh_neg_mat), mask_pos, mask_neg, permutation_t_matrices
-    end
-end
+######################################
+########### User Functions ###########
+######################################
 
 """
     permutation_test(prepared::StatisticalData; kwargs...)
@@ -399,7 +307,166 @@ function permutation_test(
     return result
 end
 
-# === ANALYTIC TEST (ERP & TF) ===
+"""
+    analytic_test(prepared::StatisticalData; alpha = 0.05, tail = :both, correction_method = :none)
+    analytic_test(prepared::TFStatisticalData; alpha = 0.05, tail = :both, correction_method = :none)
+
+Perform an analytic (parametric) mass-univariate t-test on prepared ERP (`StatisticalData`)
+or time-frequency (`TFStatisticalData`) data.
+
+# Keyword Arguments
+- `alpha::Real = 0.05`: Significance threshold
+- `tail::Symbol = :both`: Test tail (`:both`, `:left`, or `:right`)
+- `correction_method::Symbol = :none`: Multiple comparison correction (`:none` / `:no` or `:bonferroni`)
+"""
+function analytic_test(prepared::StatisticalData; alpha::Real = 0.05, tail::Symbol = :both, correction_method::Symbol = :none)
+    alpha_f, correction_method = _validate_analytic_params(alpha, tail, correction_method)
+    t_matrix, df, p_matrix, se_matrix = _compute_t_matrix(prepared, tail = tail)
+    mask_positive, mask_negative, critical_t = _validate_and_mask_analytic(t_matrix, p_matrix, df, alpha_f, tail, correction_method)
+
+    result = AnalyticResult(
+        TestInfo(prepared.analysis.design, df, alpha_f, tail, correction_method, nothing),
+        prepared.data,
+        StatMatrix(t_matrix, p_matrix),
+        Masks(mask_positive, mask_negative),
+        channel_labels(prepared.data[1]),
+        prepared.analysis.time_points,
+        critical_t,
+        se_matrix,
+        prepared.se_cond1,
+        prepared.se_cond2,
+        prepared.se_diff,
+    )
+
+    @info "Analytic test complete: $(count(mask_positive)) +ve, $(count(mask_negative)) -ve significant points."
+    return result
+end
+
+function analytic_test(prepared::TFStatisticalData; alpha::Real = 0.05, tail::Symbol = :both, correction_method::Symbol = :none)
+    alpha_f, correction_method = _validate_analytic_params(alpha, tail, correction_method)
+    t_matrix, df, p_matrix = _compute_t_matrix_tf(prepared, tail = tail)
+    mask_positive, mask_negative, critical_t = _validate_and_mask_analytic(t_matrix, p_matrix, df, alpha_f, tail, correction_method)
+
+    result = TFAnalyticResult(
+        TestInfo(prepared.analysis.design, df, alpha_f, tail, correction_method, nothing),
+        prepared.data,
+        TFStatMatrix(t_matrix, p_matrix),
+        TFMasks(mask_positive, mask_negative),
+        channel_labels(prepared.data[1]),
+        prepared.analysis.frequencies,
+        prepared.analysis.time_points,
+        critical_t,
+    )
+
+    @info "TF Analytic test complete: $(count(mask_positive)) +ve, $(count(mask_negative)) -ve significant points."
+    return result
+end
+
+######################################
+######### Internal Functions #########
+######################################
+
+function _resolve_erp_thresholds(
+    prepared::StatisticalData,
+    t_matrix::Matrix{Float64},
+    df::Float64,
+    plan::AbstractMatrix,
+    threshold_method::Symbol,
+    cluster_alpha_f::Float64,
+    tail::Symbol,
+    show_progress::Bool,
+    permutation_t_matrices::Union{Nothing,Array{Float64,3}},
+)
+    if threshold_method == :parametric
+        @debug "Computing parametric critical t-values..."
+        crit = _compute_critical_t_values(df, size(t_matrix), cluster_alpha_f, tail)
+        @debug "Thresholding observed data (parametric)..."
+        mask_pos, mask_neg = _threshold_t_matrix_parametric(t_matrix, crit, tail)
+        return crit, crit, mask_pos, mask_neg, permutation_t_matrices
+    end
+
+    if isnothing(permutation_t_matrices)
+        @debug "Collecting permutation t-matrices for $(threshold_method) thresholding..."
+        permutation_t_matrices = _collect_permutation_t_matrices(prepared, plan, show_progress)
+    end
+
+    if threshold_method == :nonparametric_common
+        @debug "Computing non-parametric common threshold..."
+        thresh_pos, thresh_neg = _compute_nonparametric_threshold_common(permutation_t_matrices, cluster_alpha_f, tail)
+        @debug "Thresholding observed data (non-parametric common)..."
+        mask_pos, mask_neg = _threshold_t_matrix_nonparametric(t_matrix, thresh_pos, thresh_neg, tail)
+        return (thresh_pos, -thresh_neg), (thresh_pos, thresh_neg), mask_pos, mask_neg, permutation_t_matrices
+    else
+        @debug "Computing non-parametric individual thresholds..."
+        thresh_pos_mat, thresh_neg_mat = _compute_nonparametric_threshold_individual(permutation_t_matrices, cluster_alpha_f, tail)
+        @debug "Thresholding observed data (non-parametric individual)..."
+        mask_pos, mask_neg = _threshold_t_matrix_nonparametric(t_matrix, thresh_pos_mat, thresh_neg_mat, tail)
+        return (thresh_pos_mat, -thresh_neg_mat), (thresh_pos_mat, thresh_neg_mat), mask_pos, mask_neg, permutation_t_matrices
+    end
+end
+
+function _resolve_tf_thresholds(
+    prepared::TFStatisticalData,
+    t_matrix::Array{Float64,3},
+    df::Float64,
+    plan::AbstractMatrix,
+    threshold_method::Symbol,
+    cluster_alpha_f::Float64,
+    tail::Symbol,
+    show_progress::Bool,
+)
+    if threshold_method == :parametric
+        @debug "Computing parametric critical t-values..."
+        crit = _compute_critical_t_values_tf(df, size(t_matrix), cluster_alpha_f, tail)
+        @debug "Thresholding observed data (parametric)..."
+        mask_pos, mask_neg = _threshold_t_matrix_parametric_tf(t_matrix, crit, tail)
+        return crit, mask_pos, mask_neg, nothing
+    end
+
+    total_floats = length(t_matrix) * size(plan, 2)
+    permutation_t_matrices = nothing
+
+    if threshold_method == :nonparametric_common
+        if total_floats <= _TF_PERM_CACHE_MAX_FLOATS
+            @debug "Collecting TF permutation t-matrices in parallel..."
+            permutation_t_matrices = _collect_permutation_t_matrices_tf(
+                prepared.analysis.data[1],
+                prepared.analysis.data[2],
+                prepared.analysis.design,
+                plan,
+                show_progress,
+            )
+            @debug "Computing non-parametric common threshold..."
+            thresh_pos, thresh_neg = _compute_nonparametric_threshold_common_tf(permutation_t_matrices, cluster_alpha_f, tail)
+        else
+            @debug "Streaming non-parametric common threshold across chunks (avoiding large 4D allocation)..."
+            thresh_pos, thresh_neg = _stream_nonparametric_threshold_common_tf(prepared, plan, cluster_alpha_f, tail, show_progress)
+        end
+        @debug "Thresholding observed data (non-parametric common)..."
+        mask_pos, mask_neg = _threshold_t_matrix_nonparametric(t_matrix, thresh_pos, thresh_neg, tail)
+        return (thresh_pos, thresh_neg), mask_pos, mask_neg, permutation_t_matrices
+    else
+        if total_floats <= _TF_PERM_CACHE_MAX_FLOATS
+            @debug "Collecting TF permutation t-matrices in parallel..."
+            permutation_t_matrices = _collect_permutation_t_matrices_tf(
+                prepared.analysis.data[1],
+                prepared.analysis.data[2],
+                prepared.analysis.design,
+                plan,
+                show_progress,
+            )
+            @debug "Computing non-parametric individual thresholds..."
+            thresh_pos_mat, thresh_neg_mat = _compute_nonparametric_threshold_individual_tf(permutation_t_matrices, cluster_alpha_f, tail)
+        else
+            @debug "Streaming non-parametric individual thresholds per electrode (avoiding large 4D allocation)..."
+            thresh_pos_mat, thresh_neg_mat =
+                _stream_nonparametric_threshold_individual_tf(prepared, plan, cluster_alpha_f, tail, show_progress)
+        end
+        @debug "Thresholding observed data (non-parametric individual)..."
+        mask_pos, mask_neg = _threshold_t_matrix_nonparametric(t_matrix, thresh_pos_mat, thresh_neg_mat, tail)
+        return (thresh_pos_mat, thresh_neg_mat), mask_pos, mask_neg, permutation_t_matrices
+    end
+end
 
 function _validate_and_mask_analytic(
     t_matrix::Array{Float64,N},
@@ -468,60 +535,3 @@ function _validate_analytic_params(alpha::Real, tail::Symbol, correction_method:
     (0.0 < alpha_f < 1.0) || @minimal_error "alpha must be between 0 and 1, got $alpha_f"
     return alpha_f, correction_method
 end
-
-"""
-    analytic_test(prepared::StatisticalData; alpha = 0.05, tail = :both, correction_method = :none)
-    analytic_test(prepared::TFStatisticalData; alpha = 0.05, tail = :both, correction_method = :none)
-
-Perform an analytic (parametric) mass-univariate t-test on prepared ERP (`StatisticalData`)
-or time-frequency (`TFStatisticalData`) data.
-
-# Keyword Arguments
-- `alpha::Real = 0.05`: Significance threshold
-- `tail::Symbol = :both`: Test tail (`:both`, `:left`, or `:right`)
-- `correction_method::Symbol = :none`: Multiple comparison correction (`:none` / `:no` or `:bonferroni`)
-"""
-function analytic_test(prepared::StatisticalData; alpha::Real = 0.05, tail::Symbol = :both, correction_method::Symbol = :none)
-    alpha_f, correction_method = _validate_analytic_params(alpha, tail, correction_method)
-    t_matrix, df, p_matrix, se_matrix = _compute_t_matrix(prepared, tail = tail)
-    mask_positive, mask_negative, critical_t = _validate_and_mask_analytic(t_matrix, p_matrix, df, alpha_f, tail, correction_method)
-
-    result = AnalyticResult(
-        TestInfo(prepared.analysis.design, df, alpha_f, tail, correction_method, nothing),
-        prepared.data,
-        StatMatrix(t_matrix, p_matrix),
-        Masks(mask_positive, mask_negative),
-        channel_labels(prepared.data[1]),
-        prepared.analysis.time_points,
-        critical_t,
-        se_matrix,
-        prepared.se_cond1,
-        prepared.se_cond2,
-        prepared.se_diff,
-    )
-
-    @info "Analytic test complete: $(count(mask_positive)) +ve, $(count(mask_negative)) -ve significant points."
-    return result
-end
-
-function analytic_test(prepared::TFStatisticalData; alpha::Real = 0.05, tail::Symbol = :both, correction_method::Symbol = :none)
-    alpha_f, correction_method = _validate_analytic_params(alpha, tail, correction_method)
-    t_matrix, df, p_matrix = _compute_t_matrix_tf(prepared, tail = tail)
-    mask_positive, mask_negative, critical_t = _validate_and_mask_analytic(t_matrix, p_matrix, df, alpha_f, tail, correction_method)
-
-    result = TFAnalyticResult(
-        TestInfo(prepared.analysis.design, df, alpha_f, tail, correction_method, nothing),
-        prepared.data,
-        TFStatMatrix(t_matrix, p_matrix),
-        TFMasks(mask_positive, mask_negative),
-        channel_labels(prepared.data[1]),
-        prepared.analysis.frequencies,
-        prepared.analysis.time_points,
-        critical_t,
-    )
-
-    @info "TF Analytic test complete: $(count(mask_positive)) +ve, $(count(mask_negative)) -ve significant points."
-    return result
-end
-
-const _compute_tf_cluster_pvalues = _compute_cluster_pvalues

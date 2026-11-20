@@ -1,19 +1,18 @@
+# Makie `convert_arguments` recipes for plotting EegFun data types directly.
+
 import Makie
 
-_tf_1d_recipe_error(dat) =
-    @minimal_error("Direct 1D Makie recipes (e.g. `lines`) are not supported for $(typeof(dat)); use `EegFun.plot_tf` instead.")
+######################################
+########### User Functions ###########
+######################################
 
 Makie.convert_arguments(::Makie.PointBased, dat::Union{TimeFreqData,TimeFreqEpochData}) = _tf_1d_recipe_error(dat)
-Makie.convert_arguments(::Makie.PointBased, dat::Union{TimeFreqData,TimeFreqEpochData}, ::Symbol) = _tf_1d_recipe_error(dat)
-Makie.convert_arguments(::Type{<:Makie.Series}, dat::Union{TimeFreqData,TimeFreqEpochData}) = _tf_1d_recipe_error(dat)
-Makie.convert_arguments(::Type{<:Makie.Series}, dat::TimeFreqEpochData, ::Symbol) = _tf_1d_recipe_error(dat)
 
-@inline function _copy_col_to_row!(mat::Matrix{Float64}, row::Int, col::AbstractVector)
-    @inbounds for j in eachindex(col)
-        mat[row, j] = Float64(col[j])
-    end
-    return nothing
-end
+Makie.convert_arguments(::Makie.PointBased, dat::Union{TimeFreqData,TimeFreqEpochData}, ::Symbol) = _tf_1d_recipe_error(dat)
+
+Makie.convert_arguments(::Type{<:Makie.Series}, dat::Union{TimeFreqData,TimeFreqEpochData}) = _tf_1d_recipe_error(dat)
+
+Makie.convert_arguments(::Type{<:Makie.Series}, dat::TimeFreqEpochData, ::Symbol) = _tf_1d_recipe_error(dat)
 
 function Makie.convert_arguments(P::Makie.PointBased, dat::SpectrumData, channel::Symbol)
     hasproperty(dat.data, channel) || @minimal_error("Channel $channel not found in SpectrumData.")
@@ -58,4 +57,18 @@ function Makie.convert_arguments(P::Makie.PointBased, layout::Layout)
         _ensure_coordinates_2d!(layout)
     end
     return Makie.convert_arguments(P, layout.data[!, :x2], layout.data[!, :y2])
+end
+
+######################################
+######### Internal Functions #########
+######################################
+
+_tf_1d_recipe_error(dat) =
+    @minimal_error("Direct 1D Makie recipes (e.g. `lines`) are not supported for $(typeof(dat)); use `EegFun.plot_tf` instead.")
+
+@inline function _copy_col_to_row!(mat::Matrix{Float64}, row::Int, col::AbstractVector)
+    @inbounds for j in eachindex(col)
+        mat[row, j] = Float64(col[j])
+    end
+    return nothing
 end

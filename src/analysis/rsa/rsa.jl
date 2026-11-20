@@ -1,5 +1,291 @@
 # Representational Similarity Analysis (RSA): RDM computation, normalization, model comparison, and grand averaging.
 
+######################################
+######### Types & Constants ##########
+######################################
+
+# Pre-allocated buffers for within-condition demeaned Ledoit-Wolf shrinkage covariance
+struct _PooledCovWorkspace
+    residuals::Matrix{Float64}
+    cond_mean::Vector{Float64}
+    S::Matrix{Float64}
+end
+
+######################################
+########### User Functions ###########
+######################################
+
+"""
+    normalize_rdm(rdm::AbstractMatrix{Float64}; method::Symbol = :none) -> Matrix{Float64}
+
+Normalize upper/lower off-diagonal entries of a symmetric RDM (preserving zero diagonal)
+using `:none`, `:zscore`, `:rank` (average tied ranks), or `:minmax` (`[0, 1]`).
+"""
+function normalize_rdm(rdm::AbstractMatrix{Float64}; method::Symbol = :none)
+    method == :none && return Matrix(rdm)
+
+    n = size(rdm, 1)
+    normalized_rdm = Matrix(rdm)
+    upper_values = _extract_upper_triangular(rdm)
+
+    normalized_values = if method == :zscore
+        μ = mean(upper_values)
+        σ = std(upper_values)
+        σ > 0 ? (upper_values .- μ) ./ σ : zeros(Float64, length(upper_values))
+    elseif method == :rank
+        StatsBase.tiedrank(upper_values)
+    elseif method == :minmax
+        min_val, max_val = extrema(upper_values)
+        max_val > min_val ? (upper_values .- min_val) ./ (max_val - min_val) : zeros(Float64, length(upper_values))
+    else
+        @minimal_error("Unknown normalization method: $method. Use :none, :zscore, :rank, or :minmax")
+    end
+
+    k = 1
+    @inbounds for i = 1:n
+        normalized_rdm[i, i] = 0.0
+        for j = (i+1):n
+            v = normalized_values[k]
+            normalized_rdm[i, j] = v
+            normalized_rdm[j, i] = v
+            k += 1
+        end
+    end
+
+    return normalized_rdm
+end
+
+"""
+    rsa(
+        epochs::AbstractVector{<:EpochData};
+        channel_selection = channels(),
+        sample_selection = samples(),
+        interval_selection::Interval = times(),
+        dissimilarity_measure::Symbol = :correlation,
+        average_trials::Bool = true,
+        normalize_method::Symbol = :none,
+    ) -> RsaData
+    rsa(all_participant_epochs::Vector{Vector{EpochData}}; kwargs...) -> Vector{RsaData}
+
+Compute time-resolved Representational Dissimilarity Matrices (RDMs) across conditions for a
+participant (or vector of participants).
+
+# Keyword Arguments
+- `channel_selection`: Channel selection predicate (default: `channels()`)
+- `sample_selection`: Sample selection predicate (default: `samples()`)
+- `interval_selection::Interval`: Time interval filter (default: `times()`)
+- `dissimilarity_measure::Symbol`: `:correlation` (`:pearson`), `:spearman`, `:euclidean`, or `:mahalanobis`
+- `average_trials::Bool`: Average trials per condition before computing RDMs (default: `true`)
+- `normalize_method::Symbol`: `:none` (default), `:zscore`, `:rank`, or `:minmax`
+"""
+function rsa(
+    epochs::AbstractVector{<:EpochData};
+    channel_selection = channels(),
+    sample_selection = samples(),
+    interval_selection::Interval = times(),
+    dissimilarity_measure::Symbol = :correlation,
+    average_trials::Bool = true,
+    normalize_method::Symbol = :none,
+)
+    combined_sel = _combine_interval_sample(interval_selection, sample_selection)
+    data_arrays, times, n_trials_per_condition, condition_names, selected_channels, layout_sub, first_epoch =
+        _prepare_and_validate_rsa(epochs, channel_selection, combined_sel)
+
+    n_conditions = length(condition_names)
+    n_timepoints = length(times)
+
+    if any(==(0), n_trials_per_condition)
+        empty_conditions = condition_names[n_trials_per_condition .== 0]
+        @minimal_error("One or more conditions have zero trials: $(join(empty_conditions, ", "))")
+    end
+
+    if average_trials
+        rdms = _compute_rdms_from_data(data_arrays, n_timepoints, n_conditions, selected_channels, dissimilarity_measure)
+    else
+        n_ch = length(selected_channels)
+        rdms = zeros(Float64, n_timepoints, n_conditions, n_conditions)
+        avg_rdm = zeros(Float64, n_conditions, n_conditions)
+        trial_rdm_buffer = zeros(Float64, n_conditions, n_conditions)
+        condition_patterns = [Vector{Float64}(undef, n_ch) for _ = 1:n_conditions]
+        n_trials = minimum(n_trials_per_condition)
+        use_mahal = dissimilarity_measure == :mahalanobis
+        cov_ws = use_mahal ? _PooledCovWorkspace(n_ch, sum(size(d, 3) for d in data_arrays)) : nothing
+        inv_pooled_cov = use_mahal ? Matrix{Float64}(undef, n_ch, n_ch) : nothing
+
+        for t = 1:n_timepoints
+            if use_mahal
+                _compute_inv_pooled_covariance!(inv_pooled_cov::Matrix{Float64}, cov_ws::_PooledCovWorkspace, data_arrays, nothing, t)
+            end
+            fill!(avg_rdm, 0.0)
+            for trial_idx = 1:n_trials
+                @inbounds for cond_idx = 1:n_conditions
+                    cp = condition_patterns[cond_idx]
+                    cd = data_arrays[cond_idx]
+                    @simd for ch = 1:n_ch
+                        cp[ch] = cd[ch, t, trial_idx]
+                    end
+                end
+                _compute_rdm!(trial_rdm_buffer, condition_patterns, dissimilarity_measure; inv_covariance_matrix = inv_pooled_cov)
+                avg_rdm .+= trial_rdm_buffer
+            end
+            if n_trials > 0
+                inv_nt = 1.0 / n_trials
+                @inbounds for j = 1:n_conditions, i = 1:n_conditions
+                    rdms[t, i, j] = avg_rdm[i, j] * inv_nt
+                end
+            end
+        end
+    end
+
+    _normalize_rdms!(rdms, normalize_method)
+
+    return RsaData(
+        first_epoch.file,
+        condition_names,
+        times,
+        rdms,
+        dissimilarity_measure,
+        selected_channels,
+        layout_sub,
+        first_epoch.sample_rate;
+        analysis_info = copy(first_epoch.analysis_info),
+    )
+end
+
+function rsa(all_participant_epochs::Vector{Vector{EpochData}}; kwargs...)
+    return [rsa(participant_epochs; kwargs...) for participant_epochs in all_participant_epochs]
+end
+
+"""
+    compare_models(
+        rsa_data::RsaData,
+        model_rdms::AbstractVector;
+        model_names::Union{Vector{String},Nothing} = nothing,
+        correlation_method::Symbol = :spearman,
+        n_permutations::Int = 1000,
+        tail::Symbol = :right,
+        rng::AbstractRNG = Random.default_rng(),
+    ) -> RsaData
+
+Compare neural RDMs to static (`Matrix{Float64}`) or temporal (`Array{Float64,3}`) model RDMs,
+returning a new `RsaData` copy with Mantel condition-permutation `p_values` (exact `N!` for
+`3 <= N <= 4`, Monte Carlo for `N >= 5`).
+"""
+function compare_models(
+    rsa_data::RsaData,
+    model_rdms::AbstractVector;
+    model_names::Union{Vector{String},Nothing} = nothing,
+    correlation_method::Symbol = :spearman,
+    correlation_type::Union{Nothing,Symbol} = nothing,
+    n_permutations::Int = 1000,
+    tail::Symbol = :right,
+    rng::AbstractRNG = Random.default_rng(),
+)
+    return compare_models!(
+        copy(rsa_data),
+        model_rdms;
+        model_names = model_names,
+        correlation_method = correlation_method,
+        correlation_type = correlation_type,
+        n_permutations = n_permutations,
+        tail = tail,
+        rng = rng,
+    )
+end
+
+"""
+    compare_models!(
+        rsa_data::RsaData,
+        model_rdms::AbstractVector;
+        model_names::Union{Vector{String},Nothing} = nothing,
+        correlation_method::Symbol = :spearman,
+        n_permutations::Int = 1000,
+        tail::Symbol = :right,
+        rng::AbstractRNG = Random.default_rng(),
+    ) -> RsaData
+
+Compare neural RDMs in `rsa_data` to `model_rdms` in-place (without mutating `model_rdms`).
+See [`compare_models`](@ref) for full parameter details.
+"""
+function compare_models!(
+    rsa_data::RsaData,
+    model_rdms::AbstractVector;
+    model_names::Union{Vector{String},Nothing} = nothing,
+    correlation_method::Symbol = :spearman,
+    correlation_type::Union{Nothing,Symbol} = nothing,
+    n_permutations::Int = 1000,
+    tail::Symbol = :right,
+    rng::AbstractRNG = Random.default_rng(),
+)
+    corr_method = isnothing(correlation_type) ? correlation_method : correlation_type
+    corr_method in (:spearman, :pearson) || @minimal_error("Unknown correlation method: $corr_method. Use :spearman or :pearson")
+    tail in (:right, :left, :both) || @minimal_error("Unknown tail: $tail. Use :right, :left, or :both")
+    n_permutations < 0 && @minimal_error("n_permutations must be >= 0, got $n_permutations")
+
+    n_models = length(model_rdms)
+    n_conditions = length(rsa_data.condition_names)
+    n_times = length(rsa_data.times)
+    is_temporal = _validate_model_rdms(model_rdms, n_conditions, n_times)
+
+    resolved_names = if isnothing(model_names)
+        ["Model$(i)" for i = 1:n_models]
+    elseif length(model_names) != n_models
+        @minimal_error("Number of model names ($(length(model_names))) doesn't match number of models ($n_models)")
+    else
+        copy(model_names)
+    end
+
+    correlations, p_values =
+        _compute_model_correlations(rsa_data, model_rdms, is_temporal, corr_method, n_permutations; tail = tail, rng = rng)
+
+    rsa_data.model_correlations = correlations
+    rsa_data.model_names = resolved_names
+    rsa_data.p_values = p_values
+    return rsa_data
+end
+
+function grand_average(rsa_data_list::AbstractVector{<:RsaData}; compute_noise_ceiling::Bool = true)
+    isempty(rsa_data_list) && @minimal_error("Cannot compute grand average with empty RSA data list")
+    length(rsa_data_list) == 1 && return copy(rsa_data_list[1])
+
+    first_rsa = rsa_data_list[1]
+    n_conditions = length(first_rsa.condition_names)
+    n_times = length(first_rsa.times)
+
+    for (idx, rsa_data) in enumerate(rsa_data_list)
+        length(rsa_data.condition_names) != n_conditions &&
+            @minimal_error("RSA data $idx has $(length(rsa_data.condition_names)) conditions, expected $n_conditions")
+        length(rsa_data.times) != n_times && @minimal_error("RSA data $idx has $(length(rsa_data.times)) time points, expected $n_times")
+        rsa_data.dissimilarity_measure != first_rsa.dissimilarity_measure &&
+            @minimal_warning "RSA data $idx uses dissimilarity measure $(rsa_data.dissimilarity_measure), expected $(first_rsa.dissimilarity_measure)"
+    end
+
+    grand_rdm = zeros(Float64, n_times, n_conditions, n_conditions)
+    for rsa_data in rsa_data_list
+        grand_rdm .+= rsa_data.rdm
+    end
+    grand_rdm ./= length(rsa_data_list)
+
+    noise_ceiling = (compute_noise_ceiling && length(rsa_data_list) >= 2) ? EegFun.compute_noise_ceiling(rsa_data_list) : nothing
+
+    return RsaData(
+        "Grand Average",
+        copy(first_rsa.condition_names),
+        copy(first_rsa.times),
+        grand_rdm,
+        first_rsa.dissimilarity_measure,
+        copy(first_rsa.channels),
+        copy(first_rsa.layout),
+        first_rsa.sample_rate;
+        noise_ceiling = noise_ceiling,
+        analysis_info = copy(first_rsa.analysis_info),
+    )
+end
+
+######################################
+######### Internal Functions #########
+######################################
+
 function _extract_upper_triangular!(vec::Vector{Float64}, rdm::AbstractMatrix{<:Real})
     n = size(rdm, 1)
     k = 1
@@ -76,13 +362,6 @@ function _zscore_unit_norm!(dest::AbstractVector{Float64}, src::AbstractVector{F
         dest[k] *= inv_norm
     end
     return true
-end
-
-# Pre-allocated buffers for within-condition demeaned Ledoit-Wolf shrinkage covariance
-struct _PooledCovWorkspace
-    residuals::Matrix{Float64}
-    cond_mean::Vector{Float64}
-    S::Matrix{Float64}
 end
 
 function _PooledCovWorkspace(n_features::Int, max_total_trials::Int)
@@ -302,46 +581,6 @@ function _compute_rdm(
     )
 end
 
-"""
-    normalize_rdm(rdm::AbstractMatrix{Float64}; method::Symbol = :none) -> Matrix{Float64}
-
-Normalize upper/lower off-diagonal entries of a symmetric RDM (preserving zero diagonal)
-using `:none`, `:zscore`, `:rank` (average tied ranks), or `:minmax` (`[0, 1]`).
-"""
-function normalize_rdm(rdm::AbstractMatrix{Float64}; method::Symbol = :none)
-    method == :none && return Matrix(rdm)
-
-    n = size(rdm, 1)
-    normalized_rdm = Matrix(rdm)
-    upper_values = _extract_upper_triangular(rdm)
-
-    normalized_values = if method == :zscore
-        μ = mean(upper_values)
-        σ = std(upper_values)
-        σ > 0 ? (upper_values .- μ) ./ σ : zeros(Float64, length(upper_values))
-    elseif method == :rank
-        StatsBase.tiedrank(upper_values)
-    elseif method == :minmax
-        min_val, max_val = extrema(upper_values)
-        max_val > min_val ? (upper_values .- min_val) ./ (max_val - min_val) : zeros(Float64, length(upper_values))
-    else
-        @minimal_error("Unknown normalization method: $method. Use :none, :zscore, :rank, or :minmax")
-    end
-
-    k = 1
-    @inbounds for i = 1:n
-        normalized_rdm[i, i] = 0.0
-        for j = (i+1):n
-            v = normalized_values[k]
-            normalized_rdm[i, j] = v
-            normalized_rdm[j, i] = v
-            k += 1
-        end
-    end
-
-    return normalized_rdm
-end
-
 function _normalize_rdms!(rdms::Array{Float64,3}, method::Symbol)
     method == :none && return rdms
     for t = 1:size(rdms, 1)
@@ -425,109 +664,6 @@ function _compute_rdms_from_data(
 
     return rdms
 end
-
-"""
-    rsa(
-        epochs::AbstractVector{<:EpochData};
-        channel_selection = channels(),
-        sample_selection = samples(),
-        interval_selection::Interval = times(),
-        dissimilarity_measure::Symbol = :correlation,
-        average_trials::Bool = true,
-        normalize_method::Symbol = :none,
-    ) -> RsaData
-    rsa(all_participant_epochs::Vector{Vector{EpochData}}; kwargs...) -> Vector{RsaData}
-
-Compute time-resolved Representational Dissimilarity Matrices (RDMs) across conditions for a
-participant (or vector of participants).
-
-# Keyword Arguments
-- `channel_selection`: Channel selection predicate (default: `channels()`)
-- `sample_selection`: Sample selection predicate (default: `samples()`)
-- `interval_selection::Interval`: Time interval filter (default: `times()`)
-- `dissimilarity_measure::Symbol`: `:correlation` (`:pearson`), `:spearman`, `:euclidean`, or `:mahalanobis`
-- `average_trials::Bool`: Average trials per condition before computing RDMs (default: `true`)
-- `normalize_method::Symbol`: `:none` (default), `:zscore`, `:rank`, or `:minmax`
-"""
-function rsa(
-    epochs::AbstractVector{<:EpochData};
-    channel_selection = channels(),
-    sample_selection = samples(),
-    interval_selection::Interval = times(),
-    dissimilarity_measure::Symbol = :correlation,
-    average_trials::Bool = true,
-    normalize_method::Symbol = :none,
-)
-    combined_sel = _combine_interval_sample(interval_selection, sample_selection)
-    data_arrays, times, n_trials_per_condition, condition_names, selected_channels, layout_sub, first_epoch =
-        _prepare_and_validate_rsa(epochs, channel_selection, combined_sel)
-
-    n_conditions = length(condition_names)
-    n_timepoints = length(times)
-
-    if any(==(0), n_trials_per_condition)
-        empty_conditions = condition_names[n_trials_per_condition .== 0]
-        @minimal_error("One or more conditions have zero trials: $(join(empty_conditions, ", "))")
-    end
-
-    if average_trials
-        rdms = _compute_rdms_from_data(data_arrays, n_timepoints, n_conditions, selected_channels, dissimilarity_measure)
-    else
-        n_ch = length(selected_channels)
-        rdms = zeros(Float64, n_timepoints, n_conditions, n_conditions)
-        avg_rdm = zeros(Float64, n_conditions, n_conditions)
-        trial_rdm_buffer = zeros(Float64, n_conditions, n_conditions)
-        condition_patterns = [Vector{Float64}(undef, n_ch) for _ = 1:n_conditions]
-        n_trials = minimum(n_trials_per_condition)
-        use_mahal = dissimilarity_measure == :mahalanobis
-        cov_ws = use_mahal ? _PooledCovWorkspace(n_ch, sum(size(d, 3) for d in data_arrays)) : nothing
-        inv_pooled_cov = use_mahal ? Matrix{Float64}(undef, n_ch, n_ch) : nothing
-
-        for t = 1:n_timepoints
-            if use_mahal
-                _compute_inv_pooled_covariance!(inv_pooled_cov::Matrix{Float64}, cov_ws::_PooledCovWorkspace, data_arrays, nothing, t)
-            end
-            fill!(avg_rdm, 0.0)
-            for trial_idx = 1:n_trials
-                @inbounds for cond_idx = 1:n_conditions
-                    cp = condition_patterns[cond_idx]
-                    cd = data_arrays[cond_idx]
-                    @simd for ch = 1:n_ch
-                        cp[ch] = cd[ch, t, trial_idx]
-                    end
-                end
-                _compute_rdm!(trial_rdm_buffer, condition_patterns, dissimilarity_measure; inv_covariance_matrix = inv_pooled_cov)
-                avg_rdm .+= trial_rdm_buffer
-            end
-            if n_trials > 0
-                inv_nt = 1.0 / n_trials
-                @inbounds for j = 1:n_conditions, i = 1:n_conditions
-                    rdms[t, i, j] = avg_rdm[i, j] * inv_nt
-                end
-            end
-        end
-    end
-
-    _normalize_rdms!(rdms, normalize_method)
-
-    return RsaData(
-        first_epoch.file,
-        condition_names,
-        times,
-        rdms,
-        dissimilarity_measure,
-        selected_channels,
-        layout_sub,
-        first_epoch.sample_rate;
-        analysis_info = copy(first_epoch.analysis_info),
-    )
-end
-
-function rsa(all_participant_epochs::Vector{Vector{EpochData}}; kwargs...)
-    return [rsa(participant_epochs; kwargs...) for participant_epochs in all_participant_epochs]
-end
-
-# === MODEL COMPARISON & MANTEL PERMUTATIONS ===
 
 function _validate_model_rdms(model_rdms, n_conditions::Int, n_times::Int)
     is_temporal = Vector{Bool}(undef, length(model_rdms))
@@ -741,130 +877,4 @@ function _compute_model_correlations(
     end
 
     return correlations, p_values
-end
-
-"""
-    compare_models!(
-        rsa_data::RsaData,
-        model_rdms::AbstractVector;
-        model_names::Union{Vector{String},Nothing} = nothing,
-        correlation_method::Symbol = :spearman,
-        n_permutations::Int = 1000,
-        tail::Symbol = :right,
-        rng::AbstractRNG = Random.default_rng(),
-    ) -> RsaData
-
-Compare neural RDMs in `rsa_data` to `model_rdms` in-place (without mutating `model_rdms`).
-See [`compare_models`](@ref) for full parameter details.
-"""
-function compare_models!(
-    rsa_data::RsaData,
-    model_rdms::AbstractVector;
-    model_names::Union{Vector{String},Nothing} = nothing,
-    correlation_method::Symbol = :spearman,
-    correlation_type::Union{Nothing,Symbol} = nothing,
-    n_permutations::Int = 1000,
-    tail::Symbol = :right,
-    rng::AbstractRNG = Random.default_rng(),
-)
-    corr_method = isnothing(correlation_type) ? correlation_method : correlation_type
-    corr_method in (:spearman, :pearson) || @minimal_error("Unknown correlation method: $corr_method. Use :spearman or :pearson")
-    tail in (:right, :left, :both) || @minimal_error("Unknown tail: $tail. Use :right, :left, or :both")
-    n_permutations < 0 && @minimal_error("n_permutations must be >= 0, got $n_permutations")
-
-    n_models = length(model_rdms)
-    n_conditions = length(rsa_data.condition_names)
-    n_times = length(rsa_data.times)
-    is_temporal = _validate_model_rdms(model_rdms, n_conditions, n_times)
-
-    resolved_names = if isnothing(model_names)
-        ["Model$(i)" for i = 1:n_models]
-    elseif length(model_names) != n_models
-        @minimal_error("Number of model names ($(length(model_names))) doesn't match number of models ($n_models)")
-    else
-        copy(model_names)
-    end
-
-    correlations, p_values =
-        _compute_model_correlations(rsa_data, model_rdms, is_temporal, corr_method, n_permutations; tail = tail, rng = rng)
-
-    rsa_data.model_correlations = correlations
-    rsa_data.model_names = resolved_names
-    rsa_data.p_values = p_values
-    return rsa_data
-end
-
-"""
-    compare_models(
-        rsa_data::RsaData,
-        model_rdms::AbstractVector;
-        model_names::Union{Vector{String},Nothing} = nothing,
-        correlation_method::Symbol = :spearman,
-        n_permutations::Int = 1000,
-        tail::Symbol = :right,
-        rng::AbstractRNG = Random.default_rng(),
-    ) -> RsaData
-
-Compare neural RDMs to static (`Matrix{Float64}`) or temporal (`Array{Float64,3}`) model RDMs,
-returning a new `RsaData` copy with Mantel condition-permutation `p_values` (exact `N!` for
-`3 <= N <= 4`, Monte Carlo for `N >= 5`).
-"""
-function compare_models(
-    rsa_data::RsaData,
-    model_rdms::AbstractVector;
-    model_names::Union{Vector{String},Nothing} = nothing,
-    correlation_method::Symbol = :spearman,
-    correlation_type::Union{Nothing,Symbol} = nothing,
-    n_permutations::Int = 1000,
-    tail::Symbol = :right,
-    rng::AbstractRNG = Random.default_rng(),
-)
-    return compare_models!(
-        copy(rsa_data),
-        model_rdms;
-        model_names = model_names,
-        correlation_method = correlation_method,
-        correlation_type = correlation_type,
-        n_permutations = n_permutations,
-        tail = tail,
-        rng = rng,
-    )
-end
-
-function grand_average(rsa_data_list::AbstractVector{<:RsaData}; compute_noise_ceiling::Bool = true)
-    isempty(rsa_data_list) && @minimal_error("Cannot compute grand average with empty RSA data list")
-    length(rsa_data_list) == 1 && return copy(rsa_data_list[1])
-
-    first_rsa = rsa_data_list[1]
-    n_conditions = length(first_rsa.condition_names)
-    n_times = length(first_rsa.times)
-
-    for (idx, rsa_data) in enumerate(rsa_data_list)
-        length(rsa_data.condition_names) != n_conditions &&
-            @minimal_error("RSA data $idx has $(length(rsa_data.condition_names)) conditions, expected $n_conditions")
-        length(rsa_data.times) != n_times && @minimal_error("RSA data $idx has $(length(rsa_data.times)) time points, expected $n_times")
-        rsa_data.dissimilarity_measure != first_rsa.dissimilarity_measure &&
-            @minimal_warning "RSA data $idx uses dissimilarity measure $(rsa_data.dissimilarity_measure), expected $(first_rsa.dissimilarity_measure)"
-    end
-
-    grand_rdm = zeros(Float64, n_times, n_conditions, n_conditions)
-    for rsa_data in rsa_data_list
-        grand_rdm .+= rsa_data.rdm
-    end
-    grand_rdm ./= length(rsa_data_list)
-
-    noise_ceiling = (compute_noise_ceiling && length(rsa_data_list) >= 2) ? EegFun.compute_noise_ceiling(rsa_data_list) : nothing
-
-    return RsaData(
-        "Grand Average",
-        copy(first_rsa.condition_names),
-        copy(first_rsa.times),
-        grand_rdm,
-        first_rsa.dissimilarity_measure,
-        copy(first_rsa.channels),
-        copy(first_rsa.layout),
-        first_rsa.sample_rate;
-        noise_ceiling = noise_ceiling,
-        analysis_info = copy(first_rsa.analysis_info),
-    )
 end

@@ -1,3 +1,9 @@
+# Multi-taper sinusoidal line-noise removal (CleanLine algorithm).
+
+######################################
+######### Types & Constants ##########
+######################################
+
 struct CleanLineThreadBuffer
     data_tapered::Matrix{Float64}
     J::Matrix{ComplexF64}
@@ -8,14 +14,28 @@ struct CleanLineThreadBuffer
     amps::Vector{ComplexF64}
 end
 
-"""
-    cleanline!(dat::ContinuousData; line_frequencies = [50.0, 100.0, 150.0, 200.0],
-               bandwidth::Real = 2.0, sliding_win_length::Real = 4.0, sliding_win_step::Real = 2.0,
-               time_bandwidth::Real = 3.0, k_tapers::Int = 5, p_value::Real = 0.05,
-               pad::Int = 2, channel_selection = channels())
+######################################
+########### User Functions ###########
+######################################
 
-Remove sinusoidal line noise in-place via adaptive sliding-window multi-taper F-test regression
-(Chronux / EEGLAB CleanLine algorithm). Harmonics `>= sample_rate / 2` are automatically skipped.
+"""
+    cleanline(dat::ContinuousData; line_frequencies = [50.0, 100.0, 150.0, 200.0],
+              bandwidth::Real = 2.0, sliding_win_length::Real = 4.0, sliding_win_step::Real = 2.0,
+              time_bandwidth::Real = 3.0, k_tapers::Int = 5, p_value::Real = 0.05,
+              pad::Int = 2, channel_selection = channels()) -> ContinuousData
+    cleanline(dat::AbstractVector{<:ContinuousData}; kwargs...) -> Vector{ContinuousData}
+
+Remove sinusoidal line noise via adaptive sliding-window multi-taper F-test regression
+(Chronux / EEGLAB CleanLine algorithm) without modifying `dat`. Harmonics `>= sample_rate / 2` are automatically skipped.
+"""
+cleanline(dat::ContinuousData, args...; kwargs...) = cleanline!(copy(dat), args...; kwargs...)
+
+cleanline(dat::AbstractVector{<:ContinuousData}, args...; kwargs...) = [cleanline(d, args...; kwargs...) for d in dat]
+
+"""
+    cleanline!(dat::ContinuousData; kwargs...)
+
+In-place mutating version of [`cleanline`](@ref).
 """
 function cleanline!(
     dat::ContinuousData;
@@ -135,14 +155,9 @@ function cleanline!(dat::AbstractVector{<:ContinuousData}; kwargs...)
     return dat
 end
 
-"""
-    cleanline(dat::ContinuousData, args...; kwargs...) -> ContinuousData
-    cleanline(dat::AbstractVector{<:ContinuousData}, args...; kwargs...) -> Vector{ContinuousData}
-
-Non-mutating version of [`cleanline!`](@ref).
-"""
-cleanline(dat::ContinuousData, args...; kwargs...) = cleanline!(copy(dat), args...; kwargs...)
-cleanline(dat::AbstractVector{<:ContinuousData}, args...; kwargs...) = [cleanline(d, args...; kwargs...) for d in dat]
+######################################
+######### Internal Functions #########
+######################################
 
 function _cleanline_channel!(
     data::AbstractVector{<:Real},

@@ -1,23 +1,34 @@
 # Adaptive artifact rejection and channel repair (Jas et al., 2017; NeuroImage, 159, 417-429).
 
+######################################
+######### Types & Constants ##########
+######################################
+
 """
     AutoRejectResult
 
 Result of adaptive artifact rejection and channel repair ([`autoreject`](@ref) / [`autoreject!`](@ref)).
 
 # Fields
-- `thresholds::Dict{Symbol,Float64}`: Learned peak-to-peak amplitude threshold per channel (μV).
-- `mode::Symbol`: Rejection mode (`:local` or `:global`).
-- `consensus_perc::Float64`: Consensus rejection fraction κ (`bad > κ * N` rejects epoch).
-- `max_repair_perc::Float64`: Maximum repair fraction ρ (`bad <= ρ * N` interpolates all; middle band repairs worst `ρ * N`).
-- `channels::Vector{Symbol}`: Analyzed channels.
-- `ptp::Matrix{Float64}`: Peak-to-peak amplitude matrix (`n_epochs × n_channels`).
-- `bad_matrix::BitMatrix`: Channel × epoch threshold violations.
-- `epochs_clean::Vector{Int}`, `epochs_repaired::Vector{Int}`, `epochs_rejected::Vector{Int}`: Global epoch indices.
-- `repaired_channels::OrderedDict{Int,Vector{Symbol}}`, `skipped_channels::OrderedDict{Int,Vector{Symbol}}`: Per-epoch channel tracking.
-- `rejection_info::Vector{EpochRejectionInfo}`: Per-condition `EpochRejectionInfo`.
-- `summary_table::DataFrame`, `channel_table::DataFrame`: Summary and per-channel tables.
-- `n_folds::Int`, `n_candidates::Int`, `seed::Union{Int,Nothing}`, `repair_method::Symbol`: Run configuration.
+- `thresholds::Dict{Symbol,Float64}`: Learned peak-to-peak amplitude threshold per channel (μV)
+- `mode::Symbol`: Rejection mode (`:local` or `:global`)
+- `consensus_perc::Float64`: Consensus rejection fraction κ (`bad > κ * N` rejects epoch)
+- `max_repair_perc::Float64`: Maximum repair fraction ρ (`bad <= ρ * N` interpolates all; middle band repairs worst `ρ * N`)
+- `channels::Vector{Symbol}`: Analyzed channels
+- `ptp::Matrix{Float64}`: Peak-to-peak amplitude matrix (`n_epochs × n_channels`)
+- `bad_matrix::BitMatrix`: Channel × epoch threshold violations
+- `epochs_clean::Vector{Int}`: 1-based global indices of artifact-free epochs
+- `epochs_repaired::Vector{Int}`: 1-based global indices of repaired epochs
+- `epochs_rejected::Vector{Int}`: 1-based global indices of rejected epochs
+- `repaired_channels::OrderedDict{Int,Vector{Symbol}}`: Repaired channel symbols keyed by epoch index
+- `skipped_channels::OrderedDict{Int,Vector{Symbol}}`: Bad channel symbols skipped during repair keyed by epoch index
+- `rejection_info::Vector{EpochRejectionInfo}`: Per-condition `EpochRejectionInfo` records
+- `summary_table::DataFrame`: Overall clean/repaired/rejected epoch summary table
+- `channel_table::DataFrame`: Per-channel threshold and bad-epoch count table
+- `n_folds::Int`: Number of cross-validation folds used
+- `n_candidates::Int`: Number of candidate thresholds evaluated
+- `seed::Union{Int,Nothing}`: Random seed used for cross-validation fold partitioning
+- `repair_method::Symbol`: Spatial interpolation method used (`:spherical_spline` or `:neighbor_interpolation`)
 """
 struct AutoRejectResult
     thresholds::Dict{Symbol,Float64}
@@ -41,259 +52,15 @@ struct AutoRejectResult
     repair_method::Symbol
 end
 
-function Base.show(io::IO, res::AutoRejectResult)
-    n_kept = length(res.epochs_clean) + length(res.epochs_repaired)
-    n_tot = n_kept + length(res.epochs_rejected)
-    retention = n_tot > 0 ? round(100 * n_kept / n_tot; digits = 1) : 0.0
-    th_vals = collect(values(res.thresholds))
-    min_th, med_th, max_th = isempty(th_vals) ? (0.0, 0.0, 0.0) : (minimum(th_vals), median(th_vals), maximum(th_vals))
-
-    print(
-        io,
-        "AutoRejectResult(mode=:$(res.mode), folds=$(res.n_folds), epochs=$(n_kept)/$(n_tot) kept ($(retention)%), ",
-        "repaired=$(length(res.epochs_repaired)), rejected=$(length(res.epochs_rejected)), ",
-        "thresholds=[min=$(round(min_th, digits=1)), med=$(round(med_th, digits=1)), max=$(round(max_th, digits=1))] μV)",
-    )
-end
-
-function _kfold_splits(n_total::Int, n_folds::Int, seed::Union{Int,Nothing})
-    rng = isnothing(seed) ? Random.default_rng() : Random.MersenneTwister(seed)
-    perm = randperm(rng, n_total)
-    folds = Vector{Vector{Int}}(undef, n_folds)
-    fold_size, rem_samples = divrem(n_total, n_folds)
-    start_idx = 1
-    for f = 1:n_folds
-        end_idx = start_idx + fold_size + (f <= rem_samples ? 1 : 0) - 1
-        folds[f] = perm[start_idx:end_idx]
-        start_idx = end_idx + 1
-    end
-    return folds
-end
-
-function _candidate_thresholds(ptp_values::AbstractVector{<:Real}, n_candidates::Int, quant_range::Tuple{Real,Real} = (0.40, 1.0))
-    isempty(ptp_values) && return [100.0]
-    min_p, max_p = extrema(ptp_values)
-    (min_p ≈ max_p || n_candidates <= 1) && return [Float64(max_p > 0 ? max_p * 1.01 : 100.0)]
-
-    q_levels = range(Float64(quant_range[1]), Float64(quant_range[2]); length = max(5, n_candidates - 1))
-    candidates = Float64.(unique(quantile(ptp_values, q_levels)))
-    push!(candidates, Float64(max_p * 1.01))
-    filter!(x -> x > 0 && isfinite(x), candidates)
-    isempty(candidates) && return [Float64(max(100.0, max_p * 1.01))]
-    sort!(candidates)
-    unique!(candidates)
-    return candidates
-end
-
-function _cv_candidate_errors(X::Matrix{Float64}, ptp_col::AbstractVector{Float64}, candidates::Vector{Float64}, folds::Vector{Vector{Int}})
-    n_timepoints, n_epochs = size(X)
-    n_cands = length(candidates)
-    errors = zeros(Float64, n_cands)
-    in_test = falses(n_epochs)
-    W = zeros(Float64, n_epochs, n_cands)
-    M = zeros(Float64, n_timepoints, n_cands)
-    test_med = Vector{Float64}(undef, n_timepoints)
-    med_buf = Vector{Float64}(undef, maximum(length, folds; init = 0))
-    inv_nt = 1.0 / n_timepoints
-
-    for test_idx in folds
-        k_len = length(test_idx)
-        k_len == 0 && continue
-        fill!(in_test, false)
-        in_test[test_idx] .= true
-
-        buf = view(med_buf, 1:k_len)
-        @inbounds for t = 1:n_timepoints
-            for j = 1:k_len
-                buf[j] = X[t, test_idx[j]]
-            end
-            test_med[t] = median!(buf)
-        end
-
-        @inbounds for c = 1:n_cands
-            th = candidates[c]
-            cnt = 0
-            for ep = 1:n_epochs
-                keep = !in_test[ep] && ptp_col[ep] <= th
-                W[ep, c] = ifelse(keep, 1.0, 0.0)
-                cnt += keep
-            end
-            if cnt == 0
-                errors[c] = Inf
-            else
-                inv_cnt = 1.0 / cnt
-                @simd for ep = 1:n_epochs
-                    W[ep, c] *= inv_cnt
-                end
-            end
-        end
-
-        mul!(M, X, W)
-
-        @inbounds for c = 1:n_cands
-            if isfinite(errors[c])
-                s = 0.0
-                @simd for t = 1:n_timepoints
-                    d = M[t, c] - test_med[t]
-                    s += d * d
-                end
-                errors[c] += sqrt(s * inv_nt)
-            end
-        end
-    end
-    return errors
-end
-
-function _best_candidate_index(errors::Vector{Float64}, tol::Float64 = 1e-7)
-    all(isinf, errors) && return length(errors)
-    best_idx = 1
-    min_e = errors[1]
-    @inbounds for i = 2:length(errors)
-        if errors[i] < min_e - tol
-            min_e = errors[i]
-            best_idx = i
-        end
-    end
-    return best_idx
-end
-
-@inline function _ptp_range(col::AbstractVector{<:Real}, sample_indices)
-    mn, mx = extrema(@view col[sample_indices])
-    return Float64(mx - mn)
-end
-
-@inline _copy_sample_slice!(dst::AbstractVector{Float64}, src::AbstractVector{<:Real}, sample_indices) =
-    copyto!(dst, @view src[sample_indices])
-
-function _fill_channel_epochs!(X::Matrix{Float64}, dfs::Vector{DataFrame}, col_idx::Int, sample_indices)
-    for (ep_i, ep_df) in enumerate(dfs)
-        _copy_sample_slice!(view(X, :, ep_i), ep_df[!, col_idx], sample_indices)
-    end
-    return X
-end
-
-function _channel_cv_threshold(
-    all_epoch_dfs::Vector{DataFrame},
-    col_idx::Int,
-    sample_indices,
-    ptp_col::AbstractVector{Float64},
-    n_candidates::Int,
-    candidate_quantiles::Tuple{Real,Real},
-    folds::Vector{Vector{Int}},
-)
-    candidates = _candidate_thresholds(ptp_col, n_candidates, candidate_quantiles)
-    X = Matrix{Float64}(undef, length(sample_indices), length(all_epoch_dfs))
-    _fill_channel_epochs!(X, all_epoch_dfs, col_idx, sample_indices)
-    err = _cv_candidate_errors(X, ptp_col, candidates, folds)
-    return candidates[_best_candidate_index(err)]
-end
-
-function _repair_epochs_cached!(
-    epochs_data::Vector{DataFrame},
-    epochs_to_repair::Vector{Int},
-    repair_matrix::BitMatrix,
-    target_channels::Vector{Symbol},
-    layout::Layout;
-    bad_matrix::BitMatrix = repair_matrix,
-    repair_method::Symbol = :spherical_spline,
-    m::Int = 4,
-    lambda::Real = 1e-5,
-)
-    repaired_channels = OrderedDict{Int,Vector{Symbol}}()
-    isempty(epochs_to_repair) && return repaired_channels
-
-    n_channels = length(target_channels)
-    has_spline_coords = false
-    local U_all::Matrix{Float64}
-    local f_legendre::Vector{Float64}
-
-    if repair_method == :spherical_spline
-        ch_layout_indices = Int[]
-        for ch in target_channels
-            idx = findfirst(==(ch), layout.data.label)
-            isnothing(idx) && break
-            push!(ch_layout_indices, idx)
-        end
-
-        if length(ch_layout_indices) == n_channels &&
-           ((hasproperty(layout.data, :inc) && hasproperty(layout.data, :azi)) || has_3d_coords(layout) || has_2d_coords(layout))
-            try
-                U_all = if (hasproperty(layout.data, :inc) && hasproperty(layout.data, :azi)) || has_3d_coords(layout)
-                    _spherical_coords(layout, target_channels; warn_zero = false)
-                else
-                    first(_spline_geometry(layout.data, ch_layout_indices))
-                end
-                f_legendre = _g_factors(m, 50)
-                has_spline_coords = true
-            catch e
-                @minimal_warning "Failed to construct spherical geometry from layout: $(sprint(showerror, e)). Falling back to neighbor interpolation if available."
-            end
-        else
-            @minimal_warning "Layout is missing electrode coordinates for one or more target channels. Falling back to neighbor interpolation if available."
-        end
-    end
-
-    spline_cache = Dict{Tuple{Vector{Symbol},Vector{Symbol}},Tuple{Vector{Int},Vector{Int},Matrix{Float64}}}()
-
-    for ep_idx in epochs_to_repair
-        bad_idx = findall(@view repair_matrix[ep_idx, :])
-        isempty(bad_idx) && continue
-        all_bad_idx = findall(@view bad_matrix[ep_idx, :])
-
-        pattern = sort(target_channels[bad_idx])
-        all_bad_pattern = sort(target_channels[all_bad_idx])
-        cache_key = (all_bad_pattern, pattern)
-        epoch_df = epochs_data[ep_idx]
-        n_tp = nrow(epoch_df)
-
-        if repair_method == :spherical_spline && has_spline_coords
-            good_idx = setdiff(1:n_channels, all_bad_idx)
-            if length(good_idx) >= 4
-                if !haskey(spline_cache, cache_key)
-                    try
-                        op_T = collect(transpose(_spline_good_to_bad(U_all[good_idx, :], U_all[bad_idx, :], f_legendre, lambda)))
-                        spline_cache[cache_key] = (good_idx, bad_idx, op_T)
-                    catch e
-                        @minimal_warning "Spherical spline operator generation failed for bad channels $pattern: $e. Falling back to neighbor interpolation."
-                    end
-                end
-
-                if haskey(spline_cache, cache_key)
-                    g_idx, b_idx, op_T = spline_cache[cache_key]
-                    good_data = Matrix{Float64}(undef, n_tp, length(g_idx))
-                    for (col_i, g_i) in enumerate(g_idx)
-                        copyto!(view(good_data, :, col_i), epoch_df[!, target_channels[g_i]])
-                    end
-                    repaired_data = good_data * op_T
-                    for (col_i, b_i) in enumerate(b_idx)
-                        epoch_df[!, target_channels[b_i]] = repaired_data[:, col_i]
-                    end
-                    repaired_channels[ep_idx] = pattern
-                    continue
-                end
-            end
-        end
-
-        if isnothing(layout.neighbors) &&
-           ((hasproperty(layout.data, :inc) && hasproperty(layout.data, :azi) && has_valid_coordinates(layout)) || has_3d_coords(layout))
-            get_neighbors_xyz!(layout, 0.5)
-        end
-        if !isnothing(layout.neighbors)
-            plans = _resolve_neighbor_plans(target_channels, pattern, layout.neighbors; bad_channels = all_bad_pattern, log_repairs = false)
-            if !isempty(plans)
-                _apply_neighbor_plans!(epoch_df, plans)
-                repaired_channels[ep_idx] = [bad_ch for (_, bad_ch, _, _, _) in plans]
-            end
-        end
-    end
-    return repaired_channels
-end
+######################################
+########### User Functions ###########
+######################################
 
 """
-    autoreject!(dat::AbstractVector{<:EpochData}; kwargs...) -> AutoRejectResult
-    autoreject!(dat::EpochData; kwargs...) -> AutoRejectResult
+    autoreject(dat::AbstractVector{<:EpochData}; kwargs...) -> Tuple{Vector{EpochData}, AutoRejectResult}
+    autoreject(dat::EpochData; kwargs...) -> Tuple{EpochData, AutoRejectResult}
 
-Adaptive cross-validated artifact rejection and channel repair (Jas et al., 2017), mutating `dat` in-place.
+Adaptive cross-validated artifact rejection and channel repair (Jas et al., 2017), returning `(cleaned_data, result)` without modifying `dat`.
 
 # Keyword Arguments
 - `mode::Symbol = :local`: `:local` (per-channel CV thresholds + repair/reject) or `:global` (single global threshold, reject-only).
@@ -303,6 +70,22 @@ Adaptive cross-validated artifact rejection and channel repair (Jas et al., 2017
 - `consensus_perc::Real = 0.2`, `max_repair_perc::Real = 0.1`: Consensus rejection (κ) and max repair (ρ) channel fractions.
 - `repair_method::Symbol = :spherical_spline`: `:spherical_spline` (`m = 4`, `lambda = 1e-5`) or `:neighbor_interpolation`.
 - `seed::Union{Integer,Nothing} = 42`, `reject::Bool = true`, `verbose::Bool = true`.
+"""
+function autoreject(dat::AbstractVector{<:EpochData}; kwargs...)
+    dat_copy = [copy(d) for d in dat]
+    return dat_copy, autoreject!(dat_copy; kwargs...)
+end
+
+function autoreject(dat::EpochData; kwargs...)
+    dat_copy = copy(dat)
+    return dat_copy, autoreject!(dat_copy; kwargs...)
+end
+
+"""
+    autoreject!(dat::AbstractVector{<:EpochData}; kwargs...) -> AutoRejectResult
+    autoreject!(dat::EpochData; kwargs...) -> AutoRejectResult
+
+In-place mutating version of [`autoreject`](@ref); modifies `dat` in place and returns `AutoRejectResult`.
 """
 function autoreject!(
     dat::AbstractVector{<:EpochData};
@@ -634,18 +417,254 @@ end
 
 autoreject!(dat::EpochData; kwargs...) = autoreject!([dat]; kwargs...)
 
-"""
-    autoreject(dat::AbstractVector{<:EpochData}; kwargs...) -> Tuple{Vector{EpochData}, AutoRejectResult}
-    autoreject(dat::EpochData; kwargs...) -> Tuple{EpochData, AutoRejectResult}
+function Base.show(io::IO, res::AutoRejectResult)
+    n_kept = length(res.epochs_clean) + length(res.epochs_repaired)
+    n_tot = n_kept + length(res.epochs_rejected)
+    retention = n_tot > 0 ? round(100 * n_kept / n_tot; digits = 1) : 0.0
+    th_vals = collect(values(res.thresholds))
+    min_th, med_th, max_th = isempty(th_vals) ? (0.0, 0.0, 0.0) : (minimum(th_vals), median(th_vals), maximum(th_vals))
 
-Non-mutating version of [`autoreject!`](@ref). Returns `(cleaned_data, result)` without modifying `dat`.
-"""
-function autoreject(dat::AbstractVector{<:EpochData}; kwargs...)
-    dat_copy = [copy(d) for d in dat]
-    return dat_copy, autoreject!(dat_copy; kwargs...)
+    print(
+        io,
+        "AutoRejectResult(mode=:$(res.mode), folds=$(res.n_folds), epochs=$(n_kept)/$(n_tot) kept ($(retention)%), ",
+        "repaired=$(length(res.epochs_repaired)), rejected=$(length(res.epochs_rejected)), ",
+        "thresholds=[min=$(round(min_th, digits=1)), med=$(round(med_th, digits=1)), max=$(round(max_th, digits=1))] μV)",
+    )
 end
 
-function autoreject(dat::EpochData; kwargs...)
-    dat_copy = copy(dat)
-    return dat_copy, autoreject!(dat_copy; kwargs...)
+######################################
+######### Internal Functions #########
+######################################
+
+function _kfold_splits(n_total::Int, n_folds::Int, seed::Union{Int,Nothing})
+    rng = isnothing(seed) ? Random.default_rng() : Random.MersenneTwister(seed)
+    perm = randperm(rng, n_total)
+    folds = Vector{Vector{Int}}(undef, n_folds)
+    fold_size, rem_samples = divrem(n_total, n_folds)
+    start_idx = 1
+    for f = 1:n_folds
+        end_idx = start_idx + fold_size + (f <= rem_samples ? 1 : 0) - 1
+        folds[f] = perm[start_idx:end_idx]
+        start_idx = end_idx + 1
+    end
+    return folds
+end
+
+function _candidate_thresholds(ptp_values::AbstractVector{<:Real}, n_candidates::Int, quant_range::Tuple{Real,Real} = (0.40, 1.0))
+    isempty(ptp_values) && return [100.0]
+    min_p, max_p = extrema(ptp_values)
+    (min_p ≈ max_p || n_candidates <= 1) && return [Float64(max_p > 0 ? max_p * 1.01 : 100.0)]
+
+    q_levels = range(Float64(quant_range[1]), Float64(quant_range[2]); length = max(5, n_candidates - 1))
+    candidates = Float64.(unique(quantile(ptp_values, q_levels)))
+    push!(candidates, Float64(max_p * 1.01))
+    filter!(x -> x > 0 && isfinite(x), candidates)
+    isempty(candidates) && return [Float64(max(100.0, max_p * 1.01))]
+    sort!(candidates)
+    unique!(candidates)
+    return candidates
+end
+
+function _cv_candidate_errors(X::Matrix{Float64}, ptp_col::AbstractVector{Float64}, candidates::Vector{Float64}, folds::Vector{Vector{Int}})
+    n_timepoints, n_epochs = size(X)
+    n_cands = length(candidates)
+    errors = zeros(Float64, n_cands)
+    in_test = falses(n_epochs)
+    W = zeros(Float64, n_epochs, n_cands)
+    M = zeros(Float64, n_timepoints, n_cands)
+    test_med = Vector{Float64}(undef, n_timepoints)
+    med_buf = Vector{Float64}(undef, maximum(length, folds; init = 0))
+    inv_nt = 1.0 / n_timepoints
+
+    for test_idx in folds
+        k_len = length(test_idx)
+        k_len == 0 && continue
+        fill!(in_test, false)
+        in_test[test_idx] .= true
+
+        buf = view(med_buf, 1:k_len)
+        @inbounds for t = 1:n_timepoints
+            for j = 1:k_len
+                buf[j] = X[t, test_idx[j]]
+            end
+            test_med[t] = median!(buf)
+        end
+
+        @inbounds for c = 1:n_cands
+            th = candidates[c]
+            cnt = 0
+            for ep = 1:n_epochs
+                keep = !in_test[ep] && ptp_col[ep] <= th
+                W[ep, c] = ifelse(keep, 1.0, 0.0)
+                cnt += keep
+            end
+            if cnt == 0
+                errors[c] = Inf
+            else
+                inv_cnt = 1.0 / cnt
+                @simd for ep = 1:n_epochs
+                    W[ep, c] *= inv_cnt
+                end
+            end
+        end
+
+        mul!(M, X, W)
+
+        @inbounds for c = 1:n_cands
+            if isfinite(errors[c])
+                s = 0.0
+                @simd for t = 1:n_timepoints
+                    d = M[t, c] - test_med[t]
+                    s += d * d
+                end
+                errors[c] += sqrt(s * inv_nt)
+            end
+        end
+    end
+    return errors
+end
+
+function _best_candidate_index(errors::Vector{Float64}, tol::Float64 = 1e-7)
+    all(isinf, errors) && return length(errors)
+    best_idx = 1
+    min_e = errors[1]
+    @inbounds for i = 2:length(errors)
+        if errors[i] < min_e - tol
+            min_e = errors[i]
+            best_idx = i
+        end
+    end
+    return best_idx
+end
+
+@inline function _ptp_range(col::AbstractVector{<:Real}, sample_indices)
+    mn, mx = extrema(@view col[sample_indices])
+    return Float64(mx - mn)
+end
+
+@inline _copy_sample_slice!(dst::AbstractVector{Float64}, src::AbstractVector{<:Real}, sample_indices) =
+    copyto!(dst, @view src[sample_indices])
+
+function _fill_channel_epochs!(X::Matrix{Float64}, dfs::Vector{DataFrame}, col_idx::Int, sample_indices)
+    for (ep_i, ep_df) in enumerate(dfs)
+        _copy_sample_slice!(view(X, :, ep_i), ep_df[!, col_idx], sample_indices)
+    end
+    return X
+end
+
+function _channel_cv_threshold(
+    all_epoch_dfs::Vector{DataFrame},
+    col_idx::Int,
+    sample_indices,
+    ptp_col::AbstractVector{Float64},
+    n_candidates::Int,
+    candidate_quantiles::Tuple{Real,Real},
+    folds::Vector{Vector{Int}},
+)
+    candidates = _candidate_thresholds(ptp_col, n_candidates, candidate_quantiles)
+    X = Matrix{Float64}(undef, length(sample_indices), length(all_epoch_dfs))
+    _fill_channel_epochs!(X, all_epoch_dfs, col_idx, sample_indices)
+    err = _cv_candidate_errors(X, ptp_col, candidates, folds)
+    return candidates[_best_candidate_index(err)]
+end
+
+function _repair_epochs_cached!(
+    epochs_data::Vector{DataFrame},
+    epochs_to_repair::Vector{Int},
+    repair_matrix::BitMatrix,
+    target_channels::Vector{Symbol},
+    layout::Layout;
+    bad_matrix::BitMatrix = repair_matrix,
+    repair_method::Symbol = :spherical_spline,
+    m::Int = 4,
+    lambda::Real = 1e-5,
+)
+    repaired_channels = OrderedDict{Int,Vector{Symbol}}()
+    isempty(epochs_to_repair) && return repaired_channels
+
+    n_channels = length(target_channels)
+    has_spline_coords = false
+    local U_all::Matrix{Float64}
+    local f_legendre::Vector{Float64}
+
+    if repair_method == :spherical_spline
+        ch_layout_indices = Int[]
+        for ch in target_channels
+            idx = findfirst(==(ch), layout.data.label)
+            isnothing(idx) && break
+            push!(ch_layout_indices, idx)
+        end
+
+        if length(ch_layout_indices) == n_channels &&
+           ((hasproperty(layout.data, :inc) && hasproperty(layout.data, :azi)) || has_3d_coords(layout) || has_2d_coords(layout))
+            try
+                U_all = if (hasproperty(layout.data, :inc) && hasproperty(layout.data, :azi)) || has_3d_coords(layout)
+                    _spherical_coords(layout, target_channels; warn_zero = false)
+                else
+                    first(_spline_geometry(layout.data, ch_layout_indices))
+                end
+                f_legendre = _g_factors(m, 50)
+                has_spline_coords = true
+            catch e
+                @minimal_warning "Failed to construct spherical geometry from layout: $(sprint(showerror, e)). Falling back to neighbor interpolation if available."
+            end
+        else
+            @minimal_warning "Layout is missing electrode coordinates for one or more target channels. Falling back to neighbor interpolation if available."
+        end
+    end
+
+    spline_cache = Dict{Tuple{Vector{Symbol},Vector{Symbol}},Tuple{Vector{Int},Vector{Int},Matrix{Float64}}}()
+
+    for ep_idx in epochs_to_repair
+        bad_idx = findall(@view repair_matrix[ep_idx, :])
+        isempty(bad_idx) && continue
+        all_bad_idx = findall(@view bad_matrix[ep_idx, :])
+
+        pattern = sort(target_channels[bad_idx])
+        all_bad_pattern = sort(target_channels[all_bad_idx])
+        cache_key = (all_bad_pattern, pattern)
+        epoch_df = epochs_data[ep_idx]
+        n_tp = nrow(epoch_df)
+
+        if repair_method == :spherical_spline && has_spline_coords
+            good_idx = setdiff(1:n_channels, all_bad_idx)
+            if length(good_idx) >= 4
+                if !haskey(spline_cache, cache_key)
+                    try
+                        op_T = collect(transpose(_spline_good_to_bad(U_all[good_idx, :], U_all[bad_idx, :], f_legendre, lambda)))
+                        spline_cache[cache_key] = (good_idx, bad_idx, op_T)
+                    catch e
+                        @minimal_warning "Spherical spline operator generation failed for bad channels $pattern: $e. Falling back to neighbor interpolation."
+                    end
+                end
+
+                if haskey(spline_cache, cache_key)
+                    g_idx, b_idx, op_T = spline_cache[cache_key]
+                    good_data = Matrix{Float64}(undef, n_tp, length(g_idx))
+                    for (col_i, g_i) in enumerate(g_idx)
+                        copyto!(view(good_data, :, col_i), epoch_df[!, target_channels[g_i]])
+                    end
+                    repaired_data = good_data * op_T
+                    for (col_i, b_i) in enumerate(b_idx)
+                        epoch_df[!, target_channels[b_i]] = repaired_data[:, col_i]
+                    end
+                    repaired_channels[ep_idx] = pattern
+                    continue
+                end
+            end
+        end
+
+        if isnothing(layout.neighbors) &&
+           ((hasproperty(layout.data, :inc) && hasproperty(layout.data, :azi) && has_valid_coordinates(layout)) || has_3d_coords(layout))
+            get_neighbors_xyz!(layout, 0.5)
+        end
+        if !isnothing(layout.neighbors)
+            plans = _resolve_neighbor_plans(target_channels, pattern, layout.neighbors; bad_channels = all_bad_pattern, log_repairs = false)
+            if !isempty(plans)
+                _apply_neighbor_plans!(epoch_df, plans)
+                repaired_channels[ep_idx] = [bad_ch for (_, bad_ch, _, _, _) in plans]
+            end
+        end
+    end
+    return repaired_channels
 end

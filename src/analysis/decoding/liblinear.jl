@@ -1,5 +1,25 @@
 # Low-level LIBLINEAR C bindings and pre-allocated workspaces for MVPA decoding.
 
+######################################
+######### Types & Constants ##########
+######################################
+
+# Pre-allocated LIBLINEAR workspace (with bias = 1.0 node at n_feat + 1 and sentinel -1 at n_feat + 2)
+struct LiblinearWorkspace
+    nodes::Matrix{LIBSVM.LIBLINEAR.FeatureNode}
+    nodeptrs::Vector{Ptr{LIBSVM.LIBLINEAR.FeatureNode}}
+    y_double::Vector{Float64}
+    param::Vector{LIBSVM.LIBLINEAR.Parameter}
+    problem::Vector{LIBSVM.LIBLINEAR.Problem}
+    labels_buf::Vector{Cint}
+    w_buf::Vector{Float64}
+    model_ptr_ref::Base.RefValue{Ptr{LIBSVM.LIBLINEAR.Model}}
+end
+
+######################################
+########### User Functions ###########
+######################################
+
 """
     libsvm_classifier(
         X_train::AbstractMatrix{Float64},
@@ -74,18 +94,6 @@ function libsvm_classifier(
     return y_pred
 end
 
-# Pre-allocated LIBLINEAR workspace (with bias = 1.0 node at n_feat + 1 and sentinel -1 at n_feat + 2)
-struct LiblinearWorkspace
-    nodes::Matrix{LIBSVM.LIBLINEAR.FeatureNode}
-    nodeptrs::Vector{Ptr{LIBSVM.LIBLINEAR.FeatureNode}}
-    y_double::Vector{Float64}
-    param::Vector{LIBSVM.LIBLINEAR.Parameter}
-    problem::Vector{LIBSVM.LIBLINEAR.Problem}
-    labels_buf::Vector{Cint}
-    w_buf::Vector{Float64}
-    model_ptr_ref::Base.RefValue{Ptr{LIBSVM.LIBLINEAR.Model}}
-end
-
 function LiblinearWorkspace(max_features::Int, max_samples::Int, cost::Real, max_classes::Int = 2)
     n_node_rows = max_features + 2
     nodes = Matrix{LIBSVM.LIBLINEAR.FeatureNode}(undef, n_node_rows, max_samples)
@@ -120,6 +128,10 @@ function LiblinearWorkspace(max_features::Int, max_samples::Int, cost::Real, max
     model_ptr_ref = Ref{Ptr{LIBSVM.LIBLINEAR.Model}}(C_NULL)
     return LiblinearWorkspace(nodes, nodeptrs, y_double, param, problem, labels_buf, w_buf, model_ptr_ref)
 end
+
+######################################
+######### Internal Functions #########
+######################################
 
 function _train_prealloc_zero!(ws::LiblinearWorkspace, X_tr::AbstractMatrix{Float64}, y_tr::AbstractVector{Int})
     n_feat, n_samp = size(X_tr)

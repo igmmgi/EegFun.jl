@@ -1,12 +1,17 @@
+# Interactive kurtosis/negentropy projection pursuit ICA optimization demo.
+
+######################################
+########### User Functions ###########
+######################################
+
 """
     signal_example_ica_optimization()
 
 Interactive ICA optimization demo visualizing the sphered 2D search space, projected 1D density,
 kurtosis objective landscape, and single-step / convergent gradient ascent.
 
-## See Also
-- [`signal_example_ica_mixture`](@ref), [`signal_example_ica_separation`](@ref),
-  [`signal_example_ica_geometry`](@ref), [`signal_example_ica_sphering`](@ref)
+# Returns
+- `fig::Figure`: The Makie figure object
 
 # Examples
 ```julia
@@ -14,8 +19,9 @@ using GLMakie, EegFun
 EegFun.signal_example_ica_optimization()
 ```
 
-# Returns
-- `fig::Figure`: The Makie figure object
+# See Also
+- [`signal_example_ica_mixture`](@ref), [`signal_example_ica_separation`](@ref),
+  [`signal_example_ica_geometry`](@ref), [`signal_example_ica_sphering`](@ref)
 """
 function signal_example_ica_optimization()
     _check_interactive_demo_backend("ICA Optimization demo") || return nothing

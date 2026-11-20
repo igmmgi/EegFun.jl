@@ -1,18 +1,24 @@
+# Interactive sliding-kernel time-domain convolution teaching demo.
+
+######################################
+########### User Functions ###########
+######################################
+
 """
     signal_example_convolution()
 
 Interactive discrete convolution demo showing Gaussian, Boxcar, and Morlet wavelet kernels
 sliding across a noisy sinusoid and accumulating the output or amplitude envelope.
 
+# Returns
+- `fig::Figure`: The Makie figure object
+- `axes::Tuple`: `(ax_sig, ax_out)` — the two axis objects
+
 # Examples
 ```julia
 using GLMakie, EegFun
 EegFun.signal_example_convolution()
 ```
-
-# Returns
-- `fig::Figure`: The Makie figure object
-- `axes::Tuple`: `(ax_sig, ax_out)` — the two axis objects
 """
 function signal_example_convolution()
     _check_interactive_demo_backend("Signal Convolution demo") || return nothing

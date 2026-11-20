@@ -1,9 +1,116 @@
+# Polyphase anti-aliased resampling and downsampling for EEG data.
+
+######################################
+######### Types & Constants ##########
+######################################
+
 struct PaddedVector{T,V<:AbstractVector{T}} <: AbstractVector{T}
     data::V
     pad_len::Int
 end
+
+const _ResampleData = Union{ContinuousData,ErpData,EpochData}
+
+######################################
+########### User Functions ###########
+######################################
+
+"""
+    resample(dat::Union{ContinuousData,ErpData,EpochData}, target_rate::Real)
+    resample(data_vec::AbstractVector{<:Union{ContinuousData,ErpData,EpochData}}, target_rate::Real)
+    resample(file_pattern::String, target_rate::Real; input_dir = pwd(), participant_selection = participants(), output_dir = nothing)
+
+Non-mutating or batch JLD2 version of [`resample!`](@ref).
+"""
+function resample(dat::_ResampleData, target_rate::Real)
+    _validate_target_rate(target_rate)
+    return resample!(copy(dat), target_rate)
+end
+
+function resample(data_vec::AbstractVector{<:_ResampleData}, target_rate::Real)
+    _validate_target_rate(target_rate)
+    return [resample(dat, target_rate) for dat in data_vec]
+end
+
+"""
+    resample!(dat::Union{ContinuousData, ErpData, EpochData}, target_rate::Real)
+    resample!(data_vec::AbstractVector{<:_ResampleData}, target_rate::Real)
+
+Resample EEG data in-place to integer `target_rate` (Hz) using polyphase anti-alias filtering.
+"""
+function resample!(dat::Union{ContinuousData,ErpData}, target_rate::Real)
+    target_rate_int = _validate_target_rate(target_rate)
+    if target_rate_int == dat.sample_rate
+        @info "Target rate matches current sample rate, no resampling needed"
+        return dat
+    end
+
+    @info "Resampling data from $(dat.sample_rate) Hz to $(target_rate_int) Hz"
+    dat.data = _resample_dataframe(dat.data, dat.sample_rate, target_rate_int, channel_labels(dat), :trigger, extra_labels(dat))
+    hasproperty(dat.data, :sample) && (dat.data.sample = collect(1:n_samples(dat)))
+
+    dat.sample_rate = target_rate_int
+    dat.analysis_info.sample_rate = Float64(target_rate_int)
+    @info "Resampling complete. New sample rate: $(dat.sample_rate) Hz, $(n_samples(dat)) samples"
+    return dat
+end
+
+function resample!(dat::EpochData, target_rate::Real)
+    target_rate_int = _validate_target_rate(target_rate)
+    if target_rate_int == dat.sample_rate
+        @info "Target rate matches current sample rate, no resampling needed"
+        return dat
+    end
+
+    @info "Resampling $(n_epochs(dat)) epochs from $(dat.sample_rate) Hz to $(target_rate_int) Hz"
+    old_rate = dat.sample_rate
+    rate_spec, rate, h = _prepare_resample_spec(old_rate, target_rate_int)
+    ch_set = Set(channel_labels(dat))
+    ex_set = Set(extra_labels(dat))
+    n_ep = length(dat.data)
+
+    if n_ep > 1
+        Threads.@threads :static for i = 1:n_ep
+            dat.data[i] = _resample_single_epoch(dat.data[i], old_rate, target_rate_int, rate_spec, rate, h, ch_set, ex_set, false)
+        end
+    elseif n_ep == 1
+        dat.data[1] = _resample_single_epoch(dat.data[1], old_rate, target_rate_int, rate_spec, rate, h, ch_set, ex_set, true)
+    end
+
+    dat.sample_rate = target_rate_int
+    dat.analysis_info.sample_rate = Float64(target_rate_int)
+    !isempty(dat.data) && @info "Resampling complete. New sample rate: $(dat.sample_rate) Hz, $(nrow(dat.data[1])) samples per epoch"
+    return dat
+end
+
+function resample!(data_vec::AbstractVector{<:_ResampleData}, target_rate::Real)
+    _validate_target_rate(target_rate)
+    for dat in data_vec
+        resample!(dat, target_rate)
+    end
+    return data_vec
+end
+
+function resample(
+    file_pattern::String,
+    target_rate::Real;
+    input_dir::String = pwd(),
+    participant_selection = participants(),
+    output_dir::Union{String,Nothing} = nothing,
+)
+    _with_batch_logging("resampling", "resample.log", input_dir, output_dir) do ctx
+        @log_call "resample"
+        target_rate_int = _validate_target_rate(target_rate)
+        output_dir = _prepare_output_dir!(ctx, _default_resample_output_dir(input_dir, file_pattern, target_rate_int))
+        process_fn = (input_path, output_path) -> _process_resample_file(input_path, output_path, target_rate_int)
+        batch_process(process_fn, file_pattern, input_dir, output_dir, participant_selection, "Resampling")
+    end
+end
+
 Base.size(p::PaddedVector) = (length(p.data) + 2 * p.pad_len,)
+
 Base.IndexStyle(::Type{<:PaddedVector}) = IndexLinear()
+
 @inline function Base.getindex(p::PaddedVector, i::Int)
     n = length(p.data)
     pad = p.pad_len
@@ -16,7 +123,9 @@ Base.IndexStyle(::Type{<:PaddedVector}) = IndexLinear()
     end
 end
 
-const _ResampleData = Union{ContinuousData,ErpData,EpochData}
+######################################
+######### Internal Functions #########
+######################################
 
 function _validate_target_rate(target_rate::Real)::Int
     (!isfinite(target_rate) || target_rate <= 0 || !isinteger(target_rate)) &&
@@ -183,29 +292,6 @@ function _resample_dataframe(
     )
 end
 
-"""
-    resample!(dat::Union{ContinuousData, ErpData, EpochData}, target_rate::Real)
-    resample!(data_vec::AbstractVector{<:_ResampleData}, target_rate::Real)
-
-Resample EEG data in-place to integer `target_rate` (Hz) using polyphase anti-alias filtering.
-"""
-function resample!(dat::Union{ContinuousData,ErpData}, target_rate::Real)
-    target_rate_int = _validate_target_rate(target_rate)
-    if target_rate_int == dat.sample_rate
-        @info "Target rate matches current sample rate, no resampling needed"
-        return dat
-    end
-
-    @info "Resampling data from $(dat.sample_rate) Hz to $(target_rate_int) Hz"
-    dat.data = _resample_dataframe(dat.data, dat.sample_rate, target_rate_int, channel_labels(dat), :trigger, extra_labels(dat))
-    hasproperty(dat.data, :sample) && (dat.data.sample = collect(1:n_samples(dat)))
-
-    dat.sample_rate = target_rate_int
-    dat.analysis_info.sample_rate = Float64(target_rate_int)
-    @info "Resampling complete. New sample rate: $(dat.sample_rate) Hz, $(n_samples(dat)) samples"
-    return dat
-end
-
 function _resample_single_epoch(
     epoch::DataFrame,
     old_rate::Real,
@@ -226,61 +312,8 @@ function _resample_single_epoch(
     return new_df
 end
 
-function resample!(dat::EpochData, target_rate::Real)
-    target_rate_int = _validate_target_rate(target_rate)
-    if target_rate_int == dat.sample_rate
-        @info "Target rate matches current sample rate, no resampling needed"
-        return dat
-    end
-
-    @info "Resampling $(n_epochs(dat)) epochs from $(dat.sample_rate) Hz to $(target_rate_int) Hz"
-    old_rate = dat.sample_rate
-    rate_spec, rate, h = _prepare_resample_spec(old_rate, target_rate_int)
-    ch_set = Set(channel_labels(dat))
-    ex_set = Set(extra_labels(dat))
-    n_ep = length(dat.data)
-
-    if n_ep > 1
-        Threads.@threads :static for i = 1:n_ep
-            dat.data[i] = _resample_single_epoch(dat.data[i], old_rate, target_rate_int, rate_spec, rate, h, ch_set, ex_set, false)
-        end
-    elseif n_ep == 1
-        dat.data[1] = _resample_single_epoch(dat.data[1], old_rate, target_rate_int, rate_spec, rate, h, ch_set, ex_set, true)
-    end
-
-    dat.sample_rate = target_rate_int
-    dat.analysis_info.sample_rate = Float64(target_rate_int)
-    !isempty(dat.data) && @info "Resampling complete. New sample rate: $(dat.sample_rate) Hz, $(nrow(dat.data[1])) samples per epoch"
-    return dat
-end
-
-"""
-    resample(dat::Union{ContinuousData,ErpData,EpochData}, target_rate::Real)
-    resample(data_vec::AbstractVector{<:Union{ContinuousData,ErpData,EpochData}}, target_rate::Real)
-    resample(file_pattern::String, target_rate::Real; input_dir = pwd(), participant_selection = participants(), output_dir = nothing)
-
-Non-mutating or batch JLD2 version of [`resample!`](@ref).
-"""
-function resample(dat::_ResampleData, target_rate::Real)
-    _validate_target_rate(target_rate)
-    return resample!(copy(dat), target_rate)
-end
-
-function resample(data_vec::AbstractVector{<:_ResampleData}, target_rate::Real)
-    _validate_target_rate(target_rate)
-    return [resample(dat, target_rate) for dat in data_vec]
-end
-
-function resample!(data_vec::AbstractVector{<:_ResampleData}, target_rate::Real)
-    _validate_target_rate(target_rate)
-    for dat in data_vec
-        resample!(dat, target_rate)
-    end
-    return data_vec
-end
-
 _default_resample_output_dir(input_dir::String, pattern::String, target_rate::Real) =
-    joinpath(input_dir, "resampled_by_$(target_rate)_$(clean_pattern(pattern))")
+    joinpath(input_dir, "resampled_by_$(target_rate)_$(_clean_pattern(pattern))")
 
 function _process_resample_file(filepath::String, output_path::String, target_rate::Real)
     filename = basename(filepath)
@@ -297,20 +330,4 @@ function _process_resample_file(filepath::String, output_path::String, target_ra
     new_rate = is_vec ? first(resampled_data).sample_rate : resampled_data.sample_rate
     jldsave(output_path; data = resampled_data, format_version = EEGFUN_FORMAT_VERSION)
     return BatchResult(true, filename, "Resampled from $old_rate Hz to $new_rate Hz (target rate: $target_rate)")
-end
-
-function resample(
-    file_pattern::String,
-    target_rate::Real;
-    input_dir::String = pwd(),
-    participant_selection = participants(),
-    output_dir::Union{String,Nothing} = nothing,
-)
-    _with_batch_logging("resampling", "resample.log", input_dir, output_dir) do ctx
-        @log_call "resample"
-        target_rate_int = _validate_target_rate(target_rate)
-        output_dir = _prepare_output_dir!(ctx, _default_resample_output_dir(input_dir, file_pattern, target_rate_int))
-        process_fn = (input_path, output_path) -> _process_resample_file(input_path, output_path, target_rate_int)
-        batch_process(process_fn, file_pattern, input_dir, output_dir, participant_selection, "Resampling")
-    end
 end

@@ -1,3 +1,9 @@
+# Data structures for MVPA decoding parameters, results, and group statistics.
+
+######################################
+######### Types & Constants ##########
+######################################
+
 """
     DecodingParameters
 
@@ -59,6 +65,10 @@ mutable struct DecodedData <: EegFunData
         return new(file, condition_names, times, average_score, channels, parameters, stderror, confusion_matrix, raw_predictions)
     end
 end
+
+######################################
+########### User Functions ###########
+######################################
 
 function Base.copy(decoded::DecodedData)::DecodedData
     return DecodedData(

@@ -1,5 +1,9 @@
 # Plotting functions for Time-Frequency statistical test results.
 
+######################################
+########### User Functions ###########
+######################################
+
 """
     plot_tf_stats(result::TFStatsResult;
                   layout::Union{Symbol, PlotLayout} = :grid,
@@ -260,7 +264,9 @@ function plot_tf_stats(
     return (fig = fig, axes = axes)
 end
 
-# === Internal helpers ===
+######################################
+######### Internal Functions #########
+######################################
 
 function _tf_masked_copy(data_mat::Matrix{Float64}, sig_mask::AbstractMatrix{Bool})
     out = similar(data_mat)

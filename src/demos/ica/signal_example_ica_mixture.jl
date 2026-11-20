@@ -1,19 +1,25 @@
+# Interactive linear source mixing (cocktail-party problem) ICA demo.
+
+######################################
+########### User Functions ###########
+######################################
+
 """
     signal_example_ica_mixture()
 
 Interactive demonstration of linear signal mixing in EEG, showing how a single scalp electrode
 records a weighted sum of an underlying brain oscillation and a blink artifact.
 
-## See Also
-- [`signal_example_ica_separation`](@ref), [`signal_example_ica_geometry`](@ref),
-  [`signal_example_ica_clt`](@ref), [`signal_example_ica_sphering`](@ref),
-  [`signal_example_ica_optimization`](@ref)
-
 # Examples
 ```julia
 using GLMakie, EegFun
 EegFun.signal_example_ica_mixture()
 ```
+
+# See Also
+- [`signal_example_ica_separation`](@ref), [`signal_example_ica_geometry`](@ref),
+  [`signal_example_ica_clt`](@ref), [`signal_example_ica_sphering`](@ref),
+  [`signal_example_ica_optimization`](@ref)
 """
 function signal_example_ica_mixture()
     _check_interactive_demo_backend("ICA Mixture demo") || return nothing

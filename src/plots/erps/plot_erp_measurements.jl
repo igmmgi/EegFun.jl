@@ -1,3 +1,9 @@
+# Diagnostic ERP waveform overlays visualizing measured peaks, latencies, and areas.
+
+######################################
+########### User Functions ###########
+######################################
+
 """
     plot_erp_measurements(erp_data, analysis_type;
                           analysis_interval = nothing,
@@ -35,31 +41,6 @@ plot_erp_measurements("erps_final.jld2", "max_peak_amplitude", analysis_interval
 ```
 """
 plot_erp_measurements(erp::ErpData, analysis_type::String; kwargs...) = plot_erp_measurements([erp], analysis_type; kwargs...)
-
-function plot_erp_measurements(
-    filepath::String,
-    analysis_type::String;
-    input_dir::String = pwd(),
-    participant_selection = participants(),
-    kwargs...,
-)
-    if endswith(filepath, ".jld2")
-        resolved = _resolve_input_filepath(filepath, input_dir)
-        data = read_data(resolved)
-        isnothing(data) && @minimal_error "No data found in file: $resolved"
-        return plot_erp_measurements(data, analysis_type; kwargs...)
-    end
-
-    files = _require_batch_files(filepath, input_dir, participant_selection)
-    results = NamedTuple[]
-    for file in files
-        @info "Plotting: $file"
-        data = read_data(joinpath(input_dir, file))
-        isnothing(data) && continue
-        push!(results, plot_erp_measurements(data, analysis_type; kwargs...))
-    end
-    return results
-end
 
 function plot_erp_measurements(
     erp_datasets::AbstractVector{<:ErpData},
@@ -177,6 +158,35 @@ function plot_erp_measurements(
 
     return (fig = fig, axes = axes)
 end
+
+function plot_erp_measurements(
+    filepath::String,
+    analysis_type::String;
+    input_dir::String = pwd(),
+    participant_selection = participants(),
+    kwargs...,
+)
+    if endswith(filepath, ".jld2")
+        resolved = _resolve_input_filepath(filepath, input_dir)
+        data = read_data(resolved)
+        isnothing(data) && @minimal_error "No data found in file: $resolved"
+        return plot_erp_measurements(data, analysis_type; kwargs...)
+    end
+
+    files = _require_batch_files(filepath, input_dir, participant_selection)
+    results = NamedTuple[]
+    for file in files
+        @info "Plotting: $file"
+        data = read_data(joinpath(input_dir, file))
+        isnothing(data) && continue
+        push!(results, plot_erp_measurements(data, analysis_type; kwargs...))
+    end
+    return results
+end
+
+######################################
+######### Internal Functions #########
+######################################
 
 function _build_plot_line_lookup(line_refs, axes)
     plot_lines = [Dict{Tuple{Int,Symbol},Any}() for _ in axes]

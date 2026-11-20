@@ -1,3 +1,9 @@
+# Data structures for Representational Similarity Analysis (RDMs and noise ceilings).
+
+######################################
+######### Types & Constants ##########
+######################################
+
 """
     NoiseCeiling <: EegFunData
 
@@ -12,22 +18,6 @@ struct NoiseCeiling <: EegFunData
     lower_bound::Vector{Float64}
     upper_bound::Vector{Float64}
     n_participants::Int
-end
-
-Base.copy(nc::NoiseCeiling)::NoiseCeiling = NoiseCeiling(copy(nc.lower_bound), copy(nc.upper_bound), nc.n_participants)
-
-function _bound_range_str(v::Vector{Float64}; include_mean::Bool = false)
-    isempty(v) && return "N/A"
-    lo, hi = round.(extrema(v); digits = 3)
-    return include_mean ? "$(round(mean(v); digits = 3)) (range: $lo-$hi)" : "$lo to $hi"
-end
-
-function Base.show(io::IO, nc::NoiseCeiling)
-    println(io, "NoiseCeiling:")
-    println(io, "  Participants: $(nc.n_participants)")
-    println(io, "  Time points: $(length(nc.lower_bound))")
-    println(io, "  Lower bound: $(_bound_range_str(nc.lower_bound))")
-    println(io, "  Upper bound: $(_bound_range_str(nc.upper_bound))")
 end
 
 """
@@ -66,6 +56,10 @@ mutable struct RsaData <: EegFunData
     analysis_info::AnalysisInfo
 end
 
+######################################
+########### User Functions ###########
+######################################
+
 function RsaData(
     file::String,
     condition_names::Vector{String},
@@ -96,6 +90,16 @@ function RsaData(
         noise_ceiling,
         copy(analysis_info),
     )
+end
+
+Base.copy(nc::NoiseCeiling)::NoiseCeiling = NoiseCeiling(copy(nc.lower_bound), copy(nc.upper_bound), nc.n_participants)
+
+function Base.show(io::IO, nc::NoiseCeiling)
+    println(io, "NoiseCeiling:")
+    println(io, "  Participants: $(nc.n_participants)")
+    println(io, "  Time points: $(length(nc.lower_bound))")
+    println(io, "  Lower bound: $(_bound_range_str(nc.lower_bound))")
+    println(io, "  Upper bound: $(_bound_range_str(nc.upper_bound))")
 end
 
 function Base.copy(rsa::RsaData)::RsaData
@@ -146,4 +150,14 @@ function Base.show(io::IO, rsa::RsaData)
         println(io, "    - Lower: $(_bound_range_str(nc.lower_bound; include_mean = true))")
         println(io, "    - Upper: $(_bound_range_str(nc.upper_bound; include_mean = true))")
     end
+end
+
+######################################
+######### Internal Functions #########
+######################################
+
+function _bound_range_str(v::Vector{Float64}; include_mean::Bool = false)
+    isempty(v) && return "N/A"
+    lo, hi = round.(extrema(v); digits = 3)
+    return include_mean ? "$(round(mean(v); digits = 3)) (range: $lo-$hi)" : "$lo to $hi"
 end

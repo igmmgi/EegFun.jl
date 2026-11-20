@@ -1,30 +1,8 @@
-function _welch_channel_epochs!(
-    avg_power::Vector{Float64},
-    dfs::Vector{DataFrame},
-    channel::Symbol,
-    cfg::DSP.Periodograms.WelchConfig,
-    sig_buf::Vector{Float64},
-)
-    fill!(avg_power, 0.0)
-    n_ep = length(dfs)
-    for ep_idx = 1:n_ep
-        col = dfs[ep_idx][!, channel]
-        pgram = if col isa Vector{Float64}
-            DSP.welch_pgram(col, cfg)
-        else
-            @inbounds for i in eachindex(sig_buf)
-                sig_buf[i] = Float64(col[i])
-            end
-            DSP.welch_pgram(sig_buf, cfg)
-        end
-        p = DSP.power(pgram)
-        @inbounds @simd for i in eachindex(avg_power)
-            avg_power[i] += p[i]
-        end
-    end
-    avg_power .*= (1.0 / n_ep)
-    return avg_power
-end
+# Welch, FFT, and multitaper power spectral density estimation.
+
+######################################
+########### User Functions ###########
+######################################
 
 """
     freq_spectrum(dat::Union{ContinuousData,ErpData,EpochData};
@@ -134,4 +112,36 @@ function freq_spectrum(
         subset_layout(dat.layout; channel_selection = channels(selected_channels))
     cond_num = hasproperty(dat, :condition) ? dat.condition : 0
     return SpectrumData(dat.file, cond_num, condition_name(dat), spectrum_df, sub_layout, dat.sample_rate, :welch, copy(dat.analysis_info))
+end
+
+######################################
+######### Internal Functions #########
+######################################
+
+function _welch_channel_epochs!(
+    avg_power::Vector{Float64},
+    dfs::Vector{DataFrame},
+    channel::Symbol,
+    cfg::DSP.Periodograms.WelchConfig,
+    sig_buf::Vector{Float64},
+)
+    fill!(avg_power, 0.0)
+    n_ep = length(dfs)
+    for ep_idx = 1:n_ep
+        col = dfs[ep_idx][!, channel]
+        pgram = if col isa Vector{Float64}
+            DSP.welch_pgram(col, cfg)
+        else
+            @inbounds for i in eachindex(sig_buf)
+                sig_buf[i] = Float64(col[i])
+            end
+            DSP.welch_pgram(sig_buf, cfg)
+        end
+        p = DSP.power(pgram)
+        @inbounds @simd for i in eachindex(avg_power)
+            avg_power[i] += p[i]
+        end
+    end
+    avg_power .*= (1.0 / n_ep)
+    return avg_power
 end

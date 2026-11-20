@@ -1,237 +1,32 @@
-function _robust_z(x::AbstractVector{<:Real})
-    n = length(x)
-    n == 0 && return Float64[]
-    out = zeros(Float64, n)
-    finite_vals = Float64[Float64(v) for v in x if isfinite(v)]
-    length(finite_vals) < 2 && return out
+# Automated EOG, ECG, line-noise, and focal-kurtosis ICA component identification.
 
-    med = median(finite_vals)
-    mad = median(abs.(finite_vals .- med))
-    s = 1.482602218505602 * mad
-    if s > eps(Float64)
-        @inbounds for i = 1:n
-            v = Float64(x[i])
-            out[i] = isfinite(v) ? (v - med) / s : 0.0
-        end
-        return out
-    end
-    s_std = std(finite_vals)
-    if s_std > eps(Float64)
-        m = mean(finite_vals)
-        @inbounds for i = 1:n
-            v = Float64(x[i])
-            out[i] = isfinite(v) ? (v - m) / s_std : 0.0
-        end
-    end
-    return out
+######################################
+######### Types & Constants ##########
+######################################
+
+"""
+    ArtifactComponents
+
+Container of identified ICA artifact component indices (`eog`, `ecg`, `line_noise`, `channel_noise`, `manual`).
+
+# Fields
+- `eog::Dict{Symbol,Vector{Int}}`: Identified ocular component indices keyed by `:vEOG` and `:hEOG`
+- `ecg::Vector{Int}`: Identified cardiac artifact component indices
+- `line_noise::Vector{Int}`: Identified power-line noise component indices
+- `channel_noise::Vector{Int}`: Identified focal single-channel noise component indices
+- `manual::Vector{Int}`: Manually flagged component indices
+"""
+struct ArtifactComponents
+    eog::Dict{Symbol,Vector{Int}}
+    ecg::Vector{Int}
+    line_noise::Vector{Int}
+    channel_noise::Vector{Int}
+    manual::Vector{Int}
 end
 
-function _zscore_for_remaining(corr_vector::AbstractVector{<:Real}, remaining_indices::AbstractVector{Int})
-    z = fill(NaN, length(corr_vector))
-    if length(remaining_indices) >= 2
-        z[remaining_indices] = _robust_z(corr_vector[remaining_indices])
-    elseif length(remaining_indices) == 1
-        z[remaining_indices] .= 0.0
-    end
-    return z
-end
-
-function _calculate_eog_correlations(components_t::Matrix{Float64}, eog_signal::AbstractVector{<:Real})
-    n_components = size(components_t, 2)
-    out = Vector{Float64}(undef, n_components)
-    for comp_idx = 1:n_components
-        c = abs(cor(view(components_t, :, comp_idx), eog_signal))
-        out[comp_idx] = isfinite(c) ? c : 0.0
-    end
-    return out
-end
-
-function _calculate_spatial_correlations(
-    remaining_components::Vector{Int},
-    primary_components::Vector{Int},
-    mixing_matrix::Matrix{Float64},
-    n_components::Int,
-)
-    spatial_corrs = fill(NaN, n_components)
-    (isempty(remaining_components) || isempty(primary_components)) && return spatial_corrs
-
-    for comp_idx in remaining_components
-        comp_topo = view(mixing_matrix, :, comp_idx)
-        max_corr = 0.0
-        for primary_comp in primary_components
-            c = abs(cor(comp_topo, view(mixing_matrix, :, primary_comp)))
-            (isfinite(c) && c > max_corr) && (max_corr = c)
-        end
-        spatial_corrs[comp_idx] = max_corr
-    end
-    return spatial_corrs
-end
-
-function _max_lagged_corr(x_norm::AbstractVector{Float64}, y_norm::AbstractVector{Float64}, lags)
-    n = length(x_norm)
-    best = 0.0
-    for lag in lags
-        a = max(1, 1 - lag)
-        b = min(n, n - lag)
-        a > b && continue
-        c = abs(dot(view(x_norm, a:b), view(y_norm, (a+lag):(b+lag))))
-        c > best && (best = c)
-    end
-    return best
-end
-
-function _normalize_unit_l2(sig::AbstractVector{Float64})
-    n = length(sig)
-    denom = std(sig, corrected = false) * sqrt(n)
-    return denom > eps(Float64) ? (sig .- mean(sig)) ./ denom : zeros(Float64, n)
-end
-
-function _calculate_lagged_correlations(
-    remaining_components::Vector{Int},
-    primary_components::Vector{Int},
-    components_t::Matrix{Float64},
-    max_lag_samples::Int,
-    lag_step::Int,
-)
-    n_samples, n_components = size(components_t)
-    lagged_corrs = fill(NaN, n_components)
-    (isempty(remaining_components) || isempty(primary_components)) && return lagged_corrs
-
-    lags = (-max_lag_samples):lag_step:max_lag_samples
-    primary_norms = [_normalize_unit_l2(view(components_t, :, p_idx)) for p_idx in primary_components]
-
-    Threads.@threads for comp_idx in remaining_components
-        sig = view(components_t, :, comp_idx)
-        denom = std(sig, corrected = false) * sqrt(n_samples)
-        if denom > eps(Float64)
-            x_norm = (sig .- mean(sig)) ./ denom
-            max_c = 0.0
-            for y_norm in primary_norms
-                c = _max_lagged_corr(x_norm, y_norm, lags)
-                c > max_c && (max_c = c)
-            end
-            lagged_corrs[comp_idx] = max_c
-        else
-            lagged_corrs[comp_idx] = 0.0
-        end
-    end
-    return lagged_corrs
-end
-
-function _identify_secondary_components(
-    remaining_components::Vector{Int},
-    corr_vector::Vector{Float64},
-    corr_z_vector::Vector{Float64},
-    min_corr_threshold::Real,
-    z_threshold::Real,
-)
-    return [c for c in remaining_components if corr_vector[c] > min_corr_threshold && corr_z_vector[c] > z_threshold]
-end
-
-function _empty_eog_metrics()
-    return DataFrame(
-        :Component => Int[],
-        :vEOG_corr => Float64[],
-        :vEOG_zscore => Float64[],
-        :vEOG_spatial_corr => Float64[],
-        :vEOG_spatial_corr_z => Float64[],
-        :vEOG_temporal_corr => Float64[],
-        :vEOG_temporal_corr_z => Float64[],
-        :hEOG_corr => Float64[],
-        :hEOG_zscore => Float64[],
-        :hEOG_spatial_corr => Float64[],
-        :hEOG_spatial_corr_z => Float64[],
-        :hEOG_temporal_corr => Float64[],
-        :hEOG_temporal_corr_z => Float64[],
-    )
-end
-
-function _empty_ecg_metrics()
-    return DataFrame(
-        :Component => Int[],
-        :num_peaks => Int[],
-        :num_valid_ibis => Int[],
-        :mean_ibi_s => Float64[],
-        :std_ibi_s => Float64[],
-        :peak_ratio => Float64[],
-        :heart_rate_bpm => Float64[],
-    )
-end
-
-function _empty_line_noise_metrics()
-    return DataFrame(
-        :Component => Int[],
-        :line_power => Float64[],
-        :flanking_power => Float64[],
-        :power_ratio => Float64[],
-        :harmonic_ratio => Float64[],
-        :power_ratio_zscore => Float64[],
-    )
-end
-
-function _resolve_artifact_samples(
-    dat::ContinuousData,
-    sample_selection,
-    interval_selection::Interval,
-    precomputed_samples::Union{Nothing,Vector{Int}},
-)
-    !isnothing(precomputed_samples) && return precomputed_samples
-    return get_selected_samples(dat, _combine_interval_sample(interval_selection, sample_selection))
-end
-
-function _resolve_artifact_components(
-    dat::ContinuousData,
-    ica::InfoIca,
-    selected_samples::Vector{Int},
-    precomputed_components::Union{Nothing,Tuple{Matrix{Float64},Int}},
-)
-    return !isnothing(precomputed_components) ? precomputed_components : _prepare_ica_data_matrix(dat, ica, selected_samples)
-end
-
-function _evaluate_eog_channel(
-    dat::ContinuousData,
-    selected_samples::Vector{Int},
-    eog_channel::Symbol,
-    has_eog::Bool,
-    components_t::Matrix{Float64},
-    mixing::Matrix{Float64},
-    n_components::Int,
-    min_correlation::Real,
-    z_threshold::Real,
-    two_step::Bool,
-    max_lag_samples::Int,
-    lag_step::Int,
-)
-    corrs = fill(NaN, n_components)
-    corr_z = fill(NaN, n_components)
-    spatial_corr = fill(NaN, n_components)
-    spatial_corr_z = fill(NaN, n_components)
-    temporal_corr = fill(NaN, n_components)
-    temporal_corr_z = fill(NaN, n_components)
-
-    has_eog || return Int[], corrs, corr_z, spatial_corr, spatial_corr_z, temporal_corr, temporal_corr_z
-
-    eog_sig = dat.data[selected_samples, eog_channel]
-    corrs = _calculate_eog_correlations(components_t, eog_sig)
-    corr_z = _robust_z(corrs)
-    primary = findall((corr_z .> z_threshold) .& (corrs .> min_correlation))
-
-    identified = primary
-    if two_step && !isempty(primary)
-        remaining = setdiff(1:n_components, primary)
-        spatial_corr = _calculate_spatial_correlations(remaining, primary, mixing, n_components)
-        temporal_corr = _calculate_lagged_correlations(remaining, primary, components_t, max_lag_samples, lag_step)
-        spatial_corr_z = _zscore_for_remaining(spatial_corr, remaining)
-        temporal_corr_z = _zscore_for_remaining(temporal_corr, remaining)
-
-        sec_spat = _identify_secondary_components(remaining, spatial_corr, spatial_corr_z, min_correlation, z_threshold)
-        sec_temp = _identify_secondary_components(remaining, temporal_corr, temporal_corr_z, min_correlation, z_threshold)
-        identified = union(primary, sec_spat, sec_temp)
-    end
-
-    sort!(identified)
-    return identified, corrs, corr_z, spatial_corr, spatial_corr_z, temporal_corr, temporal_corr_z
-end
+######################################
+########### User Functions ###########
+######################################
 
 """
     identify_eog_components(dat::ContinuousData, ica::InfoIca;
@@ -330,86 +125,6 @@ function identify_eog_components(
     )
 
     return Dict{Symbol,Vector{Int}}(:vEOG => identified_vEOG, :hEOG => identified_hEOG), metrics_df
-end
-
-function _find_unidirectional_peaks(
-    data::AbstractVector;
-    min_prominence_std::Real = 3.0,
-    window_size::Int = 1,
-    min_distance::Int = 1,
-    sample_coords::Union{Nothing,AbstractVector{<:Integer}} = nothing,
-)
-    n = length(data)
-    n < 2 * window_size + 1 && return Int[]
-    peaks = Int[]
-    m = mean(data)
-    s = std(data)
-    thresh = (s ≈ 0) ? m : m + min_prominence_std * s
-
-    @inbounds for i = (window_size+1):(n-window_size)
-        val = data[i]
-        if val > thresh
-            is_p = true
-            for j = (i-window_size):(i-1)
-                if val <= data[j]
-                    is_p = false
-                    break
-                end
-            end
-            if is_p
-                for j = (i+1):(i+window_size)
-                    if val <= data[j]
-                        is_p = false
-                        break
-                    end
-                end
-            end
-            is_p && push!(peaks, i)
-        end
-    end
-
-    if min_distance > 1 && length(peaks) > 1
-        coords = isnothing(sample_coords) ? peaks : [Int(sample_coords[p]) for p in peaks]
-        order = sortperm(peaks; by = p -> data[p], rev = true)
-        suppressed = falses(length(peaks))
-        for k in order
-            suppressed[k] && continue
-            c_k = coords[k]
-            lo = searchsortedfirst(coords, c_k - min_distance + 1)
-            hi = searchsortedlast(coords, c_k + min_distance - 1)
-            for j = lo:hi
-                j != k && (suppressed[j] = true)
-            end
-        end
-        peaks = [peaks[j] for j in eachindex(peaks) if !suppressed[j]]
-    end
-
-    return peaks
-end
-
-function _calculate_ibi_metrics(peak_indices::Vector{Int}, sample_rate::Real, min_ibi_s::Real, max_ibi_s::Real)
-    num_peaks = length(peak_indices)
-    num_peaks < 2 && return 0, NaN, NaN, 0.0
-
-    inv_fs = 1.0 / Float64(sample_rate)
-    valid_ibis = Float64[]
-    @inbounds for i = 1:(num_peaks-1)
-        ibi = (peak_indices[i+1] - peak_indices[i]) * inv_fs
-        (min_ibi_s <= ibi <= max_ibi_s) && push!(valid_ibis, ibi)
-    end
-
-    num_valid_ibis = length(valid_ibis)
-    peak_ratio = num_valid_ibis / (num_peaks - 1)
-
-    if num_valid_ibis > 1
-        mean_ibi, std_ibi = mean(valid_ibis), std(valid_ibis)
-    elseif num_valid_ibis == 1
-        mean_ibi, std_ibi = valid_ibis[1], 0.0
-    else
-        mean_ibi, std_ibi = NaN, NaN
-    end
-
-    return num_valid_ibis, mean_ibi, std_ibi, peak_ratio
 end
 
 """
@@ -649,19 +364,6 @@ function identify_line_noise_components(
     return line_noise_comps, metrics_df
 end
 
-"""
-    ArtifactComponents
-
-Container of identified ICA artifact component indices (`eog`, `ecg`, `line_noise`, `channel_noise`, `manual`).
-"""
-struct ArtifactComponents
-    eog::Dict{Symbol,Vector{Int}}
-    ecg::Vector{Int}
-    line_noise::Vector{Int}
-    channel_noise::Vector{Int}
-    manual::Vector{Int}
-end
-
 ArtifactComponents(eog::Dict{Symbol,Vector{Int}}, ecg::Vector{Int}, line_noise::Vector{Int}, channel_noise::Vector{Int}) =
     ArtifactComponents(eog, ecg, line_noise, channel_noise, Int[])
 
@@ -692,23 +394,6 @@ function get_all_ica_components(artifacts::ArtifactComponents)
 end
 
 components(artifacts::ArtifactComponents) = components(get_all_ica_components(artifacts))
-
-function Base.show(io::IO, artifacts::ArtifactComponents)
-    all_comps = get_all_ica_components(artifacts)
-    print(io, "ArtifactComponents($(length(all_comps)) components: $(all_comps))")
-end
-
-function Base.show(io::IO, ::MIME"text/plain", artifacts::ArtifactComponents)
-    all_comps = get_all_ica_components(artifacts)
-    println(io, "ICA Artifact Components")
-    println(io, "  vEOG: $(get(artifacts.eog, :vEOG, Int[]))")
-    println(io, "  hEOG: $(get(artifacts.eog, :hEOG, Int[]))")
-    println(io, "  ECG: $(artifacts.ecg)")
-    println(io, "  Line Noise: $(artifacts.line_noise)")
-    println(io, "  Channel Noise: $(artifacts.channel_noise)")
-    !isempty(artifacts.manual) && println(io, "  Manual: $(artifacts.manual)")
-    print(io, "  All: $all_comps")
-end
 
 """
     identify_components(dat::ContinuousData, ica::InfoIca; method = :correlation,
@@ -787,4 +472,340 @@ function identify_components(
         :channel_noise_metrics => channel_noise_metrics_df,
     )
     return artifacts, metrics
+end
+
+function Base.show(io::IO, artifacts::ArtifactComponents)
+    all_comps = get_all_ica_components(artifacts)
+    print(io, "ArtifactComponents($(length(all_comps)) components: $(all_comps))")
+end
+
+function Base.show(io::IO, ::MIME"text/plain", artifacts::ArtifactComponents)
+    all_comps = get_all_ica_components(artifacts)
+    println(io, "ICA Artifact Components")
+    println(io, "  vEOG: $(get(artifacts.eog, :vEOG, Int[]))")
+    println(io, "  hEOG: $(get(artifacts.eog, :hEOG, Int[]))")
+    println(io, "  ECG: $(artifacts.ecg)")
+    println(io, "  Line Noise: $(artifacts.line_noise)")
+    println(io, "  Channel Noise: $(artifacts.channel_noise)")
+    !isempty(artifacts.manual) && println(io, "  Manual: $(artifacts.manual)")
+    print(io, "  All: $all_comps")
+end
+
+######################################
+######### Internal Functions #########
+######################################
+
+function _robust_z(x::AbstractVector{<:Real})
+    n = length(x)
+    n == 0 && return Float64[]
+    out = zeros(Float64, n)
+    finite_vals = Float64[Float64(v) for v in x if isfinite(v)]
+    length(finite_vals) < 2 && return out
+
+    med = median(finite_vals)
+    mad = median(abs.(finite_vals .- med))
+    s = 1.482602218505602 * mad
+    if s > eps(Float64)
+        @inbounds for i = 1:n
+            v = Float64(x[i])
+            out[i] = isfinite(v) ? (v - med) / s : 0.0
+        end
+        return out
+    end
+    s_std = std(finite_vals)
+    if s_std > eps(Float64)
+        m = mean(finite_vals)
+        @inbounds for i = 1:n
+            v = Float64(x[i])
+            out[i] = isfinite(v) ? (v - m) / s_std : 0.0
+        end
+    end
+    return out
+end
+
+function _zscore_for_remaining(corr_vector::AbstractVector{<:Real}, remaining_indices::AbstractVector{Int})
+    z = fill(NaN, length(corr_vector))
+    if length(remaining_indices) >= 2
+        z[remaining_indices] = _robust_z(corr_vector[remaining_indices])
+    elseif length(remaining_indices) == 1
+        z[remaining_indices] .= 0.0
+    end
+    return z
+end
+
+function _calculate_eog_correlations(components_t::Matrix{Float64}, eog_signal::AbstractVector{<:Real})
+    n_components = size(components_t, 2)
+    out = Vector{Float64}(undef, n_components)
+    for comp_idx = 1:n_components
+        c = abs(cor(view(components_t, :, comp_idx), eog_signal))
+        out[comp_idx] = isfinite(c) ? c : 0.0
+    end
+    return out
+end
+
+function _calculate_spatial_correlations(
+    remaining_components::Vector{Int},
+    primary_components::Vector{Int},
+    mixing_matrix::Matrix{Float64},
+    n_components::Int,
+)
+    spatial_corrs = fill(NaN, n_components)
+    (isempty(remaining_components) || isempty(primary_components)) && return spatial_corrs
+
+    for comp_idx in remaining_components
+        comp_topo = view(mixing_matrix, :, comp_idx)
+        max_corr = 0.0
+        for primary_comp in primary_components
+            c = abs(cor(comp_topo, view(mixing_matrix, :, primary_comp)))
+            (isfinite(c) && c > max_corr) && (max_corr = c)
+        end
+        spatial_corrs[comp_idx] = max_corr
+    end
+    return spatial_corrs
+end
+
+function _max_lagged_corr(x_norm::AbstractVector{Float64}, y_norm::AbstractVector{Float64}, lags)
+    n = length(x_norm)
+    best = 0.0
+    for lag in lags
+        a = max(1, 1 - lag)
+        b = min(n, n - lag)
+        a > b && continue
+        c = abs(dot(view(x_norm, a:b), view(y_norm, (a+lag):(b+lag))))
+        c > best && (best = c)
+    end
+    return best
+end
+
+function _normalize_unit_l2(sig::AbstractVector{Float64})
+    n = length(sig)
+    denom = std(sig, corrected = false) * sqrt(n)
+    return denom > eps(Float64) ? (sig .- mean(sig)) ./ denom : zeros(Float64, n)
+end
+
+function _calculate_lagged_correlations(
+    remaining_components::Vector{Int},
+    primary_components::Vector{Int},
+    components_t::Matrix{Float64},
+    max_lag_samples::Int,
+    lag_step::Int,
+)
+    n_samples, n_components = size(components_t)
+    lagged_corrs = fill(NaN, n_components)
+    (isempty(remaining_components) || isempty(primary_components)) && return lagged_corrs
+
+    lags = (-max_lag_samples):lag_step:max_lag_samples
+    primary_norms = [_normalize_unit_l2(view(components_t, :, p_idx)) for p_idx in primary_components]
+
+    Threads.@threads for comp_idx in remaining_components
+        sig = view(components_t, :, comp_idx)
+        denom = std(sig, corrected = false) * sqrt(n_samples)
+        if denom > eps(Float64)
+            x_norm = (sig .- mean(sig)) ./ denom
+            max_c = 0.0
+            for y_norm in primary_norms
+                c = _max_lagged_corr(x_norm, y_norm, lags)
+                c > max_c && (max_c = c)
+            end
+            lagged_corrs[comp_idx] = max_c
+        else
+            lagged_corrs[comp_idx] = 0.0
+        end
+    end
+    return lagged_corrs
+end
+
+function _identify_secondary_components(
+    remaining_components::Vector{Int},
+    corr_vector::Vector{Float64},
+    corr_z_vector::Vector{Float64},
+    min_corr_threshold::Real,
+    z_threshold::Real,
+)
+    return [c for c in remaining_components if corr_vector[c] > min_corr_threshold && corr_z_vector[c] > z_threshold]
+end
+
+function _empty_eog_metrics()
+    return DataFrame(
+        :Component => Int[],
+        :vEOG_corr => Float64[],
+        :vEOG_zscore => Float64[],
+        :vEOG_spatial_corr => Float64[],
+        :vEOG_spatial_corr_z => Float64[],
+        :vEOG_temporal_corr => Float64[],
+        :vEOG_temporal_corr_z => Float64[],
+        :hEOG_corr => Float64[],
+        :hEOG_zscore => Float64[],
+        :hEOG_spatial_corr => Float64[],
+        :hEOG_spatial_corr_z => Float64[],
+        :hEOG_temporal_corr => Float64[],
+        :hEOG_temporal_corr_z => Float64[],
+    )
+end
+
+function _empty_ecg_metrics()
+    return DataFrame(
+        :Component => Int[],
+        :num_peaks => Int[],
+        :num_valid_ibis => Int[],
+        :mean_ibi_s => Float64[],
+        :std_ibi_s => Float64[],
+        :peak_ratio => Float64[],
+        :heart_rate_bpm => Float64[],
+    )
+end
+
+function _empty_line_noise_metrics()
+    return DataFrame(
+        :Component => Int[],
+        :line_power => Float64[],
+        :flanking_power => Float64[],
+        :power_ratio => Float64[],
+        :harmonic_ratio => Float64[],
+        :power_ratio_zscore => Float64[],
+    )
+end
+
+function _resolve_artifact_samples(
+    dat::ContinuousData,
+    sample_selection,
+    interval_selection::Interval,
+    precomputed_samples::Union{Nothing,Vector{Int}},
+)
+    !isnothing(precomputed_samples) && return precomputed_samples
+    return get_selected_samples(dat, _combine_interval_sample(interval_selection, sample_selection))
+end
+
+function _resolve_artifact_components(
+    dat::ContinuousData,
+    ica::InfoIca,
+    selected_samples::Vector{Int},
+    precomputed_components::Union{Nothing,Tuple{Matrix{Float64},Int}},
+)
+    return !isnothing(precomputed_components) ? precomputed_components : _prepare_ica_data_matrix(dat, ica, selected_samples)
+end
+
+function _evaluate_eog_channel(
+    dat::ContinuousData,
+    selected_samples::Vector{Int},
+    eog_channel::Symbol,
+    has_eog::Bool,
+    components_t::Matrix{Float64},
+    mixing::Matrix{Float64},
+    n_components::Int,
+    min_correlation::Real,
+    z_threshold::Real,
+    two_step::Bool,
+    max_lag_samples::Int,
+    lag_step::Int,
+)
+    corrs = fill(NaN, n_components)
+    corr_z = fill(NaN, n_components)
+    spatial_corr = fill(NaN, n_components)
+    spatial_corr_z = fill(NaN, n_components)
+    temporal_corr = fill(NaN, n_components)
+    temporal_corr_z = fill(NaN, n_components)
+
+    has_eog || return Int[], corrs, corr_z, spatial_corr, spatial_corr_z, temporal_corr, temporal_corr_z
+
+    eog_sig = dat.data[selected_samples, eog_channel]
+    corrs = _calculate_eog_correlations(components_t, eog_sig)
+    corr_z = _robust_z(corrs)
+    primary = findall((corr_z .> z_threshold) .& (corrs .> min_correlation))
+
+    identified = primary
+    if two_step && !isempty(primary)
+        remaining = setdiff(1:n_components, primary)
+        spatial_corr = _calculate_spatial_correlations(remaining, primary, mixing, n_components)
+        temporal_corr = _calculate_lagged_correlations(remaining, primary, components_t, max_lag_samples, lag_step)
+        spatial_corr_z = _zscore_for_remaining(spatial_corr, remaining)
+        temporal_corr_z = _zscore_for_remaining(temporal_corr, remaining)
+
+        sec_spat = _identify_secondary_components(remaining, spatial_corr, spatial_corr_z, min_correlation, z_threshold)
+        sec_temp = _identify_secondary_components(remaining, temporal_corr, temporal_corr_z, min_correlation, z_threshold)
+        identified = union(primary, sec_spat, sec_temp)
+    end
+
+    sort!(identified)
+    return identified, corrs, corr_z, spatial_corr, spatial_corr_z, temporal_corr, temporal_corr_z
+end
+
+function _find_unidirectional_peaks(
+    data::AbstractVector;
+    min_prominence_std::Real = 3.0,
+    window_size::Int = 1,
+    min_distance::Int = 1,
+    sample_coords::Union{Nothing,AbstractVector{<:Integer}} = nothing,
+)
+    n = length(data)
+    n < 2 * window_size + 1 && return Int[]
+    peaks = Int[]
+    m = mean(data)
+    s = std(data)
+    thresh = (s ≈ 0) ? m : m + min_prominence_std * s
+
+    @inbounds for i = (window_size+1):(n-window_size)
+        val = data[i]
+        if val > thresh
+            is_p = true
+            for j = (i-window_size):(i-1)
+                if val <= data[j]
+                    is_p = false
+                    break
+                end
+            end
+            if is_p
+                for j = (i+1):(i+window_size)
+                    if val <= data[j]
+                        is_p = false
+                        break
+                    end
+                end
+            end
+            is_p && push!(peaks, i)
+        end
+    end
+
+    if min_distance > 1 && length(peaks) > 1
+        coords = isnothing(sample_coords) ? peaks : [Int(sample_coords[p]) for p in peaks]
+        order = sortperm(peaks; by = p -> data[p], rev = true)
+        suppressed = falses(length(peaks))
+        for k in order
+            suppressed[k] && continue
+            c_k = coords[k]
+            lo = searchsortedfirst(coords, c_k - min_distance + 1)
+            hi = searchsortedlast(coords, c_k + min_distance - 1)
+            for j = lo:hi
+                j != k && (suppressed[j] = true)
+            end
+        end
+        peaks = [peaks[j] for j in eachindex(peaks) if !suppressed[j]]
+    end
+
+    return peaks
+end
+
+function _calculate_ibi_metrics(peak_indices::Vector{Int}, sample_rate::Real, min_ibi_s::Real, max_ibi_s::Real)
+    num_peaks = length(peak_indices)
+    num_peaks < 2 && return 0, NaN, NaN, 0.0
+
+    inv_fs = 1.0 / Float64(sample_rate)
+    valid_ibis = Float64[]
+    @inbounds for i = 1:(num_peaks-1)
+        ibi = (peak_indices[i+1] - peak_indices[i]) * inv_fs
+        (min_ibi_s <= ibi <= max_ibi_s) && push!(valid_ibis, ibi)
+    end
+
+    num_valid_ibis = length(valid_ibis)
+    peak_ratio = num_valid_ibis / (num_peaks - 1)
+
+    if num_valid_ibis > 1
+        mean_ibi, std_ibi = mean(valid_ibis), std(valid_ibis)
+    elseif num_valid_ibis == 1
+        mean_ibi, std_ibi = valid_ibis[1], 0.0
+    else
+        mean_ibi, std_ibi = NaN, NaN
+    end
+
+    return num_valid_ibis, mean_ibi, std_ibi, peak_ratio
 end

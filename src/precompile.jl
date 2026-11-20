@@ -1,3 +1,5 @@
+# PrecompileTools workload for EegFun.jl.
+
 import PrecompileTools
 
 PrecompileTools.@compile_workload begin

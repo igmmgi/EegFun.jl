@@ -1,3 +1,75 @@
+# Time-domain baseline subtraction for continuous, epoched, and ERP data.
+
+######################################
+########### User Functions ###########
+######################################
+
+"""
+    baseline(dat::Union{ContinuousData,ErpData,EpochData}, baseline_interval::Interval = times(); channel_selection = channels())
+    baseline(dat::AbstractVector{<:Union{ContinuousData,ErpData,EpochData}}, baseline_interval::Interval = times(); channel_selection = channels())
+    baseline(file_pattern::String, baseline_interval; input_dir = pwd(),
+             participant_selection = participants(), condition_selection = conditions(), output_dir = nothing)
+
+Subtract the mean amplitude over `baseline_interval` from each selected channel without modifying `dat`
+(or batch-process matching `.jld2` files when given `file_pattern::String`).
+Omitting `baseline_interval` uses the full time range; passing `nothing` returns a copy unchanged.
+"""
+baseline(dat::_TimeDomainEegData, args...; kwargs...) = baseline!(copy(dat), args...; kwargs...)
+
+baseline(dat::AbstractVector{<:_TimeDomainEegData}, args...; kwargs...) = [baseline(d, args...; kwargs...) for d in dat]
+
+"""
+    baseline!(dat::Union{ContinuousData,ErpData,EpochData}, baseline_interval::Interval = times(); channel_selection = channels())
+    baseline!(dat::AbstractVector{<:Union{ContinuousData,ErpData,EpochData}}, baseline_interval::Interval = times(); channel_selection = channels())
+
+In-place mutating version of [`baseline`](@ref).
+"""
+function baseline!(dat::_TimeDomainEegData, baseline_interval::Interval = times(); channel_selection = channels())
+    isnothing(baseline_interval) && return dat
+    bl_idx = _validate_baseline_interval(dat, baseline_interval)
+    selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
+    if isempty(selected_channels)
+        @minimal_warning "No channels selected for baseline correction"
+        return dat
+    end
+
+    time = time_vector(dat)
+    t_start = round(time[bl_idx[1]], digits = 3)
+    t_end = round(time[bl_idx[2]], digits = 3)
+    @info "Applying baseline correction to $(length(selected_channels)) channels over interval $(bl_idx[1]):$(bl_idx[2]) ($(t_start) to $(t_end) s)"
+    _apply_baseline!(dat.data, selected_channels, bl_idx)
+    return dat
+end
+
+function baseline!(dat::AbstractVector{<:_TimeDomainEegData}, baseline_interval::Interval = times(); channel_selection = channels())
+    isnothing(baseline_interval) && return dat
+    for d in dat
+        baseline!(d, baseline_interval; channel_selection = channel_selection)
+    end
+    return dat
+end
+
+function baseline(
+    file_pattern::String,
+    baseline_interval::Interval;
+    input_dir::String = pwd(),
+    participant_selection = participants(),
+    condition_selection = conditions(),
+    output_dir::Union{String,Nothing} = nothing,
+)
+    _with_batch_logging("baseline correction", "baseline.log", input_dir, output_dir) do ctx
+        @log_call "baseline"
+        bl_tuple = _validate_baseline_interval(baseline_interval)
+        output_dir = _prepare_output_dir!(ctx, _default_baseline_output_dir(input_dir, file_pattern, bl_tuple))
+        process_fn = (input_path, output_path) -> _process_baseline_file(input_path, output_path, bl_tuple, condition_selection)
+        batch_process(process_fn, file_pattern, input_dir, output_dir, participant_selection, "Baseline correction")
+    end
+end
+
+######################################
+######### Internal Functions #########
+######################################
+
 function _apply_baseline!(dat::DataFrame, ch_indices::Vector{Int}, baseline_interval::Tuple{Int,Int})
     start_idx, end_idx = baseline_interval
     inv_len = 1.0 / (end_idx - start_idx + 1)
@@ -39,52 +111,8 @@ function _apply_baseline!(dat::AbstractVector{DataFrame}, channels::AbstractVect
     return nothing
 end
 
-const _TimeDomainEegData = Union{ContinuousData,ErpData,EpochData}
-
-"""
-    baseline!(dat::Union{ContinuousData,ErpData,EpochData}, baseline_interval::Interval = times(); channel_selection = channels())
-    baseline!(dat::AbstractVector{<:Union{ContinuousData,ErpData,EpochData}}, baseline_interval::Interval = times(); channel_selection = channels())
-
-Subtract the mean amplitude over `baseline_interval` from each selected channel in-place.
-Omitting `baseline_interval` uses the full time range; passing `nothing` leaves `dat` unchanged.
-"""
-function baseline!(dat::_TimeDomainEegData, baseline_interval::Interval = times(); channel_selection = channels())
-    isnothing(baseline_interval) && return dat
-    bl_idx = _validate_baseline_interval(dat, baseline_interval)
-    selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
-    if isempty(selected_channels)
-        @minimal_warning "No channels selected for baseline correction"
-        return dat
-    end
-
-    time = time_vector(dat)
-    t_start = round(time[bl_idx[1]], digits = 3)
-    t_end = round(time[bl_idx[2]], digits = 3)
-    @info "Applying baseline correction to $(length(selected_channels)) channels over interval $(bl_idx[1]):$(bl_idx[2]) ($(t_start) to $(t_end) s)"
-    _apply_baseline!(dat.data, selected_channels, bl_idx)
-    return dat
-end
-
-function baseline!(dat::AbstractVector{<:_TimeDomainEegData}, baseline_interval::Interval = times(); channel_selection = channels())
-    isnothing(baseline_interval) && return dat
-    for d in dat
-        baseline!(d, baseline_interval; channel_selection = channel_selection)
-    end
-    return dat
-end
-
-"""
-    baseline(dat, args...; kwargs...)
-    baseline(file_pattern::String, baseline_interval; input_dir = pwd(),
-             participant_selection = participants(), condition_selection = conditions(), output_dir = nothing)
-
-Non-mutating or batch JLD2 version of [`baseline!`](@ref).
-"""
-baseline(dat::_TimeDomainEegData, args...; kwargs...) = baseline!(copy(dat), args...; kwargs...)
-baseline(dat::AbstractVector{<:_TimeDomainEegData}, args...; kwargs...) = [baseline(d, args...; kwargs...) for d in dat]
-
 _default_baseline_output_dir(input_dir::String, pattern::String, baseline_interval::Tuple{Real,Real}) =
-    joinpath(input_dir, "baseline_$(clean_pattern(pattern))_$(baseline_interval[1])_to_$(baseline_interval[2])")
+    joinpath(input_dir, "baseline_$(_clean_pattern(pattern))_$(baseline_interval[1])_to_$(baseline_interval[2])")
 
 function _to_interval(interval::Tuple{Real,Real})
     start, stop = Float64(interval[1]), Float64(interval[2])
@@ -106,6 +134,7 @@ function _to_interval(interval::AbstractVector{<:Real})
 end
 
 _validate_baseline_interval(baseline_interval::Interval)::Tuple{Real,Real} = _to_interval(baseline_interval)
+
 _validate_baseline_interval(time::AbstractVector, ::AllSelection)::Tuple{Int,Int} = (1, length(time))
 
 function _validate_baseline_interval(time::AbstractVector, baseline_interval::Interval)::Tuple{Int,Int}
@@ -160,21 +189,4 @@ function _process_baseline_file(filepath::String, output_path::String, baseline_
     baseline!(data, baseline_interval)
     jldsave(output_path; data = data, format_version = EEGFUN_FORMAT_VERSION)
     return BatchResult(true, filename, "Baseline corrected successfully")
-end
-
-function baseline(
-    file_pattern::String,
-    baseline_interval::Interval;
-    input_dir::String = pwd(),
-    participant_selection = participants(),
-    condition_selection = conditions(),
-    output_dir::Union{String,Nothing} = nothing,
-)
-    _with_batch_logging("baseline correction", "baseline.log", input_dir, output_dir) do ctx
-        @log_call "baseline"
-        bl_tuple = _validate_baseline_interval(baseline_interval)
-        output_dir = _prepare_output_dir!(ctx, _default_baseline_output_dir(input_dir, file_pattern, bl_tuple))
-        process_fn = (input_path, output_path) -> _process_baseline_file(input_path, output_path, bl_tuple, condition_selection)
-        batch_process(process_fn, file_pattern, input_dir, output_dir, participant_selection, "Baseline correction")
-    end
 end

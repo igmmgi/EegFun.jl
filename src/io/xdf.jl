@@ -1,3 +1,9 @@
+# Lab Streaming Layer Extensible Data Format (`.xdf` / `.xdf.gz`) import.
+
+######################################
+########### User Functions ###########
+######################################
+
 """
     read_xdf(filepath::String; select_streams = nothing, sync = true, dejitter_timestamps = true, handle_clock_resets = true) -> ExtensibleDataFormat.XdfData
 

@@ -1,3 +1,9 @@
+# ERP statistical waveform, t-value, SEM, and significance interval plots.
+
+######################################
+########### User Functions ###########
+######################################
+
 """
     plot_erp_stats(result::StatsResult;
                    layout::Union{Symbol,PlotLayout} = :single,
@@ -178,6 +184,123 @@ function plot_erp_stats(
     plot_kwargs[:display_plot] && _display_figure(fig)
     return (fig = fig, axes = axes)
 end
+
+"""
+    plot_erp_stats(result::LmmStatsResult; coef = 2, alpha::Real = 0.05, kwargs...)
+
+Plot the fitted fixed-effect waveform (`β̂`), SE band, z-values, and permutation significance
+for one predictor of an [`LmmStatsResult`](@ref) via [`extract_predictor_stats`](@ref).
+"""
+function plot_erp_stats(result::LmmStatsResult; coef = 2, coef_idx::Union{Nothing,Int} = nothing, alpha::Real = 0.05, kwargs...)
+    c_idx = _resolve_lmm_coef_idx(result, something(coef_idx, coef))
+    return plot_erp_stats(extract_predictor_stats(result, result.coefficients[c_idx]; alpha = alpha); kwargs...)
+end
+
+"""
+    plot_stat_heatmap(result::StatsResult; kwargs...)
+
+Plot a 2D heatmap of t-statistics (`Channels × Time`) from an analytic or permutation test.
+"""
+function plot_stat_heatmap(result::StatsResult; kwargs...)
+    plot_kwargs = _merge_plot_kwargs(PLOT_ERP_KWARGS, kwargs; validate = false)
+    window_title = get(kwargs, :window_title, "T-Statistic Heatmap")
+    xlabel = get(kwargs, :xlabel, get(kwargs, :time_unit, :s) == :ms ? "Time (ms)" : "Time (s)")
+    ylabel = get(kwargs, :ylabel, "Channels")
+
+    fig = _eegfun_figure(size = (850, 600), title = window_title, figure_padding = plot_kwargs[:figure_padding])
+    ax = Axis(fig[1, 1], xlabel = xlabel, ylabel = ylabel)
+
+    plot_stat_heatmap!(fig, ax, result; kwargs...)
+
+    if !isempty(plot_kwargs[:figure_title])
+        Label(fig[0, :], plot_kwargs[:figure_title], fontsize = plot_kwargs[:figure_title_fontsize], font = :bold, tellwidth = false)
+    end
+    plot_kwargs[:display_plot] && _display_figure(fig)
+    return (fig = fig, axes = [ax])
+end
+
+"""
+    plot_stat_heatmap(result::LmmStatsResult; coef = 2, cluster_thresh::Real = 2.0, threshold_p = nothing, kwargs...)
+
+Plot a 2D spatiotemporal heatmap (`Channels × Time`) of test statistics for a Linear Mixed-Effects Model predictor.
+"""
+function plot_stat_heatmap(
+    result::LmmStatsResult;
+    coef = 2,
+    coef_idx::Union{Nothing,Int} = nothing,
+    cluster_thresh::Real = 2.0,
+    threshold_p = nothing,
+    kwargs...,
+)
+    c_idx = _resolve_lmm_coef_idx(result, something(coef_idx, coef))
+    plot_kwargs = _merge_plot_kwargs(PLOT_ERP_KWARGS, kwargs; validate = false)
+    coef_name = result.coefficients[c_idx]
+    window_title = get(kwargs, :window_title, "LMM Heatmap: $(coef_name)")
+    xlabel_def = get(kwargs, :time_unit, :s) == :ms ? "Time (ms)" : "Time (s)"
+    xlabel = get(kwargs, :xlabel, xlabel_def)
+    ylabel = get(kwargs, :ylabel, "Channels")
+    title_str = get(kwargs, :plot_title, "LMM Heatmap: $(coef_name)")
+
+    fig = _eegfun_figure(size = (900, 600), title = window_title, figure_padding = plot_kwargs[:figure_padding])
+    ax = Axis(fig[1, 1], xlabel = xlabel, ylabel = ylabel, title = title_str)
+
+    plot_stat_heatmap!(fig, ax, result; coef_idx = c_idx, cluster_thresh = cluster_thresh, threshold_p = threshold_p, kwargs...)
+
+    if !isempty(plot_kwargs[:figure_title])
+        Label(fig[0, :], plot_kwargs[:figure_title], fontsize = plot_kwargs[:figure_title_fontsize], font = :bold, tellwidth = false)
+    end
+
+    plot_kwargs[:display_plot] && _display_figure(fig)
+    return (fig = fig, axes = [ax])
+end
+
+"""
+    plot_stat_heatmap!(fig, ax, result::StatsResult; kwargs...)
+
+Mutating variant of `plot_stat_heatmap` to draw a 2D statistical heatmap into an existing `Axis`.
+"""
+function plot_stat_heatmap!(fig::Union{Figure,Nothing}, ax::Axis, result::StatsResult; kwargs...)
+    t_values = result.stat_matrix.t
+    has_masks = hasproperty(result, :masks) && !isnothing(result.masks)
+    mask = has_masks ? (result.masks.positive .| result.masks.negative) : trues(size(t_values))
+    return _plot_stat_heatmap_core!(fig, ax, result.time_points, result.electrodes, t_values, mask; kwargs...)
+end
+
+"""
+    plot_stat_heatmap!(fig, ax, result::LmmStatsResult; coef = 2, cluster_thresh::Real = 2.0, threshold_p = nothing, kwargs...)
+
+Mutating variant of `plot_stat_heatmap` for `LmmStatsResult`.
+"""
+function plot_stat_heatmap!(
+    fig::Union{Figure,Nothing},
+    ax::Axis,
+    result::LmmStatsResult;
+    coef = 2,
+    coef_idx::Union{Nothing,Int} = nothing,
+    cluster_thresh::Real = 2.0,
+    threshold_p = nothing,
+    kwargs...,
+)
+    c_idx = _resolve_lmm_coef_idx(result, something(coef_idx, coef))
+    time_points = result.time_points
+    electrodes = result.channels
+    t_values = Matrix{Float64}(_lmm_stat_slice(result, c_idx))
+
+    # threshold_p masks on the corrected p-values when permutation inference was run, otherwise on
+    # the uncorrected p-values (never silently mixing the two)
+    mask = if !isnothing(threshold_p)
+        p = (!isnothing(result.p_corrected) && c_idx in result.tested) ? result.p_corrected : result.p_parametric
+        p[:, :, c_idx] .<= threshold_p
+    else
+        abs.(t_values) .>= cluster_thresh
+    end
+
+    return _plot_stat_heatmap_core!(fig, ax, time_points, electrodes, t_values, mask; kwargs...)
+end
+
+######################################
+######### Internal Functions #########
+######################################
 
 function _plot_erp_stats_channel!(
     ax::Axis,
@@ -480,117 +603,4 @@ function _plot_stat_heatmap_core!(
 
     _apply_axis_properties!(ax; plot_kwargs...)
     return (hm = hm, ax = ax)
-end
-
-"""
-    plot_stat_heatmap!(fig, ax, result::StatsResult; kwargs...)
-
-Mutating variant of `plot_stat_heatmap` to draw a 2D statistical heatmap into an existing `Axis`.
-"""
-function plot_stat_heatmap!(fig::Union{Figure,Nothing}, ax::Axis, result::StatsResult; kwargs...)
-    t_values = result.stat_matrix.t
-    has_masks = hasproperty(result, :masks) && !isnothing(result.masks)
-    mask = has_masks ? (result.masks.positive .| result.masks.negative) : trues(size(t_values))
-    return _plot_stat_heatmap_core!(fig, ax, result.time_points, result.electrodes, t_values, mask; kwargs...)
-end
-
-"""
-    plot_stat_heatmap(result::StatsResult; kwargs...)
-
-Plot a 2D heatmap of t-statistics (`Channels × Time`) from an analytic or permutation test.
-"""
-function plot_stat_heatmap(result::StatsResult; kwargs...)
-    plot_kwargs = _merge_plot_kwargs(PLOT_ERP_KWARGS, kwargs; validate = false)
-    window_title = get(kwargs, :window_title, "T-Statistic Heatmap")
-    xlabel = get(kwargs, :xlabel, get(kwargs, :time_unit, :s) == :ms ? "Time (ms)" : "Time (s)")
-    ylabel = get(kwargs, :ylabel, "Channels")
-
-    fig = _eegfun_figure(size = (850, 600), title = window_title, figure_padding = plot_kwargs[:figure_padding])
-    ax = Axis(fig[1, 1], xlabel = xlabel, ylabel = ylabel)
-
-    plot_stat_heatmap!(fig, ax, result; kwargs...)
-
-    if !isempty(plot_kwargs[:figure_title])
-        Label(fig[0, :], plot_kwargs[:figure_title], fontsize = plot_kwargs[:figure_title_fontsize], font = :bold, tellwidth = false)
-    end
-    plot_kwargs[:display_plot] && _display_figure(fig)
-    return (fig = fig, axes = [ax])
-end
-
-"""
-    plot_erp_stats(result::LmmStatsResult; coef = 2, alpha::Real = 0.05, kwargs...)
-
-Plot the fitted fixed-effect waveform (`β̂`), SE band, z-values, and permutation significance
-for one predictor of an [`LmmStatsResult`](@ref) via [`extract_predictor_stats`](@ref).
-"""
-function plot_erp_stats(result::LmmStatsResult; coef = 2, coef_idx::Union{Nothing,Int} = nothing, alpha::Real = 0.05, kwargs...)
-    c_idx = _resolve_lmm_coef_idx(result, something(coef_idx, coef))
-    return plot_erp_stats(extract_predictor_stats(result, result.coefficients[c_idx]; alpha = alpha); kwargs...)
-end
-
-"""
-    plot_stat_heatmap!(fig, ax, result::LmmStatsResult; coef = 2, cluster_thresh::Real = 2.0, threshold_p = nothing, kwargs...)
-
-Mutating variant of `plot_stat_heatmap` for `LmmStatsResult`.
-"""
-function plot_stat_heatmap!(
-    fig::Union{Figure,Nothing},
-    ax::Axis,
-    result::LmmStatsResult;
-    coef = 2,
-    coef_idx::Union{Nothing,Int} = nothing,
-    cluster_thresh::Real = 2.0,
-    threshold_p = nothing,
-    kwargs...,
-)
-    c_idx = _resolve_lmm_coef_idx(result, something(coef_idx, coef))
-    time_points = result.time_points
-    electrodes = result.channels
-    t_values = Matrix{Float64}(_lmm_stat_slice(result, c_idx))
-
-    # threshold_p masks on the corrected p-values when permutation inference was run, otherwise on
-    # the uncorrected p-values (never silently mixing the two)
-    mask = if !isnothing(threshold_p)
-        p = (!isnothing(result.p_corrected) && c_idx in result.tested) ? result.p_corrected : result.p_parametric
-        p[:, :, c_idx] .<= threshold_p
-    else
-        abs.(t_values) .>= cluster_thresh
-    end
-
-    return _plot_stat_heatmap_core!(fig, ax, time_points, electrodes, t_values, mask; kwargs...)
-end
-
-"""
-    plot_stat_heatmap(result::LmmStatsResult; coef = 2, cluster_thresh::Real = 2.0, threshold_p = nothing, kwargs...)
-
-Plot a 2D spatiotemporal heatmap (`Channels × Time`) of test statistics for a Linear Mixed-Effects Model predictor.
-"""
-function plot_stat_heatmap(
-    result::LmmStatsResult;
-    coef = 2,
-    coef_idx::Union{Nothing,Int} = nothing,
-    cluster_thresh::Real = 2.0,
-    threshold_p = nothing,
-    kwargs...,
-)
-    c_idx = _resolve_lmm_coef_idx(result, something(coef_idx, coef))
-    plot_kwargs = _merge_plot_kwargs(PLOT_ERP_KWARGS, kwargs; validate = false)
-    coef_name = result.coefficients[c_idx]
-    window_title = get(kwargs, :window_title, "LMM Heatmap: $(coef_name)")
-    xlabel_def = get(kwargs, :time_unit, :s) == :ms ? "Time (ms)" : "Time (s)"
-    xlabel = get(kwargs, :xlabel, xlabel_def)
-    ylabel = get(kwargs, :ylabel, "Channels")
-    title_str = get(kwargs, :plot_title, "LMM Heatmap: $(coef_name)")
-
-    fig = _eegfun_figure(size = (900, 600), title = window_title, figure_padding = plot_kwargs[:figure_padding])
-    ax = Axis(fig[1, 1], xlabel = xlabel, ylabel = ylabel, title = title_str)
-
-    plot_stat_heatmap!(fig, ax, result; coef_idx = c_idx, cluster_thresh = cluster_thresh, threshold_p = threshold_p, kwargs...)
-
-    if !isempty(plot_kwargs[:figure_title])
-        Label(fig[0, :], plot_kwargs[:figure_title], fontsize = plot_kwargs[:figure_title_fontsize], font = :bold, tellwidth = false)
-    end
-
-    plot_kwargs[:display_plot] && _display_figure(fig)
-    return (fig = fig, axes = [ax])
 end

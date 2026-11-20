@@ -1,7 +1,18 @@
+# Multi-file batch discovery, JLD2 serialization, and batch execution framework.
+
+######################################
+######### Types & Constants ##########
+######################################
+
 """
     BatchResult
 
 Result of processing a single file in a batch operation (`success`, `filename`, `message`).
+
+# Fields
+- `success::Bool`: `true` if processing succeeded without throwing an error
+- `filename::String`: Processed input filename
+- `message::String`: Summary status or error message
 """
 struct BatchResult
     success::Bool
@@ -9,56 +20,15 @@ struct BatchResult
     message::String
 end
 
-function _extract_participant_id(filename::String)
-    name_without_ext, _ = splitext(basename(filename))
-    m = match(r"(?:^|[^a-zA-Z])(?:sub|subj|subject|participant|part|pp|vp)[_-]?(\d+)"i, name_without_ext)
-    !isnothing(m) && return parse(Int, m.captures[1])
-    m_sp = match(r"^[sp][_-]?(\d+)(?:[_-]|$)"i, name_without_ext)
-    !isnothing(m_sp) && return parse(Int, m_sp.captures[1])
-    m_lead = match(r"^(\d+)(?:[_-]|$)", name_without_ext)
-    !isnothing(m_lead) && return parse(Int, m_lead.captures[1])
-    cu = codeunits(name_without_ext)
-    i = length(cu)
-    while i >= 1 && !(0x30 <= cu[i] <= 0x39)
-        i -= 1
-    end
-    if i >= 1
-        end_idx = i
-        while i >= 1 && (0x30 <= cu[i] <= 0x39)
-            i -= 1
-        end
-        return parse(Int, SubString(name_without_ext, i + 1, end_idx))
-    end
-    participant = Int(hash(filename) % 1_000_000_000)
-    @info "  No numeric participant ID found in filename, using hash: $participant"
-    return participant
-end
-
-function _matches_batch_pattern(filename::String, pattern::String, rx::Union{Regex,Nothing})::Bool
-    endswith(lowercase(filename), ".jld2") || return false
-    if !occursin("grand_av", lowercase(pattern)) && occursin(r"^grand_av(?:erage|g)(?:_|\.)", lowercase(filename))
-        return false
-    end
-    return isnothing(rx) ? contains(filename, pattern) : occursin(rx, filename)
-end
-
-function _find_batch_files(pattern::String, dir::String, @nospecialize(participant_selection = participants()))
-    part_func = _to_participant_func(participant_selection)
-    rx = occursin(r"[\^$\\\[\]|+?()*]", pattern) ? Regex(pattern) : nothing
-    files = filter(f -> _matches_batch_pattern(f, pattern, rx), readdir(dir))
-    sort!(files; by = _natural_sort_key)
-    ids = Int[_extract_participant_id(f) for f in files]
-    return files[part_func(ids)]
-end
-
-_find_batch_files(rx::Regex, dir::String, @nospecialize(participant_selection = participants())) =
-    _find_batch_files(rx.pattern, dir, participant_selection)
-
-_find_batch_files(pattern::String, dir::String, ids::Int) = _find_batch_files(pattern, dir, x -> x .== ids)
-_find_batch_files(pattern::String, dir::String, ids::Vector{Int}) = _find_batch_files(pattern, dir, x -> [id in ids for id in x])
-_find_batch_files(pattern::String, dir::String, ::Nothing) = _find_batch_files(pattern, dir, x -> trues(length(x)))
-
 const EEGFUN_FORMAT_VERSION = 1
+
+mutable struct BatchContext
+    output_dir::Union{String,Nothing}
+end
+
+######################################
+########### User Functions ###########
+######################################
 
 """
     save_data(filepath::AbstractString, data::Union{EegFunData,AbstractVector{<:EegFunData}}; overwrite::Bool = true) -> String
@@ -107,73 +77,6 @@ function read_data(filepath::String)::Union{EegFunData,Vector{<:EegFunData},Noth
     end
 end
 
-function _read_data(data::Vector{Any})::Union{Vector{<:EegFunData},Nothing}
-    (isempty(data) || !all(x -> x isa EegFunData, data)) && return nothing
-    T = mapreduce(typeof, typejoin, data)
-    return T[x for x in data]
-end
-
-function _read_data(data::Dict)::Union{EegFunData,Vector{<:EegFunData},Nothing}
-    values_found = EegFunData[]
-    for value in values(data)
-        result = _read_data(value)
-        isnothing(result) && continue
-        if result isa Vector{<:EegFunData}
-            append!(values_found, result)
-        elseif result isa EegFunData
-            push!(values_found, result)
-        end
-    end
-    return isempty(values_found) ? nothing : _single_or_vector(values_found)
-end
-
-_read_data(data::Union{EegFunData,Vector{<:EegFunData}}) = data
-_read_data(::Any)::Nothing = nothing
-
-_single_or_vector(v::Vector) = length(v) == 1 ? v[1] : v
-
-function _condition_select(data, condition_selection::Function = conditions())
-    isempty(data) && return data
-    return data isa AbstractVector{<:EegFunData} ? data[get_selected_conditions(data, condition_selection)] :
-           data[condition_selection(1:length(data))]
-end
-function _condition_select(data, condition_selection::Vector{Int})
-    isempty(data) && return data
-    if data isa AbstractVector{<:EegFunData} &&
-       all(>(0), condition_selection) &&
-       all(d -> hasfield(typeof(d), :condition) && d.condition isa Integer && d.condition > 0, data)
-        cond_nums = Int[Int(d.condition) for d in data]
-        all(c -> c in cond_nums, condition_selection) && return data[_match_condition_indices(data, condition_selection)]
-    end
-    return data[condition_selection]
-end
-_condition_select(data, condition_selection::Int) = _condition_select(data, [condition_selection])
-_condition_select(data, ::Nothing) = _condition_select(data, x -> trues(length(x)))
-
-function _read_all_data_core(::Type{T}, files::Vector{String}, input_dir::String) where {T}
-    all_data = T[]
-    sorted_files = sort(files, by = _natural_sort_key)
-    n_files = length(sorted_files)
-    for (i, file) in enumerate(sorted_files)
-        @info "Loading: $file ($i/$n_files)"
-        file_data = read_data(joinpath(input_dir, file))
-        isnothing(file_data) && continue
-        if file_data isa Vector{<:T}
-            append!(all_data, file_data)
-        elseif file_data isa T
-            push!(all_data, file_data)
-        else
-            @minimal_warning "  Skipping $file: data is not of type $T"
-        end
-    end
-    return all_data
-end
-
-function _split_path_pattern(path_pattern::String)
-    d = dirname(path_pattern)
-    return isempty(d) ? pwd() : d, basename(path_pattern)
-end
-
 """
     read_all_data(path_pattern::String, participant_selection = participants())
     read_all_data(::Type{T}, path_pattern::String, participant_selection = participants())
@@ -207,6 +110,168 @@ function group_by_condition(items::AbstractVector{T}) where {T}
         push!(get!(() -> T[], grouped, item.condition), item)
     end
     return OrderedDict(sort!(collect(grouped), by = first))
+end
+
+"""
+    batch_process(process_fn::Function, file_pattern::String, input_dir::String, output_dir::String,
+                  participant_selection, operation_name::String;
+                  filename_modifier::Function = identity, parallel::Bool = false)
+
+Apply `process_fn(input_path, output_path)` across all `.jld2` files in `input_dir` matching
+`file_pattern` and `participant_selection`.
+"""
+function batch_process(
+    process_fn::Function,
+    file_pattern::String,
+    input_dir::String,
+    output_dir::String,
+    @nospecialize(participant_selection),
+    operation_name::String;
+    filename_modifier::Function = identity,
+    parallel::Bool = false,
+)
+    files = _find_batch_files(file_pattern, input_dir, participant_selection)
+    if isempty(files)
+        @minimal_warning "No JLD2 files found matching pattern '$file_pattern' in $input_dir"
+        return nothing
+    end
+    @info "Found $(length(files)) JLD2 files matching pattern '$file_pattern'"
+    results = _run_batch_operation(
+        process_fn,
+        files,
+        input_dir,
+        output_dir;
+        operation_name = operation_name,
+        filename_modifier = filename_modifier,
+        parallel = parallel,
+    )
+    return _log_batch_summary(results, output_dir)
+end
+
+######################################
+######### Internal Functions #########
+######################################
+
+function _extract_participant_id(filename::String)
+    name_without_ext, _ = splitext(basename(filename))
+    m = match(r"(?:^|[^a-zA-Z])(?:sub|subj|subject|participant|part|pp|vp)[_-]?(\d+)"i, name_without_ext)
+    !isnothing(m) && return parse(Int, m.captures[1])
+    m_sp = match(r"^[sp][_-]?(\d+)(?:[_-]|$)"i, name_without_ext)
+    !isnothing(m_sp) && return parse(Int, m_sp.captures[1])
+    m_lead = match(r"^(\d+)(?:[_-]|$)", name_without_ext)
+    !isnothing(m_lead) && return parse(Int, m_lead.captures[1])
+    cu = codeunits(name_without_ext)
+    i = length(cu)
+    while i >= 1 && !(0x30 <= cu[i] <= 0x39)
+        i -= 1
+    end
+    if i >= 1
+        end_idx = i
+        while i >= 1 && (0x30 <= cu[i] <= 0x39)
+            i -= 1
+        end
+        return parse(Int, SubString(name_without_ext, i + 1, end_idx))
+    end
+    participant = Int(hash(filename) % 1_000_000_000)
+    @info "  No numeric participant ID found in filename, using hash: $participant"
+    return participant
+end
+
+function _matches_batch_pattern(filename::String, pattern::String, rx::Union{Regex,Nothing})::Bool
+    endswith(lowercase(filename), ".jld2") || return false
+    if !occursin("grand_av", lowercase(pattern)) && occursin(r"^grand_av(?:erage|g)(?:_|\.)", lowercase(filename))
+        return false
+    end
+    return isnothing(rx) ? contains(filename, pattern) : occursin(rx, filename)
+end
+
+function _find_batch_files(pattern::String, dir::String, @nospecialize(participant_selection = participants()))
+    part_func = _to_participant_func(participant_selection)
+    rx = occursin(r"[\^$\\\[\]|+?()*]", pattern) ? Regex(pattern) : nothing
+    files = filter(f -> _matches_batch_pattern(f, pattern, rx), readdir(dir))
+    sort!(files; by = _natural_sort_key)
+    ids = Int[_extract_participant_id(f) for f in files]
+    return files[part_func(ids)]
+end
+
+_find_batch_files(rx::Regex, dir::String, @nospecialize(participant_selection = participants())) =
+    _find_batch_files(rx.pattern, dir, participant_selection)
+
+_find_batch_files(pattern::String, dir::String, ids::Int) = _find_batch_files(pattern, dir, x -> x .== ids)
+
+_find_batch_files(pattern::String, dir::String, ids::Vector{Int}) = _find_batch_files(pattern, dir, x -> [id in ids for id in x])
+
+_find_batch_files(pattern::String, dir::String, ::Nothing) = _find_batch_files(pattern, dir, x -> trues(length(x)))
+
+function _read_data(data::Vector{Any})::Union{Vector{<:EegFunData},Nothing}
+    (isempty(data) || !all(x -> x isa EegFunData, data)) && return nothing
+    T = mapreduce(typeof, typejoin, data)
+    return T[x for x in data]
+end
+
+function _read_data(data::Dict)::Union{EegFunData,Vector{<:EegFunData},Nothing}
+    values_found = EegFunData[]
+    for value in values(data)
+        result = _read_data(value)
+        isnothing(result) && continue
+        if result isa Vector{<:EegFunData}
+            append!(values_found, result)
+        elseif result isa EegFunData
+            push!(values_found, result)
+        end
+    end
+    return isempty(values_found) ? nothing : _single_or_vector(values_found)
+end
+
+_read_data(data::Union{EegFunData,Vector{<:EegFunData}}) = data
+
+_read_data(::Any)::Nothing = nothing
+
+_single_or_vector(v::Vector) = length(v) == 1 ? v[1] : v
+
+function _condition_select(data, condition_selection::Function = conditions())
+    isempty(data) && return data
+    return data isa AbstractVector{<:EegFunData} ? data[get_selected_conditions(data, condition_selection)] :
+           data[condition_selection(1:length(data))]
+end
+
+function _condition_select(data, condition_selection::Vector{Int})
+    isempty(data) && return data
+    if data isa AbstractVector{<:EegFunData} &&
+       all(>(0), condition_selection) &&
+       all(d -> hasfield(typeof(d), :condition) && d.condition isa Integer && d.condition > 0, data)
+        cond_nums = Int[Int(d.condition) for d in data]
+        all(c -> c in cond_nums, condition_selection) && return data[_match_condition_indices(data, condition_selection)]
+    end
+    return data[condition_selection]
+end
+
+_condition_select(data, condition_selection::Int) = _condition_select(data, [condition_selection])
+
+_condition_select(data, ::Nothing) = _condition_select(data, x -> trues(length(x)))
+
+function _read_all_data_core(::Type{T}, files::Vector{String}, input_dir::String) where {T}
+    all_data = T[]
+    sorted_files = sort(files, by = _natural_sort_key)
+    n_files = length(sorted_files)
+    for (i, file) in enumerate(sorted_files)
+        @info "Loading: $file ($i/$n_files)"
+        file_data = read_data(joinpath(input_dir, file))
+        isnothing(file_data) && continue
+        if file_data isa Vector{<:T}
+            append!(all_data, file_data)
+        elseif file_data isa T
+            push!(all_data, file_data)
+        else
+            @minimal_warning "  Skipping $file: data is not of type $T"
+        end
+    end
+    return all_data
+end
+
+function _split_path_pattern(path_pattern::String)
+    d = dirname(path_pattern)
+    return isempty(d) ? pwd() : d, basename(path_pattern)
 end
 
 function _participant_group_key(d)
@@ -322,42 +387,6 @@ function _run_batch_operation(
     return results
 end
 
-"""
-    batch_process(process_fn::Function, file_pattern::String, input_dir::String, output_dir::String,
-                  participant_selection, operation_name::String;
-                  filename_modifier::Function = identity, parallel::Bool = false)
-
-Apply `process_fn(input_path, output_path)` across all `.jld2` files in `input_dir` matching
-`file_pattern` and `participant_selection`.
-"""
-function batch_process(
-    process_fn::Function,
-    file_pattern::String,
-    input_dir::String,
-    output_dir::String,
-    @nospecialize(participant_selection),
-    operation_name::String;
-    filename_modifier::Function = identity,
-    parallel::Bool = false,
-)
-    files = _find_batch_files(file_pattern, input_dir, participant_selection)
-    if isempty(files)
-        @minimal_warning "No JLD2 files found matching pattern '$file_pattern' in $input_dir"
-        return nothing
-    end
-    @info "Found $(length(files)) JLD2 files matching pattern '$file_pattern'"
-    results = _run_batch_operation(
-        process_fn,
-        files,
-        input_dir,
-        output_dir;
-        operation_name = operation_name,
-        filename_modifier = filename_modifier,
-        parallel = parallel,
-    )
-    return _log_batch_summary(results, output_dir)
-end
-
 function _log_batch_summary(results::Vector{BatchResult}, output_dir::String)
     n_success = count(r -> r.success, results)
     n_error = length(results) - n_success
@@ -373,10 +402,6 @@ function _cleanup_logging(log_file::String, output_dir::Union{String,Nothing})
         dest = joinpath(output_dir, basename(log_file))
         abspath(log_file) != abspath(dest) && mv(log_file, dest, force = true)
     end
-end
-
-mutable struct BatchContext
-    output_dir::Union{String,Nothing}
 end
 
 function _with_batch_logging(f::Function, description::AbstractString, log_file::AbstractString, input_dir::AbstractString, output_dir)

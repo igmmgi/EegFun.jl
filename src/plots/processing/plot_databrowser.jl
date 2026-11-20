@@ -1,3 +1,9 @@
+# Interactive scrolling multi-channel EEG, EOG, and ICA data browser.
+
+######################################
+######### Types & Constants ##########
+######################################
+
 const PLOT_DATABROWSER_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Figure and layout
     :figure_size => ((1300, 800), "Figure size as (width, height)"),
@@ -237,7 +243,130 @@ mutable struct DataBrowserState{T<:AbstractDataState}
 end
 
 const ContinuousDataBrowserState = DataBrowserState{ContinuousDataState}
+
 const EpochedDataBrowserState = DataBrowserState{EpochedDataState}
+
+const _CHANNEL_HEMISPHERE_GROUPS = Tuple{String,Function}[
+    ("Left", ch -> occursin(r"\d*[13579]$", String(ch))),
+    ("Right", ch -> occursin(r"\d*[24680]$", String(ch))),
+    ("Central", ch -> occursin(r"z$", String(ch))),
+]
+
+const _IcaComponentMetrics = NamedTuple{
+    (:variance_pct, :var_rank, :channel, :channel_corr, :corr_rank),
+    Tuple{Vector{Float64},Vector{Int},Union{Nothing,Symbol},Vector{Float64},Vector{Int}},
+}
+
+const _RegionTriggerEvent = NamedTuple{(:sample, :code, :time),Tuple{Int,Int,Float64}}
+
+# Navigation & Interaction
+const KEYBOARD_ACTIONS = Dict(
+    Keyboard.left => :left,
+    Keyboard.right => :right,
+    Keyboard.up => :up,
+    Keyboard.down => :down,
+    Keyboard.page_up => :page_back,
+    Keyboard.page_down => :page_forward,
+)
+
+######################################
+########### User Functions ###########
+######################################
+
+"""
+    plot_databrowser(dat::EegData, ica = nothing; screen = nothing, kwargs...)
+    plot_databrowser(; launcher::Bool = false, screen = nothing, kwargs...)
+    plot_databrowser(filename::String, ica = nothing; input_dir = pwd(), participant_selection = participants(), screen = nothing, kwargs...)
+    plot_databrowser(data::Vector{<:EegData}, ica = nothing; screen = nothing, kwargs...)
+
+Launch the interactive EEG data browser for continuous, epoched, or ERP datasets, with optional
+dynamic ICA component subtraction, filtering, re-referencing, channel repair, and region selection.
+Called with no arguments, opens the bundled `example1.bdf` dataset (`launcher = true` opens the
+drag-and-drop file launcher).
+
+$(_generate_kwargs_doc(PLOT_DATABROWSER_KWARGS))
+"""
+function plot_databrowser(dat::EegData, ica = nothing; screen = nothing, kwargs...)
+    if string(Makie.current_backend()) == "CairoMakie"
+        @minimal_warning "CairoMakie detected. For full interactivity in plot_databrowser, use GLMakie."
+    end
+
+    _set_window_title(_generate_window_title(dat))
+    try
+        plot_kwargs = _merge_plot_kwargs(PLOT_DATABROWSER_KWARGS, kwargs)
+        fontsize_kw = isnothing(plot_kwargs[:theme_fontsize]) ? (;) : (; fontsize = plot_kwargs[:theme_fontsize])
+        fig = _eegfun_figure(; size = plot_kwargs[:figure_size], figure_padding = plot_kwargs[:figure_padding], fontsize_kw...)
+        ax = Axis(fig[1, 1], xlabel = plot_kwargs[:xlabel], ylabel = plot_kwargs[:ylabel], title = _get_title(dat))
+
+        state = _create_browser_state(dat, dat.layout.data.label, ax, ica, plot_kwargs)
+        state.extra_channel.fig = fig
+        _setup_ui(fig, ax, state, dat, ica, plot_kwargs)
+        _draw(ax, state)
+        _draw_extra_channel!(ax, state)
+        plot_kwargs[:show_scale_indicator] && _add_scale_indicator!(ax, state, plot_kwargs)
+
+        screen_obj = nothing
+        if plot_kwargs[:display_plot]
+            if !isnothing(screen)
+                display(screen, fig)
+                screen_obj = screen
+            else
+                screen_obj = _display_figure(fig)
+            end
+        end
+
+        return (fig = fig, axes = [ax], ax = ax, analysis_settings = state.analysis_settings, screen = screen_obj)
+    finally
+        _set_window_title("Makie")
+    end
+end
+
+function plot_databrowser(; launcher::Bool = false, screen = nothing, kwargs...)
+    launcher && return _plot_databrowser_launcher(; screen = screen, kwargs...)
+    return plot_databrowser(_load_example_databrowser_data(); screen = screen, kwargs...)
+end
+
+function plot_databrowser(data::Vector{<:EegData}, ica = nothing; screen = nothing, kwargs...)
+    @info "Vector of $(length(data)) datasets provided — opening a browser for each"
+    results = NamedTuple[]
+    display_plot = get(kwargs, :display_plot, true)
+    for dat in data
+        _set_window_title(_generate_window_title(dat))
+        s = !isnothing(screen) ? screen : (display_plot ? _create_screen() : nothing)
+        push!(results, plot_databrowser(dat, ica; screen = s, kwargs...))
+    end
+    return results
+end
+
+function plot_databrowser(
+    filename::String,
+    ica = nothing;
+    input_dir::String = pwd(),
+    participant_selection = participants(),
+    screen = nothing,
+    kwargs...,
+)
+    ica_obj = ica isa AbstractString ? read_data(_resolve_input_filepath(ica, input_dir)) : ica
+    if endswith(filename, ".jld2")
+        resolved = _resolve_input_filepath(filename, input_dir)
+        dat_eeg = read_data(resolved)
+        isnothing(dat_eeg) && @minimal_error "No data found in file: $resolved"
+        return plot_databrowser(dat_eeg, ica_obj; screen = screen, kwargs...)
+    end
+    files = _require_batch_files(filename, input_dir, participant_selection)
+    results = NamedTuple[]
+    for file in files
+        @info "Browsing: $file"
+        dat_eeg = read_data(joinpath(input_dir, file))
+        isnothing(dat_eeg) && continue
+        push!(results, plot_databrowser(dat_eeg, ica_obj; screen = screen, kwargs...))
+    end
+    return results
+end
+
+######################################
+######### Internal Functions #########
+######################################
 
 function _update_analysis_settings!(state::DataBrowserState)
     fs = state.data.filter_state
@@ -279,6 +408,7 @@ function _mark_regions!(df::DataFrame, selected_regions::Vector{Tuple{Float64,Fl
 end
 
 _add_selected_regions!(dat::EegData, regions::Vector{Tuple{Float64,Float64}}) = _mark_regions!(dat.data, regions)
+
 _add_selected_regions!(dat::EpochData, regions::Vector{Tuple{Float64,Float64}}) = foreach(df -> _mark_regions!(df, regions), dat.data)
 
 function _create_browser_state(dat::T, channel_labels, ax, ica, plot_kwargs) where {T<:EegData}
@@ -302,22 +432,26 @@ function _get_initial_window_size(dat::ContinuousData, plot_kwargs = Dict{Symbol
     sr = dat.sample_rate > 0 ? Float64(dat.sample_rate) : 500.0
     return clamp(round(Int, dur_sec * sr), min(2, n_samples(dat)), n_samples(dat))
 end
+
 _get_initial_window_size(dat::ErpData, plot_kwargs = Dict{Symbol,Any}()) = n_samples(dat)
+
 _get_initial_window_size(dat::EpochData, plot_kwargs = Dict{Symbol,Any}()) = nrow(dat.data[1])
 
 _data_state_type(::Type{ContinuousData}) = ContinuousDataState
+
 _data_state_type(::Type{EpochData}) = EpochedDataState
+
 _data_state_type(::Type{ErpData}) = ContinuousDataState
 
 _get_current_data(state::ContinuousDataState) = state.current[].data
+
 _get_current_data(state::EpochedDataState) = state.current[].data[state.current_epoch[]]
+
 _has_column(state::ContinuousDataState, col::Symbol) = hasproperty(state.current[].data, col)
+
 _has_column(state::EpochedDataState, col::Symbol) = hasproperty(state.current[].data[state.current_epoch[]], col)
 
-# =============================================================================
 # UI
-# =============================================================================
-
 function _setup_ui_base(fig, ax, state, dat, ica = nothing)
     deregister_interaction!(ax, :rectanglezoom)
     _set_axes!(ax, state)
@@ -479,12 +613,6 @@ function _show_single_filter_menu(state, dat, filter_type::Symbol)
 
     _display_in_screen(menu_fig)
 end
-
-const _CHANNEL_HEMISPHERE_GROUPS = Tuple{String,Function}[
-    ("Left", ch -> occursin(r"\d*[13579]$", String(ch))),
-    ("Right", ch -> occursin(r"\d*[24680]$", String(ch))),
-    ("Central", ch -> occursin(r"z$", String(ch))),
-]
 
 function _show_labels_menu(state, ax)
     all_channels = state.channels.labels
@@ -753,11 +881,6 @@ function _ica_activation_matrix(dat::EegData, ica::InfoIca)::Matrix{Float64}
     end
     return X * transpose(ica.unmixing)
 end
-
-const _IcaComponentMetrics = NamedTuple{
-    (:variance_pct, :var_rank, :channel, :channel_corr, :corr_rank),
-    Tuple{Vector{Float64},Vector{Int},Union{Nothing,Symbol},Vector{Float64},Vector{Int}},
-}
 
 function _ica_component_metrics(
     dat::EegData,
@@ -1186,8 +1309,6 @@ function _create_epoch_menu(fig, ax, state)
     return hcat(slider_epoch, label)
 end
 
-const _RegionTriggerEvent = NamedTuple{(:sample, :code, :time),Tuple{Int,Int,Float64}}
-
 function _scan_region_triggers(trig_col::AbstractVector, time_col::AbstractVector{<:Real}, x_min::Float64, x_max::Float64, active_triggers)
     events = _RegionTriggerEvent[]
     @inbounds for i in eachindex(trig_col, time_col)
@@ -1548,20 +1669,8 @@ function _build_grid_components!(
 end
 
 _get_epoch_menu(fig, ax, state::ContinuousDataBrowserState) = nothing
+
 _get_epoch_menu(fig, ax, state::EpochedDataBrowserState) = _create_epoch_menu(fig, ax, state)
-
-# =============================================================================
-# Navigation & Interaction
-# =============================================================================
-
-const KEYBOARD_ACTIONS = Dict(
-    Keyboard.left => :left,
-    Keyboard.right => :right,
-    Keyboard.up => :up,
-    Keyboard.down => :down,
-    Keyboard.page_up => :page_back,
-    Keyboard.page_down => :page_forward,
-)
 
 function _handle_navigation!(ax, state::DataBrowserState{<:AbstractDataState}, action::Symbol)
     if action == :up
@@ -1580,12 +1689,19 @@ function _handle_navigation!(ax, state::DataBrowserState{<:AbstractDataState}, a
 end
 
 _handle_left_navigation(ax, state::ContinuousDataBrowserState) = _xback!(ax, state)
+
 _handle_left_navigation(ax, state::EpochedDataBrowserState) = _step_epoch_backward(ax, state)
+
 _handle_right_navigation(ax, state::ContinuousDataBrowserState) = _xforward!(ax, state)
+
 _handle_right_navigation(ax, state::EpochedDataBrowserState) = _step_epoch_forward(ax, state)
+
 _handle_page_back(ax, state::ContinuousDataBrowserState) = _xback!(ax, state, length(state.view.xrange.val))
+
 _handle_page_back(ax, state::EpochedDataBrowserState) = _step_epoch!(ax, state, -5)
+
 _handle_page_forward(ax, state::ContinuousDataBrowserState) = _xforward!(ax, state, length(state.view.xrange.val))
+
 _handle_page_forward(ax, state::EpochedDataBrowserState) = _step_epoch!(ax, state, 5)
 
 function _xback!(ax, state::ContinuousDataBrowserState, step::Int = state.plot_kwargs[:scroll_step])
@@ -1606,6 +1722,7 @@ function _xforward!(ax, state::ContinuousDataBrowserState, step::Int = state.plo
 end
 
 _step_epoch_backward(ax, state::EpochedDataBrowserState) = _step_epoch!(ax, state, -1)
+
 _step_epoch_forward(ax, state::EpochedDataBrowserState) = _step_epoch!(ax, state, 1)
 
 function _step_epoch!(ax, state::EpochedDataBrowserState, direction::Int)
@@ -1620,6 +1737,7 @@ function _step_epoch!(ax, state::EpochedDataBrowserState, direction::Int)
 end
 
 _yless!(ax, state) = _yzoom!(ax, state, 1.2)
+
 _ymore!(ax, state) = _yzoom!(ax, state, 0.8)
 
 function _yzoom!(ax, state, factor::Float64)
@@ -1969,10 +2087,7 @@ function _subset_selected_data(state::EpochedDataBrowserState, clicked_region_id
     return epoch_to_continuous(epoch_data, 1)
 end
 
-# =============================================================================
 # Filtering
-# =============================================================================
-
 _apply_filters!(state) = _rebuild_current!(state)
 
 function _apply_hp_filter!(state, active::Bool = !state.data.filter_state.hp_active[])
@@ -1985,11 +2100,12 @@ function _apply_lp_filter!(state, active::Bool = !state.data.filter_state.lp_act
     _apply_filters!(state)
 end
 
-# =============================================================================
 # Drawing
-# =============================================================================
+"""
+    _add_marker!(markers, ax, state, data, col; label = nothing, trial = nothing, visible = false, active_values = nothing)
 
-"""Add a vertical marker (trigger/EOG) to the marker list, window-scoped for performance."""
+Add a vertical marker (trigger/EOG) to the marker list, window-scoped for performance.
+"""
 function _add_marker!(markers, ax, state, data, col; label = nothing, trial = nothing, visible = false, active_values = nothing)
     src_df = isnothing(trial) ? data : data[trial]
     col_vec = src_df[!, col]
@@ -2179,6 +2295,7 @@ function _points_observable(fill_points!::F, tracker::Vector{Any}, xrange::Obser
 end
 
 _ica_original_series(data::ContinuousDataState, ep, col) = data.pre_ica.data[!, col]
+
 _ica_original_series(data::EpochedDataState, ep, col) = data.pre_ica.data[ep][!, col]
 
 function _accumulate_activation!(
@@ -2737,7 +2854,9 @@ function _draw_extra_channel!(ax, state::DataBrowserState{<:AbstractDataState})
 end
 
 _get_title(dat::EpochData) = "Epoch 1/$(n_epochs(dat))"
+
 _get_title(::ContinuousData) = ""
+
 _get_title(dat::ErpData) = "Epoch Average (n=$(n_epochs(dat)))"
 
 function _plot_vertical_lines!(ax, marker, active)
@@ -2815,10 +2934,7 @@ function _add_scale_indicator!(ax, state, plot_kwargs)
     end
 end
 
-# =============================================================================
 # Entry Points & File Launcher
-# =============================================================================
-
 function _load_example_databrowser_data()
     raw_path = example_path("data/bdf/example1.bdf")
     lay = read_layout(example_path("layouts/biosemi/biosemi72.csv"))
@@ -2826,59 +2942,6 @@ function _load_example_databrowser_data()
     dat = create_eegfun_data(read_raw_data(raw_path), lay)
     dat.file = basename(raw_path)
     return dat
-end
-
-"""
-    plot_databrowser(dat::EegData, ica = nothing; screen = nothing, kwargs...)
-    plot_databrowser(; launcher::Bool = false, screen = nothing, kwargs...)
-    plot_databrowser(filename::String, ica = nothing; input_dir = pwd(), participant_selection = participants(), screen = nothing, kwargs...)
-    plot_databrowser(data::Vector{<:EegData}, ica = nothing; screen = nothing, kwargs...)
-
-Launch the interactive EEG data browser for continuous, epoched, or ERP datasets, with optional
-dynamic ICA component subtraction, filtering, re-referencing, channel repair, and region selection.
-Called with no arguments, opens the bundled `example1.bdf` dataset (`launcher = true` opens the
-drag-and-drop file launcher).
-
-$(_generate_kwargs_doc(PLOT_DATABROWSER_KWARGS))
-"""
-function plot_databrowser(dat::EegData, ica = nothing; screen = nothing, kwargs...)
-    if string(Makie.current_backend()) == "CairoMakie"
-        @minimal_warning "CairoMakie detected. For full interactivity in plot_databrowser, use GLMakie."
-    end
-
-    _set_window_title(_generate_window_title(dat))
-    try
-        plot_kwargs = _merge_plot_kwargs(PLOT_DATABROWSER_KWARGS, kwargs)
-        fontsize_kw = isnothing(plot_kwargs[:theme_fontsize]) ? (;) : (; fontsize = plot_kwargs[:theme_fontsize])
-        fig = _eegfun_figure(; size = plot_kwargs[:figure_size], figure_padding = plot_kwargs[:figure_padding], fontsize_kw...)
-        ax = Axis(fig[1, 1], xlabel = plot_kwargs[:xlabel], ylabel = plot_kwargs[:ylabel], title = _get_title(dat))
-
-        state = _create_browser_state(dat, dat.layout.data.label, ax, ica, plot_kwargs)
-        state.extra_channel.fig = fig
-        _setup_ui(fig, ax, state, dat, ica, plot_kwargs)
-        _draw(ax, state)
-        _draw_extra_channel!(ax, state)
-        plot_kwargs[:show_scale_indicator] && _add_scale_indicator!(ax, state, plot_kwargs)
-
-        screen_obj = nothing
-        if plot_kwargs[:display_plot]
-            if !isnothing(screen)
-                display(screen, fig)
-                screen_obj = screen
-            else
-                screen_obj = _display_figure(fig)
-            end
-        end
-
-        return (fig = fig, axes = [ax], ax = ax, analysis_settings = state.analysis_settings, screen = screen_obj)
-    finally
-        _set_window_title("Makie")
-    end
-end
-
-function plot_databrowser(; launcher::Bool = false, screen = nothing, kwargs...)
-    launcher && return _plot_databrowser_launcher(; screen = screen, kwargs...)
-    return plot_databrowser(_load_example_databrowser_data(); screen = screen, kwargs...)
 end
 
 function _plot_databrowser_launcher(; screen = nothing, kwargs...)
@@ -3002,42 +3065,4 @@ function _read_any_eeg_file(filepath::String, layout::Union{Nothing,Layout} = no
 
     isnothing(dat_eeg) && @minimal_error("Unsupported file format or failed to read: $filepath")
     return (dat_eeg, ica_data)
-end
-
-function plot_databrowser(
-    filename::String,
-    ica = nothing;
-    input_dir::String = pwd(),
-    participant_selection = participants(),
-    screen = nothing,
-    kwargs...,
-)
-    ica_obj = ica isa AbstractString ? read_data(_resolve_input_filepath(ica, input_dir)) : ica
-    if endswith(filename, ".jld2")
-        resolved = _resolve_input_filepath(filename, input_dir)
-        dat_eeg = read_data(resolved)
-        isnothing(dat_eeg) && @minimal_error "No data found in file: $resolved"
-        return plot_databrowser(dat_eeg, ica_obj; screen = screen, kwargs...)
-    end
-    files = _require_batch_files(filename, input_dir, participant_selection)
-    results = NamedTuple[]
-    for file in files
-        @info "Browsing: $file"
-        dat_eeg = read_data(joinpath(input_dir, file))
-        isnothing(dat_eeg) && continue
-        push!(results, plot_databrowser(dat_eeg, ica_obj; screen = screen, kwargs...))
-    end
-    return results
-end
-
-function plot_databrowser(data::Vector{<:EegData}, ica = nothing; screen = nothing, kwargs...)
-    @info "Vector of $(length(data)) datasets provided — opening a browser for each"
-    results = NamedTuple[]
-    display_plot = get(kwargs, :display_plot, true)
-    for dat in data
-        _set_window_title(_generate_window_title(dat))
-        s = !isnothing(screen) ? screen : (display_plot ? _create_screen() : nothing)
-        push!(results, plot_databrowser(dat, ica; screen = s, kwargs...))
-    end
-    return results
 end

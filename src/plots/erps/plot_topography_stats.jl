@@ -1,24 +1,8 @@
-function _mean_col_diff(col_a::AbstractVector, col_b::AbstractVector, r::AbstractVector{Int})
-    s = 0.0
-    @inbounds @simd for k in r
-        s += Float64(col_a[k]) - Float64(col_b[k])
-    end
-    return s / length(r)
-end
+# Statistical t-map topographies and cluster-highlighted scalp maps.
 
-function _partition_indices(indices::Vector{Int}, n::Int)
-    len = length(indices)
-    bins = Vector{UnitRange{Int}}(undef, n)
-    base_size = div(len, n)
-    remainder = mod(len, n)
-    start = 1
-    for i = 1:n
-        stop = start + base_size + (i <= remainder ? 1 : 0) - 1
-        bins[i] = indices[start]:indices[stop]
-        start = stop + 1
-    end
-    return bins
-end
+######################################
+########### User Functions ###########
+######################################
 
 """
     plot_topography_stats(result::StatsResult;
@@ -546,4 +530,30 @@ function plot_topography_stats(
 
     display_plot && _display_figure(fig)
     return (fig = fig, axes = axes, colorbar = cb)
+end
+
+######################################
+######### Internal Functions #########
+######################################
+
+function _mean_col_diff(col_a::AbstractVector, col_b::AbstractVector, r::AbstractVector{Int})
+    s = 0.0
+    @inbounds @simd for k in r
+        s += Float64(col_a[k]) - Float64(col_b[k])
+    end
+    return s / length(r)
+end
+
+function _partition_indices(indices::Vector{Int}, n::Int)
+    len = length(indices)
+    bins = Vector{UnitRange{Int}}(undef, n)
+    base_size = div(len, n)
+    remainder = mod(len, n)
+    start = 1
+    for i = 1:n
+        stop = start + base_size + (i <= remainder ? 1 : 0) - 1
+        bins[i] = indices[start]:indices[stop]
+        start = stop + 1
+    end
+    return bins
 end

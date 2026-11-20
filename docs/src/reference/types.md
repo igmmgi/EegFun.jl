@@ -14,6 +14,8 @@ EegFun.EegData
 EegFun.SingleDataFrameEeg
 EegFun.MultiDataFrameEeg
 EegFun.EegFunError
+EegFun.TimeSelection
+EegFun.AllSelection
 EegFun.Interval
 ```
 
@@ -76,6 +78,7 @@ EegFun.TFAnalyticResult
 ```@docs
 EegFun.DecodingParameters
 EegFun.DecodedData
+EegFun.TemporalCluster
 EegFun.DecodingStatisticsResult
 EegFun.NoiseCeiling
 EegFun.RsaData
@@ -108,6 +111,7 @@ EegFun.AutoRejectResult
 ```@docs
 EegFun.AnalysisSettings
 EegFun.BatchResult
+EegFun.ConfigParameter
 EegFun.CleanLineConfig
 EegFun.EegConfig
 EegFun.EogConfig

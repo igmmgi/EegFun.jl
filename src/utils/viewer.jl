@@ -1,3 +1,9 @@
+# Interactive tabular `DataFrame` and `EegData` inspection helpers.
+
+######################################
+########### User Functions ###########
+######################################
+
 """
     viewer(dat)
 

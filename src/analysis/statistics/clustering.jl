@@ -1,5 +1,9 @@
 # Connected-component clustering, neighbor pre-filtering, cluster statistics, and TFCE.
 
+######################################
+######### Internal Functions #########
+######################################
+
 _symmetrize_connectivity(conn::SparseMatrixCSC{Bool}) = issymmetric(conn) ? conn : (conn .| copy(transpose(conn)))
 
 function _build_connectivity_matrix(electrodes::Vector{Symbol}, layout::Layout, cluster_type::Symbol)
@@ -38,7 +42,6 @@ function _build_connectivity_matrix(electrodes::Vector{Symbol}, layout::Layout, 
 end
 
 # === SPATIAL NEIGHBOR PRE-FILTERING (2D & 3D) ===
-
 function _prefilter_mask_by_neighbors!(mask::BitArray{N}, spatial_connectivity::SparseMatrixCSC{Bool}, min_num_neighbors::Int) where {N}
     min_num_neighbors <= 0 && return nothing
 
@@ -81,7 +84,6 @@ function _prefilter_mask_by_neighbors(mask::BitArray{N}, spatial_connectivity::S
 end
 
 # === OBSERVED CLUSTER FINDING (2D & 3D BFS) ===
-
 function _find_clusters_connected_components(
     mask::BitArray{2},
     electrodes::Vector{Symbol},
@@ -328,7 +330,6 @@ function _find_clusters_tf(
 end
 
 # === CLUSTER STATISTICS (MAXSUM) ===
-
 function _compute_cluster_statistics(clusters::Vector{Cluster}, t_matrix::AbstractMatrix{<:AbstractFloat}; return_clusters::Bool = true)
     isempty(clusters) && return (return_clusters ? (Cluster[], Float64[]) : Float64[])
 
@@ -394,7 +395,6 @@ _compute_cluster_statistics_tf(clusters::Vector{TFCluster}, t_matrix::AbstractAr
     _compute_cluster_statistics_tf(clusters, t_matrix, true)
 
 # === PERMUTATION CLUSTER STATISTIC ===
-
 @inline function _enqueue_2d!(
     ne::Int,
     nt::Int,
@@ -599,7 +599,6 @@ function _max_cluster_stat_tf(
 end
 
 # === THRESHOLD-FREE CLUSTER ENHANCEMENT (TFCE) ===
-
 function _accumulate_tfce_polarity!(
     tfce_map::Matrix{Float64},
     t_map::AbstractMatrix{<:AbstractFloat},

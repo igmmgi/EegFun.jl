@@ -1,36 +1,30 @@
-_make_output_filename(output_dir::String, input_file::String, suffix::String) =
-    joinpath(output_dir, "$(basename_without_ext(input_file))$(suffix).jld2")
+# Trigger run collapsing, section headers, package paths, and `version_info`.
 
+######################################
+########### User Functions ###########
+######################################
+
+"""
+    basename_without_ext(path::String) -> String
+
+Return the filename stem of `path` without its extension (handling compound `.xdf.gz` suffixes).
+"""
 function basename_without_ext(path::String)
     base = basename(path)
     endswith(lowercase(base), ".xdf.gz") && return base[1:(end-7)]
     return splitext(base)[1]
 end
 
+"""
+    consecutive(f::Function, A::AbstractVector; step::Int = 1) -> Vector
+
+Evaluate `f(A[i + step], A[i])` across consecutive pairs separated by `step` indices in `A`.
+"""
 function consecutive(f::Function, A::AbstractVector; step::Int = 1)
     step < 1 && @minimal_error "Step must be positive"
     length(A) < step + 1 && @minimal_error "Vector too short for given step size"
     return [f(A[i+step], A[i]) for i = 1:(length(A)-step)]
 end
-
-function _splitgroups(v::AbstractVector{<:Integer})
-    isempty(v) && return Int64[], Int64[]
-    n = length(v)
-    start_vals = [Int64(v[1])]
-    end_vals = Int64[]
-    @inbounds for i = 2:n
-        if v[i] > v[i-1] + 1
-            push!(end_vals, Int64(v[i-1]))
-            push!(start_vals, Int64(v[i]))
-        end
-    end
-    push!(end_vals, Int64(v[end]))
-    return start_vals, end_vals
-end
-
-_find_idx_start_end(time::AbstractVector, start_time::Real, end_time::Real) =
-    searchsortedfirst(time, start_time), searchsortedlast(time, end_time)
-_find_idx_start_end(time::AbstractVector, limits::AbstractVector) = searchsortedfirst(time, limits[1]), searchsortedlast(time, limits[end])
 
 """
     find_times(time::AbstractVector, requested_times::AbstractVector) -> (indices::Vector{Int}, times::Vector{Float64})
@@ -110,6 +104,78 @@ function detrend(x::AbstractVector, y::AbstractVector)::Vector{Float64}
     return out
 end
 
+"""
+    example_path(relative_path::String) -> String
+
+Return the absolute path to a bundled resource file under `pkgdir(EegFun)/resources/`.
+"""
+function example_path(relative_path::String)
+    path = joinpath(pkgdir(EegFun), "resources", relative_path)
+    isfile(path) || isdir(path) || @minimal_error("Example resource not found: $relative_path\nExpected at: $path")
+    return path
+end
+
+Base.copy(dat::ContinuousData)::ContinuousData =
+    ContinuousData(dat.file, copy(dat.data, copycols = true), copy(dat.layout), dat.sample_rate, copy(dat.analysis_info))
+
+Base.copy(dat::EpochData)::EpochData = EpochData(
+    dat.file,
+    dat.condition,
+    dat.condition_name,
+    [copy(epoch, copycols = true) for epoch in dat],
+    copy(dat.layout),
+    dat.sample_rate,
+    copy(dat.analysis_info),
+)
+
+Base.copy(dat::ErpData)::ErpData = ErpData(
+    dat.file,
+    dat.condition,
+    dat.condition_name,
+    copy(dat.data, copycols = true),
+    copy(dat.layout),
+    dat.sample_rate,
+    copy(dat.analysis_info),
+    dat.n_epochs,
+)
+
+Base.copy(info::AnalysisInfo)::AnalysisInfo = AnalysisInfo(
+    reference = info.reference,
+    hp_filter = info.hp_filter,
+    lp_filter = info.lp_filter,
+    sample_rate = info.sample_rate,
+    n_ica_components_removed = info.n_ica_components_removed,
+    n_channels_repaired = info.n_channels_repaired,
+    repaired_channels = copy(info.repaired_channels),
+)
+
+######################################
+######### Internal Functions #########
+######################################
+
+_make_output_filename(output_dir::String, input_file::String, suffix::String) =
+    joinpath(output_dir, "$(basename_without_ext(input_file))$(suffix).jld2")
+
+function _splitgroups(v::AbstractVector{<:Integer})
+    isempty(v) && return Int64[], Int64[]
+    n = length(v)
+    start_vals = [Int64(v[1])]
+    end_vals = Int64[]
+    @inbounds for i = 2:n
+        if v[i] > v[i-1] + 1
+            push!(end_vals, Int64(v[i-1]))
+            push!(start_vals, Int64(v[i]))
+        end
+    end
+    push!(end_vals, Int64(v[end]))
+    return start_vals, end_vals
+end
+
+_find_idx_start_end(time::AbstractVector, start_time::Real, end_time::Real) =
+    searchsortedfirst(time, start_time), searchsortedlast(time, end_time)
+
+_find_idx_start_end(time::AbstractVector, limits::AbstractVector) = searchsortedfirst(time, limits[1]), searchsortedlast(time, limits[end])
+
 function _natural_sort_key(s::AbstractString)::String
     cu = codeunits(s)
     n = length(cu)
@@ -164,40 +230,6 @@ function _natural_sort_key(s::AbstractString)::String
     return String(out)
 end
 
-Base.copy(dat::ContinuousData)::ContinuousData =
-    ContinuousData(dat.file, copy(dat.data, copycols = true), copy(dat.layout), dat.sample_rate, copy(dat.analysis_info))
-
-Base.copy(dat::EpochData)::EpochData = EpochData(
-    dat.file,
-    dat.condition,
-    dat.condition_name,
-    [copy(epoch, copycols = true) for epoch in dat],
-    copy(dat.layout),
-    dat.sample_rate,
-    copy(dat.analysis_info),
-)
-
-Base.copy(dat::ErpData)::ErpData = ErpData(
-    dat.file,
-    dat.condition,
-    dat.condition_name,
-    copy(dat.data, copycols = true),
-    copy(dat.layout),
-    dat.sample_rate,
-    copy(dat.analysis_info),
-    dat.n_epochs,
-)
-
-Base.copy(info::AnalysisInfo)::AnalysisInfo = AnalysisInfo(
-    reference = info.reference,
-    hp_filter = info.hp_filter,
-    lp_filter = info.lp_filter,
-    sample_rate = info.sample_rate,
-    n_ica_components_removed = info.n_ica_components_removed,
-    n_channels_repaired = info.n_channels_repaired,
-    repaired_channels = copy(info.repaired_channels),
-)
-
 function _parse_string_to_ints(text::String)
     isempty(text) && return Int[]
     occursin('.', text) && @minimal_error("Decimal points not allowed in integer selection: '$text'")
@@ -248,6 +280,7 @@ end
 
 _merge_plot_kwargs(defaults_dict::Dict{Symbol,Tuple{Any,String}}, user_kwargs::Dict; validate::Bool = true)::Dict{Symbol,Any} =
     _merge_plot_kwargs(defaults_dict, NamedTuple(user_kwargs); validate = validate)
+
 _merge_plot_kwargs(defaults_dict::Dict{Symbol,Tuple{Any,String}}, user_kwargs::Base.Pairs; validate::Bool = true)::Dict{Symbol,Any} =
     _merge_plot_kwargs(defaults_dict, NamedTuple(user_kwargs); validate = validate)
 
@@ -338,17 +371,6 @@ function _combine_boolean_columns!(dat::ContinuousData, columns::Vector{Symbol},
 
     dat.data[!, output_column] = result
     @info "_combine_boolean_columns!: Combined $(length(columns)) columns using :$operation operation into column :$output_column"
-end
-
-"""
-    example_path(relative_path::String) -> String
-
-Return the absolute path to a bundled resource file under `pkgdir(EegFun)/resources/`.
-"""
-function example_path(relative_path::String)
-    path = joinpath(pkgdir(EegFun), "resources", relative_path)
-    isfile(path) || isdir(path) || @minimal_error("Example resource not found: $relative_path\nExpected at: $path")
-    return path
 end
 
 function _foreach_chunk(f, n::Integer; ntasks::Integer = Threads.nthreads())

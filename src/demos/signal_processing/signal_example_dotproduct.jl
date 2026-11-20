@@ -1,18 +1,24 @@
+# Interactive inner product, phase lag, and cosine similarity demo.
+
+######################################
+########### User Functions ###########
+######################################
+
 """
     signal_example_dotproduct()
 
 Interactive dot-product demo illustrating how the Discrete Fourier Transform (DFT) detects
 frequency power via sine and complex (sine + cosine) probe sinusoids.
 
+# Returns
+- `fig::Figure`: The Makie figure object
+- `axes::Tuple`: `(ax_sig, ax_prod_sin, ax_prod_cos)` — the three axis objects
+
 # Examples
 ```julia
 using GLMakie, EegFun
 EegFun.signal_example_dotproduct()
 ```
-
-# Returns
-- `fig::Figure`: The Makie figure object
-- `axes::Tuple`: `(ax_sig, ax_prod_sin, ax_prod_cos)` — the three axis objects
 """
 function signal_example_dotproduct()
     _check_interactive_demo_backend("Signal Dot Product demo") || return nothing

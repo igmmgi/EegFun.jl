@@ -1,3 +1,9 @@
+# Interactive time-window and ERP component measurement exploration GUI.
+
+######################################
+########### User Functions ###########
+######################################
+
 """
     plot_erp_measurement_gui(; filter_lp = 30.0, channel = :Cz, analysis_type = "mean_amplitude",
                                analysis_interval = (0.3, 0.5), baseline_interval = (-0.2, 0.0), kwargs...)
@@ -44,12 +50,6 @@ function plot_erp_measurement_gui(;
         baseline_interval = baseline_interval,
         kwargs...,
     )
-end
-
-function plot_erp_measurement_gui(filepath::String; kwargs...)
-    data = read_data(filepath)
-    isnothing(data) && @minimal_error "No data found in file: $filepath"
-    return plot_erp_measurement_gui(data; kwargs...)
 end
 
 function plot_erp_measurement_gui(
@@ -599,6 +599,16 @@ function plot_erp_measurement_gui(
     screen = display_plot ? _display_figure(fig) : nothing
     return (fig = fig, axes = [ax], screen = screen)
 end
+
+function plot_erp_measurement_gui(filepath::String; kwargs...)
+    data = read_data(filepath)
+    isnothing(data) && @minimal_error "No data found in file: $filepath"
+    return plot_erp_measurement_gui(data; kwargs...)
+end
+
+######################################
+######### Internal Functions #########
+######################################
 
 _is_latency_measurement(atype::AbstractString) = endswith(atype, "latency")
 

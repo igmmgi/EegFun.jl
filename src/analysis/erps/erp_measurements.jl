@@ -1,4 +1,14 @@
-"""Human-readable labels paired with measurement type strings, for use in GUI menus."""
+# ERP amplitude, peak latency, area, and fractional latency measurement functions.
+
+######################################
+######### Types & Constants ##########
+######################################
+
+"""
+    MEASUREMENT_TYPE_LABELS
+
+Human-readable `"Label" => "type_string"` pairs for all supported ERP measurement types, used in GUI menus.
+"""
 const MEASUREMENT_TYPE_LABELS = [
     "Mean Amplitude" => "mean_amplitude",
     "Max Peak Amplitude" => "max_peak_amplitude",
@@ -15,7 +25,11 @@ const MEASUREMENT_TYPE_LABELS = [
     "Fractional Peak Latency" => "fractional_peak_latency",
 ]
 
-"""Valid ERP measurement type strings."""
+"""
+    VALID_MEASUREMENT_TYPES
+
+Vector of valid `analysis_type` identifier strings accepted by [`erp_measurements`](@ref).
+"""
 const VALID_MEASUREMENT_TYPES = last.(MEASUREMENT_TYPE_LABELS)
 
 const ERP_MEASUREMENTS_KWARGS = Dict{Symbol,Tuple{Any,String}}(
@@ -43,6 +57,291 @@ struct _MeasurementSpec
     fractional_peak_direction::Symbol
     peak_polarity::Symbol
 end
+
+######################################
+########### User Functions ###########
+######################################
+
+"""
+    erp_measurements(data::Union{ErpData,EpochData}, analysis_type; analysis_interval = times(), baseline_interval = nothing, channel_selection = channels(), participant = nothing, average_channels = false, include_extra = false, kwargs...) -> Union{ErpMeasurementsResult,Nothing}
+    erp_measurements(data::AbstractVector{<:Union{ErpData,EpochData}}, analysis_type; condition_selection = conditions(), kwargs...) -> Union{ErpMeasurementsResult,Nothing}
+    erp_measurements(file_pattern::String, analysis_type; analysis_interval = times(), baseline_interval = nothing, participant_selection = participants(), condition_selection = conditions(), channel_selection = channels(), input_dir = pwd(), output_dir = nothing, output_file = "erp_measurements", kwargs...)
+
+Extract ERP amplitude, latency, or area measurements from EEG data without mutating input data:
+- On in-memory `ErpData`, `EpochData`, or `Vector`, returns an [`ErpMeasurementsResult`](@ref).
+- On `file_pattern::String`, batch-processes matching `.jld2` files and writes a CSV table.
+
+$(_generate_kwargs_doc(ERP_MEASUREMENTS_KWARGS))
+
+# Details
+Supported `analysis_type` values:
+- `"mean_amplitude"` — mean amplitude in `analysis_interval`
+- `"max_peak_amplitude"` / `"min_peak_amplitude"` — robust local peak amplitude (with simple extremum fallback)
+- `"max_peak_latency"` / `"min_peak_latency"` — peak latency in seconds
+- `"peak_to_peak_amplitude"` / `"peak_to_peak_latency"` — difference between max and min peaks
+- `"integral"` / `"rectified_area"` / `"positive_area"` / `"negative_area"` — trapezoidal area in µV·s
+- `"fractional_area_latency"` / `"fractional_peak_latency"` — interpolated onset/offset latencies
+"""
+function erp_measurements(
+    dat::Union{ErpData,EpochData},
+    analysis_type::Union{AbstractString,Symbol};
+    analysis_interval::Interval = times(),
+    baseline_interval::Interval = nothing,
+    channel_selection = channels(),
+    participant::Union{Int,Nothing} = nothing,
+    average_channels::Bool = false,
+    include_extra::Bool = false,
+    kwargs...,
+)::Union{ErpMeasurementsResult,Nothing}
+    analysis_type_str = string(analysis_type)
+    measurement_kwargs = _merge_plot_kwargs(ERP_MEASUREMENTS_KWARGS, kwargs)
+    spec = _validate_measurement_params(analysis_type_str, analysis_interval, measurement_kwargs)
+    part_id = _resolve_in_memory_participant(dat, participant)
+
+    res_df = _extract_measurements_df(
+        dat,
+        analysis_type_str,
+        spec;
+        analysis_interval = analysis_interval,
+        baseline_interval = baseline_interval,
+        channel_selection = channel_selection,
+        participant = part_id,
+        average_channels = average_channels,
+        include_extra = include_extra,
+        apply_baseline = true,
+    )
+    isnothing(res_df) && return nothing
+    return ErpMeasurementsResult(res_df, analysis_type_str, analysis_interval, baseline_interval)
+end
+
+function erp_measurements(
+    data::AbstractVector{<:Union{ErpData,EpochData}},
+    analysis_type::Union{AbstractString,Symbol};
+    analysis_interval::Interval = times(),
+    baseline_interval::Interval = nothing,
+    condition_selection = conditions(),
+    channel_selection = channels(),
+    participant::Union{Int,Nothing} = nothing,
+    average_channels::Bool = false,
+    include_extra::Bool = false,
+    kwargs...,
+)::Union{ErpMeasurementsResult,Nothing}
+    analysis_type_str = string(analysis_type)
+    measurement_kwargs = _merge_plot_kwargs(ERP_MEASUREMENTS_KWARGS, kwargs)
+    spec = _validate_measurement_params(analysis_type_str, analysis_interval, measurement_kwargs)
+
+    isempty(data) && return nothing
+    selected_indices = get_selected_conditions(data, condition_selection)
+    if isempty(selected_indices)
+        @minimal_warning "No conditions selected for ERP measurements"
+        return nothing
+    end
+
+    dfs = DataFrame[]
+    for idx in selected_indices
+        dat = data[idx]
+        part_id = _resolve_in_memory_participant(dat, participant)
+        df = _extract_measurements_df(
+            dat,
+            analysis_type_str,
+            spec;
+            analysis_interval = analysis_interval,
+            baseline_interval = baseline_interval,
+            channel_selection = channel_selection,
+            participant = part_id,
+            average_channels = average_channels,
+            include_extra = include_extra,
+            apply_baseline = true,
+        )
+        !isnothing(df) && push!(dfs, df)
+    end
+
+    isempty(dfs) && return nothing
+    combined = length(dfs) == 1 ? dfs[1] : vcat(dfs...; cols = :union)
+    return ErpMeasurementsResult(combined, analysis_type_str, analysis_interval, baseline_interval)
+end
+
+"""
+    erp_measurements!(dat::Union{ErpData,EpochData}, analysis_type; kwargs...)
+    erp_measurements!(data::AbstractVector{<:Union{ErpData,EpochData}}, analysis_type; kwargs...)
+
+In-place mutating version of [`erp_measurements`](@ref); applies `baseline_interval` and condition metadata columns in place and returns raw `NamedTuple` row(s).
+"""
+function erp_measurements!(
+    dat::Union{ErpData,EpochData},
+    analysis_type::Union{AbstractString,Symbol};
+    analysis_interval::Interval = times(),
+    baseline_interval::Interval = nothing,
+    channel_selection = channels(),
+    participant::Int = 0,
+    average_channels::Bool = false,
+    include_extra::Bool = false,
+    kwargs...,
+)
+    analysis_type_str = string(analysis_type)
+    measurement_kwargs = _merge_plot_kwargs(ERP_MEASUREMENTS_KWARGS, kwargs)
+    spec = _validate_measurement_params(analysis_type_str, analysis_interval, measurement_kwargs)
+
+    selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = include_extra)
+    if isempty(selected_channels)
+        @minimal_warning "No channels selected"
+        return nothing
+    end
+    all_channels = include_extra ? union(channel_labels(dat), selected_channels) : channel_labels(dat)
+
+    dfs = dat isa ErpData ? [dat.data] : dat.data
+    _apply_baseline_correction!(dfs, baseline_interval, all_channels)
+    for df in dfs
+        hasproperty(df, :condition) || insertcols!(df, 1, :condition => dat.condition)
+        hasproperty(df, :condition_name) || insertcols!(df, 2, :condition_name => dat.condition_name)
+    end
+
+    res_df = _extract_measurements_df(
+        dat,
+        analysis_type_str,
+        spec;
+        analysis_interval = analysis_interval,
+        baseline_interval = baseline_interval,
+        channel_selection = channel_selection,
+        participant = participant,
+        average_channels = average_channels,
+        include_extra = include_extra,
+        apply_baseline = false,
+    )
+    isnothing(res_df) && return nothing
+    rows = Tables.rowtable(res_df)
+    return dat isa ErpData ? only(rows) : rows
+end
+
+function erp_measurements!(
+    data::AbstractVector{<:Union{ErpData,EpochData}},
+    analysis_type::Union{AbstractString,Symbol};
+    analysis_interval::Interval = times(),
+    baseline_interval::Interval = nothing,
+    channel_selection = channels(),
+    participant::Int = 0,
+    average_channels::Bool = false,
+    include_extra::Bool = false,
+    kwargs...,
+)
+    if isempty(data)
+        measurement_kwargs = _merge_plot_kwargs(ERP_MEASUREMENTS_KWARGS, kwargs)
+        _validate_measurement_params(string(analysis_type), analysis_interval, measurement_kwargs)
+        return nothing
+    end
+
+    all_results = NamedTuple[]
+    for dat in data
+        result = erp_measurements!(
+            dat,
+            analysis_type;
+            analysis_interval = analysis_interval,
+            baseline_interval = baseline_interval,
+            channel_selection = channel_selection,
+            participant = participant,
+            average_channels = average_channels,
+            include_extra = include_extra,
+            kwargs...,
+        )
+        isnothing(result) && continue
+        if result isa AbstractVector
+            append!(all_results, result)
+        else
+            push!(all_results, result)
+        end
+    end
+    return isempty(all_results) ? nothing : all_results
+end
+
+function erp_measurements(
+    file_pattern::String,
+    analysis_type::Union{AbstractString,Symbol};
+    analysis_interval::Interval = times(),
+    baseline_interval::Interval = nothing,
+    participant_selection = participants(),
+    condition_selection = conditions(),
+    channel_selection = channels(),
+    average_channels::Bool = false,
+    include_extra::Bool = false,
+    input_dir::String = pwd(),
+    output_dir::Union{String,Nothing} = nothing,
+    output_file::String = "erp_measurements",
+    kwargs...,
+)
+    _with_batch_logging("ERP measurement analysis", "$(output_file).log", input_dir, output_dir) do ctx
+        @log_call "erp_measurements"
+
+        analysis_type_str = string(analysis_type)
+        measurement_kwargs = _merge_plot_kwargs(ERP_MEASUREMENTS_KWARGS, kwargs)
+        spec = _validate_measurement_params(analysis_type_str, analysis_interval, measurement_kwargs)
+
+        output_dir = _prepare_output_dir!(ctx, _default_measurements_output_dir(input_dir, analysis_type_str))
+        @info "Analysis type: $analysis_type_str"
+
+        files = _find_batch_files(file_pattern, input_dir, participant_selection)
+        if isempty(files)
+            @minimal_warning "No JLD2 files found matching pattern '$file_pattern' in $input_dir"
+            return nothing
+        end
+        @info "Found $(length(files)) JLD2 files"
+
+        file_dfs = DataFrame[]
+        processed_count = 0
+        error_count = 0
+
+        p = Progress(length(files); desc = "Measuring ERPs...")
+        for (file_idx, file) in enumerate(files)
+            input_path = joinpath(input_dir, file)
+            @info "Processing: $file ($file_idx/$(length(files)))"
+            try
+                file_df = _process_measurements_file(
+                    input_path,
+                    analysis_interval,
+                    analysis_type_str,
+                    spec,
+                    baseline_interval,
+                    average_channels,
+                    condition_selection,
+                    channel_selection;
+                    include_extra = include_extra,
+                )
+                if !isnothing(file_df) && !isempty(file_df)
+                    push!(file_dfs, file_df)
+                    processed_count += 1
+                    @info "  ✓ Extracted $(nrow(file_df)) measurement(s)"
+                else
+                    error_count += 1
+                    @minimal_warning "  ✗ No measurements extracted from $file"
+                end
+            catch e
+                @minimal_warning "Error processing $file: $(sprint(showerror, e))"
+                error_count += 1
+            end
+            next!(p)
+        end
+
+        if isempty(file_dfs)
+            @minimal_warning "No results to save"
+            @info "Analysis complete! Processed $processed_count files successfully, $error_count errors"
+            return nothing
+        end
+
+        results_df = length(file_dfs) == 1 ? file_dfs[1] : vcat(file_dfs...; cols = :union)
+        sort_cols = hasproperty(results_df, :epoch) ? [:participant, :condition, :epoch] : [:participant, :condition]
+        sort!(results_df, sort_cols)
+
+        output_csv = joinpath(output_dir, "$(output_file).csv")
+        CSV.write(output_csv, results_df)
+
+        @info "Saved $(nrow(results_df)) measurement(s) to: $output_csv"
+        @info "Analysis complete! Processed $processed_count files successfully, $error_count errors"
+        return ErpMeasurementsResult(results_df, analysis_type_str, analysis_interval, baseline_interval)
+    end
+end
+
+######################################
+######### Internal Functions #########
+######################################
 
 function _MeasurementSpec(analysis_type::Union{AbstractString,Symbol}, measurement_kwargs::Dict{Symbol,Any})
     t_str = string(analysis_type)
@@ -101,8 +400,6 @@ function _normalize_interval(interval::Interval)
         return interval
     end
 end
-
-# === SCALAR MEASUREMENT KERNELS ===
 
 function _find_robust_peak(data::AbstractVector, peak_type::Symbol; local_interval::Int = 3)
     n = length(data)
@@ -378,8 +675,6 @@ function _compute_measurement(
     return _eval_channel_measurement(chan_data, selected_times, _MeasurementSpec(analysis_type, measurement_kwargs), channel_name)
 end
 
-# === TABLE EXTRACTION ENGINE ===
-
 function _resolve_in_memory_participant(dat::Union{ErpData,EpochData}, participant::Union{Int,Nothing})::Int
     !isnothing(participant) && return participant
     first_df = dat isa ErpData ? dat.data : (isempty(dat.data) ? nothing : dat.data[1])
@@ -636,203 +931,6 @@ function _extract_measurements_df(
     return out_df
 end
 
-# === PUBLIC API ===
-
-"""
-    erp_measurements!(dat::ErpData, analysis_type; analysis_interval = times(), baseline_interval = nothing, channel_selection = channels(), participant = 0, kwargs...)
-    erp_measurements!(dat::EpochData, analysis_type; kwargs...)
-    erp_measurements!(data::AbstractVector{<:Union{ErpData,EpochData}}, analysis_type; kwargs...)
-    erp_measurements(data::Union{ErpData,EpochData,AbstractVector{<:Union{ErpData,EpochData}}}, analysis_type; kwargs...) -> Union{ErpMeasurementsResult,Nothing}
-    erp_measurements(file_pattern::String, analysis_type; analysis_interval = times(), baseline_interval = nothing,
-                     participant_selection = participants(), condition_selection = conditions(), channel_selection = channels(),
-                     input_dir = pwd(), output_dir = nothing, output_file = "erp_measurements", kwargs...)
-
-Extract ERP amplitude, latency, or area measurements from EEG data.
-- `erp_measurements` on in-memory `ErpData`, `EpochData`, or `Vector` returns an [`ErpMeasurementsResult`](@ref) without mutating input data.
-- `erp_measurements!` mutates input data in-place when applying `baseline_interval` / condition columns and returns raw `NamedTuple` row(s).
-- `erp_measurements(file_pattern, ...)` batch-processes JLD2 files and saves a CSV.
-
-# `analysis_type` Options
-- `"mean_amplitude"` — mean amplitude in `analysis_interval`
-- `"max_peak_amplitude"` / `"min_peak_amplitude"` — robust local peak amplitude (with simple extremum fallback)
-- `"max_peak_latency"` / `"min_peak_latency"` — peak latency in seconds
-- `"peak_to_peak_amplitude"` / `"peak_to_peak_latency"` — difference between max and min peaks
-- `"integral"` / `"rectified_area"` / `"positive_area"` / `"negative_area"` — trapezoidal area in µV·s
-- `"fractional_area_latency"` / `"fractional_peak_latency"` — interpolated onset/offset latencies
-
-$(_generate_kwargs_doc(ERP_MEASUREMENTS_KWARGS))
-"""
-function erp_measurements!(
-    dat::Union{ErpData,EpochData},
-    analysis_type::Union{AbstractString,Symbol};
-    analysis_interval::Interval = times(),
-    baseline_interval::Interval = nothing,
-    channel_selection = channels(),
-    participant::Int = 0,
-    average_channels::Bool = false,
-    include_extra::Bool = false,
-    kwargs...,
-)
-    analysis_type_str = string(analysis_type)
-    measurement_kwargs = _merge_plot_kwargs(ERP_MEASUREMENTS_KWARGS, kwargs)
-    spec = _validate_measurement_params(analysis_type_str, analysis_interval, measurement_kwargs)
-
-    selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = include_extra)
-    if isempty(selected_channels)
-        @minimal_warning "No channels selected"
-        return nothing
-    end
-    all_channels = include_extra ? union(channel_labels(dat), selected_channels) : channel_labels(dat)
-
-    dfs = dat isa ErpData ? [dat.data] : dat.data
-    _apply_baseline_correction!(dfs, baseline_interval, all_channels)
-    for df in dfs
-        hasproperty(df, :condition) || insertcols!(df, 1, :condition => dat.condition)
-        hasproperty(df, :condition_name) || insertcols!(df, 2, :condition_name => dat.condition_name)
-    end
-
-    res_df = _extract_measurements_df(
-        dat,
-        analysis_type_str,
-        spec;
-        analysis_interval = analysis_interval,
-        baseline_interval = baseline_interval,
-        channel_selection = channel_selection,
-        participant = participant,
-        average_channels = average_channels,
-        include_extra = include_extra,
-        apply_baseline = false,
-    )
-    isnothing(res_df) && return nothing
-    rows = Tables.rowtable(res_df)
-    return dat isa ErpData ? only(rows) : rows
-end
-
-function erp_measurements!(
-    data::AbstractVector{<:Union{ErpData,EpochData}},
-    analysis_type::Union{AbstractString,Symbol};
-    analysis_interval::Interval = times(),
-    baseline_interval::Interval = nothing,
-    channel_selection = channels(),
-    participant::Int = 0,
-    average_channels::Bool = false,
-    include_extra::Bool = false,
-    kwargs...,
-)
-    if isempty(data)
-        measurement_kwargs = _merge_plot_kwargs(ERP_MEASUREMENTS_KWARGS, kwargs)
-        _validate_measurement_params(string(analysis_type), analysis_interval, measurement_kwargs)
-        return nothing
-    end
-
-    all_results = NamedTuple[]
-    for dat in data
-        result = erp_measurements!(
-            dat,
-            analysis_type;
-            analysis_interval = analysis_interval,
-            baseline_interval = baseline_interval,
-            channel_selection = channel_selection,
-            participant = participant,
-            average_channels = average_channels,
-            include_extra = include_extra,
-            kwargs...,
-        )
-        isnothing(result) && continue
-        if result isa AbstractVector
-            append!(all_results, result)
-        else
-            push!(all_results, result)
-        end
-    end
-    return isempty(all_results) ? nothing : all_results
-end
-
-"""
-    erp_measurements(data::Union{ErpData,EpochData}, analysis_type; kwargs...) -> Union{ErpMeasurementsResult,Nothing}
-    erp_measurements(data::AbstractVector{<:Union{ErpData,EpochData}}, analysis_type; condition_selection = conditions(), kwargs...) -> Union{ErpMeasurementsResult,Nothing}
-
-Non-mutating in-memory ERP measurement extraction returning an [`ErpMeasurementsResult`](@ref).
-"""
-function erp_measurements(
-    dat::Union{ErpData,EpochData},
-    analysis_type::Union{AbstractString,Symbol};
-    analysis_interval::Interval = times(),
-    baseline_interval::Interval = nothing,
-    channel_selection = channels(),
-    participant::Union{Int,Nothing} = nothing,
-    average_channels::Bool = false,
-    include_extra::Bool = false,
-    kwargs...,
-)::Union{ErpMeasurementsResult,Nothing}
-    analysis_type_str = string(analysis_type)
-    measurement_kwargs = _merge_plot_kwargs(ERP_MEASUREMENTS_KWARGS, kwargs)
-    spec = _validate_measurement_params(analysis_type_str, analysis_interval, measurement_kwargs)
-    part_id = _resolve_in_memory_participant(dat, participant)
-
-    res_df = _extract_measurements_df(
-        dat,
-        analysis_type_str,
-        spec;
-        analysis_interval = analysis_interval,
-        baseline_interval = baseline_interval,
-        channel_selection = channel_selection,
-        participant = part_id,
-        average_channels = average_channels,
-        include_extra = include_extra,
-        apply_baseline = true,
-    )
-    isnothing(res_df) && return nothing
-    return ErpMeasurementsResult(res_df, analysis_type_str, analysis_interval, baseline_interval)
-end
-
-function erp_measurements(
-    data::AbstractVector{<:Union{ErpData,EpochData}},
-    analysis_type::Union{AbstractString,Symbol};
-    analysis_interval::Interval = times(),
-    baseline_interval::Interval = nothing,
-    condition_selection = conditions(),
-    channel_selection = channels(),
-    participant::Union{Int,Nothing} = nothing,
-    average_channels::Bool = false,
-    include_extra::Bool = false,
-    kwargs...,
-)::Union{ErpMeasurementsResult,Nothing}
-    analysis_type_str = string(analysis_type)
-    measurement_kwargs = _merge_plot_kwargs(ERP_MEASUREMENTS_KWARGS, kwargs)
-    spec = _validate_measurement_params(analysis_type_str, analysis_interval, measurement_kwargs)
-
-    isempty(data) && return nothing
-    selected_indices = get_selected_conditions(data, condition_selection)
-    if isempty(selected_indices)
-        @minimal_warning "No conditions selected for ERP measurements"
-        return nothing
-    end
-
-    dfs = DataFrame[]
-    for idx in selected_indices
-        dat = data[idx]
-        part_id = _resolve_in_memory_participant(dat, participant)
-        df = _extract_measurements_df(
-            dat,
-            analysis_type_str,
-            spec;
-            analysis_interval = analysis_interval,
-            baseline_interval = baseline_interval,
-            channel_selection = channel_selection,
-            participant = part_id,
-            average_channels = average_channels,
-            include_extra = include_extra,
-            apply_baseline = true,
-        )
-        !isnothing(df) && push!(dfs, df)
-    end
-
-    isempty(dfs) && return nothing
-    combined = length(dfs) == 1 ? dfs[1] : vcat(dfs...; cols = :union)
-    return ErpMeasurementsResult(combined, analysis_type_str, analysis_interval, baseline_interval)
-end
-
 function _process_measurements_file(
     filepath::String,
     analysis_interval::Interval,
@@ -883,90 +981,4 @@ function _process_measurements_file(
     end
     isempty(dfs) && return nothing
     return length(dfs) == 1 ? dfs[1] : vcat(dfs...; cols = :union)
-end
-
-function erp_measurements(
-    file_pattern::String,
-    analysis_type::Union{AbstractString,Symbol};
-    analysis_interval::Interval = times(),
-    baseline_interval::Interval = nothing,
-    participant_selection = participants(),
-    condition_selection = conditions(),
-    channel_selection = channels(),
-    average_channels::Bool = false,
-    include_extra::Bool = false,
-    input_dir::String = pwd(),
-    output_dir::Union{String,Nothing} = nothing,
-    output_file::String = "erp_measurements",
-    kwargs...,
-)
-    _with_batch_logging("ERP measurement analysis", "$(output_file).log", input_dir, output_dir) do ctx
-        @log_call "erp_measurements"
-
-        analysis_type_str = string(analysis_type)
-        measurement_kwargs = _merge_plot_kwargs(ERP_MEASUREMENTS_KWARGS, kwargs)
-        spec = _validate_measurement_params(analysis_type_str, analysis_interval, measurement_kwargs)
-
-        output_dir = _prepare_output_dir!(ctx, _default_measurements_output_dir(input_dir, analysis_type_str))
-        @info "Analysis type: $analysis_type_str"
-
-        files = _find_batch_files(file_pattern, input_dir, participant_selection)
-        if isempty(files)
-            @minimal_warning "No JLD2 files found matching pattern '$file_pattern' in $input_dir"
-            return nothing
-        end
-        @info "Found $(length(files)) JLD2 files"
-
-        file_dfs = DataFrame[]
-        processed_count = 0
-        error_count = 0
-
-        p = Progress(length(files); desc = "Measuring ERPs...")
-        for (file_idx, file) in enumerate(files)
-            input_path = joinpath(input_dir, file)
-            @info "Processing: $file ($file_idx/$(length(files)))"
-            try
-                file_df = _process_measurements_file(
-                    input_path,
-                    analysis_interval,
-                    analysis_type_str,
-                    spec,
-                    baseline_interval,
-                    average_channels,
-                    condition_selection,
-                    channel_selection;
-                    include_extra = include_extra,
-                )
-                if !isnothing(file_df) && !isempty(file_df)
-                    push!(file_dfs, file_df)
-                    processed_count += 1
-                    @info "  ✓ Extracted $(nrow(file_df)) measurement(s)"
-                else
-                    error_count += 1
-                    @minimal_warning "  ✗ No measurements extracted from $file"
-                end
-            catch e
-                @minimal_warning "Error processing $file: $(sprint(showerror, e))"
-                error_count += 1
-            end
-            next!(p)
-        end
-
-        if isempty(file_dfs)
-            @minimal_warning "No results to save"
-            @info "Analysis complete! Processed $processed_count files successfully, $error_count errors"
-            return nothing
-        end
-
-        results_df = length(file_dfs) == 1 ? file_dfs[1] : vcat(file_dfs...; cols = :union)
-        sort_cols = hasproperty(results_df, :epoch) ? [:participant, :condition, :epoch] : [:participant, :condition]
-        sort!(results_df, sort_cols)
-
-        output_csv = joinpath(output_dir, "$(output_file).csv")
-        CSV.write(output_csv, results_df)
-
-        @info "Saved $(nrow(results_df)) measurement(s) to: $output_csv"
-        @info "Analysis complete! Processed $processed_count files successfully, $error_count errors"
-        return ErpMeasurementsResult(results_df, analysis_type_str, analysis_interval, baseline_interval)
-    end
 end

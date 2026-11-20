@@ -1,3 +1,20 @@
+# Discrete prolate spheroidal (DPSS) multitaper time-frequency decomposition.
+
+######################################
+######### Types & Constants ##########
+######################################
+
+struct MultitaperAccumulators
+    power_trials::Matrix{Float64}
+    complex_trials::Matrix{ComplexF64}
+    power_avg::Vector{Float64}
+    complex_avg::Vector{ComplexF64}
+end
+
+######################################
+########### User Functions ###########
+######################################
+
 """
     tf_multitaper(dat::EpochData;
                   channel_selection=channels(),
@@ -137,10 +154,10 @@ function tf_multitaper(
         gpu_active ?
         _tf_gpu_buffers(
             g;
-            power_accum_trials_gpu = return_trials ? gpu_array(zeros(Float64, n_trials, n_times)) : nothing,
-            complex_accum_trials_gpu = (return_trials && return_phase) ? gpu_array(zeros(ComplexF64, n_trials, n_times)) : nothing,
-            power_accum_avg_gpu = !return_trials ? gpu_array(zeros(Float64, n_times)) : nothing,
-            complex_accum_avg_gpu = (!return_trials && return_phase) ? gpu_array(zeros(ComplexF64, n_times)) : nothing,
+            power_accum_trials_gpu = return_trials ? _gpu_array(zeros(Float64, n_trials, n_times)) : nothing,
+            complex_accum_trials_gpu = (return_trials && return_phase) ? _gpu_array(zeros(ComplexF64, n_trials, n_times)) : nothing,
+            power_accum_avg_gpu = !return_trials ? _gpu_array(zeros(Float64, n_times)) : nothing,
+            complex_accum_avg_gpu = (!return_trials && return_phase) ? _gpu_array(zeros(ComplexF64, n_times)) : nothing,
         ) : nothing
     out = TFOutput(times_out, freqs, length(selected_channels), g)
 
@@ -170,11 +187,22 @@ function tf_multitaper(
     return _tf_result(sdat, out, selected_channels, :multitaper, g)
 end
 
-struct MultitaperAccumulators
-    power_trials::Matrix{Float64}
-    complex_trials::Matrix{ComplexF64}
-    power_avg::Vector{Float64}
-    complex_avg::Vector{ComplexF64}
+tf_multitaper(data_vec::AbstractVector{<:EpochData}; kwargs...) = [tf_multitaper(dat; kwargs...) for dat in data_vec]
+
+function tf_multitaper(
+    file_pattern::String;
+    input_dir::String = pwd(),
+    output_dir::Union{String,Nothing} = nothing,
+    participant_selection = participants(),
+    condition_selection = conditions(),
+    kwargs...,
+)
+    _with_batch_logging("tf_multitaper", "tf_multitaper.log", input_dir, output_dir) do ctx
+        @log_call "tf_multitaper"
+        output_dir = _prepare_output_dir!(ctx, joinpath(input_dir, "tf_multitaper_$(_clean_pattern(file_pattern))"))
+        process_fn = _tf_batch_worker(tf_multitaper, "multitaper", condition_selection, kwargs)
+        batch_process(process_fn, file_pattern, input_dir, output_dir, participant_selection, "TF multitaper")
+    end
 end
 
 function MultitaperAccumulators(g::TFGeometry; host_outputs::Bool = true)
@@ -186,6 +214,10 @@ function MultitaperAccumulators(g::TFGeometry; host_outputs::Bool = true)
         (host_outputs && !rt && rp) ? Vector{ComplexF64}(undef, g.n_times) : Vector{ComplexF64}(undef, 0),
     )
 end
+
+######################################
+######### Internal Functions #########
+######################################
 
 function _process_multitaper_channel!(
     ch_idx::Int,
@@ -364,22 +396,4 @@ function _process_multitaper_channel!(
     g.filter_edges && _filter_edges!(power, conv, num_frex, adjusted_time_indices, window_lengths_samples_exact, g.n_padded)
     _tf_store_channel!(out, ch_idx, power, conv, g)
     return nothing
-end
-
-tf_multitaper(data_vec::AbstractVector{<:EpochData}; kwargs...) = [tf_multitaper(dat; kwargs...) for dat in data_vec]
-
-function tf_multitaper(
-    file_pattern::String;
-    input_dir::String = pwd(),
-    output_dir::Union{String,Nothing} = nothing,
-    participant_selection = participants(),
-    condition_selection = conditions(),
-    kwargs...,
-)
-    _with_batch_logging("tf_multitaper", "tf_multitaper.log", input_dir, output_dir) do ctx
-        @log_call "tf_multitaper"
-        output_dir = _prepare_output_dir!(ctx, joinpath(input_dir, "tf_multitaper_$(clean_pattern(file_pattern))"))
-        process_fn = _tf_batch_worker(tf_multitaper, "multitaper", condition_selection, kwargs)
-        batch_process(process_fn, file_pattern, input_dir, output_dir, participant_selection, "TF multitaper")
-    end
 end

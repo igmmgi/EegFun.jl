@@ -1,8 +1,26 @@
-"""
-    repair_artifacts!(dat::EpochData, artifacts::EpochRejectionInfo; method::Symbol=:neighbor_interpolation, kwargs...)
+# Per-epoch bad-channel interpolation via neighbor weighting or spherical splines.
 
-Repair detected epoch artifacts in-place using `:neighbor_interpolation` (weighted neighbor interpolation from `dat.layout.neighbors`)
-or `:spherical_spline` (accepts `m::Int=4`, `lambda::Real=1e-5`). Updates `artifacts.repaired` and `artifacts.skipped`.
+######################################
+########### User Functions ###########
+######################################
+
+"""
+    repair_artifacts(dat::EpochData, artifacts::EpochRejectionInfo; method::Symbol = :neighbor_interpolation, kwargs...)
+
+Repair detected epoch artifacts on a copy of `dat` using `:neighbor_interpolation` (weighted neighbor interpolation from `dat.layout.neighbors`)
+or `:spherical_spline` (accepts `m::Int = 4`, `lambda::Real = 1e-5`), leaving both `dat` and `artifacts` unmodified.
+"""
+function repair_artifacts(dat::EpochData, artifacts::EpochRejectionInfo; method::Symbol = :neighbor_interpolation, kwargs...)
+    return repair_artifacts!(copy(dat), copy(artifacts); method = method, kwargs...)
+end
+
+repair_artifacts(dat::AbstractVector{<:EpochData}, artifacts::AbstractVector{<:EpochRejectionInfo}; kwargs...) =
+    repair_artifacts.(dat, artifacts; kwargs...)
+
+"""
+    repair_artifacts!(dat::EpochData, artifacts::EpochRejectionInfo; method::Symbol = :neighbor_interpolation, kwargs...)
+
+In-place mutating version of [`repair_artifacts`](@ref); updates `dat`, `artifacts.repaired`, and `artifacts.skipped`.
 """
 function repair_artifacts!(dat::EpochData, artifacts::EpochRejectionInfo; method::Symbol = :neighbor_interpolation, kwargs...)
     if method ∉ (:neighbor_interpolation, :spherical_spline)
@@ -13,24 +31,12 @@ function repair_artifacts!(dat::EpochData, artifacts::EpochRejectionInfo; method
     @info "Condition: $(dat.condition) ($(dat.condition_name)) - Repairing artifacts using method: $method"
     if method == :neighbor_interpolation
         isnothing(artifacts.repaired) && channel_repairable!(artifacts, dat.layout)
-        repair_artifacts_neighbor!(dat, artifacts; kwargs...)
+        _repair_artifacts_neighbor!(dat, artifacts; kwargs...)
     else
-        repair_artifacts_spherical_spline!(dat, artifacts; kwargs...)
+        _repair_artifacts_spherical_spline!(dat, artifacts; kwargs...)
     end
     return dat
 end
-
-"""
-    repair_artifacts(dat::EpochData, artifacts::EpochRejectionInfo; method::Symbol=:neighbor_interpolation, kwargs...)
-
-Non-mutating version of [`repair_artifacts!`](@ref); leaves both `dat` and `artifacts` unmodified.
-"""
-function repair_artifacts(dat::EpochData, artifacts::EpochRejectionInfo; method::Symbol = :neighbor_interpolation, kwargs...)
-    return repair_artifacts!(copy(dat), copy(artifacts); method = method, kwargs...)
-end
-
-repair_artifacts(dat::AbstractVector{<:EpochData}, artifacts::AbstractVector{<:EpochRejectionInfo}; kwargs...) =
-    repair_artifacts.(dat, artifacts; kwargs...)
 
 function repair_artifacts!(dat::AbstractVector{<:EpochData}, artifacts::AbstractVector{<:EpochRejectionInfo}; kwargs...)
     for (d, a) in zip(dat, artifacts)
@@ -76,7 +82,11 @@ end
 
 channel_repairable!(artifacts::Vector{EpochRejectionInfo}, layout::Layout) = channel_repairable!.(artifacts, Ref(layout))
 
-function repair_artifacts_neighbor!(dat::EpochData, artifacts::EpochRejectionInfo)
+######################################
+######### Internal Functions #########
+######################################
+
+function _repair_artifacts_neighbor!(dat::EpochData, artifacts::EpochRejectionInfo)
     isnothing(artifacts.repaired) && @minimal_error("repaired not populated. Call channel_repairable! first.")
     if isempty(artifacts.repaired)
         @info "No channels to repair (all bad channels were skipped)"
@@ -98,7 +108,7 @@ function repair_artifacts_neighbor!(dat::EpochData, artifacts::EpochRejectionInf
     return dat
 end
 
-function repair_artifacts_spherical_spline!(dat::EpochData, artifacts::EpochRejectionInfo; m::Int = 4, lambda::Real = 1e-5)
+function _repair_artifacts_spherical_spline!(dat::EpochData, artifacts::EpochRejectionInfo; m::Int = 4, lambda::Real = 1e-5)
     _ensure_coordinates_3d!(dat.layout)
     artifacts.repaired = OrderedDict{Int,Vector{Symbol}}()
     artifacts.skipped = OrderedDict{Int,Vector{Symbol}}()

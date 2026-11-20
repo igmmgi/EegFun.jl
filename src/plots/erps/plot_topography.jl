@@ -1,6 +1,458 @@
-# Note: PLOT_TOPOGRAPHY_KWARGS is defined in plot_ica.jl
+# Topographic scalp map plotting and interpolation functions.
+
+######################################
+######### Types & Constants ##########
+######################################
 
 const _UNIT_CIRCLE_200 = Tuple{Float32,Float32}[(Float32(cos(a)), Float32(sin(a))) for a in range(0, 2π, length = 200)]
+
+struct SphericalSplineOperator
+    W::Matrix{Float64}
+    valid::Vector{Int}
+    grid_scale::Int
+    radius::Float64
+end
+
+const _SPLINE_CACHE = Dict{UInt,SphericalSplineOperator}()
+
+const _SPLINE_CACHE_LOCK = ReentrantLock()
+
+const _RBF_GRID_CACHE = Dict{Tuple{Int,Float64},Tuple{Vector{Int},Matrix{Float64}}}()
+
+const _RBF_GRID_LOCK = ReentrantLock()
+
+const _TOPO_RBF_METHODS = Dict{Symbol,Any}(
+    :multiquadratic         => ScatteredInterpolation.Multiquadratic,
+    :inverse_multiquadratic => ScatteredInterpolation.InverseMultiquadratic,
+    :gaussian               => ScatteredInterpolation.Gaussian,
+    :inverse_quadratic      => ScatteredInterpolation.InverseQuadratic,
+    :thin_plate             => ScatteredInterpolation.ThinPlate,
+    :polyharmonic           => () -> ScatteredInterpolation.Polyharmonic(3),
+    :shepard                => ScatteredInterpolation.Shepard,
+    :nearest                => ScatteredInterpolation.NearestNeighbor,
+)
+
+mutable struct TopoSelectionState
+    active::Observable{Bool}
+    bounds::Observable{Tuple{Float64,Float64,Float64,Float64}}
+    visible::Observable{Bool}
+    rectangles::Vector{Vector{Makie.Poly}}
+    bounds_list::Observable{Vector{Tuple{Float64,Float64,Float64,Float64}}}
+    temp_rectangles::Vector{Union{Makie.Poly,Nothing}}
+    selected_channels::Vector{Symbol}
+    axes::Vector{Axis}
+    time_interval::Interval
+
+    function TopoSelectionState(axes::Vector{Axis}, time_interval::Interval = times())
+        n_axes = length(axes)
+        new(
+            Observable(false),
+            Observable((0.0, 0.0, 0.0, 0.0)),
+            Observable(false),
+            [Makie.Poly[] for _ = 1:n_axes],
+            Observable(Tuple{Float64,Float64,Float64,Float64}[]),
+            Union{Makie.Poly,Nothing}[nothing for _ = 1:n_axes],
+            Symbol[],
+            axes,
+            time_interval,
+        )
+    end
+end
+
+######################################
+########### User Functions ###########
+######################################
+
+"""
+    plot_topography(dat::SingleDataFrameEeg; channel_selection = channels(), sample_selection = samples(), interval_selection = times(), baseline_interval = nothing, n_topo = nothing, scrubber = false, display_plot = true, interactive = true, kwargs...)
+    plot_topography(dat::AbstractVector{<:SingleDataFrameEeg}; kwargs...)
+    plot_topography(dat::AbstractVector{<:EpochData}; kwargs...)
+    plot_topography(dat::MultiDataFrameEeg, epoch::Int; kwargs...)
+    plot_topography(filepath::String; input_dir = pwd(), participant_selection = participants(), kwargs...)
+
+Plot 2D scalp topographies for ERP, continuous, or epoched EEG data (or `.jld2` files/patterns).
+
+Supports multi-bin time expansion via `n_topo`, interactive playback via `scrubber = true`,
+and Shift+drag spatial channel selection with right-click ERP plotting.
+
+$(_generate_kwargs_doc(PLOT_TOPOGRAPHY_KWARGS))
+"""
+function plot_topography(
+    dat::SingleDataFrameEeg;
+    channel_selection = channels(),
+    sample_selection = samples(),
+    interval_selection::Interval = times(),
+    baseline_interval::Interval = nothing,
+    n_topo::Union{Int,Nothing} = nothing,
+    scrubber::Bool = false,
+    display_plot = true,
+    interactive = true,
+    kwargs...,
+)
+    !isnothing(baseline_interval) && (dat = baseline(dat, baseline_interval))
+
+    if scrubber
+        dat_subset =
+            subset(dat, channel_selection = channel_selection, sample_selection = sample_selection, interval_selection = interval_selection)
+        if nrow(dat_subset.data) > 1
+            return _plot_topography_scrubber(dat_subset; display_plot = display_plot, interactive = interactive, kwargs...)
+        end
+    end
+
+    if !isnothing(n_topo) && n_topo > 1
+        bin_datasets = _expand_topo_time_bins(
+            dat,
+            n_topo,
+            channel_selection,
+            sample_selection,
+            interval_selection,
+            get(kwargs, :time_unit, :s);
+            include_cond_prefix = false,
+        )
+        return plot_topography(
+            bin_datasets;
+            channel_selection = channels(),
+            sample_selection = samples(),
+            interval_selection = times(),
+            display_plot = display_plot,
+            interactive = interactive,
+            kwargs...,
+        )
+    end
+
+    _set_window_title(_generate_window_title(dat))
+    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs)
+    fontsize_kw = isnothing(plot_kwargs[:theme_fontsize]) ? (;) : (; fontsize = plot_kwargs[:theme_fontsize])
+    fig = _eegfun_figure(; figure_padding = plot_kwargs[:figure_padding], fontsize_kw...)
+    ax = Axis(fig[1, 1], aspect = DataAspect())
+
+    plot_topography!(
+        fig,
+        ax,
+        dat;
+        channel_selection = channel_selection,
+        sample_selection = sample_selection,
+        interval_selection = interval_selection,
+        kwargs...,
+    )
+
+    if interactive
+        deregister_interaction!(ax, :rectanglezoom)
+        _setup_topo_keyboard_handlers!(fig, ax; zoom_step = plot_kwargs[:zoom_step])
+        dat isa ErpData && _setup_topo_selection!(fig, ax, dat, interval_selection)
+    end
+
+    display_plot && _display_figure(fig)
+    _set_window_title("Makie")
+    return (fig = fig, axes = [ax])
+end
+
+function plot_topography(
+    dat::AbstractVector{<:SingleDataFrameEeg};
+    channel_selection = channels(),
+    sample_selection = samples(),
+    interval_selection::Interval = times(),
+    baseline_interval::Interval = nothing,
+    display_plot = true,
+    interactive = true,
+    kwargs...,
+)
+    !isnothing(baseline_interval) && (dat = baseline.(dat, Ref(baseline_interval)))
+    n_datasets = length(dat)
+    n_datasets == 0 && @minimal_error "Cannot plot empty vector of datasets"
+
+    kwargs_dict = _kwargs_dict(kwargs)
+    colorbar_enabled = get(kwargs_dict, :colorbar_plot, true)
+    user_colorbar_position = get(kwargs_dict, :colorbar_position, nothing)
+    colorbar_plot_numbers = get(kwargs_dict, :colorbar_plot_numbers, [])
+    dims = get(kwargs_dict, :dims, nothing)
+    n_topo = pop!(kwargs_dict, :n_topo, nothing)
+
+    if !isnothing(n_topo) && n_topo > 1
+        time_unit = get(kwargs_dict, :time_unit, :s)
+        expanded = eltype(dat)[]
+        sizehint!(expanded, n_datasets * n_topo)
+        for dataset in dat
+            append!(
+                expanded,
+                _expand_topo_time_bins(
+                    dataset,
+                    n_topo,
+                    channel_selection,
+                    sample_selection,
+                    interval_selection,
+                    time_unit;
+                    include_cond_prefix = true,
+                ),
+            )
+        end
+
+        isnothing(dims) && (kwargs_dict[:dims] = (n_datasets, n_topo))
+        if !haskey(kwargs_dict, :colorbar_plot)
+            if haskey(kwargs_dict, :colorbar_plot_numbers) && !isempty(kwargs_dict[:colorbar_plot_numbers])
+                kwargs_dict[:colorbar_plot_numbers] = [i * n_topo for i in kwargs_dict[:colorbar_plot_numbers]]
+            else
+                kwargs_dict[:colorbar_plot] = false
+            end
+        end
+
+        return plot_topography(
+            expanded;
+            channel_selection = channels(),
+            sample_selection = samples(),
+            interval_selection = times(),
+            display_plot = display_plot,
+            interactive = interactive,
+            kwargs_dict...,
+        )
+    end
+
+    plot_rows, plot_cols = if isnothing(dims)
+        _best_rect(n_datasets)
+    else
+        (length(dims) != 2 || any(dims .<= 0)) && @minimal_error "Invalid dimensions: $dims. Expected [rows, cols] with positive values."
+        r, c = dims
+        r * c < n_datasets && @minimal_error "Grid dimensions $dims provide $(r * c) cells but need $n_datasets."
+        r, c
+    end
+
+    total_cols = if colorbar_enabled && !isnothing(user_colorbar_position) && user_colorbar_position[1] > 1
+        plot_cols
+    elseif colorbar_enabled
+        plot_cols * 2
+    else
+        plot_cols
+    end
+
+    _set_window_title(_generate_window_title(dat))
+    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs_dict)
+    fontsize_kw = isnothing(plot_kwargs[:theme_fontsize]) ? (;) : (; fontsize = plot_kwargs[:theme_fontsize])
+    fig = _eegfun_figure(; figure_padding = plot_kwargs[:figure_padding], fontsize_kw...)
+    axes = Axis[]
+
+    subsets = [
+        subset(
+            dataset;
+            channel_selection = channel_selection,
+            sample_selection = sample_selection,
+            interval_selection = interval_selection,
+        ) for dataset in dat
+    ]
+
+    first_layout = subsets[1].layout
+    method = plot_kwargs[:method]
+    gridscale = plot_kwargs[:gridscale]
+    can_batch =
+        n_datasets > 1 &&
+        has_valid_coordinates(first_layout) &&
+        all(s -> has_valid_coordinates(s.layout) && s.layout.data.label == first_layout.data.label, subsets) &&
+        _topo_method_supported(method)
+
+    batched_interp = nothing
+    xb_shared = nothing
+    yb_shared = nothing
+
+    if can_batch
+        _ensure_coordinates_2d!(first_layout)
+        labels = first_layout.data.label
+        channel_mat = Matrix{Float64}(undef, length(labels), n_datasets)
+        for j = 1:n_datasets
+            df = subsets[j].data
+            for (i, lbl) in enumerate(labels)
+                channel_mat[i, j] = mean(df[!, lbl])
+            end
+        end
+        batched_interp, xb_shared, yb_shared = _topo_interpolate(channel_mat, first_layout, gridscale; method = method)
+    end
+
+    for (idx, dataset) in enumerate(subsets)
+        base_row = div(idx - 1, plot_cols) + 1
+        base_col = mod1(idx, plot_cols)
+
+        if colorbar_enabled && !isnothing(user_colorbar_position)
+            cb_row_offset, cb_col_offset = user_colorbar_position
+            plot_row = cb_row_offset > 1 ? ((base_row - 1) * 2 + 1) : base_row
+            plot_col = cb_row_offset > 1 ? base_col : ((base_col - 1) * 2 + 1)
+            colorbar_row = plot_row + (cb_row_offset - 1)
+            colorbar_col = plot_col + (cb_col_offset - 1)
+        elseif colorbar_enabled
+            plot_row = base_row
+            plot_col = (base_col - 1) * 2 + 1
+            colorbar_row = plot_row
+            colorbar_col = plot_col + 1
+        else
+            plot_row = base_row
+            plot_col = base_col
+            colorbar_row = plot_row
+            colorbar_col = plot_col + 1
+        end
+
+        ax = Axis(fig[plot_row, plot_col], aspect = DataAspect())
+        push!(axes, ax)
+        if hasproperty(dataset, :condition_name) && dataset.condition_name !== ""
+            ax.title = dataset.condition_name
+        end
+
+        should_show_colorbar = colorbar_enabled && (isempty(colorbar_plot_numbers) || idx in colorbar_plot_numbers)
+        _plot_topography!(
+            fig,
+            ax,
+            dataset.data,
+            dataset.layout;
+            data_interp = can_batch ? batched_interp[idx] : nothing,
+            x_bounds = can_batch ? xb_shared : nothing,
+            y_bounds = can_batch ? yb_shared : nothing,
+            kwargs_dict...,
+            colorbar_plot = should_show_colorbar,
+            colorbar_position = (colorbar_row, colorbar_col),
+        )
+    end
+
+    if colorbar_enabled && (isnothing(user_colorbar_position) || user_colorbar_position[1] <= 1)
+        for col = 1:min(total_cols, size(fig.layout)[2])
+            colsize!(fig.layout, col, isodd(col) ? Auto() : Fixed(50))
+        end
+    end
+
+    if interactive
+        deregister_interaction!.(axes, :rectanglezoom)
+        _setup_topo_keyboard_handlers!(fig, axes; zoom_step = plot_kwargs[:zoom_step])
+        if all(d -> d isa ErpData, dat)
+            _setup_shared_topo_selection!(fig, dat, TopoSelectionState(axes, interval_selection))
+        end
+    end
+
+    display_plot && _display_figure(fig)
+    _set_window_title("Makie")
+    return (fig = fig, axes = axes)
+end
+
+plot_topography(dat::AbstractVector{<:EpochData}; kwargs...) = plot_topography(average_epochs.(dat); kwargs...)
+
+function plot_topography(dat::AbstractVector{<:EpochData}, epoch::Int; kwargs...)
+    @info "Plotting epoch $(epoch) for each dataset in the vector"
+    return [plot_topography(d, epoch; kwargs...) for d in dat]
+end
+
+function plot_topography(
+    dat::MultiDataFrameEeg,
+    epoch::Int;
+    channel_selection = channels(),
+    sample_selection = samples(),
+    interval_selection::Interval = times(),
+    scrubber::Bool = false,
+    display_plot = true,
+    kwargs...,
+)
+    cont_dat = epoch_to_continuous(dat, epoch)
+    if scrubber
+        return plot_topography(
+            cont_dat;
+            channel_selection = channel_selection,
+            sample_selection = sample_selection,
+            interval_selection = interval_selection,
+            scrubber = true,
+            display_plot = display_plot,
+            kwargs...,
+        )
+    end
+
+    _set_window_title(_generate_window_title(dat) * " - Epoch $epoch")
+    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs)
+    fontsize_kw = isnothing(plot_kwargs[:theme_fontsize]) ? (;) : (; fontsize = plot_kwargs[:theme_fontsize])
+    fig = _eegfun_figure(; figure_padding = plot_kwargs[:figure_padding], fontsize_kw...)
+    ax = Axis(fig[1, 1], aspect = DataAspect())
+
+    plot_topography!(
+        fig,
+        ax,
+        cont_dat;
+        channel_selection = channel_selection,
+        sample_selection = sample_selection,
+        interval_selection = interval_selection,
+        kwargs...,
+    )
+
+    display_plot && _display_figure(fig)
+    _set_window_title("Makie")
+    return (fig = fig, axes = [ax])
+end
+
+"""
+    plot_topography!(fig, ax, dat::SingleDataFrameEeg; kwargs...)
+    plot_topography!(fig, ax, dat::MultiDataFrameEeg, epoch::Int; kwargs...)
+
+In-place topographic plot: subset `dat` and render onto an existing `Figure` and `Axis`.
+"""
+function plot_topography!(
+    fig,
+    ax,
+    dat::SingleDataFrameEeg;
+    channel_selection = channels(),
+    sample_selection = samples(),
+    interval_selection::Interval = times(),
+    data_interp = nothing,
+    x_bounds = nothing,
+    y_bounds = nothing,
+    kwargs...,
+)
+    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs)
+    dat_subset =
+        subset(dat, channel_selection = channel_selection, sample_selection = sample_selection, interval_selection = interval_selection)
+    return _plot_topography!(
+        fig,
+        ax,
+        dat_subset.data,
+        dat_subset.layout;
+        data_interp = data_interp,
+        x_bounds = x_bounds,
+        y_bounds = y_bounds,
+        plot_kwargs...,
+    )
+end
+
+function plot_topography!(
+    fig,
+    ax,
+    dat::MultiDataFrameEeg,
+    epoch::Int;
+    channel_selection = channels(),
+    sample_selection = samples(),
+    interval_selection::Interval = times(),
+    kwargs...,
+)
+    return plot_topography!(
+        fig,
+        ax,
+        epoch_to_continuous(dat, epoch);
+        channel_selection = channel_selection,
+        sample_selection = sample_selection,
+        interval_selection = interval_selection,
+        kwargs...,
+    )
+end
+
+function plot_topography(filepath::String; input_dir::String = pwd(), participant_selection = participants(), kwargs...)
+    if endswith(filepath, ".jld2")
+        resolved = _resolve_input_filepath(filepath, input_dir)
+        data = read_data(resolved)
+        isnothing(data) && @minimal_error "No data found in file: $resolved"
+        return plot_topography(data; kwargs...)
+    end
+    files = _require_batch_files(filepath, input_dir, participant_selection)
+    results = NamedTuple[]
+    for file in files
+        @info "Plotting: $file"
+        data = read_data(joinpath(input_dir, file))
+        isnothing(data) && continue
+        push!(results, plot_topography(data; kwargs...))
+    end
+    return results
+end
+
+######################################
+######### Internal Functions #########
+######################################
 
 function _symmetric_colorrange(A::AbstractArray)
     max_abs = 0.0
@@ -195,393 +647,6 @@ function _expand_topo_time_bins(
     return bins
 end
 
-"""
-    plot_topography(filepath::String; input_dir = pwd(), participant_selection = participants(), kwargs...)
-    plot_topography(dat::SingleDataFrameEeg; channel_selection = channels(), sample_selection = samples(), interval_selection = times(), baseline_interval = nothing, n_topo = nothing, scrubber = false, display_plot = true, interactive = true, kwargs...)
-    plot_topography(dat::AbstractVector{<:SingleDataFrameEeg}; kwargs...)
-    plot_topography(dat::AbstractVector{<:EpochData}; kwargs...)
-    plot_topography(dat::MultiDataFrameEeg, epoch::Int; kwargs...)
-
-Plot 2D scalp topographies for ERP, continuous, or epoched EEG data (or `.jld2` files/patterns).
-
-Supports multi-bin time expansion via `n_topo`, interactive playback via `scrubber = true`,
-and Shift+drag spatial channel selection with right-click ERP plotting.
-
-$(_generate_kwargs_doc(PLOT_TOPOGRAPHY_KWARGS))
-"""
-function plot_topography(filepath::String; input_dir::String = pwd(), participant_selection = participants(), kwargs...)
-    if endswith(filepath, ".jld2")
-        resolved = _resolve_input_filepath(filepath, input_dir)
-        data = read_data(resolved)
-        isnothing(data) && @minimal_error "No data found in file: $resolved"
-        return plot_topography(data; kwargs...)
-    end
-    files = _require_batch_files(filepath, input_dir, participant_selection)
-    results = NamedTuple[]
-    for file in files
-        @info "Plotting: $file"
-        data = read_data(joinpath(input_dir, file))
-        isnothing(data) && continue
-        push!(results, plot_topography(data; kwargs...))
-    end
-    return results
-end
-
-function plot_topography(
-    dat::SingleDataFrameEeg;
-    channel_selection = channels(),
-    sample_selection = samples(),
-    interval_selection::Interval = times(),
-    baseline_interval::Interval = nothing,
-    n_topo::Union{Int,Nothing} = nothing,
-    scrubber::Bool = false,
-    display_plot = true,
-    interactive = true,
-    kwargs...,
-)
-    !isnothing(baseline_interval) && (dat = baseline(dat, baseline_interval))
-
-    if scrubber
-        dat_subset =
-            subset(dat, channel_selection = channel_selection, sample_selection = sample_selection, interval_selection = interval_selection)
-        if nrow(dat_subset.data) > 1
-            return _plot_topography_scrubber(dat_subset; display_plot = display_plot, interactive = interactive, kwargs...)
-        end
-    end
-
-    if !isnothing(n_topo) && n_topo > 1
-        bin_datasets = _expand_topo_time_bins(
-            dat,
-            n_topo,
-            channel_selection,
-            sample_selection,
-            interval_selection,
-            get(kwargs, :time_unit, :s);
-            include_cond_prefix = false,
-        )
-        return plot_topography(
-            bin_datasets;
-            channel_selection = channels(),
-            sample_selection = samples(),
-            interval_selection = times(),
-            display_plot = display_plot,
-            interactive = interactive,
-            kwargs...,
-        )
-    end
-
-    _set_window_title(_generate_window_title(dat))
-    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs)
-    fontsize_kw = isnothing(plot_kwargs[:theme_fontsize]) ? (;) : (; fontsize = plot_kwargs[:theme_fontsize])
-    fig = _eegfun_figure(; figure_padding = plot_kwargs[:figure_padding], fontsize_kw...)
-    ax = Axis(fig[1, 1], aspect = DataAspect())
-
-    plot_topography!(
-        fig,
-        ax,
-        dat;
-        channel_selection = channel_selection,
-        sample_selection = sample_selection,
-        interval_selection = interval_selection,
-        kwargs...,
-    )
-
-    if interactive
-        deregister_interaction!(ax, :rectanglezoom)
-        _setup_topo_keyboard_handlers!(fig, ax; zoom_step = plot_kwargs[:zoom_step])
-        dat isa ErpData && _setup_topo_selection!(fig, ax, dat, interval_selection)
-    end
-
-    display_plot && _display_figure(fig)
-    _set_window_title("Makie")
-    return (fig = fig, axes = [ax])
-end
-
-"""
-    plot_topography!(fig, ax, dat::SingleDataFrameEeg; kwargs...)
-    plot_topography!(fig, ax, dat::MultiDataFrameEeg, epoch::Int; kwargs...)
-
-In-place topographic plot: subset `dat` and render onto an existing `Figure` and `Axis`.
-"""
-function plot_topography!(
-    fig,
-    ax,
-    dat::SingleDataFrameEeg;
-    channel_selection = channels(),
-    sample_selection = samples(),
-    interval_selection::Interval = times(),
-    data_interp = nothing,
-    x_bounds = nothing,
-    y_bounds = nothing,
-    kwargs...,
-)
-    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs)
-    dat_subset =
-        subset(dat, channel_selection = channel_selection, sample_selection = sample_selection, interval_selection = interval_selection)
-    return _plot_topography!(
-        fig,
-        ax,
-        dat_subset.data,
-        dat_subset.layout;
-        data_interp = data_interp,
-        x_bounds = x_bounds,
-        y_bounds = y_bounds,
-        plot_kwargs...,
-    )
-end
-
-function plot_topography(
-    dat::AbstractVector{<:SingleDataFrameEeg};
-    channel_selection = channels(),
-    sample_selection = samples(),
-    interval_selection::Interval = times(),
-    baseline_interval::Interval = nothing,
-    display_plot = true,
-    interactive = true,
-    kwargs...,
-)
-    !isnothing(baseline_interval) && (dat = baseline.(dat, Ref(baseline_interval)))
-    n_datasets = length(dat)
-    n_datasets == 0 && @minimal_error "Cannot plot empty vector of datasets"
-
-    kwargs_dict = _kwargs_dict(kwargs)
-    colorbar_enabled = get(kwargs_dict, :colorbar_plot, true)
-    user_colorbar_position = get(kwargs_dict, :colorbar_position, nothing)
-    colorbar_plot_numbers = get(kwargs_dict, :colorbar_plot_numbers, [])
-    dims = get(kwargs_dict, :dims, nothing)
-    n_topo = pop!(kwargs_dict, :n_topo, nothing)
-
-    if !isnothing(n_topo) && n_topo > 1
-        time_unit = get(kwargs_dict, :time_unit, :s)
-        expanded = eltype(dat)[]
-        sizehint!(expanded, n_datasets * n_topo)
-        for dataset in dat
-            append!(
-                expanded,
-                _expand_topo_time_bins(
-                    dataset,
-                    n_topo,
-                    channel_selection,
-                    sample_selection,
-                    interval_selection,
-                    time_unit;
-                    include_cond_prefix = true,
-                ),
-            )
-        end
-
-        isnothing(dims) && (kwargs_dict[:dims] = (n_datasets, n_topo))
-        if !haskey(kwargs_dict, :colorbar_plot)
-            if haskey(kwargs_dict, :colorbar_plot_numbers) && !isempty(kwargs_dict[:colorbar_plot_numbers])
-                kwargs_dict[:colorbar_plot_numbers] = [i * n_topo for i in kwargs_dict[:colorbar_plot_numbers]]
-            else
-                kwargs_dict[:colorbar_plot] = false
-            end
-        end
-
-        return plot_topography(
-            expanded;
-            channel_selection = channels(),
-            sample_selection = samples(),
-            interval_selection = times(),
-            display_plot = display_plot,
-            interactive = interactive,
-            kwargs_dict...,
-        )
-    end
-
-    plot_rows, plot_cols = if isnothing(dims)
-        _best_rect(n_datasets)
-    else
-        (length(dims) != 2 || any(dims .<= 0)) && @minimal_error "Invalid dimensions: $dims. Expected [rows, cols] with positive values."
-        r, c = dims
-        r * c < n_datasets && @minimal_error "Grid dimensions $dims provide $(r * c) cells but need $n_datasets."
-        r, c
-    end
-
-    total_cols = if colorbar_enabled && !isnothing(user_colorbar_position) && user_colorbar_position[1] > 1
-        plot_cols
-    elseif colorbar_enabled
-        plot_cols * 2
-    else
-        plot_cols
-    end
-
-    _set_window_title(_generate_window_title(dat))
-    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs_dict)
-    fontsize_kw = isnothing(plot_kwargs[:theme_fontsize]) ? (;) : (; fontsize = plot_kwargs[:theme_fontsize])
-    fig = _eegfun_figure(; figure_padding = plot_kwargs[:figure_padding], fontsize_kw...)
-    axes = Axis[]
-
-    subsets = [
-        subset(
-            dataset;
-            channel_selection = channel_selection,
-            sample_selection = sample_selection,
-            interval_selection = interval_selection,
-        ) for dataset in dat
-    ]
-
-    first_layout = subsets[1].layout
-    method = plot_kwargs[:method]
-    gridscale = plot_kwargs[:gridscale]
-    can_batch =
-        n_datasets > 1 &&
-        has_valid_coordinates(first_layout) &&
-        all(s -> has_valid_coordinates(s.layout) && s.layout.data.label == first_layout.data.label, subsets) &&
-        _topo_method_supported(method)
-
-    batched_interp = nothing
-    xb_shared = nothing
-    yb_shared = nothing
-
-    if can_batch
-        _ensure_coordinates_2d!(first_layout)
-        labels = first_layout.data.label
-        channel_mat = Matrix{Float64}(undef, length(labels), n_datasets)
-        for j = 1:n_datasets
-            df = subsets[j].data
-            for (i, lbl) in enumerate(labels)
-                channel_mat[i, j] = mean(df[!, lbl])
-            end
-        end
-        batched_interp, xb_shared, yb_shared = _topo_interpolate(channel_mat, first_layout, gridscale; method = method)
-    end
-
-    for (idx, dataset) in enumerate(subsets)
-        base_row = div(idx - 1, plot_cols) + 1
-        base_col = mod1(idx, plot_cols)
-
-        if colorbar_enabled && !isnothing(user_colorbar_position)
-            cb_row_offset, cb_col_offset = user_colorbar_position
-            plot_row = cb_row_offset > 1 ? ((base_row - 1) * 2 + 1) : base_row
-            plot_col = cb_row_offset > 1 ? base_col : ((base_col - 1) * 2 + 1)
-            colorbar_row = plot_row + (cb_row_offset - 1)
-            colorbar_col = plot_col + (cb_col_offset - 1)
-        elseif colorbar_enabled
-            plot_row = base_row
-            plot_col = (base_col - 1) * 2 + 1
-            colorbar_row = plot_row
-            colorbar_col = plot_col + 1
-        else
-            plot_row = base_row
-            plot_col = base_col
-            colorbar_row = plot_row
-            colorbar_col = plot_col + 1
-        end
-
-        ax = Axis(fig[plot_row, plot_col], aspect = DataAspect())
-        push!(axes, ax)
-        if hasproperty(dataset, :condition_name) && dataset.condition_name !== ""
-            ax.title = dataset.condition_name
-        end
-
-        should_show_colorbar = colorbar_enabled && (isempty(colorbar_plot_numbers) || idx in colorbar_plot_numbers)
-        _plot_topography!(
-            fig,
-            ax,
-            dataset.data,
-            dataset.layout;
-            data_interp = can_batch ? batched_interp[idx] : nothing,
-            x_bounds = can_batch ? xb_shared : nothing,
-            y_bounds = can_batch ? yb_shared : nothing,
-            kwargs_dict...,
-            colorbar_plot = should_show_colorbar,
-            colorbar_position = (colorbar_row, colorbar_col),
-        )
-    end
-
-    if colorbar_enabled && (isnothing(user_colorbar_position) || user_colorbar_position[1] <= 1)
-        for col = 1:min(total_cols, size(fig.layout)[2])
-            colsize!(fig.layout, col, isodd(col) ? Auto() : Fixed(50))
-        end
-    end
-
-    if interactive
-        deregister_interaction!.(axes, :rectanglezoom)
-        _setup_topo_keyboard_handlers!(fig, axes; zoom_step = plot_kwargs[:zoom_step])
-        if all(d -> d isa ErpData, dat)
-            _setup_shared_topo_selection!(fig, dat, TopoSelectionState(axes, interval_selection))
-        end
-    end
-
-    display_plot && _display_figure(fig)
-    _set_window_title("Makie")
-    return (fig = fig, axes = axes)
-end
-
-plot_topography(dat::AbstractVector{<:EpochData}; kwargs...) = plot_topography(average_epochs.(dat); kwargs...)
-
-function plot_topography(dat::AbstractVector{<:EpochData}, epoch::Int; kwargs...)
-    @info "Plotting epoch $(epoch) for each dataset in the vector"
-    return [plot_topography(d, epoch; kwargs...) for d in dat]
-end
-
-function plot_topography!(
-    fig,
-    ax,
-    dat::MultiDataFrameEeg,
-    epoch::Int;
-    channel_selection = channels(),
-    sample_selection = samples(),
-    interval_selection::Interval = times(),
-    kwargs...,
-)
-    return plot_topography!(
-        fig,
-        ax,
-        epoch_to_continuous(dat, epoch);
-        channel_selection = channel_selection,
-        sample_selection = sample_selection,
-        interval_selection = interval_selection,
-        kwargs...,
-    )
-end
-
-function plot_topography(
-    dat::MultiDataFrameEeg,
-    epoch::Int;
-    channel_selection = channels(),
-    sample_selection = samples(),
-    interval_selection::Interval = times(),
-    scrubber::Bool = false,
-    display_plot = true,
-    kwargs...,
-)
-    cont_dat = epoch_to_continuous(dat, epoch)
-    if scrubber
-        return plot_topography(
-            cont_dat;
-            channel_selection = channel_selection,
-            sample_selection = sample_selection,
-            interval_selection = interval_selection,
-            scrubber = true,
-            display_plot = display_plot,
-            kwargs...,
-        )
-    end
-
-    _set_window_title(_generate_window_title(dat) * " - Epoch $epoch")
-    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs)
-    fontsize_kw = isnothing(plot_kwargs[:theme_fontsize]) ? (;) : (; fontsize = plot_kwargs[:theme_fontsize])
-    fig = _eegfun_figure(; figure_padding = plot_kwargs[:figure_padding], fontsize_kw...)
-    ax = Axis(fig[1, 1], aspect = DataAspect())
-
-    plot_topography!(
-        fig,
-        ax,
-        cont_dat;
-        channel_selection = channel_selection,
-        sample_selection = sample_selection,
-        interval_selection = interval_selection,
-        kwargs...,
-    )
-
-    display_plot && _display_figure(fig)
-    _set_window_title("Makie")
-    return (fig = fig, axes = [ax])
-end
-
 function _draw_smooth_circle_mask!(ax::Axis, x_bounds::Tuple, y_bounds::Tuple)
     x_radius = max(abs(x_bounds[1]), abs(x_bounds[2]))
     y_radius = max(abs(y_bounds[1]), abs(y_bounds[2]))
@@ -612,10 +677,7 @@ function _draw_smooth_circle_mask!(ax::Axis, x_bounds::Tuple, y_bounds::Tuple)
     return nothing
 end
 
-# =============================================================================
 # TOPOGRAPHY INTERPOLATION & OPERATOR CACHING
-# =============================================================================
-
 function _topo_plot_radius(layout::Layout)
     x2 = layout.data.x2
     y2 = layout.data.y2
@@ -626,19 +688,6 @@ function _topo_plot_radius(layout::Layout)
     end
     return r_max * 1.05
 end
-
-struct SphericalSplineOperator
-    W::Matrix{Float64}
-    valid::Vector{Int}
-    grid_scale::Int
-    radius::Float64
-end
-
-const _SPLINE_CACHE = Dict{UInt,SphericalSplineOperator}()
-const _SPLINE_CACHE_LOCK = ReentrantLock()
-
-const _RBF_GRID_CACHE = Dict{Tuple{Int,Float64},Tuple{Vector{Int},Matrix{Float64}}}()
-const _RBF_GRID_LOCK = ReentrantLock()
 
 function _get_rbf_grid(grid_scale::Int, plot_radius::Float64)
     key = (grid_scale, plot_radius)
@@ -938,17 +987,6 @@ function _data_interpolation_topo(
     end
 end
 
-const _TOPO_RBF_METHODS = Dict{Symbol,Any}(
-    :multiquadratic         => ScatteredInterpolation.Multiquadratic,
-    :inverse_multiquadratic => ScatteredInterpolation.InverseMultiquadratic,
-    :gaussian               => ScatteredInterpolation.Gaussian,
-    :inverse_quadratic      => ScatteredInterpolation.InverseQuadratic,
-    :thin_plate             => ScatteredInterpolation.ThinPlate,
-    :polyharmonic           => () -> ScatteredInterpolation.Polyharmonic(3),
-    :shepard                => ScatteredInterpolation.Shepard,
-    :nearest                => ScatteredInterpolation.NearestNeighbor,
-)
-
 _topo_method_supported(m::Symbol) = m === :spherical_spline || haskey(_TOPO_RBF_METHODS, m)
 
 function _topo_interpolate(
@@ -969,8 +1007,6 @@ function _topo_interpolate(
     end
 end
 
-# === INTERACTIVITY & SELECTION ===
-
 function _setup_topo_keyboard_handlers!(fig::Figure, axes; zoom_step::Float64 = 0.2)
     on(events(fig).keyboardbutton) do event
         if event.action == Keyboard.press
@@ -982,33 +1018,6 @@ function _setup_topo_keyboard_handlers!(fig::Figure, axes; zoom_step::Float64 = 
                 axes isa Vector ? _topo_scale_down!.(axes, zoom_step) : _topo_scale_down!(axes, zoom_step)
             end
         end
-    end
-end
-
-mutable struct TopoSelectionState
-    active::Observable{Bool}
-    bounds::Observable{Tuple{Float64,Float64,Float64,Float64}}
-    visible::Observable{Bool}
-    rectangles::Vector{Vector{Makie.Poly}}
-    bounds_list::Observable{Vector{Tuple{Float64,Float64,Float64,Float64}}}
-    temp_rectangles::Vector{Union{Makie.Poly,Nothing}}
-    selected_channels::Vector{Symbol}
-    axes::Vector{Axis}
-    time_interval::Interval
-
-    function TopoSelectionState(axes::Vector{Axis}, time_interval::Interval = times())
-        n_axes = length(axes)
-        new(
-            Observable(false),
-            Observable((0.0, 0.0, 0.0, 0.0)),
-            Observable(false),
-            [Makie.Poly[] for _ = 1:n_axes],
-            Observable(Tuple{Float64,Float64,Float64,Float64}[]),
-            Union{Makie.Poly,Nothing}[nothing for _ = 1:n_axes],
-            Symbol[],
-            axes,
-            time_interval,
-        )
     end
 end
 
@@ -1042,6 +1051,7 @@ function _scale_topo_levels!(ax::LScene, scale_factor::Float64)
 end
 
 _topo_scale_up!(ax, zoom_step::Float64 = 0.2) = _scale_topo_levels!(ax, 1.0 - zoom_step)
+
 _topo_scale_down!(ax, zoom_step::Float64 = 0.2) = _scale_topo_levels!(ax, 1.0 / (1.0 - zoom_step))
 
 function _create_rectangles_on_all_axes!(selection_state::TopoSelectionState, rect_points::Vector{Point2f}, is_temporary::Bool)

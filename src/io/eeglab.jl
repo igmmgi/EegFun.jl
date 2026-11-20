@@ -1,24 +1,8 @@
 # EEGLAB .set file import functionality (experimental).
 
-function _extract_channel_cols!(cols::Vector{AbstractVector}, offset::Int, mat::AbstractMatrix{T}, n_ch::Int, n_pts::Int) where {T}
-    ch_vecs = Vector{Vector{T}}(undef, n_ch)
-    @inbounds for c = 1:n_ch
-        v = Vector{T}(undef, n_pts)
-        ch_vecs[c] = v
-        cols[offset+c] = v
-    end
-    tb = 64
-    @inbounds for t0 = 1:tb:n_pts
-        t1 = min(t0 + tb - 1, n_pts)
-        for c = 1:n_ch
-            dst = ch_vecs[c]
-            @simd for t = t0:t1
-                dst[t] = mat[c, t]
-            end
-        end
-    end
-    return cols
-end
+######################################
+########### User Functions ###########
+######################################
 
 """
     read_eeglab(filepath::String; preserve_radial_distance::Bool = true)
@@ -55,6 +39,30 @@ function read_eeglab(filepath::String; preserve_radial_distance::Bool = true)
         return eeg_data, _extract_ica_info(eeg, filepath, eeg_data.layout)
     end
     return eeg_data
+end
+
+######################################
+######### Internal Functions #########
+######################################
+
+function _extract_channel_cols!(cols::Vector{AbstractVector}, offset::Int, mat::AbstractMatrix{T}, n_ch::Int, n_pts::Int) where {T}
+    ch_vecs = Vector{Vector{T}}(undef, n_ch)
+    @inbounds for c = 1:n_ch
+        v = Vector{T}(undef, n_pts)
+        ch_vecs[c] = v
+        cols[offset+c] = v
+    end
+    tb = 64
+    @inbounds for t0 = 1:tb:n_pts
+        t1 = min(t0 + tb - 1, n_pts)
+        for c = 1:n_ch
+            dst = ch_vecs[c]
+            @simd for t = t0:t1
+                dst[t] = mat[c, t]
+            end
+        end
+    end
+    return cols
 end
 
 function _load_common_eeglab_components(eeg::AbstractDict, filepath::String, preserve_radial_distance::Bool)
@@ -127,7 +135,7 @@ function _eeglab_to_epochdata(eeg::AbstractDict, filepath::String, preserve_radi
         (haskey(eeg, "epoch") && !isempty(eeg["epoch"])) ? _extract_triggers(eeg["epoch"], n_trials) :
         (zeros(Int, n_trials), fill("", n_trials))
 
-    zero_idx = find_closest_time_index(times, 0.0)
+    zero_idx = _find_closest_time_index(times, 0.0)
     epoch_dataframes = _build_eeglab_epochs(data_array, ch_names, times, trigger_codes, trigger_info, zero_idx)
 
     condition_name = get(eeg, "setname", basename(filepath))

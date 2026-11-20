@@ -1,3 +1,9 @@
+# Multi-trial and butterfly ERP/epoch waveform plotting functions.
+
+######################################
+######### Types & Constants ##########
+######################################
+
 const PLOT_EPOCHS_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Display parameters
     :display_plot => (true, "Whether to display the plot"),
@@ -75,96 +81,27 @@ const PLOT_EPOCHS_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :figure_padding => ((10, 30, 10, 10), "Padding around entire figure as (left, right, bottom, top) tuple (in pixels)"),
 )
 
-function _require_batch_files(pattern::String, input_dir::String, participant_selection; kind::String = "")
-    files = _find_batch_files(pattern, input_dir, participant_selection)
-    if isempty(files)
-        all_matching = _find_batch_files(pattern, input_dir)
-        label = isempty(kind) ? "files" : "$kind files"
-        if isempty(all_matching)
-            @minimal_error "No $label matching pattern '$pattern' in $input_dir"
-        else
-            avail_ids = sort(unique(_extract_participant_id.(all_matching)))
-            @minimal_error "Pattern '$pattern' matched $(length(all_matching)) file(s), but none passed the participant selection. Available participant IDs: $avail_ids"
-        end
-    end
-    return sort(files, by = _natural_sort_key)
-end
+######################################
+########### User Functions ###########
+######################################
 
 """
-    plot_epochs(filename::String;
-                input_dir::String = pwd(),
-                participant_selection::Function = participants(),
-                channel_selection::Function = channels(),
-                sample_selection::Function = samples(),
-                interval_selection::Interval = times(),
-                epoch_selection::Function = epochs(),
-                include_extra::Bool = false,
-                layout = :single,
-                kwargs...)
+    plot_epochs(datasets::AbstractVector{<:EpochData}; condition_selection = conditions(), channel_selection = channels(), sample_selection = samples(), interval_selection = times(), epoch_selection = epochs(), include_extra = false, layout = :single, kwargs...)
+    plot_epochs(dat::EpochData; kwargs...)
+    plot_epochs(filename::String; input_dir = pwd(), participant_selection = participants(), kwargs...)
 
-Load epoch data and create plots. Accepts either a direct `.jld2` filepath or a pattern
-string to discover and plot all matching files (one plot per file).
+Plot single-trial epoch waveforms across `:single`, `:grid`, `:topo`, or custom `PlotLayout` layouts
+from in-memory `EpochData` or a `.jld2` filepath / filename pattern.
 
 $(_generate_kwargs_doc(PLOT_EPOCHS_KWARGS))
 
 # Examples
 ```julia
+plot_epochs(epochs_data; layout = :grid)
 plot_epochs("epochs_raw.jld2")
-plot_epochs("epochs_raw")
 plot_epochs("epochs_raw", participant_selection = participants(1))
 ```
 """
-function plot_epochs(
-    filename::String;
-    input_dir::String = pwd(),
-    participant_selection = participants(),
-    channel_selection = channels(),
-    sample_selection = samples(),
-    interval_selection::Interval = times(),
-    epoch_selection = epochs(),
-    include_extra::Bool = false,
-    layout = :single,
-    kwargs...,
-)
-    if endswith(filename, ".jld2")
-        resolved = _resolve_input_filepath(filename, input_dir)
-        data = read_data(resolved)
-        isnothing(data) && @minimal_error "No data found in file: $resolved"
-        return plot_epochs(
-            data;
-            channel_selection = channel_selection,
-            sample_selection = sample_selection,
-            interval_selection = interval_selection,
-            epoch_selection = epoch_selection,
-            include_extra = include_extra,
-            layout = layout,
-            kwargs...,
-        )
-    end
-
-    files = _require_batch_files(filename, input_dir, participant_selection)
-    results = NamedTuple[]
-    for file in files
-        @info "Plotting: $file"
-        data = read_data(joinpath(input_dir, file))
-        isnothing(data) && continue
-        push!(
-            results,
-            plot_epochs(
-                data;
-                channel_selection = channel_selection,
-                sample_selection = sample_selection,
-                interval_selection = interval_selection,
-                epoch_selection = epoch_selection,
-                include_extra = include_extra,
-                layout = layout,
-                kwargs...,
-            ),
-        )
-    end
-    return results
-end
-
 function plot_epochs(
     datasets::AbstractVector{<:EpochData};
     condition_selection = conditions(),
@@ -322,7 +259,7 @@ function plot_epochs(
         elseif plot_layout.type == :custom
             created_axes, layout_channels = _apply_layout!(fig, plot_layout; plot_kwargs...)
             append!(axes, created_axes)
-            ylim = something_or_calc_ylim(plot_kwargs[:ylim], dat_subset, layout_channels)
+            ylim = _something_or_calc_ylim(plot_kwargs[:ylim], dat_subset, layout_channels)
             is_grid_custom = get(plot_layout.metadata, :custom_mode, :canvas) === :grid
             for (idx, (ax, ch)) in enumerate(zip(axes, layout_channels))
                 ax_line_refs = !isnothing(line_refs) && idx <= length(line_refs) ? line_refs[idx] : nothing
@@ -407,6 +344,78 @@ function plot_epochs(
         layout = layout,
         kwargs...,
     )
+end
+
+function plot_epochs(
+    filename::String;
+    input_dir::String = pwd(),
+    participant_selection = participants(),
+    channel_selection = channels(),
+    sample_selection = samples(),
+    interval_selection::Interval = times(),
+    epoch_selection = epochs(),
+    include_extra::Bool = false,
+    layout = :single,
+    kwargs...,
+)
+    if endswith(filename, ".jld2")
+        resolved = _resolve_input_filepath(filename, input_dir)
+        data = read_data(resolved)
+        isnothing(data) && @minimal_error "No data found in file: $resolved"
+        return plot_epochs(
+            data;
+            channel_selection = channel_selection,
+            sample_selection = sample_selection,
+            interval_selection = interval_selection,
+            epoch_selection = epoch_selection,
+            include_extra = include_extra,
+            layout = layout,
+            kwargs...,
+        )
+    end
+
+    files = _require_batch_files(filename, input_dir, participant_selection)
+    results = NamedTuple[]
+    for file in files
+        @info "Plotting: $file"
+        data = read_data(joinpath(input_dir, file))
+        isnothing(data) && continue
+        push!(
+            results,
+            plot_epochs(
+                data;
+                channel_selection = channel_selection,
+                sample_selection = sample_selection,
+                interval_selection = interval_selection,
+                epoch_selection = epoch_selection,
+                include_extra = include_extra,
+                layout = layout,
+                kwargs...,
+            ),
+        )
+    end
+    return results
+end
+
+######################################
+######### Internal Functions #########
+######################################
+
+_something_or_calc_ylim(ylim, datasets, chs) = isnothing(ylim) ? _ylimits(datasets; channel_selection = channels(chs)) : ylim
+
+function _require_batch_files(pattern::String, input_dir::String, participant_selection; kind::String = "")
+    files = _find_batch_files(pattern, input_dir, participant_selection)
+    if isempty(files)
+        all_matching = _find_batch_files(pattern, input_dir)
+        label = isempty(kind) ? "files" : "$kind files"
+        if isempty(all_matching)
+            @minimal_error "No $label matching pattern '$pattern' in $input_dir"
+        else
+            avail_ids = sort(unique(_extract_participant_id.(all_matching)))
+            @minimal_error "Pattern '$pattern' matched $(length(all_matching)) file(s), but none passed the participant selection. Available participant IDs: $avail_ids"
+        end
+    end
+    return sort(files, by = _natural_sort_key)
 end
 
 function _finalize_epochs_axis!(ax::Axis, kw::Dict; xlim = kw[:xlim], ylim = kw[:ylim], xlabel = kw[:xlabel], ylabel = kw[:ylabel])
@@ -509,7 +518,7 @@ function _plot_epochs_grid_multi!(
     time_cat_list::Union{Vector{<:AbstractVector},Nothing} = nothing,
 )
     rows, cols = grid_dims
-    ylim = something_or_calc_ylim(plot_kwargs[:ylim], datasets, all_plot_channels)
+    ylim = _something_or_calc_ylim(plot_kwargs[:ylim], datasets, all_plot_channels)
 
     for (idx, channel) in enumerate(all_plot_channels)
         row = fld(idx - 1, cols) + 1
@@ -545,8 +554,6 @@ function _plot_epochs_grid_multi!(
     length(axes) > 1 && Makie.linkaxes!(axes...)
 end
 
-something_or_calc_ylim(ylim, datasets, chs) = isnothing(ylim) ? _ylimits(datasets; channel_selection = channels(chs)) : ylim
-
 function _plot_epochs_topo_multi!(
     fig::Figure,
     axes::Vector{Axis},
@@ -564,7 +571,7 @@ function _plot_epochs_topo_multi!(
         polar_to_cartesian_xy!(dat.layout)
     end
 
-    ylim = something_or_calc_ylim(plot_kwargs[:ylim], datasets, all_plot_channels)
+    ylim = _something_or_calc_ylim(plot_kwargs[:ylim], datasets, all_plot_channels)
     plot_w = get(plot_kwargs, :layout_topo_plot_width, !isnothing(plot_layout) ? get(plot_layout.metadata, :topo_plot_width, 0.1) : 0.1)
     plot_h = get(plot_kwargs, :layout_topo_plot_height, !isnothing(plot_layout) ? get(plot_layout.metadata, :topo_plot_height, 0.1) : 0.1)
 

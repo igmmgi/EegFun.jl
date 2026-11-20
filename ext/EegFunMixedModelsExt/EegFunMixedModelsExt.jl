@@ -1,17 +1,32 @@
+# Mass-univariate linear mixed-effects modeling (MixedModels.jl extension).
+
 module EegFunMixedModelsExt
 
 using EegFun
+
 using MixedModels
+
 using StatsModels
+
 using DataFrames
+
 using Random
+
 using ProgressMeter
+
 using Distributions
+
 using LinearAlgebra
+
 using Logging
+
 using SparseArrays
 
 import EegFun: fit_mass_lmm, @minimal_error, @minimal_warning
+
+######################################
+######### Types & Constants ##########
+######################################
 
 # Relative objective tolerance for the (single) observed fit per pixel
 const OBSERVED_FTOL_REL = 1e-12
@@ -25,177 +40,53 @@ const MAX_EVALS = 1000
 
 # Fit outcome codes: zero-based indices into `EegFun.LMM_FIT_STATUS`
 const STATUS_CONVERGED = 0x00
-const STATUS_ROUNDOFF = 0x01
-const STATUS_MAXEVAL = 0x02
-const STATUS_OPTFAIL = 0x03
-const STATUS_FLAT = 0x04    # constant / non-finite data: not fitted
-const STATUS_ERROR = 0x05   # fit threw, or produced non-finite estimates
 
-# Named predicate for statistical inference eligibility.
-# Only successfully converged fits and roundoff-limited fits (which in MixedModels/NLopt
-# indicate convergence at machine precision or on a boundary θ_k -> 0) are eligible to
-# enter the observed statistic map, the permutation null distribution, and cluster/TFCE formation.
-# Fits that reached evaluation limits (STATUS_MAXEVAL), optimizer failures (STATUS_OPTFAIL),
-# flat/constant data (STATUS_FLAT), or threw errors (STATUS_ERROR) are ineligible.
-is_inference_eligible(status::UInt8) = status <= STATUS_ROUNDOFF
+const STATUS_ROUNDOFF = 0x01
+
+const STATUS_MAXEVAL = 0x02
+
+const STATUS_OPTFAIL = 0x03
+
+const STATUS_FLAT = 0x04    # constant / non-finite data: not fitted
+
+const STATUS_ERROR = 0x05   # fit threw, or produced non-finite estimates
 
 # Stored null maps (:cluster / :tfce) are warned about / refused above these fractions of free memory
 const ZPERM_WARN_FRACTION = 0.5
+
 const ZPERM_ERROR_FRACTION = 0.9
 
 # Below this many random sign flips the permutation p-values are very coarse
 const SMALL_N_PERMS = 100
 
-# Map the optimizer's return code to a fit outcome. The names are NLopt's (MixedModels' default backend);
-# anything unrecognised is conservatively reported as an optimizer failure.
-function _classify_returnvalue(rv::Symbol)
-    rv in (:SUCCESS, :STOPVAL_REACHED, :FTOL_REACHED, :XTOL_REACHED, :SMALL_TR_RADIUS, :FTARGET_ACHIEVED) && return STATUS_CONVERGED
-    rv === :ROUNDOFF_LIMITED && return STATUS_ROUNDOFF
-    rv in (:MAXEVAL_REACHED, :MAXTIME_REACHED, :MAXFUN_REACHED, :MAXTR_REACHED) && return STATUS_MAXEVAL
-    return STATUS_OPTFAIL
+# Pixel-independent per-block design pieces
+struct BlockDesign
+    rows::Vector{Vector{Int}}
+    X::Vector{Matrix{Float64}}                    # n_s × p (estimable fixed-effects columns)
+    Z::Vector{Matrix{Float64}}                    # n_s × q_s (unscaled random-effects columns)
+    XtX::Vector{Matrix{Float64}}
+    ZtX::Vector{Matrix{Float64}}
+    ZtZ::Vector{Matrix{Float64}}
+    lambda_blocks::Vector{Vector{Tuple{Int,Int}}} # per block: (term index, column offset) for each level
 end
 
-# Refuse / warn when the stored null z-maps (channels × time × flips × tested, Float32) would not fit in memory
-function _check_zperm_memory(n_channels, n_timepoints, n_flips, n_tested; free::Real = Sys.free_memory())
-    bytes = 4.0 * n_channels * n_timepoints * n_flips * n_tested
-    gb(x) = round(x / 2^30; digits = 1)
-    detail =
-        "The cluster/TFCE null needs the z-map of every permutation ($n_channels channels × $n_timepoints time points × " *
-        "$n_flips permutations × $n_tested tested coefficients = $(gb(bytes)) GB, $(gb(free)) GB currently free). "
-    advice =
-        "Reduce `n_permutations`, test fewer coefficients (`tested_coefs`), use a shorter time window or fewer channels, " *
-        "or use `correction_method = :maxt`, which does not store the null maps."
-    if bytes > ZPERM_ERROR_FRACTION * free
-        @minimal_error detail * "This exceeds the available memory. " * advice
-    elseif bytes > ZPERM_WARN_FRACTION * free
-        @minimal_warning detail * "This is a large share of the available memory. " * advice
-    end
-    return bytes
+# 5. PER-PIXEL WORK (one LMM fit + closed-form pivotal CR2 sign-flip null)
+struct LmmScratch{M<:LinearMixedModel}
+    m::M
+    design::Union{BlockDesign,Nothing}
+    y::Vector{Float64}
+    beta::Vector{Float64}
+    se::Vector{Float64}
+    z::Vector{Float64}
+    p::Vector{Float64}
+    z_perm_obs::Vector{Float64}
+    znull::Matrix{Float64}      # n_flips × n_tested
+    singular::Base.RefValue{Bool}
 end
 
-# Random sign flips give p-values with resolution 1/(n+1); say so when that is too coarse
-function _warn_small_n_perms(n_flips::Int, exhaustive::Bool)
-    exhaustive && return
-    pmin = 1 / (n_flips + 1)
-    if pmin >= 0.05
-        @minimal_warning "Only $n_flips random sign flips: the smallest attainable corrected p-value is $(round(pmin; digits = 3)), " *
-                         "so no point can reach p < 0.05. Use at least 1000 permutations."
-    elseif n_flips < SMALL_N_PERMS
-        @minimal_warning "Only $n_flips random sign flips: corrected p-values have a resolution of $(round(pmin; digits = 3)) and " *
-                         "are noisy. Use at least 1000 permutations for reportable results."
-    end
-    return
-end
-
-# One consolidated warning for points that could not be fitted or did not converge
-function _report_fit_problems(status::AbstractMatrix{UInt8}, channel_names, first_error)
-    n_total = length(status)
-    n_flat, n_err = count(==(STATUS_FLAT), status), count(==(STATUS_ERROR), status)
-    n_max, n_opt = count(==(STATUS_MAXEVAL), status), count(==(STATUS_OPTFAIL), status)
-    n_unfit, n_unconv = n_flat + n_err, n_max + n_opt
-    n_unfit + n_unconv == 0 && return
-    msgs = String[]
-    if n_unfit > 0
-        bad = status .>= STATUS_FLAT
-        by_ch = [(channel_names[c], count(@view bad[c, :])) for c in axes(bad, 1) if any(@view bad[c, :])]
-        shown = join(["$ch ($k/$(size(bad, 2)) time points)" for (ch, k) in first(by_ch, 5)], ", ")
-        more = length(by_ch) > 5 ? ", ... ($(length(by_ch)) channels in total)" : ""
-        push!(
-            msgs,
-            "$n_unfit of $n_total channel × time points could not be fitted (flat or non-finite data: $n_flat; " *
-            "fit error: $n_err). Their beta, se, z and p are NaN, and they are excluded from the permutation null and " *
-            "from cluster/TFCE formation. Affected: $shown$more.",
-        )
-        isnothing(first_error) || push!(msgs, "First fit error: $first_error")
-    end
-    if n_unconv > 0
-        push!(
-            msgs,
-            "$n_unconv of $n_total fits did not converge (evaluation limit reached: $n_max; other optimizer " *
-            "failure: $n_opt). Their estimates are kept in beta/se/z_values, and they are excluded from permutation " *
-            "inference; see `fit_status` in the result.",
-        )
-    end
-    @minimal_warning join(msgs, "\n")
-    return
-end
-
-# ============================================================================
-# 1. COEFFICIENT & INTERCEPT RESOLUTION HELPERS
-# ============================================================================
-
-function _add_intercept!(idxs, coef_names, test_intercept)
-    if test_intercept
-        intercept_idx = findfirst(==("(Intercept)"), coef_names)
-        if !isnothing(intercept_idx)
-            push!(idxs, intercept_idx)
-        end
-    end
-    return sort!(unique!(idxs))
-end
-
-# Match a user-supplied name to coefficient names (case-insensitive). An exact match wins.
-# Otherwise the name selects all contrast columns of that term (e.g. `:condition` matches
-# "condition: B" and "condition: C"), but never interactions involving it, unless the
-# requested name is itself an interaction (contains '&').
-function _match_coef_names(coef_names, target::AbstractString)
-    t = lowercase(strip(target))
-    names_lc = lowercase.(coef_names)
-    exact = findall(==(t), names_lc)
-    isempty(exact) || return exact
-    is_interaction = occursin('&', t)
-    return findall(names_lc) do x
-        startswith(x, t * ": ") && (is_interaction || !occursin('&', x))
-    end
-end
-
-function _resolve_tested_coefs(coef_names, tested_coefs, test_intercept)
-    n = length(coef_names)
-
-    if tested_coefs === nothing || tested_coefs === :effects || tested_coefs === :auto
-        if test_intercept
-            return Vector(1:n)
-        end
-        intercept_idx = findfirst(==("(Intercept)"), coef_names)
-        effects = isnothing(intercept_idx) ? Vector(1:n) : filter(!=(intercept_idx), 1:n)
-        return (isempty(effects) && !isnothing(intercept_idx)) ? [intercept_idx] : effects
-    elseif tested_coefs === :all
-        return Vector(1:n)
-    end
-
-    targets = tested_coefs isa Union{AbstractVector,Tuple} ? tested_coefs : (tested_coefs,)
-    idxs = Int[]
-
-    for t in targets
-        if t isa Integer
-            (1 <= t <= n) || @minimal_error "Index $t out of bounds (1:$n)"
-            push!(idxs, t)
-        elseif t isa Union{AbstractString,Symbol}
-            matching = _match_coef_names(coef_names, String(t))
-            isempty(matching) && @minimal_error "No model coefficient matches '$t'. Available: $coef_names"
-            append!(idxs, matching)
-        else
-            @minimal_error "Unsupported type for tested_coefs: $(typeof(t))"
-        end
-    end
-
-    return _add_intercept!(idxs, coef_names, test_intercept)
-end
-
-# ============================================================================
-# 2. HIGH-LEVEL WRAPPER FOR EpochData
-# ============================================================================
-
-@inline function _fill_lmm_epoch_slice!(eeg_data::Array{Float64,3}, c_idx::Int, ep_idx::Int, col::Vector{Float64}, n_samp::Int)
-    @inbounds @simd for t = 1:n_samp
-        eeg_data[c_idx, t, ep_idx] = col[t]
-    end
-end
-@inline function _fill_lmm_epoch_slice!(eeg_data::Array{Float64,3}, c_idx::Int, ep_idx::Int, col::AbstractVector, n_samp::Int)
-    @inbounds for t = 1:n_samp
-        eeg_data[c_idx, t, ep_idx] = Float64(col[t])
-    end
-end
+######################################
+########### User Functions ###########
+######################################
 
 function fit_mass_lmm(
     epochs::EegFun.EpochData,
@@ -249,15 +140,6 @@ function fit_mass_lmm(
         spatial_connectivity = spatial_connectivity,
         kwargs...,
     )
-end
-
-function _resolve_epoch_participant_label(ep::EegFun.EpochData)::String
-    if !isempty(ep.data) && !isempty(ep.data[1]) && hasproperty(ep.data[1], :participant)
-        return string(ep.data[1][1, :participant])
-    end
-    stem, _ = splitext(basename(ep.file))
-    any(isdigit, stem) && return string(EegFun._extract_participant_id(basename(ep.file)))
-    return isempty(stem) ? "1" : stem
 end
 
 function fit_mass_lmm(
@@ -364,9 +246,222 @@ function fit_mass_lmm(
     )
 end
 
-# ============================================================================
+# 7. PRIMARY MASS-UNIVARIATE LMM FITTER
+function fit_mass_lmm(
+    eeg_data::AbstractArray{<:Real,3},
+    meta_df::DataFrame,
+    f::FormulaTerm;
+    dim_order = (:channels, :timepoints, :epochs),
+    kwargs...,
+)
+    target = (:channels, :timepoints, :epochs)
+    (length(dim_order) == 3 && Set(dim_order) == Set(target)) ||
+        @minimal_error "dim_order must be a 3-element permutation of (:channels, :timepoints, :epochs), got: $dim_order"
+    if dim_order != target
+        perm = [findfirst(==(t), dim_order) for t in target]
+        eeg_data = permutedims(eeg_data, tuple(perm...))
+    end
+    return _fit_mass_lmm(eeg_data, meta_df, f, nothing; kwargs...)
+end
+
+function BlockDesign(m::LinearMixedModel, X::Matrix{Float64}, block_ids::Vector{Int})
+    n_blocks = maximum(block_ids)
+    rows = [Int[] for _ = 1:n_blocks]
+    for (i, b) in enumerate(block_ids)
+        push!(rows[b], i)
+    end
+    Xs, Zs, lam = Matrix{Float64}[], Matrix{Float64}[], Vector{Tuple{Int,Int}}[]
+    for r in rows
+        cols, blocks, off = Matrix{Float64}[], Tuple{Int,Int}[], 0
+        for (k, A) in enumerate(m.reterms)
+            q = size(A.z, 1)
+            levs = sort!(unique(view(A.refs, r)))
+            Zk = zeros(length(r), q * length(levs))
+            for (i, obs) in enumerate(r)
+                j = searchsortedfirst(levs, A.refs[obs])
+                Zk[i, ((j-1)*q+1):(j*q)] .= view(A.z, :, obs)
+            end
+            for j in eachindex(levs)
+                push!(blocks, (k, off + (j - 1) * q))
+            end
+            off += q * length(levs)
+            push!(cols, Zk)
+        end
+        push!(Xs, X[r, :])
+        push!(Zs, reduce(hcat, cols))
+        push!(lam, blocks)
+    end
+    return BlockDesign(rows, Xs, Zs, [x' * x for x in Xs], [z' * x for (z, x) in zip(Zs, Xs)], [z' * z for z in Zs], lam)
+end
+
+######################################
+######### Internal Functions #########
+######################################
+
+# Named predicate for statistical inference eligibility.
+# Only successfully converged fits and roundoff-limited fits (which in MixedModels/NLopt
+# indicate convergence at machine precision or on a boundary θ_k -> 0) are eligible to
+# enter the observed statistic map, the permutation null distribution, and cluster/TFCE formation.
+# Fits that reached evaluation limits (STATUS_MAXEVAL), optimizer failures (STATUS_OPTFAIL),
+# flat/constant data (STATUS_FLAT), or threw errors (STATUS_ERROR) are ineligible.
+_is_inference_eligible(status::UInt8) = status <= STATUS_ROUNDOFF
+
+# Map the optimizer's return code to a fit outcome. The names are NLopt's (MixedModels' default backend);
+# anything unrecognised is conservatively reported as an optimizer failure.
+function _classify_returnvalue(rv::Symbol)
+    rv in (:SUCCESS, :STOPVAL_REACHED, :FTOL_REACHED, :XTOL_REACHED, :SMALL_TR_RADIUS, :FTARGET_ACHIEVED) && return STATUS_CONVERGED
+    rv === :ROUNDOFF_LIMITED && return STATUS_ROUNDOFF
+    rv in (:MAXEVAL_REACHED, :MAXTIME_REACHED, :MAXFUN_REACHED, :MAXTR_REACHED) && return STATUS_MAXEVAL
+    return STATUS_OPTFAIL
+end
+
+# Refuse / warn when the stored null z-maps (channels × time × flips × tested, Float32) would not fit in memory
+function _check_zperm_memory(n_channels, n_timepoints, n_flips, n_tested; free::Real = Sys.free_memory())
+    bytes = 4.0 * n_channels * n_timepoints * n_flips * n_tested
+    gb(x) = round(x / 2^30; digits = 1)
+    detail =
+        "The cluster/TFCE null needs the z-map of every permutation ($n_channels channels × $n_timepoints time points × " *
+        "$n_flips permutations × $n_tested tested coefficients = $(gb(bytes)) GB, $(gb(free)) GB currently free). "
+    advice =
+        "Reduce `n_permutations`, test fewer coefficients (`tested_coefs`), use a shorter time window or fewer channels, " *
+        "or use `correction_method = :maxt`, which does not store the null maps."
+    if bytes > ZPERM_ERROR_FRACTION * free
+        @minimal_error detail * "This exceeds the available memory. " * advice
+    elseif bytes > ZPERM_WARN_FRACTION * free
+        @minimal_warning detail * "This is a large share of the available memory. " * advice
+    end
+    return bytes
+end
+
+# Random sign flips give p-values with resolution 1/(n+1); say so when that is too coarse
+function _warn_small_n_perms(n_flips::Int, exhaustive::Bool)
+    exhaustive && return
+    pmin = 1 / (n_flips + 1)
+    if pmin >= 0.05
+        @minimal_warning "Only $n_flips random sign flips: the smallest attainable corrected p-value is $(round(pmin; digits = 3)), " *
+                         "so no point can reach p < 0.05. Use at least 1000 permutations."
+    elseif n_flips < SMALL_N_PERMS
+        @minimal_warning "Only $n_flips random sign flips: corrected p-values have a resolution of $(round(pmin; digits = 3)) and " *
+                         "are noisy. Use at least 1000 permutations for reportable results."
+    end
+    return
+end
+
+# One consolidated warning for points that could not be fitted or did not converge
+function _report_fit_problems(status::AbstractMatrix{UInt8}, channel_names, first_error)
+    n_total = length(status)
+    n_flat, n_err = count(==(STATUS_FLAT), status), count(==(STATUS_ERROR), status)
+    n_max, n_opt = count(==(STATUS_MAXEVAL), status), count(==(STATUS_OPTFAIL), status)
+    n_unfit, n_unconv = n_flat + n_err, n_max + n_opt
+    n_unfit + n_unconv == 0 && return
+    msgs = String[]
+    if n_unfit > 0
+        bad = status .>= STATUS_FLAT
+        by_ch = [(channel_names[c], count(@view bad[c, :])) for c in axes(bad, 1) if any(@view bad[c, :])]
+        shown = join(["$ch ($k/$(size(bad, 2)) time points)" for (ch, k) in first(by_ch, 5)], ", ")
+        more = length(by_ch) > 5 ? ", ... ($(length(by_ch)) channels in total)" : ""
+        push!(
+            msgs,
+            "$n_unfit of $n_total channel × time points could not be fitted (flat or non-finite data: $n_flat; " *
+            "fit error: $n_err). Their beta, se, z and p are NaN, and they are excluded from the permutation null and " *
+            "from cluster/TFCE formation. Affected: $shown$more.",
+        )
+        isnothing(first_error) || push!(msgs, "First fit error: $first_error")
+    end
+    if n_unconv > 0
+        push!(
+            msgs,
+            "$n_unconv of $n_total fits did not converge (evaluation limit reached: $n_max; other optimizer " *
+            "failure: $n_opt). Their estimates are kept in beta/se/z_values, and they are excluded from permutation " *
+            "inference; see `fit_status` in the result.",
+        )
+    end
+    @minimal_warning join(msgs, "\n")
+    return
+end
+
+# 1. COEFFICIENT & INTERCEPT RESOLUTION HELPERS
+function _add_intercept!(idxs, coef_names, test_intercept)
+    if test_intercept
+        intercept_idx = findfirst(==("(Intercept)"), coef_names)
+        if !isnothing(intercept_idx)
+            push!(idxs, intercept_idx)
+        end
+    end
+    return sort!(unique!(idxs))
+end
+
+# Match a user-supplied name to coefficient names (case-insensitive). An exact match wins.
+# Otherwise the name selects all contrast columns of that term (e.g. `:condition` matches
+# "condition: B" and "condition: C"), but never interactions involving it, unless the
+# requested name is itself an interaction (contains '&').
+function _match_coef_names(coef_names, target::AbstractString)
+    t = lowercase(strip(target))
+    names_lc = lowercase.(coef_names)
+    exact = findall(==(t), names_lc)
+    isempty(exact) || return exact
+    is_interaction = occursin('&', t)
+    return findall(names_lc) do x
+        startswith(x, t * ": ") && (is_interaction || !occursin('&', x))
+    end
+end
+
+function _resolve_tested_coefs(coef_names, tested_coefs, test_intercept)
+    n = length(coef_names)
+
+    if tested_coefs === nothing || tested_coefs === :effects || tested_coefs === :auto
+        if test_intercept
+            return Vector(1:n)
+        end
+        intercept_idx = findfirst(==("(Intercept)"), coef_names)
+        effects = isnothing(intercept_idx) ? Vector(1:n) : filter(!=(intercept_idx), 1:n)
+        return (isempty(effects) && !isnothing(intercept_idx)) ? [intercept_idx] : effects
+    elseif tested_coefs === :all
+        return Vector(1:n)
+    end
+
+    targets = tested_coefs isa Union{AbstractVector,Tuple} ? tested_coefs : (tested_coefs,)
+    idxs = Int[]
+
+    for t in targets
+        if t isa Integer
+            (1 <= t <= n) || @minimal_error "Index $t out of bounds (1:$n)"
+            push!(idxs, t)
+        elseif t isa Union{AbstractString,Symbol}
+            matching = _match_coef_names(coef_names, String(t))
+            isempty(matching) && @minimal_error "No model coefficient matches '$t'. Available: $coef_names"
+            append!(idxs, matching)
+        else
+            @minimal_error "Unsupported type for tested_coefs: $(typeof(t))"
+        end
+    end
+
+    return _add_intercept!(idxs, coef_names, test_intercept)
+end
+
+# 2. HIGH-LEVEL WRAPPER FOR EpochData
+@inline function _fill_lmm_epoch_slice!(eeg_data::Array{Float64,3}, c_idx::Int, ep_idx::Int, col::Vector{Float64}, n_samp::Int)
+    @inbounds @simd for t = 1:n_samp
+        eeg_data[c_idx, t, ep_idx] = col[t]
+    end
+end
+
+@inline function _fill_lmm_epoch_slice!(eeg_data::Array{Float64,3}, c_idx::Int, ep_idx::Int, col::AbstractVector, n_samp::Int)
+    @inbounds for t = 1:n_samp
+        eeg_data[c_idx, t, ep_idx] = Float64(col[t])
+    end
+end
+
+function _resolve_epoch_participant_label(ep::EegFun.EpochData)::String
+    if !isempty(ep.data) && !isempty(ep.data[1]) && hasproperty(ep.data[1], :participant)
+        return string(ep.data[1][1, :participant])
+    end
+    stem, _ = splitext(basename(ep.file))
+    any(isdigit, stem) && return string(EegFun._extract_participant_id(basename(ep.file)))
+    return isempty(stem) ? "1" : stem
+end
+
 # 3. EXCHANGEABILITY BLOCKS & PIVOTAL CR2 SIGN-FLIP INFERENCE
-# ============================================================================
 #
 # Under H0, whole-block sign flipping of the reduced-model (Freedman–Lane) residuals preserves
 # their joint distribution when blocks are independent and block-level errors are symmetric.
@@ -374,7 +469,6 @@ end
 # predictors, and unequal trial counts without refitting, each flip η ∈ {-1, +1}^S (and the
 # observed identity flip η = 1) is studentized by its Bell–McCaffrey / Pustejovsky–Tipton CR2
 # cluster-robust standard error and mapped to a Normal-equivalent z-score via Satterthwaite df.
-
 _block_ids(col) = (lv = unique(col); idx = Dict(v => i for (i, v) in enumerate(lv)); [idx[v] for v in col])
 
 # Every level of every random-effects term must occur in exactly one block
@@ -518,47 +612,6 @@ end
     lp == -Inf && return copysign(38.0, t)
     lp >= -0.6931471805599453 && return 0.0
     return copysign(invlogccdf(Normal(), lp), t)
-end
-
-# Pixel-independent per-block design pieces
-struct BlockDesign
-    rows::Vector{Vector{Int}}
-    X::Vector{Matrix{Float64}}                    # n_s × p (estimable fixed-effects columns)
-    Z::Vector{Matrix{Float64}}                    # n_s × q_s (unscaled random-effects columns)
-    XtX::Vector{Matrix{Float64}}
-    ZtX::Vector{Matrix{Float64}}
-    ZtZ::Vector{Matrix{Float64}}
-    lambda_blocks::Vector{Vector{Tuple{Int,Int}}} # per block: (term index, column offset) for each level
-end
-
-function BlockDesign(m::LinearMixedModel, X::Matrix{Float64}, block_ids::Vector{Int})
-    n_blocks = maximum(block_ids)
-    rows = [Int[] for _ = 1:n_blocks]
-    for (i, b) in enumerate(block_ids)
-        push!(rows[b], i)
-    end
-    Xs, Zs, lam = Matrix{Float64}[], Matrix{Float64}[], Vector{Tuple{Int,Int}}[]
-    for r in rows
-        cols, blocks, off = Matrix{Float64}[], Tuple{Int,Int}[], 0
-        for (k, A) in enumerate(m.reterms)
-            q = size(A.z, 1)
-            levs = sort!(unique(view(A.refs, r)))
-            Zk = zeros(length(r), q * length(levs))
-            for (i, obs) in enumerate(r)
-                j = searchsortedfirst(levs, A.refs[obs])
-                Zk[i, ((j-1)*q+1):(j*q)] .= view(A.z, :, obs)
-            end
-            for j in eachindex(levs)
-                push!(blocks, (k, off + (j - 1) * q))
-            end
-            off += q * length(levs)
-            push!(cols, Zk)
-        end
-        push!(Xs, X[r, :])
-        push!(Zs, reduce(hcat, cols))
-        push!(lam, blocks)
-    end
-    return BlockDesign(rows, Xs, Zs, [x' * x for x in Xs], [z' * x for (z, x) in zip(Zs, Xs)], [z' * z for z in Zs], lam)
 end
 
 # Per-block GLS sufficient statistics at the model's current θ, with V_s = I + Z_s Λ_s Λ_s' Z_s':
@@ -708,10 +761,7 @@ function _cr2_pivotal_z!(
     return z_obs
 end
 
-# ============================================================================
 # 4. MODEL DESIGN SETUP
-# ============================================================================
-
 function _setup_lmm_design(f, meta_df, n_epochs, tested_coefs, test_intercept, contrasts)
     meta_df_init = copy(meta_df)
     meta_df_init[!, Symbol(f.lhs)] = randn(Random.MersenneTwister(0), n_epochs)
@@ -739,23 +789,6 @@ function _setup_lmm_design(f, meta_df, n_epochs, tested_coefs, test_intercept, c
 
     tested = setdiff(_resolve_tested_coefs(coef_names, tested_coefs, test_intercept), dropped_coefs)
     return m_initial, coef_names, dropped_coefs, tested, meta_df_init
-end
-
-# ============================================================================
-# 5. PER-PIXEL WORK (one LMM fit + closed-form pivotal CR2 sign-flip null)
-# ============================================================================
-
-struct LmmScratch{M<:LinearMixedModel}
-    m::M
-    design::Union{BlockDesign,Nothing}
-    y::Vector{Float64}
-    beta::Vector{Float64}
-    se::Vector{Float64}
-    z::Vector{Float64}
-    p::Vector{Float64}
-    z_perm_obs::Vector{Float64}
-    znull::Matrix{Float64}      # n_flips × n_tested
-    singular::Base.RefValue{Bool}
 end
 
 function _create_scratch(f, meta_df_init, est_cols, block_ids, n_flips, n_tested, contrasts)
@@ -889,7 +922,7 @@ function _process_pixel!(scr::LmmScratch, eeg, c_idx::Int, t_idx::Int, slot::Int
         e isa Union{InterruptException,UndefVarError,BoundsError,TypeError} && rethrow()
         STATUS_ERROR
     end
-    eligible = is_inference_eligible(status)
+    eligible = _is_inference_eligible(status)
     status < STATUS_FLAT && _commit_pixel!(scr, out, c_idx, t_idx, slot, ctx, eligible)
     out.status[c_idx, t_idx] = status
     return
@@ -932,10 +965,7 @@ function _first_fit_error(status, eeg, make_scratch, ctx)
     return "channel index $c, time index $t: $reason"
 end
 
-# ============================================================================
 # 6. NULL DISTRIBUTIONS & CORRECTED P-VALUES
-# ============================================================================
-
 function _build_cluster_stat_map(t_map, channel_names, time_points, spatial_conn, cluster_threshold)
     n_channels, n_timepoints = size(t_map)
     pos_clusters, neg_clusters = EegFun._find_clusters(
@@ -1037,27 +1067,6 @@ function _compute_p_corrected(z_obs_map, null_max, tested, ctx, bad::AbstractMat
         p_c[bad] .= NaN
     end
     return p_corr
-end
-
-# ============================================================================
-# 7. PRIMARY MASS-UNIVARIATE LMM FITTER
-# ============================================================================
-
-function fit_mass_lmm(
-    eeg_data::AbstractArray{<:Real,3},
-    meta_df::DataFrame,
-    f::FormulaTerm;
-    dim_order = (:channels, :timepoints, :epochs),
-    kwargs...,
-)
-    target = (:channels, :timepoints, :epochs)
-    (length(dim_order) == 3 && Set(dim_order) == Set(target)) ||
-        @minimal_error "dim_order must be a 3-element permutation of (:channels, :timepoints, :epochs), got: $dim_order"
-    if dim_order != target
-        perm = [findfirst(==(t), dim_order) for t in target]
-        eeg_data = permutedims(eeg_data, tuple(perm...))
-    end
-    return _fit_mass_lmm(eeg_data, meta_df, f, nothing; kwargs...)
 end
 
 function _fit_mass_lmm(
@@ -1242,7 +1251,7 @@ function _fit_mass_lmm(
         first_error = _first_fit_error(fit_status, eeg, make_scratch, base_ctx)
         _report_fit_problems(fit_status, channel_names, first_error)
         unfitted = fit_status .>= STATUS_FLAT
-        ineligible = .!is_inference_eligible.(fit_status)
+        ineligible = .!_is_inference_eligible.(fit_status)
 
         beta, se, z, p_param = out.beta, out.se, out.z, out.p
         for arr in (beta, se, z, p_param)
@@ -1310,8 +1319,8 @@ function _fit_mass_lmm(
             z_perm_obs = z_perm_obs_out,
             prespecified_field_size = (n_channels, n_timepoints),
             field_mask_policy = :intersection_of_valid_pixels,
-            n_valid_pixels = count(is_inference_eligible, fit_status),
-            n_ineligible_pixels = count(!is_inference_eligible, fit_status),
+            n_valid_pixels = count(_is_inference_eligible, fit_status),
+            n_ineligible_pixels = count(!_is_inference_eligible, fit_status),
             n_total_pixels = length(fit_status),
         )
         return EegFun.LmmStatsResult(

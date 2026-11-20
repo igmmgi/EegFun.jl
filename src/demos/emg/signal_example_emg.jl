@@ -1,3 +1,9 @@
+# Interactive surface electromyography (EMG) rectification and envelope demo.
+
+######################################
+########### User Functions ###########
+######################################
+
 """
     signal_example_emg()
 

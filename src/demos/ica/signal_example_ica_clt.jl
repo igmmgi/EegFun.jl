@@ -1,3 +1,9 @@
+# Interactive Central Limit Theorem and non-Gaussianity ICA teaching demo.
+
+######################################
+########### User Functions ###########
+######################################
+
 """
     signal_example_ica_clt()
 

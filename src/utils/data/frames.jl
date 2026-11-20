@@ -1,31 +1,47 @@
+# Conversion between EegFun data containers and tabular `DataFrame` representations.
+
+######################################
+######### Types & Constants ##########
+######################################
+
+const ConditionAverageData = Union{ErpData,TimeFreqData}
+
+######################################
+######### Internal Functions #########
+######################################
+
 _data_frames(dat::EegData) = (dat.data,)
+
 _data_frames(dat::Union{TimeFreqData,TimeFreqEpochData}) = (dat.data_power, dat.data_phase)
 
 function _set_data_frames!(dat::EegData, frames::Tuple{Any})
     dat.data = frames[1]
     return dat
 end
+
 function _set_data_frames!(dat::Union{TimeFreqData,TimeFreqEpochData}, frames::Tuple{Any,Any})
     dat.data_power, dat.data_phase = frames
     return dat
 end
 
 _foreach_df(f, df::DataFrame) = (f(df); nothing)
+
 _foreach_df(f, dfs::AbstractVector{<:DataFrame}) = (foreach(f, dfs); nothing)
 
 _map_df(f, df::DataFrame) = f(df)
+
 _map_df(f, dfs::AbstractVector{<:DataFrame}) = DataFrame[f(df) for df in dfs]
 
 _kind_tag(::Type{<:Union{TimeFreqData,TimeFreqEpochData}}) = "TF "
-_kind_tag(::Type) = ""
 
-const ConditionAverageData = Union{ErpData,TimeFreqData}
+_kind_tag(::Type) = ""
 
 @inline function _accum_col!(dst::Vector{Float64}, src::Vector{Float64})
     @inbounds @simd for i in eachindex(dst, src)
         dst[i] += src[i]
     end
 end
+
 @inline function _accum_col!(dst::AbstractVector, src::AbstractVector)
     @inbounds @simd for i in eachindex(dst, src)
         dst[i] += src[i]

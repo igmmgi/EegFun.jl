@@ -1,5 +1,14 @@
-_flag_symbol(base::AbstractString, criterion) = Symbol(base, '_', criterion)
+# Raw file existence checks and pre-pipeline data inspection utilities.
 
+######################################
+########### User Functions ###########
+######################################
+
+"""
+    check_files_exist(files::Vector{String}) -> Bool
+
+Return `true` if every path in `files` exists on disk, emitting a warning for each missing file.
+"""
 function check_files_exist(files::Vector{String})
     all_exist = true
     for fname in files
@@ -9,12 +18,6 @@ function check_files_exist(files::Vector{String})
         end
     end
     return all_exist
-end
-
-function _center_title(title::String, width::Int)
-    total_dashes = max(0, width - length(title) - 2)
-    left_dashes = div(total_dashes, 2)
-    return "-"^left_dashes * " $title " * "-"^(total_dashes - left_dashes)
 end
 
 """
@@ -27,43 +30,19 @@ function section(title::String; width::Int = 80)
     return "\n$dash_line\n$(_center_title(title, width))\n$dash_line"
 end
 
+"""
+    subsection(title::String; width::Int = 80) -> String
+
+Format a single-line centered subsection header of total character width `width`.
+"""
 subsection(title::String; width::Int = 80) = "\n" * _center_title(title, width)
+
+"""
+    subsubsection(title::String) -> String
+
+Format a `# title` subsubsection log marker.
+"""
 subsubsection(title::String) = "\n# " * title
-
-function _bdf_file_integrity(filepath::String)
-    actual_bytes = filesize(filepath)
-    if actual_bytes < 256
-        return (; hdr = nothing, actual_bytes, expected_bytes = 256, header_records = 0, actual_records = 0, status = :corrupt_header)
-    end
-    hdr = try
-        read_raw_data(filepath; header_only = true)
-    catch
-        return (;
-            hdr = nothing,
-            actual_bytes,
-            expected_bytes = actual_bytes,
-            header_records = 0,
-            actual_records = 0,
-            status = :corrupt_header,
-        )
-    end
-
-    hdr_bytes = hdr.num_bytes_header
-    bytes_per_record = sum(hdr.num_samples) * 3
-    available_data_bytes = max(0, actual_bytes - hdr_bytes)
-    actual_records = bytes_per_record > 0 ? div(available_data_bytes, bytes_per_record) : 0
-    header_records = hdr.num_data_records
-
-    if actual_bytes < hdr_bytes || bytes_per_record <= 0
-        return (; hdr, actual_bytes, expected_bytes = hdr_bytes, header_records, actual_records = 0, status = :corrupt_header)
-    elseif header_records <= 0
-        return (; hdr, actual_bytes, expected_bytes = actual_bytes, header_records, actual_records, status = :unfinalized)
-    else
-        expected_bytes = hdr_bytes + header_records * bytes_per_record
-        status = actual_bytes < expected_bytes ? :truncated : :ok
-        return (; hdr, actual_bytes, expected_bytes, header_records, actual_records, status)
-    end
-end
 
 """
     check_raw_data(directory::String; raw_data_files::String = "\\\\.(bdf|edf|vhdr|eeg|fif|xdf)\$", recursive::Bool = false) -> DataFrame
@@ -90,7 +69,7 @@ function check_raw_data(directory::String; raw_data_files::String = "\\.(bdf|edf
         file_names[idx] = basename(f)
         file_sizes_mb[idx] = round(filesize(f) / (1024 * 1024); digits = 2)
 
-        if get_file_extension(f) == ".bdf"
+        if _get_file_extension(f) == ".bdf"
             info = _bdf_file_integrity(f)
             if info.status == :corrupt_header || isnothing(info.hdr)
                 integrity_issues[idx] = true
@@ -191,4 +170,51 @@ function check_raw_data(directory::String; raw_data_files::String = "\\.(bdf|edf
     end
     @info "Saved check results to: $log_file"
     return df
+end
+
+######################################
+######### Internal Functions #########
+######################################
+
+_flag_symbol(base::AbstractString, criterion) = Symbol(base, '_', criterion)
+
+function _center_title(title::String, width::Int)
+    total_dashes = max(0, width - length(title) - 2)
+    left_dashes = div(total_dashes, 2)
+    return "-"^left_dashes * " $title " * "-"^(total_dashes - left_dashes)
+end
+
+function _bdf_file_integrity(filepath::String)
+    actual_bytes = filesize(filepath)
+    if actual_bytes < 256
+        return (; hdr = nothing, actual_bytes, expected_bytes = 256, header_records = 0, actual_records = 0, status = :corrupt_header)
+    end
+    hdr = try
+        read_raw_data(filepath; header_only = true)
+    catch
+        return (;
+            hdr = nothing,
+            actual_bytes,
+            expected_bytes = actual_bytes,
+            header_records = 0,
+            actual_records = 0,
+            status = :corrupt_header,
+        )
+    end
+
+    hdr_bytes = hdr.num_bytes_header
+    bytes_per_record = sum(hdr.num_samples) * 3
+    available_data_bytes = max(0, actual_bytes - hdr_bytes)
+    actual_records = bytes_per_record > 0 ? div(available_data_bytes, bytes_per_record) : 0
+    header_records = hdr.num_data_records
+
+    if actual_bytes < hdr_bytes || bytes_per_record <= 0
+        return (; hdr, actual_bytes, expected_bytes = hdr_bytes, header_records, actual_records = 0, status = :corrupt_header)
+    elseif header_records <= 0
+        return (; hdr, actual_bytes, expected_bytes = actual_bytes, header_records, actual_records, status = :unfinalized)
+    else
+        expected_bytes = hdr_bytes + header_records * bytes_per_record
+        status = actual_bytes < expected_bytes ? :truncated : :ok
+        return (; hdr, actual_bytes, expected_bytes, header_records, actual_records, status)
+    end
 end

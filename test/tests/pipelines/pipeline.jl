@@ -1,0 +1,547 @@
+# Tests for configurable preprocessing pipeline execution, repair tracking, and templates.
+
+using Test
+using EegFun
+using DataFrames
+
+function _write_short_bdf_pipe(src_bdf::String, dst_bdf::String, n_records::Int)
+    hdr = EegFun.read_raw_data(src_bdf; header_only = true)
+    n_chan = length(hdr.channel_labels)
+    sr = Int(hdr.sample_rate[1])
+    total_bytes = 256 * (n_chan + 1) + n_records * n_chan * sr * 3
+    buf = open(io -> read(io, total_bytes), src_bdf, "r")
+    buf[237:244] .= codeunits(rpad(string(n_records), 8))
+    mkpath(dirname(dst_bdf))
+    write(dst_bdf, buf)
+    return dst_bdf
+end
+
+@testset "Pipeline Utilities" begin
+
+    # ────────────────────────────────────────────────────────────
+    # 1. Section formatting helpers
+    # ────────────────────────────────────────────────────────────
+    @testset "section formatting" begin
+        s = EegFun.section("Test Section")
+        @test contains(s, "Test Section")
+        @test contains(s, "-")
+
+        sub = EegFun.subsection("Sub Test")
+        @test contains(sub, "Sub Test")
+
+        subsub = EegFun.subsubsection("Sub Sub")
+        @test contains(subsub, "Sub Sub")
+        @test startswith(subsub, "\n# ")
+    end
+
+    @testset "_center_title" begin
+        title = EegFun._center_title("Hello", 40)
+        @test length(title) == 40
+        @test contains(title, "Hello")
+    end
+
+    @testset "_flag_symbol" begin
+        s = EegFun._flag_symbol("is_extreme_value", 200)
+        @test s == :is_extreme_value_200
+
+        s2 = EegFun._flag_symbol("is_artifact_value", 100.0)
+        @test s2 == Symbol("is_artifact_value_100.0")
+    end
+
+    # ────────────────────────────────────────────────────────────
+    # 2. check_files_exist
+    # ────────────────────────────────────────────────────────────
+    @testset "check_files_exist" begin
+        # Create temp files
+        dir = mktempdir()
+        f1 = joinpath(dir, "file1.txt")
+        f2 = joinpath(dir, "file2.txt")
+        write(f1, "test")
+        write(f2, "test")
+
+        @test EegFun.check_files_exist([f1, f2]) == true
+        @test EegFun.check_files_exist([f1, "/nonexistent/file.txt"]) == false
+        @test EegFun.check_files_exist(String[]) == true
+    end
+
+    # ────────────────────────────────────────────────────────────
+    # 3. ContinuousRepairInfo
+    # ────────────────────────────────────────────────────────────
+    @testset "ContinuousRepairInfo" begin
+        info = EegFun.create_continuous_repair_info(:neighbor_interpolation; name = "test_repair")
+
+        @test info isa EegFun.ContinuousRepairInfo
+        @test info.name == "test_repair"
+        @test info.method == :neighbor_interpolation
+        @test isempty(info.repaired)
+        @test isempty(info.skipped)
+
+        # Show method
+        io = IOBuffer()
+        show(io, info)
+        output = String(take!(io))
+        @test contains(output, "ContinuousRepairInfo")
+        @test contains(output, "test_repair")
+    end
+
+    # ────────────────────────────────────────────────────────────
+    # 4. ArtifactInfo
+    # ────────────────────────────────────────────────────────────
+    @testset "ArtifactInfo" begin
+        info = EegFun.ArtifactInfo()
+
+        @test info isa EegFun.ArtifactInfo
+        @test isempty(info.continuous_repairs)
+        @test isempty(info.epoch_rejections)
+        @test isnothing(info.ica_components)
+
+        # Show method
+        io = IOBuffer()
+        show(io, info)
+        output = String(take!(io))
+        @test contains(output, "ArtifactInfo")
+    end
+
+    # ────────────────────────────────────────────────────────────
+    # 5. ChannelRepairInfo
+    # ────────────────────────────────────────────────────────────
+    @testset "ChannelRepairInfo" begin
+        info = EegFun.ChannelRepairInfo()
+
+        @test isnothing(info.continuous)
+        @test isempty(info.epochs)
+
+        io = IOBuffer()
+        show(io, info)
+        output = String(take!(io))
+        @test contains(output, "ChannelRepairInfo")
+    end
+
+    # ────────────────────────────────────────────────────────────
+    # 5b. Continuous Channel Repair and Repairable Analysis
+    # ────────────────────────────────────────────────────────────
+    @testset "Continuous channel repair" begin
+        c_dat = EegFun.create_test_continuous_data(n = 200, fs = 256, n_channels = 4, seed = 1)
+        c_dat.layout.data.x3 = [0.0, 0.1, 0.0, -0.1]
+        c_dat.layout.data.y3 = [0.1, 0.0, -0.1, 0.0]
+        c_dat.layout.data.z3 = [0.0, 0.0, 0.0, 0.0]
+        EegFun.get_neighbors_xyz!(c_dat.layout, 0.5)
+
+        # In-place channel_repairable!
+        rep_info = EegFun.create_continuous_repair_info(:neighbor_interpolation)
+        EegFun.channel_repairable!(rep_info, [:Ch2], c_dat.layout)
+        @test rep_info.repaired == [:Ch2]
+        @test isempty(rep_info.skipped)
+
+        # Out-of-place channel_repairable
+        rep_info2 = EegFun.create_continuous_repair_info(:neighbor_interpolation)
+        rep_res = EegFun.channel_repairable(rep_info2, [:Ch2], c_dat.layout)
+        @test isempty(rep_info2.repaired)
+        @test rep_res.repaired == [:Ch2]
+
+        # Empty bad channels
+        rep_empty = EegFun.create_continuous_repair_info(:neighbor_interpolation)
+        EegFun.channel_repairable!(rep_empty, Symbol[], c_dat.layout)
+        @test isempty(rep_empty.repaired)
+        @test isempty(rep_empty.skipped)
+
+        # Perform repair_channels! (neighbor)
+        c_dat_copy = copy(c_dat)
+        EegFun.repair_channels!(c_dat, rep_info; method = :neighbor_interpolation)
+        @test c_dat.data.Ch2 != c_dat_copy.data.Ch2
+        @test c_dat.data.Ch1 == c_dat_copy.data.Ch1
+
+        # Perform repair_channels! (spherical)
+        c_dat_sph = copy(c_dat_copy)
+        rep_info_sph = EegFun.create_continuous_repair_info(:spherical_spline)
+        EegFun.channel_repairable!(rep_info_sph, [:Ch2], c_dat.layout)
+        EegFun.repair_channels!(c_dat_sph, rep_info_sph; method = :spherical_spline)
+        @test c_dat_sph.data.Ch2 != c_dat_copy.data.Ch2
+
+        # Invalid method throws EegFunError
+        @test_throws EegFun.EegFunError EegFun.repair_channels!(c_dat, rep_info; method = :invalid_method)
+
+        # Summarize repairs
+        summ_df = EegFun.summarize_electrode_repairs([rep_info])
+        @test summ_df isa DataFrame
+        @test :electrode in propertynames(summ_df)
+        @test :n_participants in propertynames(summ_df)
+        @test :Ch2 in summ_df.electrode
+    end
+
+    # ────────────────────────────────────────────────────────────
+    # 5c. Compare Rejections
+    # ────────────────────────────────────────────────────────────
+    @testset "compare_rejections" begin
+        ep_dat1, _ = EegFun.create_test_epoch_data_with_artifacts(n_channels = 3, fs = 256, n_timepoints = 200, n_epochs = 5)
+        ep_dat2 = copy(ep_dat1)
+        rej1 = [EegFun.detect_bad_epochs_automatic(ep_dat1, abs_criterion = 50.0)]
+        rej2 = [EegFun.detect_bad_epochs_automatic(ep_dat2, abs_criterion = 100.0)]
+
+        comp_df = EegFun.compare_rejections(rej1, rej2)
+        @test comp_df isa DataFrame
+        @test nrow(comp_df) == 1
+        @test :condition in propertynames(comp_df)
+        @test :pct_final_kept in propertynames(comp_df)
+    end
+
+    # ────────────────────────────────────────────────────────────
+    # 6. Pipeline template generation
+    # ────────────────────────────────────────────────────────────
+    @testset "generate_pipeline_template" begin
+        dir = mktempdir()
+        output_file = joinpath(dir, "test_pipeline.jl")
+
+        result = EegFun.generate_pipeline_template(
+            output_file,
+            "test_preprocess";
+            options = EegFun.PipelineTemplateOptions(num_steps = 2, subsections_per_step = 1),
+        )
+
+        @test isfile(result)
+        content = read(result, String)
+        @test contains(content, "test_preprocess")
+        @test contains(content, "using EegFun")
+        @test contains(content, "Step 1")
+        @test contains(content, "Step 2")
+    end
+
+    # ────────────────────────────────────────────────────────────
+    # 7. preprocess error on missing config
+    # ────────────────────────────────────────────────────────────
+    @testset "preprocess - missing config" begin
+        @test_throws Exception EegFun.preprocess("/nonexistent/config.toml")
+    end
+
+    # ────────────────────────────────────────────────────────────
+    # 8. preprocess end-to-end integration test
+    # ────────────────────────────────────────────────────────────
+    @testset "preprocess - end-to-end" begin
+        data_dir = joinpath(pkgdir(EegFun), "resources", "data")
+        test_file = joinpath(data_dir, "bdf", "example1.bdf")
+
+        @test isfile(test_file)
+        # Create a temporary directory for the pipeline config and output
+        mktempdir() do temp_dir
+            raw_dir = joinpath(temp_dir, "raw")
+            _write_short_bdf_pipe(test_file, joinpath(raw_dir, "example1.bdf"), 65)
+
+            # Create epoch condition file
+            epoch_file = joinpath(temp_dir, "epochs.toml")
+            write(
+                epoch_file,
+                """
+  [epochs]
+  [[epochs.conditions]]
+  name = "Test Condition"
+  trigger_sequences = [1]
+  """,
+            )
+
+            # Create pipeline config file
+            pipeline_file = joinpath(temp_dir, "pipeline.toml")
+            bdf_dir = replace(raw_dir, '\\' => '/')
+            write(
+                pipeline_file,
+                """
+[files.input]
+directory = "$bdf_dir"
+raw_data_files = "example1\\\\.bdf"
+layout_file = "biosemi72.csv"
+epoch_condition_file = "epochs.toml"
+
+[files.output]
+directory = "output"
+save_continuous_data_raw = false
+save_continuous_data_corrected = false
+
+[preprocess]
+epoch_start = -0.1
+epoch_end = 0.5
+
+[preprocess.resample]
+apply = true
+target_rate = 128
+
+[preprocess.ica]
+percentage_of_data = 20.0
+""",
+            )
+
+            # Run the pipeline (this shouldn't throw any errors)
+            # Redirect stdout/stderr to avoid spamming the test output
+            redirect_stdio(stdout = devnull, stderr = devnull) do
+                EegFun.preprocess(pipeline_file; base_dir = temp_dir)
+            end
+
+            # Check that the output directory was created and contains the expected files
+            out_dir = joinpath(temp_dir, "output")
+            @test isdir(out_dir)
+            @test isfile(joinpath(out_dir, "example1_epochs.jld2"))
+            @test isfile(joinpath(out_dir, "example1_erps.jld2"))
+            @test isfile(joinpath(out_dir, "example1_artifact_info.jld2"))
+        end
+    end
+
+    # ────────────────────────────────────────────────────────────
+    # 9. preprocess - dry_run mode
+    # ────────────────────────────────────────────────────────────
+    @testset "preprocess - dry_run" begin
+        data_dir = joinpath(pkgdir(EegFun), "resources", "data")
+        test_file = joinpath(data_dir, "bdf", "example1.bdf")
+
+        @test isfile(test_file)
+        mktempdir() do temp_dir
+            epoch_file = joinpath(temp_dir, "epochs.toml")
+            write(
+                epoch_file,
+                """
+  [epochs]
+  [[epochs.conditions]]
+  name = "Test Condition"
+  trigger_sequences = [1]
+  """,
+            )
+
+            pipeline_file = joinpath(temp_dir, "pipeline.toml")
+            bdf_dir = replace(joinpath(data_dir, "bdf"), '\\' => '/')
+            write(
+                pipeline_file,
+                """
+[files.input]
+directory = "$bdf_dir"
+raw_data_files = "example1\\\\.bdf"
+layout_file = "biosemi72.csv"
+epoch_condition_file = "epochs.toml"
+
+[files.output]
+directory = "output"
+
+[preprocess]
+epoch_start = -0.1
+epoch_end = 0.5
+
+[preprocess.ica]
+percentage_of_data = 20.0
+""",
+            )
+
+            # dry_run should return nothing and NOT create output files
+            result = redirect_stdio(stdout = devnull, stderr = devnull) do
+                EegFun.preprocess(pipeline_file; base_dir = temp_dir, dry_run = true)
+            end
+
+            @test isnothing(result)
+            # dry_run must not touch the disk: no output directory, config copy or data files
+            @test !isdir(joinpath(temp_dir, "output"))
+        end
+    end
+
+    # ────────────────────────────────────────────────────────────
+    # 10. preprocess - skip_existing mode
+    # ────────────────────────────────────────────────────────────
+    @testset "preprocess - skip_existing" begin
+        data_dir = joinpath(pkgdir(EegFun), "resources", "data")
+        test_file = joinpath(data_dir, "bdf", "example1.bdf")
+
+        @test isfile(test_file)
+        mktempdir() do temp_dir
+            raw_dir = joinpath(temp_dir, "raw")
+            _write_short_bdf_pipe(test_file, joinpath(raw_dir, "example1.bdf"), 65)
+
+            epoch_file = joinpath(temp_dir, "epochs.toml")
+            write(
+                epoch_file,
+                """
+  [epochs]
+  [[epochs.conditions]]
+  name = "Test Condition"
+  trigger_sequences = [1]
+  """,
+            )
+
+            pipeline_file = joinpath(temp_dir, "pipeline.toml")
+            bdf_dir = replace(raw_dir, '\\' => '/')
+            write(
+                pipeline_file,
+                """
+[files.input]
+directory = "$bdf_dir"
+raw_data_files = "example1\\\\.bdf"
+layout_file = "biosemi72.csv"
+epoch_condition_file = "epochs.toml"
+
+[files.output]
+directory = "output"
+save_continuous_data_raw = false
+save_continuous_data_corrected = false
+
+[preprocess]
+epoch_start = -0.1
+epoch_end = 0.5
+
+[preprocess.resample]
+apply = true
+target_rate = 128
+
+[preprocess.ica]
+apply = false
+""",
+            )
+
+            # First run: process normally
+            redirect_stdio(stdout = devnull, stderr = devnull) do
+                EegFun.preprocess(pipeline_file; base_dir = temp_dir)
+            end
+
+            out_dir = joinpath(temp_dir, "output")
+            final_file = joinpath(out_dir, "example1_epochs.jld2")
+            @test isfile(final_file)
+
+            # Record modification time of the final file
+            mtime_before = mtime(final_file)
+
+            # Small sleep to ensure mtime would differ if file were rewritten
+            sleep(0.15)
+
+            # Second run with skip_existing: should NOT reprocess
+            redirect_stdio(stdout = devnull, stderr = devnull) do
+                EegFun.preprocess(pipeline_file; base_dir = temp_dir, skip_existing = true)
+            end
+
+            # The final file should NOT have been overwritten
+            @test mtime(final_file) == mtime_before
+        end
+    end
+
+    # ────────────────────────────────────────────────────────────
+    # 11. ICA component summary, pipeline template, and interactive helpers
+    # ────────────────────────────────────────────────────────────
+    @testset "ICA summary, pipeline template, and interactive helpers" begin
+        # 1. summarize_ica_components counts unique ICA components across categories + manual
+        art_overlap = EegFun.ArtifactComponents(
+            Dict(:vEOG => [1, 2], :hEOG => [2, 3]),
+            [2, 4],     # ecg overlaps component 2
+            [3],        # line_noise overlaps component 3
+            [1],        # channel_noise overlaps component 1
+            [4, 5],     # manual overlaps 4 and adds 5
+        )
+        per_file_df, avg_df = EegFun.summarize_ica_components([art_overlap])
+        @test nrow(per_file_df) == 1
+        @test per_file_df.total_components[1] == 5 # unique([1, 2, 3, 4, 5]) == 5
+        @test avg_df[avg_df.component_type .== "total", :avg_per_participant][1] == 5.0
+
+        # 2. generate_pipeline_template compiles & executes dry_run inside a fresh zero-export Module
+        mktempdir() do temp_dir
+            tpl_file = joinpath(temp_dir, "generated_pipe.jl")
+            EegFun.generate_pipeline_template(tpl_file, "custom_zero_export_pipe")
+            tpl_src = read(tpl_file, String)
+            @test !contains(tpl_src, "default.toml")
+            @test contains(tpl_src, "EegFun.read_config")
+
+            # Load into an isolated anonymous module (verifies zero reliance on unexported EegFun names!)
+            isolated_mod = Module(:IsolatedZeroExportPipeline)
+            Base.include(isolated_mod, tpl_file)
+            @test Base.invokelatest(isdefined, isolated_mod, :custom_zero_export_pipe)
+
+            data_dir = joinpath(pkgdir(EegFun), "resources", "data")
+            raw_dir = joinpath(temp_dir, "raw")
+            _write_short_bdf_pipe(joinpath(data_dir, "bdf", "example1.bdf"), joinpath(raw_dir, "example1.bdf"), 65)
+            bdf_dir = replace(raw_dir, '\\' => '/')
+            epoch_file = joinpath(temp_dir, "epochs.toml")
+            write(epoch_file, "[epochs]\n[[epochs.conditions]]\nname = \"Cond1\"\ntrigger_sequences = [1]\n")
+            cfg_file = joinpath(temp_dir, "cfg.toml")
+            write(
+                cfg_file,
+                """
+[files.input]
+directory = "$bdf_dir"
+raw_data_files = "example1\\\\.bdf"
+layout_file = "biosemi72.csv"
+epoch_condition_file = "epochs.toml"
+
+[files.output]
+directory = "out_tpl"
+
+[preprocess.resample]
+apply = true
+target_rate = 128
+
+[preprocess.ica]
+apply = false
+""",
+            )
+            cd(temp_dir) do
+                redirect_stdio(stdout = devnull, stderr = devnull) do
+                    Base.invokelatest() do
+                        pipe_fn = getfield(isolated_mod, :custom_zero_export_pipe)
+                        pipe_fn(cfg_file; base_dir = temp_dir)
+                    end
+                end
+            end
+            @test isfile(joinpath(temp_dir, "out_tpl", "config.toml"))
+            @test isfile(joinpath(temp_dir, "out_tpl", "neighbors.toml"))
+        end
+
+        # 3. _wait_interactive_figure does not throw MethodError on Makie.Figure / Makie.Scene when headless
+        fig_headless = EegFun.Makie.Figure()
+        @test isnothing(EegFun._wait_interactive_figure(fig_headless, nothing))
+
+        # 4. _to_rejection_info converts EpochRejectionState vector cleanly to EpochRejectionInfo vector
+        ep_sample = EegFun.create_test_epoch_data(n = 30, n_epochs = 3, n_channels = 2)
+        state = EegFun.detect_bad_epochs_interactive(ep_sample; display_plot = false)
+        state.rejected[2] = true
+        infos = EegFun._to_rejection_info([state])
+        @test length(infos) == 1 && infos[1] isa EegFun.EpochRejectionInfo
+        @test unique([r.epoch for r in infos[1].rejected]) == [2]
+
+        # 5. _ica_reference_rank_deficit accounts for layout reference electrodes without penalizing external references
+        c_ref = EegFun.create_test_continuous_data(n = 600, fs = 250, n_channels = 4, seed = 11)
+        c_ref.data.ExtRef = randn(600)
+        @test EegFun._ica_reference_rank_deficit(c_ref, :none) == 0
+        @test EegFun._ica_reference_rank_deficit(c_ref, :avg) == 1
+        @test EegFun._ica_reference_rank_deficit(c_ref, :Ch1) == 1
+        @test EegFun._ica_reference_rank_deficit(c_ref, [:Ch1, :Ch2]) == 1
+        @test EegFun._ica_reference_rank_deficit(c_ref, :ExtRef) == 0
+        @test EegFun._ica_reference_rank_deficit(c_ref, [:Ch1, :ExtRef]) == 0
+
+        # _pipeline_ica! succeeds on layout-referenced data (rank = n_channels - 1)
+        EegFun.rereference!(c_ref, :Ch1)
+        c_ref.data.vEOG = randn(600)
+        c_ref.data.hEOG = randn(600)
+        c_ref.data.is_vEOG = falses(600)
+        c_ref.data.is_hEOG = falses(600)
+        mktempdir() do ica_dir
+            cfg_path = joinpath(ica_dir, "ref_ica.toml")
+            write(
+                cfg_path,
+                """
+[files.output]
+save_ica_data = true
+
+[preprocess]
+reference_channel = "Ch1"
+
+[preprocess.ica]
+apply = true
+""",
+            )
+            cfg_dict = EegFun.read_config(cfg_path)
+            pipeline_cfg = EegFun.PipelineConfig(cfg_dict)
+            ext_col = EegFun._flag_symbol("is_extreme_value", pipeline_cfg.preprocess.eeg.extreme_value_abs_criterion)
+            EegFun.is_extreme_value!(c_ref, pipeline_cfg.preprocess.eeg.extreme_value_abs_criterion; channel_out = ext_col)
+            comp_art = EegFun._pipeline_ica!(c_ref, pipeline_cfg.preprocess, nothing, ica_dir, "subj1.bdf", pipeline_cfg.files)
+            @test comp_art isa EegFun.ArtifactComponents
+            ica_saved = EegFun.read_data(joinpath(ica_dir, "subj1_ica.jld2"))
+            @test size(ica_saved.unmixing, 1) == 3
+        end
+    end
+
+    # ────────────────────────────────────────────────────────────
+    # Cleanup: remove any preprocess_log files generated during tests
+    # ────────────────────────────────────────────────────────────
+    for f in filter(f -> startswith(f, "preprocess_log_") && endswith(f, ".txt"), readdir())
+        rm(f, force = true)
+    end
+
+end # @testset "Pipeline Utilities"

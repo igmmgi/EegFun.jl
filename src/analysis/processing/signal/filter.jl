@@ -1,3 +1,9 @@
+# High-pass and low-pass FIR/IIR digital filtering for EEG signals.
+
+######################################
+######### Types & Constants ##########
+######################################
+
 """
     FilterInfo
 
@@ -23,6 +29,10 @@ struct FilterInfo
     n_taps::Union{Nothing,Int}
     transition_band::Float64
 end
+
+######################################
+########### User Functions ###########
+######################################
 
 """
     create_lowpass_filter(cutoff_freq::Real, sample_rate::Real; filter_method::Symbol = :iir,
@@ -77,6 +87,272 @@ create_highpass_filter(
     transition_band_hz = transition_band_hz,
     min_taps = min_taps,
 )
+
+"""
+    lowpass_filter(dat::EegData, cutoff_freq::Real; order::Int = 3, transition_width = nothing,
+                   filter_method::Symbol = :iir, channel_selection = channels(), filter_func::Symbol = :filtfilt)
+    lowpass_filter(dat::EegData, filter_cfg::FilterConfig; section::Symbol = :lowpass)
+    lowpass_filter(file_pattern::String, cutoff_freq::Real; input_dir = pwd(),
+                   participant_selection = participants(), condition_selection = conditions(), output_dir = nothing)
+
+Apply a digital lowpass filter to a copy of `dat` (or a `Vector` of `EegData`, or batch `.jld2` files matching `file_pattern`).
+`filter_func` supports `:filtfilt` (two-pass zero-phase, default), `:filt_zerophase`
+(one-pass delay-compensated zero-phase FIR, MNE/EEGLAB style), and `:filt` (one-pass causal).
+"""
+lowpass_filter(dat::EegData, args...; kwargs...) = lowpass_filter!(copy(dat), args...; kwargs...)
+
+lowpass_filter(dat::AbstractVector{<:EegData}, cutoff_freq::Real; kwargs...) = [lowpass_filter(d, cutoff_freq; kwargs...) for d in dat]
+
+lowpass_filter(dat::EegData, filter_cfg::FilterConfig; section::Symbol = :lowpass) =
+    lowpass_filter!(copy(dat), filter_cfg; section = section)
+
+lowpass_filter(dat::AbstractVector{<:EegData}, filter_cfg::FilterConfig; section::Symbol = :lowpass) =
+    [lowpass_filter(d, filter_cfg; section = section) for d in dat]
+
+"""
+    lowpass_filter!(dat::EegData, cutoff_freq::Real; kwargs...)
+    lowpass_filter!(dat::EegData, filter_cfg::FilterConfig; section::Symbol = :lowpass)
+
+In-place mutating version of [`lowpass_filter`](@ref).
+"""
+lowpass_filter!(
+    dat::EegData,
+    cutoff_freq::Real;
+    order::Int = 3,
+    transition_width::Union{Nothing,Real} = nothing,
+    filter_method::Symbol = :iir,
+    channel_selection = channels(),
+    filter_func::Symbol = :filtfilt,
+) = _filter_eeg!(
+    dat,
+    cutoff_freq,
+    :lp;
+    order = order,
+    transition_width = transition_width,
+    filter_method = filter_method,
+    channel_selection = channel_selection,
+    filter_func = filter_func,
+)
+
+function lowpass_filter!(dat::AbstractVector{<:EegData}, cutoff_freq::Real; kwargs...)
+    for d in dat
+        lowpass_filter!(d, cutoff_freq; kwargs...)
+    end
+    return dat
+end
+
+function lowpass_filter!(dat::EegData, filter_cfg::FilterConfig; section::Symbol = :lowpass)
+    sec = getfield(filter_cfg, section)
+    sec.apply && lowpass_filter!(dat, sec.freq; order = sec.order, filter_method = sec.method, filter_func = sec.func)
+    return dat
+end
+
+function lowpass_filter!(dat::AbstractVector{<:EegData}, filter_cfg::FilterConfig; section::Symbol = :lowpass)
+    for d in dat
+        lowpass_filter!(d, filter_cfg; section = section)
+    end
+    return dat
+end
+
+lowpass_filter(
+    file_pattern::String,
+    cutoff_freq::Real;
+    input_dir::String = pwd(),
+    participant_selection = participants(),
+    condition_selection = conditions(),
+    output_dir::Union{String,Nothing} = nothing,
+) = _run_filter_batch(
+    file_pattern,
+    cutoff_freq,
+    :lp;
+    input_dir = input_dir,
+    participant_selection = participant_selection,
+    condition_selection = condition_selection,
+    output_dir = output_dir,
+)
+
+"""
+    highpass_filter(dat::EegData, cutoff_freq::Real; order::Int = 1, transition_width = nothing,
+                    filter_method::Symbol = :iir, channel_selection = channels(), filter_func::Symbol = :filtfilt)
+    highpass_filter(dat::EegData, filter_cfg::FilterConfig; section::Symbol = :highpass)
+    highpass_filter(file_pattern::String, cutoff_freq::Real; input_dir = pwd(),
+                    participant_selection = participants(), condition_selection = conditions(), output_dir = nothing)
+
+Apply a digital highpass filter to a copy of `dat` (or a `Vector` of `EegData`, or batch `.jld2` files matching `file_pattern`).
+`filter_func` supports `:filtfilt` (two-pass zero-phase, default), `:filt_zerophase`
+(one-pass delay-compensated zero-phase FIR, MNE/EEGLAB style), and `:filt` (one-pass causal).
+"""
+highpass_filter(dat::EegData, args...; kwargs...) = highpass_filter!(copy(dat), args...; kwargs...)
+
+highpass_filter(dat::AbstractVector{<:EegData}, cutoff_freq::Real; kwargs...) = [highpass_filter(d, cutoff_freq; kwargs...) for d in dat]
+
+highpass_filter(dat::EegData, filter_cfg::FilterConfig; section::Symbol = :highpass) =
+    highpass_filter!(copy(dat), filter_cfg; section = section)
+
+highpass_filter(dat::AbstractVector{<:EegData}, filter_cfg::FilterConfig; section::Symbol = :highpass) =
+    [highpass_filter(d, filter_cfg; section = section) for d in dat]
+
+"""
+    highpass_filter!(dat::EegData, cutoff_freq::Real; kwargs...)
+    highpass_filter!(dat::EegData, filter_cfg::FilterConfig; section::Symbol = :highpass)
+
+In-place mutating version of [`highpass_filter`](@ref).
+"""
+highpass_filter!(
+    dat::EegData,
+    cutoff_freq::Real;
+    order::Int = 1,
+    transition_width::Union{Nothing,Real} = nothing,
+    filter_method::Symbol = :iir,
+    channel_selection = channels(),
+    filter_func::Symbol = :filtfilt,
+) = _filter_eeg!(
+    dat,
+    cutoff_freq,
+    :hp;
+    order = order,
+    transition_width = transition_width,
+    filter_method = filter_method,
+    channel_selection = channel_selection,
+    filter_func = filter_func,
+)
+
+function highpass_filter!(dat::AbstractVector{<:EegData}, cutoff_freq::Real; kwargs...)
+    for d in dat
+        highpass_filter!(d, cutoff_freq; kwargs...)
+    end
+    return dat
+end
+
+function highpass_filter!(dat::EegData, filter_cfg::FilterConfig; section::Symbol = :highpass)
+    sec = getfield(filter_cfg, section)
+    sec.apply && highpass_filter!(dat, sec.freq; order = sec.order, filter_method = sec.method, filter_func = sec.func)
+    return dat
+end
+
+function highpass_filter!(dat::AbstractVector{<:EegData}, filter_cfg::FilterConfig; section::Symbol = :highpass)
+    for d in dat
+        highpass_filter!(d, filter_cfg; section = section)
+    end
+    return dat
+end
+
+highpass_filter(
+    file_pattern::String,
+    cutoff_freq::Real;
+    input_dir::String = pwd(),
+    participant_selection = participants(),
+    condition_selection = conditions(),
+    output_dir::Union{String,Nothing} = nothing,
+) = _run_filter_batch(
+    file_pattern,
+    cutoff_freq,
+    :hp;
+    input_dir = input_dir,
+    participant_selection = participant_selection,
+    condition_selection = condition_selection,
+    output_dir = output_dir,
+)
+
+"""
+    get_filter_characteristics(filter_info::FilterInfo; npoints::Int = 1000, filter_func = :filtfilt)
+
+Compute key frequency-response characteristics (`cutoff_freq_3db`, `cutoff_freq_6db`, `passband_ripple`,
+`stopband_atten`, `phase_delay`, `group_delay`, `transition_band`, `filter_type`) for `filter_info`.
+When `filter_func = :filtfilt` (default), dB attenuation reflects two-pass zero-phase filtering.
+"""
+function get_filter_characteristics(filter_info::FilterInfo; npoints::Int = 1000, filter_func::Union{Symbol,Function} = :filtfilt)
+    freqs = exp10.(range(log10(0.01), log10(filter_info.sample_rate / 2), length = npoints))
+    w = (2π / filter_info.sample_rate) .* freqs
+
+    resp = if filter_info.filter_method == :fir
+        _fir_freqresp(filter_info.filter_object::Vector{Float64}, w)
+    else
+        freqresp(filter_info.filter_object, w)
+    end
+
+    is_zero_phase = (filter_func == :filtfilt || filter_func === filtfilt)
+    db_scale = is_zero_phase ? 40.0 : 20.0
+    mag_db = Vector{Float64}(undef, npoints)
+    phase = Vector{Float64}(undef, npoints)
+    @inbounds for i = 1:npoints
+        mag_db[i] = db_scale * log10(abs(resp[i]))
+        phase[i] = angle(resp[i])
+    end
+
+    cutoff_freq_3db = freqs[_find_db_crossings(mag_db, -3.0)]
+    cutoff_freq_6db = freqs[_find_db_crossings(mag_db, -6.0)]
+    fc = cutoff_freq_3db[1]
+
+    if filter_info.filter_type == :lp
+        passband_mask = freqs .<= fc
+        stopband_mask = freqs .>= (fc + filter_info.transition_band)
+    else
+        passband_mask = freqs .>= fc
+        stopband_mask = freqs .<= (fc - filter_info.transition_band)
+    end
+
+    passband_ripple = any(passband_mask) ? maximum(abs, @view mag_db[passband_mask]) : NaN
+    stopband_atten = if any(stopband_mask)
+        inf_floor = is_zero_phase ? -200.0 : -100.0
+        s = 0.0
+        cnt = 0
+        @inbounds for i = 1:npoints
+            if stopband_mask[i]
+                v = mag_db[i]
+                s += (v == -Inf ? inf_floor : v)
+                cnt += 1
+            end
+        end
+        s / cnt
+    else
+        NaN
+    end
+
+    unwrapped = DSP.unwrap(phase)
+    group_delay = Vector{Float64}(undef, max(0, npoints - 1))
+    @inbounds for i = 1:(npoints-1)
+        group_delay[i] = -(unwrapped[i+1] - unwrapped[i]) / (w[i+1] - w[i])
+    end
+    phase_delay = -unwrapped ./ w
+    length(phase_delay) >= 2 && (phase_delay[1] = phase_delay[2])
+    gd_mask = @view passband_mask[1:(end-1)]
+
+    return (
+        cutoff_freq_3db = cutoff_freq_3db,
+        cutoff_freq_6db = cutoff_freq_6db,
+        passband_ripple = passband_ripple,
+        stopband_atten = stopband_atten,
+        phase_delay = any(passband_mask) ? mean(@view phase_delay[passband_mask]) : NaN,
+        group_delay = any(gd_mask) ? mean(@view group_delay[gd_mask]) : NaN,
+        transition_band = filter_info.transition_band,
+        filter_type = filter_info.filter_type,
+    )
+end
+
+"""
+    print_filter_characteristics(filter_info::FilterInfo; npoints::Int = 1000, filter_func = :filtfilt)
+
+Log a formatted summary of filter cutoff, transition band, stopband attenuation, and delay characteristics.
+"""
+function print_filter_characteristics(filter_info::FilterInfo; npoints::Int = 1000, filter_func::Union{Symbol,Function} = :filtfilt)
+    chars = get_filter_characteristics(filter_info; npoints = npoints, filter_func = filter_func)
+    @info "--------------------------------------------------------------------------------"
+    @info "Filter Characteristics: $(uppercase(string(chars.filter_type))) $(filter_info.cutoff_freq) Hz"
+    @info "Cutoff: -3 dB = $(round.(chars.cutoff_freq_3db, digits=2)) Hz, -6 dB = $(round.(chars.cutoff_freq_6db, digits=2)) Hz"
+    @info "Transition band: $(round(chars.transition_band, digits=1)) Hz"
+    @info "Stopband attenuation: $(round(chars.stopband_atten, digits=1)) dB"
+    if filter_func == :filt_zerophase && filter_info.filter_method == :fir
+        @info "One-pass zero-phase FIR: Effective group delay = 0.0 ms (compensated $(round(chars.group_delay * 1000/filter_info.sample_rate, digits=1)) ms causal delay)"
+    else
+        @info "Single-pass characteristics: Group delay = $(round(chars.group_delay * 1000/filter_info.sample_rate, digits=1)) ms, Phase delay = $(round(chars.phase_delay * 1000/filter_info.sample_rate, digits=1)) ms "
+    end
+    return nothing
+end
+
+######################################
+######### Internal Functions #########
+######################################
 
 function _resolve_transition_band_hz(
     cutoff_freq::Real,
@@ -169,6 +445,7 @@ function _effective_fir_taps(
 end
 
 @inline _prepared_filter_object(fobj::ZeroPoleGain) = convert(SecondOrderSections, fobj)
+
 @inline _prepared_filter_object(fobj::Vector{Float64}) = fobj
 
 function _filt_fir_zerophase!(dst::AbstractVector, b::Vector{Float64}, src::AbstractVector)::Nothing
@@ -340,132 +617,6 @@ function _filter_eeg!(
     return dat
 end
 
-"""
-    lowpass_filter!(dat::EegData, cutoff_freq::Real; order::Int = 3, transition_width = nothing,
-                    filter_method::Symbol = :iir, channel_selection = channels(), filter_func::Symbol = :filtfilt)
-    lowpass_filter!(dat::EegData, filter_cfg::FilterConfig; section::Symbol = :lowpass)
-
-Apply a digital lowpass filter to `dat` (or a `Vector` of `EegData`) in-place.
-`filter_func` supports `:filtfilt` (two-pass zero-phase, default), `:filt_zerophase`
-(one-pass delay-compensated zero-phase FIR, MNE/EEGLAB style), and `:filt` (one-pass causal).
-"""
-lowpass_filter!(
-    dat::EegData,
-    cutoff_freq::Real;
-    order::Int = 3,
-    transition_width::Union{Nothing,Real} = nothing,
-    filter_method::Symbol = :iir,
-    channel_selection = channels(),
-    filter_func::Symbol = :filtfilt,
-) = _filter_eeg!(
-    dat,
-    cutoff_freq,
-    :lp;
-    order = order,
-    transition_width = transition_width,
-    filter_method = filter_method,
-    channel_selection = channel_selection,
-    filter_func = filter_func,
-)
-
-"""
-    highpass_filter!(dat::EegData, cutoff_freq::Real; order::Int = 1, transition_width = nothing,
-                     filter_method::Symbol = :iir, channel_selection = channels(), filter_func::Symbol = :filtfilt)
-    highpass_filter!(dat::EegData, filter_cfg::FilterConfig; section::Symbol = :highpass)
-
-Apply a digital highpass filter to `dat` (or a `Vector` of `EegData`) in-place.
-`filter_func` supports `:filtfilt` (two-pass zero-phase, default), `:filt_zerophase`
-(one-pass delay-compensated zero-phase FIR, MNE/EEGLAB style), and `:filt` (one-pass causal).
-"""
-highpass_filter!(
-    dat::EegData,
-    cutoff_freq::Real;
-    order::Int = 1,
-    transition_width::Union{Nothing,Real} = nothing,
-    filter_method::Symbol = :iir,
-    channel_selection = channels(),
-    filter_func::Symbol = :filtfilt,
-) = _filter_eeg!(
-    dat,
-    cutoff_freq,
-    :hp;
-    order = order,
-    transition_width = transition_width,
-    filter_method = filter_method,
-    channel_selection = channel_selection,
-    filter_func = filter_func,
-)
-
-"""
-    lowpass_filter(dat, cutoff_freq::Real; kwargs...)
-    lowpass_filter(file_pattern::String, cutoff_freq::Real; input_dir = pwd(),
-                   participant_selection = participants(), condition_selection = conditions(), output_dir = nothing)
-
-Non-mutating or batch JLD2 version of [`lowpass_filter!`](@ref).
-"""
-lowpass_filter(dat::EegData, args...; kwargs...) = lowpass_filter!(copy(dat), args...; kwargs...)
-
-"""
-    highpass_filter(dat, cutoff_freq::Real; kwargs...)
-    highpass_filter(file_pattern::String, cutoff_freq::Real; input_dir = pwd(),
-                    participant_selection = participants(), condition_selection = conditions(), output_dir = nothing)
-
-Non-mutating or batch JLD2 version of [`highpass_filter!`](@ref).
-"""
-highpass_filter(dat::EegData, args...; kwargs...) = highpass_filter!(copy(dat), args...; kwargs...)
-
-function lowpass_filter!(dat::AbstractVector{<:EegData}, cutoff_freq::Real; kwargs...)
-    for d in dat
-        lowpass_filter!(d, cutoff_freq; kwargs...)
-    end
-    return dat
-end
-
-function highpass_filter!(dat::AbstractVector{<:EegData}, cutoff_freq::Real; kwargs...)
-    for d in dat
-        highpass_filter!(d, cutoff_freq; kwargs...)
-    end
-    return dat
-end
-
-lowpass_filter(dat::AbstractVector{<:EegData}, cutoff_freq::Real; kwargs...) = [lowpass_filter(d, cutoff_freq; kwargs...) for d in dat]
-highpass_filter(dat::AbstractVector{<:EegData}, cutoff_freq::Real; kwargs...) = [highpass_filter(d, cutoff_freq; kwargs...) for d in dat]
-
-function lowpass_filter!(dat::EegData, filter_cfg::FilterConfig; section::Symbol = :lowpass)
-    sec = getfield(filter_cfg, section)
-    sec.apply && lowpass_filter!(dat, sec.freq; order = sec.order, filter_method = sec.method, filter_func = sec.func)
-    return dat
-end
-
-function lowpass_filter!(dat::AbstractVector{<:EegData}, filter_cfg::FilterConfig; section::Symbol = :lowpass)
-    for d in dat
-        lowpass_filter!(d, filter_cfg; section = section)
-    end
-    return dat
-end
-
-function highpass_filter!(dat::EegData, filter_cfg::FilterConfig; section::Symbol = :highpass)
-    sec = getfield(filter_cfg, section)
-    sec.apply && highpass_filter!(dat, sec.freq; order = sec.order, filter_method = sec.method, filter_func = sec.func)
-    return dat
-end
-
-function highpass_filter!(dat::AbstractVector{<:EegData}, filter_cfg::FilterConfig; section::Symbol = :highpass)
-    for d in dat
-        highpass_filter!(d, filter_cfg; section = section)
-    end
-    return dat
-end
-
-lowpass_filter(dat::EegData, filter_cfg::FilterConfig; section::Symbol = :lowpass) =
-    lowpass_filter!(copy(dat), filter_cfg; section = section)
-highpass_filter(dat::EegData, filter_cfg::FilterConfig; section::Symbol = :highpass) =
-    highpass_filter!(copy(dat), filter_cfg; section = section)
-lowpass_filter(dat::AbstractVector{<:EegData}, filter_cfg::FilterConfig; section::Symbol = :lowpass) =
-    [lowpass_filter(d, filter_cfg; section = section) for d in dat]
-highpass_filter(dat::AbstractVector{<:EegData}, filter_cfg::FilterConfig; section::Symbol = :highpass) =
-    [highpass_filter(d, filter_cfg; section = section) for d in dat]
-
 function _fir_freqresp(h::Vector{Float64}, w::AbstractVector{Float64})::Vector{ComplexF64}
     n_pts = length(w)
     m = length(h)
@@ -504,104 +655,8 @@ function _find_db_crossings(mag_db::Vector{Float64}, target_db::Float64, thresho
     return crossings
 end
 
-"""
-    get_filter_characteristics(filter_info::FilterInfo; npoints::Int = 1000, filter_func = :filtfilt)
-
-Compute key frequency-response characteristics (`cutoff_freq_3db`, `cutoff_freq_6db`, `passband_ripple`,
-`stopband_atten`, `phase_delay`, `group_delay`, `transition_band`, `filter_type`) for `filter_info`.
-When `filter_func = :filtfilt` (default), dB attenuation reflects two-pass zero-phase filtering.
-"""
-function get_filter_characteristics(filter_info::FilterInfo; npoints::Int = 1000, filter_func::Union{Symbol,Function} = :filtfilt)
-    freqs = exp10.(range(log10(0.01), log10(filter_info.sample_rate / 2), length = npoints))
-    w = (2π / filter_info.sample_rate) .* freqs
-
-    resp = if filter_info.filter_method == :fir
-        _fir_freqresp(filter_info.filter_object::Vector{Float64}, w)
-    else
-        freqresp(filter_info.filter_object, w)
-    end
-
-    is_zero_phase = (filter_func == :filtfilt || filter_func === filtfilt)
-    db_scale = is_zero_phase ? 40.0 : 20.0
-    mag_db = Vector{Float64}(undef, npoints)
-    phase = Vector{Float64}(undef, npoints)
-    @inbounds for i = 1:npoints
-        mag_db[i] = db_scale * log10(abs(resp[i]))
-        phase[i] = angle(resp[i])
-    end
-
-    cutoff_freq_3db = freqs[_find_db_crossings(mag_db, -3.0)]
-    cutoff_freq_6db = freqs[_find_db_crossings(mag_db, -6.0)]
-    fc = cutoff_freq_3db[1]
-
-    if filter_info.filter_type == :lp
-        passband_mask = freqs .<= fc
-        stopband_mask = freqs .>= (fc + filter_info.transition_band)
-    else
-        passband_mask = freqs .>= fc
-        stopband_mask = freqs .<= (fc - filter_info.transition_band)
-    end
-
-    passband_ripple = any(passband_mask) ? maximum(abs, @view mag_db[passband_mask]) : NaN
-    stopband_atten = if any(stopband_mask)
-        inf_floor = is_zero_phase ? -200.0 : -100.0
-        s = 0.0
-        cnt = 0
-        @inbounds for i = 1:npoints
-            if stopband_mask[i]
-                v = mag_db[i]
-                s += (v == -Inf ? inf_floor : v)
-                cnt += 1
-            end
-        end
-        s / cnt
-    else
-        NaN
-    end
-
-    unwrapped = DSP.unwrap(phase)
-    group_delay = Vector{Float64}(undef, max(0, npoints - 1))
-    @inbounds for i = 1:(npoints-1)
-        group_delay[i] = -(unwrapped[i+1] - unwrapped[i]) / (w[i+1] - w[i])
-    end
-    phase_delay = -unwrapped ./ w
-    length(phase_delay) >= 2 && (phase_delay[1] = phase_delay[2])
-    gd_mask = @view passband_mask[1:(end-1)]
-
-    return (
-        cutoff_freq_3db = cutoff_freq_3db,
-        cutoff_freq_6db = cutoff_freq_6db,
-        passband_ripple = passband_ripple,
-        stopband_atten = stopband_atten,
-        phase_delay = any(passband_mask) ? mean(@view phase_delay[passband_mask]) : NaN,
-        group_delay = any(gd_mask) ? mean(@view group_delay[gd_mask]) : NaN,
-        transition_band = filter_info.transition_band,
-        filter_type = filter_info.filter_type,
-    )
-end
-
-"""
-    print_filter_characteristics(filter_info::FilterInfo; npoints::Int = 1000, filter_func = :filtfilt)
-
-Log a formatted summary of filter cutoff, transition band, stopband attenuation, and delay characteristics.
-"""
-function print_filter_characteristics(filter_info::FilterInfo; npoints::Int = 1000, filter_func::Union{Symbol,Function} = :filtfilt)
-    chars = get_filter_characteristics(filter_info; npoints = npoints, filter_func = filter_func)
-    @info "--------------------------------------------------------------------------------"
-    @info "Filter Characteristics: $(uppercase(string(chars.filter_type))) $(filter_info.cutoff_freq) Hz"
-    @info "Cutoff: -3 dB = $(round.(chars.cutoff_freq_3db, digits=2)) Hz, -6 dB = $(round.(chars.cutoff_freq_6db, digits=2)) Hz"
-    @info "Transition band: $(round(chars.transition_band, digits=1)) Hz"
-    @info "Stopband attenuation: $(round(chars.stopband_atten, digits=1)) dB"
-    if filter_func == :filt_zerophase && filter_info.filter_method == :fir
-        @info "One-pass zero-phase FIR: Effective group delay = 0.0 ms (compensated $(round(chars.group_delay * 1000/filter_info.sample_rate, digits=1)) ms causal delay)"
-    else
-        @info "Single-pass characteristics: Group delay = $(round(chars.group_delay * 1000/filter_info.sample_rate, digits=1)) ms, Phase delay = $(round(chars.phase_delay * 1000/filter_info.sample_rate, digits=1)) ms "
-    end
-    return nothing
-end
-
 _default_filter_output_dir(input_dir::String, pattern::String, filter_type::Symbol, freq::Real) =
-    joinpath(input_dir, "filtered_$(clean_pattern(pattern))_$(filter_type)_$(freq)hz")
+    joinpath(input_dir, "filtered_$(_clean_pattern(pattern))_$(filter_type)_$(freq)hz")
 
 function _process_filter_file(filepath::String, output_path::String, filter_type::Symbol, cutoff_freq::Real, condition_selection)
     filename = basename(filepath)
@@ -615,40 +670,6 @@ function _process_filter_file(filepath::String, output_path::String, filter_type
     jldsave(output_path; data = data, format_version = EEGFUN_FORMAT_VERSION)
     return BatchResult(true, filename, "Filtered successfully")
 end
-
-lowpass_filter(
-    file_pattern::String,
-    cutoff_freq::Real;
-    input_dir::String = pwd(),
-    participant_selection = participants(),
-    condition_selection = conditions(),
-    output_dir::Union{String,Nothing} = nothing,
-) = _run_filter_batch(
-    file_pattern,
-    cutoff_freq,
-    :lp;
-    input_dir = input_dir,
-    participant_selection = participant_selection,
-    condition_selection = condition_selection,
-    output_dir = output_dir,
-)
-
-highpass_filter(
-    file_pattern::String,
-    cutoff_freq::Real;
-    input_dir::String = pwd(),
-    participant_selection = participants(),
-    condition_selection = conditions(),
-    output_dir::Union{String,Nothing} = nothing,
-) = _run_filter_batch(
-    file_pattern,
-    cutoff_freq,
-    :hp;
-    input_dir = input_dir,
-    participant_selection = participant_selection,
-    condition_selection = condition_selection,
-    output_dir = output_dir,
-)
 
 function _run_filter_batch(
     file_pattern::String,

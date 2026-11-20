@@ -1,3 +1,9 @@
+# Woody adaptive cross-correlation latency estimation filter.
+
+######################################
+########### User Functions ###########
+######################################
+
 """
     find_nearest_peak(signal::AbstractVector, center::Int; positive_only::Bool = false)
 
@@ -22,47 +28,6 @@ function find_nearest_peak(signal::AbstractVector, center::Int; positive_only::B
     end
 
     return best_idx, found_peak
-end
-
-@inline function _center_vector!(dest::Vector{Float64}, src::AbstractVector)
-    n = length(src)
-    s = 0.0
-    @inbounds @simd for i = 1:n
-        v = Float64(src[i])
-        dest[i] = v
-        s += v
-    end
-    m = s / n
-    @inbounds @simd for i = 1:n
-        dest[i] -= m
-    end
-    return dest
-end
-
-@inline function _accumulate_xcov_window!(
-    win_xcov::Vector{Float64},
-    x::Vector{Float64},
-    y::AbstractVector{Float64},
-    lag_min::Int,
-    lag_max::Int,
-)
-    n = length(x)
-    @inbounds for idx = 1:(lag_max-lag_min+1)
-        τ = lag_min + idx - 1
-        s = 0.0
-        if τ >= 0
-            @simd for k = 1:(n-τ)
-                s += x[k+τ] * y[k]
-            end
-        else
-            a = -τ
-            @simd for k = 1:(n-a)
-                s += x[k] * y[k+a]
-            end
-        end
-        win_xcov[idx] += s
-    end
-    return nothing
 end
 
 """
@@ -215,4 +180,49 @@ function woody_filter(
     latencies .-= lat_median
     !isnothing(max_lag) && clamp!(latencies, -maxlag, maxlag)
     return latencies
+end
+
+######################################
+######### Internal Functions #########
+######################################
+
+@inline function _center_vector!(dest::Vector{Float64}, src::AbstractVector)
+    n = length(src)
+    s = 0.0
+    @inbounds @simd for i = 1:n
+        v = Float64(src[i])
+        dest[i] = v
+        s += v
+    end
+    m = s / n
+    @inbounds @simd for i = 1:n
+        dest[i] -= m
+    end
+    return dest
+end
+
+@inline function _accumulate_xcov_window!(
+    win_xcov::Vector{Float64},
+    x::Vector{Float64},
+    y::AbstractVector{Float64},
+    lag_min::Int,
+    lag_max::Int,
+)
+    n = length(x)
+    @inbounds for idx = 1:(lag_max-lag_min+1)
+        τ = lag_min + idx - 1
+        s = 0.0
+        if τ >= 0
+            @simd for k = 1:(n-τ)
+                s += x[k+τ] * y[k]
+            end
+        else
+            a = -τ
+            @simd for k = 1:(n-a)
+                s += x[k] * y[k+a]
+            end
+        end
+        win_xcov[idx] += s
+    end
+    return nothing
 end

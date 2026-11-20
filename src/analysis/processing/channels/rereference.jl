@@ -1,3 +1,74 @@
+# Average, mastoid, and custom-channel EEG re-referencing operations.
+
+######################################
+########### User Functions ###########
+######################################
+
+"""
+    rereference(dat, reference_selection; channel_selection = channels())
+    rereference(file_pattern::String; input_dir = pwd(), reference_selection = :avg,
+                participant_selection = participants(), condition_selection = conditions(), output_dir = nothing)
+
+Non-mutating or batch JLD2 version of [`rereference!`](@ref).
+"""
+rereference(dat::EegData, args...; kwargs...) = rereference!(copy(dat), args...; kwargs...)
+
+rereference(dat::AbstractVector{<:EegData}, args...; kwargs...) = [rereference(d, args...; kwargs...) for d in dat]
+
+"""
+    rereference!(dat::EegData, reference_selection; channel_selection = channels())
+    rereference!(dat::AbstractVector{<:EegData}, reference_selection; channel_selection = channels())
+
+Rereference EEG data in-place. `reference_selection` can be `:avg`, `:mastoid`, `:none`,
+or a channel name / vector of channel names.
+"""
+function rereference!(dat::EegData, reference_selection; channel_selection = channels())
+    selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
+    reference_channels = _get_reference_channels(dat, reference_selection; avg_channels = selected_channels)
+    if isempty(reference_channels)
+        @info "No rereferencing applied (reference: $(reference_selection))"
+        return dat
+    end
+
+    missing_channels = [ch for ch in reference_channels if ch ∉ dat]
+    !isempty(missing_channels) && @minimal_error("Missing reference channels in data: $(missing_channels)")
+
+    @info "Rereference channels: $(reference_selection) ($(_print_vector(reference_channels; n_ends=3)))"
+    _apply_rereference!(dat.data, selected_channels, reference_channels)
+    dat.analysis_info.reference = reference_selection isa Symbol ? reference_selection : Symbol(join(reference_selection, '_'))
+    return dat
+end
+
+function rereference!(dat::AbstractVector{<:EegData}, reference_selection; channel_selection = channels())
+    for d in dat
+        rereference!(d, reference_selection; channel_selection = channel_selection)
+    end
+    return dat
+end
+
+function rereference(
+    file_pattern::String;
+    input_dir::String = pwd(),
+    reference_selection::Union{Symbol,AbstractVector{Symbol}} = :avg,
+    participant_selection = participants(),
+    condition_selection = conditions(),
+    output_dir::Union{String,Nothing} = nothing,
+)
+    _with_batch_logging("rereferencing", "rereference.log", input_dir, output_dir) do ctx
+        @log_call "rereference"
+        output_dir = _prepare_output_dir!(ctx, _default_rereference_output_dir(input_dir, file_pattern, reference_selection))
+        ref_str = reference_selection isa Symbol ? string(reference_selection) : join(reference_selection, ", ")
+        @info "Reference settings: $ref_str"
+        process_fn =
+            (input_path, output_path) -> _process_rereference_file(input_path, output_path, reference_selection, condition_selection)
+        batch_process(process_fn, file_pattern, input_dir, output_dir, participant_selection, "Rereferencing")
+    end
+end
+
+######################################
+######### Internal Functions #########
+######################################
+
 function _calculate_reference!(reference::Vector{Float64}, dat::DataFrame, ref_indices::AbstractVector{<:Integer})
     n = length(reference)
     if isempty(ref_indices)
@@ -106,53 +177,13 @@ end
 
 _get_reference_channels(dat, ref::AbstractString; avg_channels::Union{Nothing,Vector{Symbol}} = nothing) =
     _get_reference_channels(dat, Symbol(ref); avg_channels = avg_channels)
+
 _get_reference_channels(dat, refs::AbstractVector{<:AbstractString}; avg_channels::Union{Nothing,Vector{Symbol}} = nothing) =
     _get_reference_channels(dat, Symbol.(refs); avg_channels = avg_channels)
 
-"""
-    rereference!(dat::EegData, reference_selection; channel_selection = channels())
-    rereference!(dat::AbstractVector{<:EegData}, reference_selection; channel_selection = channels())
-
-Rereference EEG data in-place. `reference_selection` can be `:avg`, `:mastoid`, `:none`,
-or a channel name / vector of channel names.
-"""
-function rereference!(dat::EegData, reference_selection; channel_selection = channels())
-    selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
-    reference_channels = _get_reference_channels(dat, reference_selection; avg_channels = selected_channels)
-    if isempty(reference_channels)
-        @info "No rereferencing applied (reference: $(reference_selection))"
-        return dat
-    end
-
-    missing_channels = [ch for ch in reference_channels if ch ∉ dat]
-    !isempty(missing_channels) && @minimal_error("Missing reference channels in data: $(missing_channels)")
-
-    @info "Rereference channels: $(reference_selection) ($(_print_vector(reference_channels; n_ends=3)))"
-    _apply_rereference!(dat.data, selected_channels, reference_channels)
-    dat.analysis_info.reference = reference_selection isa Symbol ? reference_selection : Symbol(join(reference_selection, '_'))
-    return dat
-end
-
-function rereference!(dat::AbstractVector{<:EegData}, reference_selection; channel_selection = channels())
-    for d in dat
-        rereference!(d, reference_selection; channel_selection = channel_selection)
-    end
-    return dat
-end
-
-"""
-    rereference(dat, reference_selection; channel_selection = channels())
-    rereference(file_pattern::String; input_dir = pwd(), reference_selection = :avg,
-                participant_selection = participants(), condition_selection = conditions(), output_dir = nothing)
-
-Non-mutating or batch JLD2 version of [`rereference!`](@ref).
-"""
-rereference(dat::EegData, args...; kwargs...) = rereference!(copy(dat), args...; kwargs...)
-rereference(dat::AbstractVector{<:EegData}, args...; kwargs...) = [rereference(d, args...; kwargs...) for d in dat]
-
 function _default_rereference_output_dir(input_dir::String, pattern::String, ref_selection)
     ref_str = ref_selection isa Symbol ? string(ref_selection) : join(ref_selection, "_")
-    return joinpath(input_dir, "rereferenced_$(clean_pattern(pattern))_$(ref_str)")
+    return joinpath(input_dir, "rereferenced_$(_clean_pattern(pattern))_$(ref_str)")
 end
 
 function _process_rereference_file(filepath::String, output_path::String, reference_selection, condition_selection::Function)
@@ -172,23 +203,4 @@ function _process_rereference_file(filepath::String, output_path::String, refere
     rereference!(data, reference_selection)
     jldsave(output_path; data = data, format_version = EEGFUN_FORMAT_VERSION)
     return BatchResult(true, fname, "Rereferenced to $ref_str")
-end
-
-function rereference(
-    file_pattern::String;
-    input_dir::String = pwd(),
-    reference_selection::Union{Symbol,AbstractVector{Symbol}} = :avg,
-    participant_selection = participants(),
-    condition_selection = conditions(),
-    output_dir::Union{String,Nothing} = nothing,
-)
-    _with_batch_logging("rereferencing", "rereference.log", input_dir, output_dir) do ctx
-        @log_call "rereference"
-        output_dir = _prepare_output_dir!(ctx, _default_rereference_output_dir(input_dir, file_pattern, reference_selection))
-        ref_str = reference_selection isa Symbol ? string(reference_selection) : join(reference_selection, ", ")
-        @info "Reference settings: $ref_str"
-        process_fn =
-            (input_path, output_path) -> _process_rereference_file(input_path, output_path, reference_selection, condition_selection)
-        batch_process(process_fn, file_pattern, input_dir, output_dir, participant_selection, "Rereferencing")
-    end
 end

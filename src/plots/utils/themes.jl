@@ -1,11 +1,21 @@
+# Default EegFun Makie visual theme and typography configuration.
+
+######################################
+######### Types & Constants ##########
+######################################
+
 const DEFAULT_COLORMAP = :coolwarm
+
+######################################
+########### User Functions ###########
+######################################
 
 """
     theme_eegfun()
 
 Returns a `Makie.Theme` optimized for EEG data visualization.
 
-# Features
+# Notes
 - Base `fontsize` = 16, `linewidth` = 2
 - Default `colormap` = `:coolwarm`
 - Categorical `palette` = Makie's colorblind-friendly `wong_colors`
@@ -20,6 +30,10 @@ function theme_eegfun()
         Axis = (xgridvisible = false, ygridvisible = false),
     )
 end
+
+######################################
+######### Internal Functions #########
+######################################
 
 function _user_theme_overrides(current::Makie.Attributes, default::Makie.Attributes)
     out = Makie.Attributes()

@@ -1,3 +1,26 @@
+# Unified `run_ica` interface, sphering, and component ordering utilities.
+
+######################################
+######### Types & Constants ##########
+######################################
+
+struct WorkArrays
+    weights::Matrix{Float64}
+    u::Matrix{Float64}
+    y::Matrix{Float64}
+    data_block::Matrix{Float64}
+    oldweights::Matrix{Float64}
+    startweights::Matrix{Float64}
+    weights_temp::Matrix{Float64}
+    wu_term::Matrix{Float64}
+    delta::Matrix{Float64}
+    olddelta::Matrix{Float64}
+end
+
+######################################
+########### User Functions ###########
+######################################
+
 """
     run_ica(dat::ContinuousData; n_components = nothing, sample_selection = samples(),
             interval_selection = times(), channel_selection = channels(), include_extra = false,
@@ -117,6 +140,26 @@ function run_ica(
 end
 
 run_ica(epoched_data::EpochData; kwargs...) = run_ica([epoched_data]; kwargs...)
+
+######################################
+######### Internal Functions #########
+######################################
+
+function _create_work_arrays(n_components::Int, block_size::Int)
+    weights = Matrix{Float64}(I, n_components, n_components)
+    return WorkArrays(
+        weights,
+        zeros(n_components, block_size),
+        zeros(n_components, block_size),
+        zeros(n_components, block_size),
+        copy(weights),
+        copy(weights),
+        zeros(n_components, n_components),
+        zeros(n_components, n_components),
+        zeros(n_components, n_components),
+        zeros(n_components, n_components),
+    )
+end
 
 function _has_local_epoch_samples(epoched_data::AbstractVector{<:EpochData}, selected_channels::Vector{Symbol})
     n_ep_total = 0
@@ -272,35 +315,6 @@ function _select_subsample!(data_matrix::Matrix{Float64}, percentage::Real; rng:
     subsampled_matrix = data_matrix[:, sample_cols]
     @info "Random sample: $n_target_samples of $n_original_samples ($(round(percentage, digits=1))%)"
     return subsampled_matrix
-end
-
-struct WorkArrays
-    weights::Matrix{Float64}
-    u::Matrix{Float64}
-    y::Matrix{Float64}
-    data_block::Matrix{Float64}
-    oldweights::Matrix{Float64}
-    startweights::Matrix{Float64}
-    weights_temp::Matrix{Float64}
-    wu_term::Matrix{Float64}
-    delta::Matrix{Float64}
-    olddelta::Matrix{Float64}
-end
-
-function create_work_arrays(n_components::Int, block_size::Int)
-    weights = Matrix{Float64}(I, n_components, n_components)
-    return WorkArrays(
-        weights,
-        zeros(n_components, block_size),
-        zeros(n_components, block_size),
-        zeros(n_components, block_size),
-        copy(weights),
-        copy(weights),
-        zeros(n_components, n_components),
-        zeros(n_components, n_components),
-        zeros(n_components, n_components),
-        zeros(n_components, n_components),
-    )
 end
 
 function _run_ica_algorithm(

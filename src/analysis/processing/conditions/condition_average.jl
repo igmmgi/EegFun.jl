@@ -1,6 +1,74 @@
+# Averaging of ERP or time-frequency datasets across condition groups.
+
+######################################
+########### User Functions ###########
+######################################
+
+"""
+    condition_average(data::AbstractVector{<:Union{ErpData, TimeFreqData}}, condition_groups) -> Vector
+    condition_average(file_pattern::String, condition_groups; input_dir = pwd(),
+                      participant_selection = participants(), output_dir = nothing)
+
+Average ERP waveforms or time-frequency representations (linear power, circular phase) across each
+group of condition indices in `condition_groups`, or batch-process matching JLD2 files.
+"""
+function condition_average(data::AbstractVector{T}, condition_groups) where {T<:ConditionAverageData}
+    raw_groups =
+        isempty(condition_groups) ? Vector{Int}[] :
+        (
+            first(condition_groups) isa Integer ? Vector{Int}[collect(Int, condition_groups)] :
+            Vector{Int}[collect(Int, g) for g in condition_groups]
+        )
+    error_msg = _validate_condition_groups(raw_groups)
+    !isnothing(error_msg) && @minimal_error(error_msg)
+
+    tag = _kind_tag(T)
+    @info "Creating $(tag)condition average waves..."
+
+    average_waves = T[]
+    part_groups = _group_by_participant_file(data)
+    if !isnothing(part_groups)
+        for pg in part_groups
+            _condition_average_single!(average_waves, pg, raw_groups)
+        end
+    else
+        _condition_average_single!(average_waves, data, raw_groups)
+    end
+
+    isempty(average_waves) && @minimal_error("No valid condition groups found")
+    @info "Created $(length(average_waves)) $(tag)average wave(s)"
+    return average_waves
+end
+
+function condition_average(
+    file_pattern::String,
+    condition_groups::AbstractVector{<:AbstractVector{<:Integer}};
+    input_dir::String = pwd(),
+    participant_selection = participants(),
+    output_dir::Union{String,Nothing} = nothing,
+)
+    _with_batch_logging("condition averaging", "condition_average.log", input_dir, output_dir) do ctx
+        @log_call "condition_average"
+        cleaned_groups = Vector{Int}[collect(Int, grp) for grp in condition_groups]
+        error_msg = _validate_condition_groups(cleaned_groups)
+        !isnothing(error_msg) && @minimal_error(error_msg)
+
+        output_dir = _prepare_output_dir!(ctx, _condition_average_default_output_dir(input_dir, file_pattern, cleaned_groups))
+        process_fn = (input_path, output_path) -> _condition_average_process_file(input_path, output_path, cleaned_groups)
+        return batch_process(process_fn, file_pattern, input_dir, output_dir, participant_selection, "Creating averages")
+    end
+end
+
+condition_average(file_pattern::String, condition_group::AbstractVector{<:Integer}; kwargs...) =
+    condition_average(file_pattern, [collect(Int, condition_group)]; kwargs...)
+
+######################################
+######### Internal Functions #########
+######################################
+
 function _condition_average_default_output_dir(input_dir::String, pattern::String, groups::AbstractVector{<:AbstractVector{<:Integer}})
     groups_str = join([join(group, "-") for group in groups], "_")
-    return joinpath(input_dir, "averages_$(clean_pattern(pattern))_$(groups_str)")
+    return joinpath(input_dir, "averages_$(_clean_pattern(pattern))_$(groups_str)")
 end
 
 function _linear_average_df(dfs::AbstractVector{DataFrame}, cond_chs::Set{Symbol})::DataFrame
@@ -144,61 +212,3 @@ function _condition_average_single!(average_waves::Vector{T}, data::AbstractVect
     end
     return average_waves
 end
-
-"""
-    condition_average(data::AbstractVector{<:Union{ErpData, TimeFreqData}}, condition_groups) -> Vector
-    condition_average(file_pattern::String, condition_groups; input_dir = pwd(),
-                      participant_selection = participants(), output_dir = nothing)
-
-Average ERP waveforms or time-frequency representations (linear power, circular phase) across each
-group of condition indices in `condition_groups`, or batch-process matching JLD2 files.
-"""
-function condition_average(data::AbstractVector{T}, condition_groups) where {T<:ConditionAverageData}
-    raw_groups =
-        isempty(condition_groups) ? Vector{Int}[] :
-        (
-            first(condition_groups) isa Integer ? Vector{Int}[collect(Int, condition_groups)] :
-            Vector{Int}[collect(Int, g) for g in condition_groups]
-        )
-    error_msg = _validate_condition_groups(raw_groups)
-    !isnothing(error_msg) && @minimal_error(error_msg)
-
-    tag = _kind_tag(T)
-    @info "Creating $(tag)condition average waves..."
-
-    average_waves = T[]
-    part_groups = _group_by_participant_file(data)
-    if !isnothing(part_groups)
-        for pg in part_groups
-            _condition_average_single!(average_waves, pg, raw_groups)
-        end
-    else
-        _condition_average_single!(average_waves, data, raw_groups)
-    end
-
-    isempty(average_waves) && @minimal_error("No valid condition groups found")
-    @info "Created $(length(average_waves)) $(tag)average wave(s)"
-    return average_waves
-end
-
-function condition_average(
-    file_pattern::String,
-    condition_groups::AbstractVector{<:AbstractVector{<:Integer}};
-    input_dir::String = pwd(),
-    participant_selection = participants(),
-    output_dir::Union{String,Nothing} = nothing,
-)
-    _with_batch_logging("condition averaging", "condition_average.log", input_dir, output_dir) do ctx
-        @log_call "condition_average"
-        cleaned_groups = Vector{Int}[collect(Int, grp) for grp in condition_groups]
-        error_msg = _validate_condition_groups(cleaned_groups)
-        !isnothing(error_msg) && @minimal_error(error_msg)
-
-        output_dir = _prepare_output_dir!(ctx, _condition_average_default_output_dir(input_dir, file_pattern, cleaned_groups))
-        process_fn = (input_path, output_path) -> _condition_average_process_file(input_path, output_path, cleaned_groups)
-        return batch_process(process_fn, file_pattern, input_dir, output_dir, participant_selection, "Creating averages")
-    end
-end
-
-condition_average(file_pattern::String, condition_group::AbstractVector{<:Integer}; kwargs...) =
-    condition_average(file_pattern, [collect(Int, condition_group)]; kwargs...)

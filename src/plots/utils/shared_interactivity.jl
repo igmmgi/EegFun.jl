@@ -1,3 +1,9 @@
+# Shared mouse drag-selection, keyboard zoom/pan, and linked-axis interactivity.
+
+######################################
+######### Types & Constants ##########
+######################################
+
 const SHARED_KEYBOARD_ACTIONS = Dict(Keyboard.up => :up, Keyboard.down => :down, Keyboard.left => :left, Keyboard.right => :right)
 
 mutable struct SharedSelectionState
@@ -41,6 +47,10 @@ mutable struct SharedSelectionState
     end
 end
 
+######################################
+######### Internal Functions #########
+######################################
+
 function _setup_shared_interactivity!(
     fig::Figure,
     axes::Vector{Axis},
@@ -74,8 +84,11 @@ function _handle_shared_navigation!(axes::Vector{Axis}, action::Symbol, zoom_ste
 end
 
 _ymore!(ax::Axis, zoom_step::Float64) = ylims!(ax, ax.yaxis.attributes.limits[] .* (1.0 - zoom_step))
+
 _yless!(ax::Axis, zoom_step::Float64) = ylims!(ax, ax.yaxis.attributes.limits[] .* (1.0 / (1.0 - zoom_step)))
+
 _xmore!(ax::Axis, zoom_step::Float64) = xlims!(ax, ax.xaxis.attributes.limits[] .* (1.0 - zoom_step))
+
 _xless!(ax::Axis, zoom_step::Float64) = xlims!(ax, ax.xaxis.attributes.limits[] .* (1.0 / (1.0 - zoom_step)))
 
 function _is_mouse_in_axis(ax::Axis, mouse_pos)
@@ -412,8 +425,9 @@ function _get_mouse_position(ax::Axis)
 end
 
 @noinline _col_val_f64(col::AbstractVector, idx::Int)::Float64 = Float64(@inbounds col[idx])
+
 @inline _closest_time_idx_typed(time_points::AbstractVector, mouse_time::Float64)::Int =
-    isempty(time_points) ? 0 : find_closest_time_index(time_points, mouse_time)
+    isempty(time_points) ? 0 : _find_closest_time_index(time_points, mouse_time)
 
 function _find_closest_channel(mouse_time, mouse_amp, current_epoch, selected_channels)
     tcol = current_epoch[!, :time]

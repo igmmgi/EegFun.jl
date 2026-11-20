@@ -1,4 +1,9 @@
-# === DEFAULT KEYWORD ARGUMENTS ===
+# Electrode-by-electrode correlation matrix heatmap visualizations.
+
+######################################
+######### Types & Constants ##########
+######################################
+
 const PLOT_CORRELATION_HEATMAP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :mask_range => (nothing, "Optional tuple (min_val, max_val) to mask correlations within this range"),
     :display_plot => (true, "Whether to display the plot"),
@@ -31,6 +36,43 @@ const PLOT_CORRELATION_HEATMAP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :colorbar_position => (:right, "Position of the colorbar (:right, :left, :top, :bottom, or tuple)"),
     :colorbar_label => ("Correlation", "Label for the colorbar"),
 )
+
+######################################
+########### User Functions ###########
+######################################
+
+"""
+    plot_correlation_heatmap(corr_df::DataFrame; kwargs...) -> NamedTuple
+
+Plot a correlation matrix `DataFrame` (first column row labels, remaining columns correlation values) as a heatmap.
+
+$(_generate_kwargs_doc(PLOT_CORRELATION_HEATMAP_KWARGS))
+"""
+function plot_correlation_heatmap(corr_df::DataFrame; kwargs...)
+    plot_kwargs = _merge_plot_kwargs(PLOT_CORRELATION_HEATMAP_KWARGS, kwargs)
+    fig = _eegfun_figure()
+    ax = Axis(fig[1, 1])
+    _plot_correlation_heatmap_impl!(ax, corr_df, plot_kwargs)
+    if plot_kwargs[:display_plot]
+        _set_window_title("Correlation Heatmap")
+        _display_figure(fig)
+    end
+    return (fig = fig, axes = [ax])
+end
+
+"""
+    plot_correlation_heatmap!(fig::Figure, ax::Axis, corr_df::DataFrame; kwargs...) -> Axis
+
+In-place axis version of [`plot_correlation_heatmap`](@ref), drawing onto `ax` and returning `ax`.
+"""
+function plot_correlation_heatmap!(fig::Figure, ax::Axis, corr_df::DataFrame; kwargs...)
+    plot_kwargs = _merge_plot_kwargs(PLOT_CORRELATION_HEATMAP_KWARGS, kwargs)
+    return _plot_correlation_heatmap_impl!(ax, corr_df, plot_kwargs)
+end
+
+######################################
+######### Internal Functions #########
+######################################
 
 function _fill_corr_row!(mat::Matrix{Float32}, j::Int, col::AbstractVector{<:Real})
     @inbounds for i in eachindex(col)
@@ -109,34 +151,4 @@ function _plot_correlation_heatmap_impl!(ax::Axis, corr_df::DataFrame, plot_kwar
         Colorbar(sg[cb_pos...]; colormap = actual_cmap, limits = colorrange, plot_kwargs[:colorbar_kwargs]...)
     end
     return ax
-end
-
-"""
-    plot_correlation_heatmap!(fig::Figure, ax::Axis, corr_df::DataFrame; kwargs...) -> Axis
-    plot_correlation_heatmap(corr_df::DataFrame; kwargs...) -> NamedTuple
-
-Plot a correlation matrix `DataFrame` (first column row labels, remaining columns correlation values) as a heatmap.
-
-$(_generate_kwargs_doc(PLOT_CORRELATION_HEATMAP_KWARGS))
-"""
-function plot_correlation_heatmap!(fig::Figure, ax::Axis, corr_df::DataFrame; kwargs...)
-    plot_kwargs = _merge_plot_kwargs(PLOT_CORRELATION_HEATMAP_KWARGS, kwargs)
-    return _plot_correlation_heatmap_impl!(ax, corr_df, plot_kwargs)
-end
-
-"""
-    plot_correlation_heatmap(corr_df::DataFrame; kwargs...) -> NamedTuple
-
-Create a figure and plot a correlation matrix `DataFrame` as a heatmap. See [`plot_correlation_heatmap!`](@ref) for keyword options.
-"""
-function plot_correlation_heatmap(corr_df::DataFrame; kwargs...)
-    plot_kwargs = _merge_plot_kwargs(PLOT_CORRELATION_HEATMAP_KWARGS, kwargs)
-    fig = _eegfun_figure()
-    ax = Axis(fig[1, 1])
-    _plot_correlation_heatmap_impl!(ax, corr_df, plot_kwargs)
-    if plot_kwargs[:display_plot]
-        _set_window_title("Correlation Heatmap")
-        _display_figure(fig)
-    end
-    return (fig = fig, axes = [ax])
 end

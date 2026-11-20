@@ -1,18 +1,24 @@
+# Interactive multivariate pattern classification (SVM hyperplane) demo.
+
+######################################
+########### User Functions ###########
+######################################
+
 """
     signal_example_decoding()
 
 Interactive MVPA decoding playground demonstrating time-resolved k-fold cross-validated SVM
 classification of two synthetic multi-channel EEG conditions.
 
+# Returns
+- `fig::Figure`: The Makie figure object
+- `axes::Tuple`: `(ax_erp, ax_acc)` — the two axis objects
+
 # Examples
 ```julia
 using GLMakie, EegFun
 EegFun.signal_example_decoding()
 ```
-
-# Returns
-- `fig::Figure`: The Makie figure object
-- `axes::Tuple`: `(ax_erp, ax_acc)` — the two axis objects
 """
 function signal_example_decoding()
     _check_interactive_demo_backend("MVPA Decoding demo") || return nothing

@@ -1,3 +1,200 @@
+# Moving-window and per-epoch peak-to-peak amplitude artifact detection.
+
+######################################
+########### User Functions ###########
+######################################
+
+"""
+    is_peak_to_peak(dat, threshold::Real, window_size::Real; channel_selection = channels(),
+                    sample_selection = samples(), interval_selection = times(), mode::Symbol = :combined)
+
+Detect moving-window peak-to-peak artifacts without modifying `dat`. Returns a `Vector{Bool}`
+(or per-epoch vector) in `:combined` mode, or a `DataFrame` (or per-epoch vector) in `:separate` mode.
+"""
+function is_peak_to_peak(
+    dat::SingleDataFrameEeg,
+    threshold::Real,
+    window_size::Real;
+    channel_selection = channels(),
+    sample_selection = samples(),
+    interval_selection::Interval = times(),
+    mode::Symbol = :combined,
+)
+    _validate_detector_args(mode, threshold, window_size)
+    window_samples = round(Int, window_size * dat.sample_rate)
+    ws = ntuple(_ -> Vector{Float64}(undef, max(1, window_samples)), 6)
+    return _detect_artifacts(
+        (buf, sig) -> _is_peak_to_peak!(buf, sig, threshold, window_samples, ws),
+        dat,
+        ch -> Symbol("is_peak_to_peak_$(ch)");
+        channel_selection,
+        sample_selection,
+        interval_selection,
+        mode,
+    )
+end
+
+function is_peak_to_peak(
+    dat::MultiDataFrameEeg,
+    threshold::Real,
+    window_size::Real;
+    channel_selection = channels(),
+    sample_selection = samples(),
+    interval_selection::Interval = times(),
+    epoch_selection = epochs(),
+    mode::Symbol = :combined,
+)
+    _validate_detector_args(mode, threshold, window_size)
+    window_samples = round(Int, window_size * dat.sample_rate)
+    return _detect_artifacts(
+        (buf, sig) -> _is_peak_to_peak!(buf, sig, threshold, window_samples),
+        dat,
+        ch -> Symbol("is_peak_to_peak_$(ch)");
+        channel_selection,
+        sample_selection,
+        interval_selection,
+        epoch_selection,
+        mode,
+    )
+end
+
+is_peak_to_peak(dat::AbstractVector{<:EpochData}, threshold::Real, window_size::Real; kwargs...) =
+    [is_peak_to_peak(d, threshold, window_size; kwargs...) for d in dat]
+
+"""
+    is_peak_to_peak!(dat::SingleDataFrameEeg, threshold::Real, window_size::Real;
+                     channel_selection = channels(), sample_selection = samples(),
+                     interval_selection = times(), mode::Symbol = :combined, channel_out = nothing)
+    is_peak_to_peak!(dat::MultiDataFrameEeg, threshold::Real, window_size::Real; kwargs...)
+    is_peak_to_peak!(dat::AbstractVector{<:EpochData}, threshold::Real, window_size::Real; kwargs...)
+
+Detect moving-window peak-to-peak artifacts (`max - min > threshold` within `window_size` seconds),
+storing boolean flag columns in-place (`:is_peak_to_peak` or `:is_peak_to_peak_<ch>` by default).
+"""
+function is_peak_to_peak!(
+    dat::SingleDataFrameEeg,
+    threshold::Real,
+    window_size::Real;
+    channel_selection = channels(),
+    sample_selection = samples(),
+    interval_selection::Interval = times(),
+    mode::Symbol = :combined,
+    channel_out::Union{Symbol,Nothing} = nothing,
+)
+    _validate_detector_args(mode, threshold, window_size)
+    window_samples = round(Int, window_size * dat.sample_rate)
+    combined_col = something(channel_out, :is_peak_to_peak)
+    sep_fn = ch -> Symbol("$(combined_col)_$(ch)")
+    ws = ntuple(_ -> Vector{Float64}(undef, max(1, window_samples)), 6)
+    return _flag_artifacts!(
+        (buf, sig) -> _is_peak_to_peak!(buf, sig, threshold, window_samples, ws),
+        dat,
+        combined_col,
+        sep_fn;
+        channel_selection,
+        sample_selection,
+        interval_selection,
+        mode,
+    )
+end
+
+function is_peak_to_peak!(
+    dat::MultiDataFrameEeg,
+    threshold::Real,
+    window_size::Real;
+    channel_selection = channels(),
+    sample_selection = samples(),
+    interval_selection::Interval = times(),
+    epoch_selection = epochs(),
+    mode::Symbol = :combined,
+    channel_out::Union{Symbol,Nothing} = nothing,
+)
+    _validate_detector_args(mode, threshold, window_size)
+    window_samples = round(Int, window_size * dat.sample_rate)
+    combined_col = something(channel_out, :is_peak_to_peak)
+    sep_fn = ch -> Symbol("$(combined_col)_$(ch)")
+    return _flag_artifacts!(
+        (buf, sig) -> _is_peak_to_peak!(buf, sig, threshold, window_samples),
+        dat,
+        combined_col,
+        sep_fn;
+        channel_selection,
+        sample_selection,
+        interval_selection,
+        epoch_selection,
+        mode,
+    )
+end
+
+function is_peak_to_peak!(dat::AbstractVector{<:EpochData}, threshold::Real, window_size::Real; kwargs...)
+    for d in dat
+        is_peak_to_peak!(d, threshold, window_size; kwargs...)
+    end
+    return dat
+end
+
+"""
+    n_peak_to_peak(dat, threshold::Real, window_size::Real; channel_selection = channels(),
+                   sample_selection = samples(), interval_selection = times(), mode::Symbol = :combined)
+
+Count peak-to-peak artifact samples across selected channels, returning a total `Int` (`:combined`)
+or a per-channel `DataFrame` (`:separate`).
+"""
+function n_peak_to_peak(
+    dat::SingleDataFrameEeg,
+    threshold::Real,
+    window_size::Real;
+    channel_selection = channels(),
+    sample_selection = samples(),
+    interval_selection::Interval = times(),
+    mode::Symbol = :combined,
+)
+    _validate_detector_args(mode, threshold, window_size)
+    window_samples = round(Int, window_size * dat.sample_rate)
+    ws = ntuple(_ -> Vector{Float64}(undef, max(1, window_samples)), 6)
+    return _count_artifacts(
+        (buf, sig) -> _is_peak_to_peak!(buf, sig, threshold, window_samples, ws),
+        dat,
+        :n_peak_to_peak;
+        channel_selection,
+        sample_selection,
+        interval_selection,
+        mode,
+    )
+end
+
+function n_peak_to_peak(
+    dat::MultiDataFrameEeg,
+    threshold::Real,
+    window_size::Real;
+    channel_selection = channels(),
+    sample_selection = samples(),
+    interval_selection::Interval = times(),
+    epoch_selection = epochs(),
+    mode::Symbol = :combined,
+)
+    _validate_detector_args(mode, threshold, window_size)
+    window_samples = round(Int, window_size * dat.sample_rate)
+    ws = ntuple(_ -> Vector{Float64}(undef, max(1, window_samples)), 6)
+    return _count_artifacts(
+        (buf, sig) -> _is_peak_to_peak!(buf, sig, threshold, window_samples, ws),
+        dat,
+        :n_peak_to_peak;
+        channel_selection,
+        sample_selection,
+        interval_selection,
+        epoch_selection,
+        mode,
+    )
+end
+
+n_peak_to_peak(dat::AbstractVector{<:EpochData}, threshold::Real, window_size::Real; kwargs...) =
+    [n_peak_to_peak(d, threshold, window_size; kwargs...) for d in dat]
+
+######################################
+######### Internal Functions #########
+######################################
+
 function _is_peak_to_peak!(
     mask::AbstractVector{Bool},
     signal::AbstractVector{<:Real},
@@ -85,190 +282,3 @@ end
 
 _is_peak_to_peak(signal::AbstractVector{<:Real}, threshold::Real, window_samples::Int) =
     _is_peak_to_peak!(falses(length(signal)), signal, threshold, window_samples)
-
-"""
-    is_peak_to_peak!(dat::SingleDataFrameEeg, threshold::Real, window_size::Real;
-                     channel_selection = channels(), sample_selection = samples(),
-                     interval_selection = times(), mode::Symbol = :combined, channel_out = nothing)
-    is_peak_to_peak!(dat::MultiDataFrameEeg, threshold::Real, window_size::Real; kwargs...)
-    is_peak_to_peak!(dat::AbstractVector{<:EpochData}, threshold::Real, window_size::Real; kwargs...)
-
-Detect moving-window peak-to-peak artifacts (`max - min > threshold` within `window_size` seconds),
-storing boolean flag columns in-place (`:is_peak_to_peak` or `:is_peak_to_peak_<ch>` by default).
-"""
-function is_peak_to_peak!(
-    dat::SingleDataFrameEeg,
-    threshold::Real,
-    window_size::Real;
-    channel_selection = channels(),
-    sample_selection = samples(),
-    interval_selection::Interval = times(),
-    mode::Symbol = :combined,
-    channel_out::Union{Symbol,Nothing} = nothing,
-)
-    _validate_detector_args(mode, threshold, window_size)
-    window_samples = round(Int, window_size * dat.sample_rate)
-    combined_col = something(channel_out, :is_peak_to_peak)
-    sep_fn = ch -> Symbol("$(combined_col)_$(ch)")
-    ws = ntuple(_ -> Vector{Float64}(undef, max(1, window_samples)), 6)
-    return _flag_artifacts!(
-        (buf, sig) -> _is_peak_to_peak!(buf, sig, threshold, window_samples, ws),
-        dat,
-        combined_col,
-        sep_fn;
-        channel_selection,
-        sample_selection,
-        interval_selection,
-        mode,
-    )
-end
-
-function is_peak_to_peak!(
-    dat::MultiDataFrameEeg,
-    threshold::Real,
-    window_size::Real;
-    channel_selection = channels(),
-    sample_selection = samples(),
-    interval_selection::Interval = times(),
-    epoch_selection = epochs(),
-    mode::Symbol = :combined,
-    channel_out::Union{Symbol,Nothing} = nothing,
-)
-    _validate_detector_args(mode, threshold, window_size)
-    window_samples = round(Int, window_size * dat.sample_rate)
-    combined_col = something(channel_out, :is_peak_to_peak)
-    sep_fn = ch -> Symbol("$(combined_col)_$(ch)")
-    return _flag_artifacts!(
-        (buf, sig) -> _is_peak_to_peak!(buf, sig, threshold, window_samples),
-        dat,
-        combined_col,
-        sep_fn;
-        channel_selection,
-        sample_selection,
-        interval_selection,
-        epoch_selection,
-        mode,
-    )
-end
-
-function is_peak_to_peak!(dat::AbstractVector{<:EpochData}, threshold::Real, window_size::Real; kwargs...)
-    for d in dat
-        is_peak_to_peak!(d, threshold, window_size; kwargs...)
-    end
-    return dat
-end
-
-"""
-    is_peak_to_peak(dat, threshold::Real, window_size::Real; channel_selection = channels(),
-                    sample_selection = samples(), interval_selection = times(), mode::Symbol = :combined)
-
-Detect moving-window peak-to-peak artifacts without modifying `dat`. Returns a `Vector{Bool}`
-(or per-epoch vector) in `:combined` mode, or a `DataFrame` (or per-epoch vector) in `:separate` mode.
-"""
-function is_peak_to_peak(
-    dat::SingleDataFrameEeg,
-    threshold::Real,
-    window_size::Real;
-    channel_selection = channels(),
-    sample_selection = samples(),
-    interval_selection::Interval = times(),
-    mode::Symbol = :combined,
-)
-    _validate_detector_args(mode, threshold, window_size)
-    window_samples = round(Int, window_size * dat.sample_rate)
-    ws = ntuple(_ -> Vector{Float64}(undef, max(1, window_samples)), 6)
-    return _detect_artifacts(
-        (buf, sig) -> _is_peak_to_peak!(buf, sig, threshold, window_samples, ws),
-        dat,
-        ch -> Symbol("is_peak_to_peak_$(ch)");
-        channel_selection,
-        sample_selection,
-        interval_selection,
-        mode,
-    )
-end
-
-function is_peak_to_peak(
-    dat::MultiDataFrameEeg,
-    threshold::Real,
-    window_size::Real;
-    channel_selection = channels(),
-    sample_selection = samples(),
-    interval_selection::Interval = times(),
-    epoch_selection = epochs(),
-    mode::Symbol = :combined,
-)
-    _validate_detector_args(mode, threshold, window_size)
-    window_samples = round(Int, window_size * dat.sample_rate)
-    return _detect_artifacts(
-        (buf, sig) -> _is_peak_to_peak!(buf, sig, threshold, window_samples),
-        dat,
-        ch -> Symbol("is_peak_to_peak_$(ch)");
-        channel_selection,
-        sample_selection,
-        interval_selection,
-        epoch_selection,
-        mode,
-    )
-end
-
-is_peak_to_peak(dat::AbstractVector{<:EpochData}, threshold::Real, window_size::Real; kwargs...) =
-    [is_peak_to_peak(d, threshold, window_size; kwargs...) for d in dat]
-
-"""
-    n_peak_to_peak(dat, threshold::Real, window_size::Real; channel_selection = channels(),
-                   sample_selection = samples(), interval_selection = times(), mode::Symbol = :combined)
-
-Count peak-to-peak artifact samples across selected channels, returning a total `Int` (`:combined`)
-or a per-channel `DataFrame` (`:separate`).
-"""
-function n_peak_to_peak(
-    dat::SingleDataFrameEeg,
-    threshold::Real,
-    window_size::Real;
-    channel_selection = channels(),
-    sample_selection = samples(),
-    interval_selection::Interval = times(),
-    mode::Symbol = :combined,
-)
-    _validate_detector_args(mode, threshold, window_size)
-    window_samples = round(Int, window_size * dat.sample_rate)
-    ws = ntuple(_ -> Vector{Float64}(undef, max(1, window_samples)), 6)
-    return _count_artifacts(
-        (buf, sig) -> _is_peak_to_peak!(buf, sig, threshold, window_samples, ws),
-        dat,
-        :n_peak_to_peak;
-        channel_selection,
-        sample_selection,
-        interval_selection,
-        mode,
-    )
-end
-
-function n_peak_to_peak(
-    dat::MultiDataFrameEeg,
-    threshold::Real,
-    window_size::Real;
-    channel_selection = channels(),
-    sample_selection = samples(),
-    interval_selection::Interval = times(),
-    epoch_selection = epochs(),
-    mode::Symbol = :combined,
-)
-    _validate_detector_args(mode, threshold, window_size)
-    window_samples = round(Int, window_size * dat.sample_rate)
-    ws = ntuple(_ -> Vector{Float64}(undef, max(1, window_samples)), 6)
-    return _count_artifacts(
-        (buf, sig) -> _is_peak_to_peak!(buf, sig, threshold, window_samples, ws),
-        dat,
-        :n_peak_to_peak;
-        channel_selection,
-        sample_selection,
-        interval_selection,
-        epoch_selection,
-        mode,
-    )
-end
-
-n_peak_to_peak(dat::AbstractVector{<:EpochData}, threshold::Real, window_size::Real; kwargs...) =
-    [n_peak_to_peak(d, threshold, window_size; kwargs...) for d in dat]
