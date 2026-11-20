@@ -11,11 +11,26 @@ _subset_dataframes(
 struct _AllSamples <: Function end
 (::_AllSamples)(x) = fill(true, nrow(x))
 
+struct _ChannelNamesSelector <: Function
+    channel_names::Vector{Symbol}
+end
+(s::_ChannelNamesSelector)(x) = x .∈ Ref(s.channel_names)
+
+struct _ChannelNumbersSelector <: Function
+    channel_numbers::Vector{Int}
+end
+(s::_ChannelNumbersSelector)(x) = Bool[i in s.channel_numbers for i = 1:length(x)]
+
 function _subset_common(dat, channel_selection, sample_selection, include_extra)
     @debug "Subsetting $(typeof(dat)): selecting channels and samples"
-    selected_channels = get_selected_channels(dat, channel_selection; include_extra = include_extra)
+    meta_cols = meta_labels(dat)
+    chosen = get_selected_channels(dat, channel_selection; include_meta = false, include_extra = include_extra)
+    eeg_set = Set{Symbol}(channel_labels(dat))
+    eeg_selected = Symbol[ch for ch in chosen if ch in eeg_set]
+    extra_selected = include_extra ? Symbol[ch for ch in chosen if ch ∉ eeg_set] : Symbol[]
+    selected_channels = vcat(meta_cols, eeg_selected, extra_selected)
     selected_samples = get_selected_samples(dat, sample_selection)
-    layout_subset = subset_layout(dat.layout; channel_selection = channel_selection)
+    layout_subset = subset_layout(dat.layout; channel_selection = _ChannelNamesSelector(eeg_selected))
     return selected_channels, selected_samples, layout_subset
 end
 
@@ -55,8 +70,11 @@ function _time_interval_mask(t::AbstractVector{<:Real}, start_time::Float64, sto
                 best_idx = i
             end
         end
-        @debug "times(): Requested $(start_time)s, snapped to nearest sample at $(round(t[best_idx]; digits = 4))s"
-        mask[best_idx] = true
+        snapped_t = t[best_idx]
+        @debug "times(): Requested $(start_time)s, snapped to nearest sample at $(round(snapped_t; digits = 4))s"
+        @inbounds for i = 1:n_rows
+            mask[i] = (t[i] == snapped_t)
+        end
     else
         @minimal_warning "times(): No samples found in range $(start_time)s–$(stop_time)s"
     end
@@ -65,15 +83,16 @@ end
 
 function _interval_to_samples(sel::TimeSelection)
     start_time, stop_time = sel.start, sel.stop
+    start_time <= stop_time || @minimal_error("Time interval start ($start_time) must be <= stop ($stop_time)")
     return x -> _time_interval_mask(x[!, :time], start_time, stop_time)
 end
 
 _interval_to_samples(::AllSelection) = samples()
 _interval_to_samples(::Nothing) = samples()
-_interval_to_samples(t::Tuple{Real,Real}) = _interval_to_samples(TimeSelection(t[1], t[2]))
+_interval_to_samples(t::Tuple{Real,Real}) = _interval_to_samples(times(t[1], t[2]))
 function _interval_to_samples(v::AbstractVector{<:Real})
     length(v) == 2 || @minimal_error("Time interval vector must have exactly 2 elements [start, stop], got $(length(v))")
-    return _interval_to_samples(TimeSelection(v[1], v[2]))
+    return _interval_to_samples(times(v[1], v[2]))
 end
 _interval_to_samples(f::Function) = f
 
@@ -235,16 +254,17 @@ end
 Create a channel selection predicate for `channel_selection` arguments.
 """
 channels() = x -> fill(true, length(x))
-channels(channel_names::AbstractVector{Symbol}) = x -> x .∈ Ref(channel_names)
+channels(channel_names::AbstractVector{Symbol}) = _ChannelNamesSelector(collect(Symbol, channel_names))
 channels(channel_names::AbstractVector{<:AbstractString}) = channels(Symbol.(channel_names))
 channels(channel_name::Symbol) = channels([channel_name])
 channels(channel_name::AbstractString) = channels([Symbol(channel_name)])
-channels(channel_names::Symbol...) = channels(collect(channel_names))
-channels(channel_names::AbstractString...) = channels(Symbol.(channel_names)...)
-channels(channel_number::Int) = channels([channel_number])
-channels(channel_numbers::AbstractVector{Int}) = x -> Bool[i in channel_numbers for i = 1:length(x)]
-channels(channel_numbers::UnitRange{Int}) = channels(collect(Int, channel_numbers))
-channels(channel_ranges::Vector{UnitRange{Int}}) = channels(collect(Int, union(channel_ranges...)))
+channels(channel_names::Symbol...) = channels(collect(Symbol, channel_names))
+channels(channel_names::AbstractString...) = channels(Symbol.(collect(channel_names)))
+channels(channel_number::Integer) = channels([Int(channel_number)])
+channels(channel_numbers::AbstractVector{<:Integer}) = _ChannelNumbersSelector(collect(Int, channel_numbers))
+channels(channel_numbers::AbstractRange{<:Integer}) = _ChannelNumbersSelector(collect(Int, channel_numbers))
+channels(channel_ranges::AbstractVector{<:AbstractRange{<:Integer}}) = _ChannelNumbersSelector(collect(Int, union(channel_ranges...)))
+channels(rx::Regex) = x -> Bool[occursin(rx, string(ch)) for ch in x]
 channels(predicate::Function) = predicate
 
 _negate_selector(f::Function) = x -> begin
@@ -277,10 +297,14 @@ channels_not(args...) = _negate_selector(channels(args...))
 Create an ICA component selection predicate.
 """
 components() = x -> fill(true, length(x))
-components(component_numbers::Union{Vector{Int},UnitRange}) = x -> Bool[i in component_numbers for i = 1:length(x)]
-components(component_number::Int) = components([component_number])
-components(component_ranges::Vector{UnitRange{Int}}) = components(union(component_ranges...))
-components(component_numbers::Int...) = components(collect(component_numbers))
+components(component_numbers::AbstractVector{<:Integer}) =
+    let nums = collect(Int, component_numbers)
+        x -> Bool[i in nums for i = 1:length(x)]
+    end
+components(component_numbers::AbstractRange{<:Integer}) = components(collect(Int, component_numbers))
+components(component_number::Integer) = components([Int(component_number)])
+components(component_ranges::AbstractVector{<:AbstractRange{<:Integer}}) = components(collect(Int, union(component_ranges...)))
+components(component_numbers::Integer...) = components(collect(Int, component_numbers))
 components(predicate::Function) = predicate
 
 """
@@ -384,8 +408,12 @@ Construct a time-interval specification (`AllSelection` or `TimeSelection`) for 
 """
 times() = AllSelection()
 times(t::Real) = TimeSelection(Float64(t), Float64(t))
-times(start::Real, stop::Real) = TimeSelection(Float64(start), Float64(stop))
-times(interval::Tuple{Real,Real}) = TimeSelection(Float64(interval[1]), Float64(interval[2]))
+function times(start::Real, stop::Real)
+    s, e = Float64(start), Float64(stop)
+    s <= e || @minimal_error("Time interval start ($s) must be <= stop ($e)")
+    return TimeSelection(s, e)
+end
+times(interval::Tuple{Real,Real}) = times(interval[1], interval[2])
 
 """
     epochs()
@@ -395,10 +423,14 @@ times(interval::Tuple{Real,Real}) = TimeSelection(Float64(interval[1]), Float64(
 Create an epoch selection predicate for `epoch_selection` arguments.
 """
 epochs() = x -> fill(true, length(x))
-epochs(epoch_numbers::Union{Vector{Int},UnitRange}) = x -> Bool[i in epoch_numbers for i = 1:length(x)]
-epochs(epoch_number::Int) = epochs([epoch_number])
-epochs(epoch_ranges::Vector{UnitRange{Int}}) = epochs(union(epoch_ranges...))
-epochs(epoch_numbers::Int...) = epochs(collect(epoch_numbers))
+epochs(epoch_numbers::AbstractVector{<:Integer}) =
+    let nums = collect(Int, epoch_numbers)
+        x -> Bool[i in nums for i = 1:length(x)]
+    end
+epochs(epoch_numbers::AbstractRange{<:Integer}) = epochs(collect(Int, epoch_numbers))
+epochs(epoch_number::Integer) = epochs([Int(epoch_number)])
+epochs(epoch_ranges::AbstractVector{<:AbstractRange{<:Integer}}) = epochs(collect(Int, union(epoch_ranges...)))
+epochs(epoch_numbers::Integer...) = epochs(collect(Int, epoch_numbers))
 epochs(predicate::Function) = x -> map(predicate, x)
 
 """
@@ -416,11 +448,14 @@ epochs_not(args...) = _negate_selector(epochs(args...))
 Create a participant ID selection predicate for batch operations.
 """
 participants() = x -> fill(true, length(x))
-participants(participant_ids::AbstractVector{Int}) = x -> Bool[id in participant_ids for id in x]
-participants(participant_ids::UnitRange{Int}) = participants(collect(Int, participant_ids))
-participants(participant_id::Int) = participants([participant_id])
-participants(participant_ranges::Vector{UnitRange{Int}}) = participants(collect(Int, union(participant_ranges...)))
-participants(participant_ids::Int...) = participants(collect(Int, participant_ids))
+participants(participant_ids::AbstractVector{<:Integer}) =
+    let ids = collect(Int, participant_ids)
+        x -> Bool[id in ids for id in x]
+    end
+participants(participant_ids::AbstractRange{<:Integer}) = participants(collect(Int, participant_ids))
+participants(participant_id::Integer) = participants([Int(participant_id)])
+participants(participant_ranges::AbstractVector{<:AbstractRange{<:Integer}}) = participants(collect(Int, union(participant_ranges...)))
+participants(participant_ids::Integer...) = participants(collect(Int, participant_ids))
 participants(predicate::Function) = predicate
 
 """
@@ -469,14 +504,21 @@ end
 Create a condition selection predicate by condition number, condition name, or custom function.
 """
 conditions() = x -> fill(true, length(x))
-conditions(condition_indices::AbstractVector{Int}) = x -> _match_condition_indices(x, condition_indices)
-conditions(condition_indices::UnitRange{Int}) = conditions(collect(Int, condition_indices))
-conditions(condition_index::Int) = conditions([condition_index])
-conditions(condition_ranges::Vector{UnitRange{Int}}) = conditions(collect(Int, union(condition_ranges...)))
-conditions(condition_indices::Int...) = conditions(collect(condition_indices))
-conditions(condition_names::Vector{String}) = x -> _match_condition_names(x, condition_names)
-conditions(cond_name::String) = conditions([cond_name])
-conditions(cond_names::String...) = conditions(collect(cond_names))
+conditions(condition_indices::AbstractVector{<:Integer}) =
+    let idxs = collect(Int, condition_indices)
+        x -> _match_condition_indices(x, idxs)
+    end
+conditions(condition_indices::AbstractRange{<:Integer}) = conditions(collect(Int, condition_indices))
+conditions(condition_index::Integer) = conditions([Int(condition_index)])
+conditions(condition_ranges::AbstractVector{<:AbstractRange{<:Integer}}) = conditions(collect(Int, union(condition_ranges...)))
+conditions(condition_indices::Integer...) = conditions(collect(Int, condition_indices))
+conditions(condition_names::AbstractVector{<:AbstractString}) =
+    let nms = collect(String, condition_names)
+        x -> _match_condition_names(x, nms)
+    end
+conditions(cond_name::AbstractString) = conditions([String(cond_name)])
+conditions(cond_names::AbstractString...) = conditions(collect(String, cond_names))
+conditions(rx::Regex) = x -> Bool[occursin(rx, condition_name(dat)) for dat in x]
 conditions(predicate::Function) = predicate
 
 """
@@ -510,6 +552,7 @@ _to_channel_func(mask::AbstractVector{Bool}) = channels(findall(mask))
 _to_channel_func(idx::Integer) = channels(Int(idx))
 _to_channel_func(idx::AbstractVector{<:Integer}) = channels(collect(Int, idx))
 _to_channel_func(idx::AbstractRange) = channels(collect(Int, idx))
+_to_channel_func(rx::Regex) = channels(rx)
 _to_channel_func(idx) = channels(idx)
 
 _to_epoch_func(::Nothing) = epochs()
@@ -533,12 +576,16 @@ _to_condition_func(idx::AbstractVector{<:Integer}) = conditions(collect(Int, idx
 _to_condition_func(idx::AbstractRange) = conditions(collect(Int, idx))
 _to_condition_func(name::AbstractString) = conditions(String(name))
 _to_condition_func(names::AbstractVector{<:AbstractString}) = conditions(collect(String, names))
+_to_condition_func(rx::Regex) = conditions(rx)
 _to_condition_func(idx) = conditions(idx)
 
 _to_participant_func(::Nothing) = participants()
 _to_participant_func(::Colon) = participants()
 _to_participant_func(f::Function) = f === Colon() ? participants() : f
-_to_participant_func(mask::AbstractVector{Bool}) = x -> collect(Bool, mask)
+_to_participant_func(mask::AbstractVector{Bool}) =
+    x ->
+        length(mask) == length(x) ? collect(Bool, mask) :
+        @minimal_error("Boolean participant mask length ($(length(mask))) must match number of files ($(length(x)))")
 _to_participant_func(idx::Integer) = participants(Int(idx))
 _to_participant_func(idx::AbstractVector{<:Integer}) = participants(collect(Int, idx))
 _to_participant_func(idx::AbstractRange) = participants(collect(Int, idx))
@@ -598,12 +645,11 @@ function get_selected_channels(dat, channel_selection::Function; include_meta::B
 
     selected = selectable_cols[channel_selection(selectable_cols)]
 
-    selection_type = typeof(channel_selection)
-    if hasfield(selection_type, :channel_names)
-        ordered = _handle_channel_names_order(getfield(channel_selection, :channel_names), selectable_cols, selected)
+    if channel_selection isa _ChannelNamesSelector
+        ordered = _handle_channel_names_order(channel_selection.channel_names, selectable_cols, selected)
         !isnothing(ordered) && (selected = ordered)
-    elseif hasfield(selection_type, :channel_numbers)
-        ordered = _handle_channel_numbers_order(getfield(channel_selection, :channel_numbers), selectable_cols, selected)
+    elseif channel_selection isa _ChannelNumbersSelector
+        ordered = _handle_channel_numbers_order(channel_selection.channel_numbers, selectable_cols, selected)
         !isnothing(ordered) && (selected = ordered)
     end
 

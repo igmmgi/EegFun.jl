@@ -419,6 +419,18 @@ end
         avgs = EegFun.condition_average(mp, [[1, 2]])
         @test length(avgs) == 2
         @test [a.file for a in avgs] == [mp[1].file, mp[3].file]
+
+        # Derived extra float channels (e.g. :vEOG) are averaged & duplicates deduplicated without mutating caller input
+        e1 = EegFun.create_test_erp_data(participant = 1, condition = 1)
+        e2 = EegFun.create_test_erp_data(participant = 1, condition = 2)
+        e1.data[!, :vEOG] = fill(10.0, nrow(e1.data))
+        e2.data[!, :vEOG] = fill(30.0, nrow(e2.data))
+        in_groups = [[1, 1, 2]]
+        avg_dedup = EegFun.condition_average([e1, e2], in_groups)
+        @test in_groups == [[1, 1, 2]] # caller's vector not mutated
+        @test avg_dedup[1].n_epochs == e1.n_epochs + e2.n_epochs
+        @test all(≈(20.0), avg_dedup[1].data.vEOG)
+        @test_throws EegFun.EegFunError EegFun.condition_average([e1, e2], [Int[]])
     end
 
     rm(test_dir, recursive = true)

@@ -154,7 +154,14 @@ Average ERP waveforms or time-frequency representations (linear power, circular 
 group of condition indices in `condition_groups`, or batch-process matching JLD2 files.
 """
 function condition_average(data::AbstractVector{T}, condition_groups) where {T<:ConditionAverageData}
-    groups = isempty(condition_groups) ? condition_groups : (first(condition_groups) isa Integer ? [condition_groups] : condition_groups)
+    raw_groups =
+        isempty(condition_groups) ? Vector{Int}[] :
+        (
+            first(condition_groups) isa Integer ? Vector{Int}[collect(Int, condition_groups)] :
+            Vector{Int}[collect(Int, g) for g in condition_groups]
+        )
+    error_msg = _validate_condition_groups(raw_groups)
+    !isnothing(error_msg) && @minimal_error(error_msg)
 
     tag = _kind_tag(T)
     @info "Creating $(tag)condition average waves..."
@@ -163,10 +170,10 @@ function condition_average(data::AbstractVector{T}, condition_groups) where {T<:
     part_groups = _group_by_participant_file(data)
     if !isnothing(part_groups)
         for pg in part_groups
-            _condition_average_single!(average_waves, pg, groups)
+            _condition_average_single!(average_waves, pg, raw_groups)
         end
     else
-        _condition_average_single!(average_waves, data, groups)
+        _condition_average_single!(average_waves, data, raw_groups)
     end
 
     isempty(average_waves) && @minimal_error("No valid condition groups found")
@@ -183,11 +190,12 @@ function condition_average(
 )
     _with_batch_logging("condition averaging", "condition_average.log", input_dir, output_dir) do ctx
         @log_call "condition_average"
-        error_msg = _validate_condition_groups(condition_groups)
+        cleaned_groups = Vector{Int}[collect(Int, grp) for grp in condition_groups]
+        error_msg = _validate_condition_groups(cleaned_groups)
         !isnothing(error_msg) && @minimal_error(error_msg)
 
-        output_dir = _prepare_output_dir!(ctx, _condition_average_default_output_dir(input_dir, file_pattern, condition_groups))
-        process_fn = (input_path, output_path) -> _condition_average_process_file(input_path, output_path, condition_groups)
+        output_dir = _prepare_output_dir!(ctx, _condition_average_default_output_dir(input_dir, file_pattern, cleaned_groups))
+        process_fn = (input_path, output_path) -> _condition_average_process_file(input_path, output_path, cleaned_groups)
         return batch_process(process_fn, file_pattern, input_dir, output_dir, participant_selection, "Creating averages")
     end
 end

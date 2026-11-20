@@ -502,5 +502,37 @@ using DataFrames
         @test length(EegFun.subset(mp_erps; condition_selection = EegFun.conditions("faces"))) == 2
         @test length(EegFun._condition_select(mp_erps, EegFun.conditions("faces"))) == 2
         @test length(EegFun._condition_select(mp_erps, EegFun.conditions(5))) == 2
+
+        # Regex selectors, StepRange selectors, extra-channel column order, and TimeFreqData single-time snap
+        @test EegFun.channel_labels(EegFun.subset(erp_ord; channel_selection = EegFun.channels(r"Ch[13]"))) == [:Ch1, :Ch3]
+        @test EegFun.channel_labels(EegFun.subset(erp_ord; channel_selection = r"Ch[23]")) == [:Ch2, :Ch3]
+        @test EegFun.channel_labels(EegFun.subset(erp_ord; channel_selection = EegFun.channels_not(r"Ch2"))) == [:Ch1, :Ch3]
+        @test length(EegFun.subset(mp_erps; condition_selection = r"^fac")) == 2
+
+        @test EegFun.subset(erp_ord; channel_selection = EegFun.channels(3:-1:1)).layout.data.label == [:Ch3, :Ch2, :Ch1]
+        @test EegFun.epochs(3:-1:1)([10, 20, 30, 40]) == [true, true, true, false]
+        @test EegFun.participants(4:-2:2)([1, 2, 3, 4]) == [false, true, false, true]
+        @test EegFun.components(3:-1:1)([1, 2, 3, 4]) == [true, true, true, false]
+        @test EegFun.conditions(5:-3:2)(mp_erps) == [2, 4, 1, 3]
+
+        # Extra channel specified before EEG channel stays in extra_labels (never becomes metadata)
+        erp_ex = copy(erp_ord)
+        erp_ex.data[!, :vEOG] = fill(7.0, nrow(erp_ex.data))
+        sub_ex = EegFun.subset(erp_ex; channel_selection = EegFun.channels([:vEOG, :Ch2]), include_extra = true)
+        @test EegFun.meta_labels(sub_ex) == EegFun.meta_labels(erp_ex)
+        @test EegFun.channel_labels(sub_ex) == [:Ch2]
+        @test EegFun.extra_labels(sub_ex) == [:vEOG]
+
+        # Single-timepoint times(t) on TimeFreqData snaps and retains ALL frequency rows
+        tf_256 = EegFun.create_test_tf_data(fs = 256, n_channels = 2)
+        n_f = length(EegFun.frequency_vector(tf_256))
+        sub_tf_pt = EegFun.subset(tf_256; interval_selection = EegFun.times(0.1))
+        @test nrow(sub_tf_pt.data_power) == n_f
+        @test length(unique(sub_tf_pt.data_power.freq)) == n_f
+
+        # Inverted times(start > stop) and mismatched boolean participant masks error cleanly
+        @test_throws EegFun.EegFunError EegFun.times(0.5, 0.1)
+        @test_throws EegFun.EegFunError EegFun.subset(erp_ord; interval_selection = (0.5, 0.1))
+        @test_throws EegFun.EegFunError EegFun._to_participant_func([true, false])([1, 2, 3])
     end
 end

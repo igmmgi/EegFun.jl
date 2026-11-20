@@ -1,6 +1,7 @@
 function _validate_epochs_pattern_combine(pattern::String)
-    !contains(pattern, "epochs") &&
-        return "condition_combine only works with epoch data. File pattern must contain 'epochs', got: '$pattern'"
+    if !contains(lowercase(pattern), "epoch") && occursin(r"(?:^|[^a-zA-Z])erps?(?:[^a-zA-Z]|$)"i, pattern)
+        return "condition_combine only works with epoch data, not ERP files (got pattern: '$pattern'). Use condition_average for ERPs."
+    end
     return nothing
 end
 
@@ -97,6 +98,7 @@ function condition_combine(
             src_dfs[pos] = df
         end
 
+        combined_condition_name = join([cond.condition_name for cond in condition_data], "_")
         combined_data_frames = Vector{DataFrame}(undef, total_eps)
         if total_eps >= 16 && Threads.nthreads() > 1
             Threads.@threads :static for i = 1:total_eps
@@ -104,6 +106,7 @@ function condition_combine(
                 if hasproperty(df_copy, :epoch)
                     df_copy.epoch isa Vector{Int} ? fill!(df_copy.epoch, i) : (df_copy[!, :epoch] = fill(i, nrow(df_copy)))
                 end
+                _sync_condition_cols!(df_copy, group_idx, combined_condition_name)
                 combined_data_frames[i] = df_copy
             end
         else
@@ -112,11 +115,10 @@ function condition_combine(
                 if hasproperty(df_copy, :epoch)
                     df_copy.epoch isa Vector{Int} ? fill!(df_copy.epoch, i) : (df_copy[!, :epoch] = fill(i, nrow(df_copy)))
                 end
+                _sync_condition_cols!(df_copy, group_idx, combined_condition_name)
                 combined_data_frames[i] = df_copy
             end
         end
-
-        combined_condition_name = join([cond.condition_name for cond in condition_data], "_")
         combined_data[group_idx] = EpochData(
             condition_data[1].file,
             group_idx,

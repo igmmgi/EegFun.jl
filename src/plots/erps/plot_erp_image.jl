@@ -122,7 +122,7 @@ function plot_erp_image(
     else
         subset(
             dat;
-            channel_selection = channel_selection,
+            channel_selection = channels(),
             sample_selection = sample_selection,
             interval_selection = interval_selection,
             include_extra = true,

@@ -1423,6 +1423,56 @@ using EegFun
             @test nrow(res_c2.data) == 2
             @test all(==(2), res_c2.data.condition)
             @test sort(res_c2.data.participant) == [1, 2]
+
+            # 7. Exact zero-crossing area, polarity-absent NaN, stale condition_name sync, and Function/times() intervals
+            zc_lay = EegFun.Layout(DataFrame(label = [:Ch1], inc = [0.0], azi = [0.0]), nothing, nothing, nothing)
+            zc_erp = EegFun.ErpData(
+                "zc",
+                1,
+                "c1",
+                DataFrame(time = [0.0, 1.0], sample = [1, 2], Ch1 = [-2.0, 10.0]),
+                zc_lay,
+                1,
+                EegFun.AnalysisInfo(),
+                1,
+            )
+            @test EegFun.erp_measurements(zc_erp, "positive_area").data[1, :Ch1] ≈ 25.0 / 6.0
+            @test EegFun.erp_measurements(zc_erp, "negative_area").data[1, :Ch1] ≈ 1.0 / 6.0
+            @test EegFun.erp_measurements(zc_erp, "rectified_area").data[1, :Ch1] ≈ 26.0 / 6.0
+            @test EegFun.erp_measurements(zc_erp, "integral").data[1, :Ch1] ≈ 4.0
+
+            neg_only_erp = create_known_signal_erp(1, 1, t -> -5.0 - sin(π * t), fs = 100, t_start = 0.0, t_end = 1.0)
+            @test isnan(
+                EegFun.erp_measurements(neg_only_erp, "fractional_area_latency"; area_boundary = :positive, fractional_area_fraction = 0.5).data[
+                    1,
+                    :Ch1,
+                ],
+            )
+            @test isnan(
+                EegFun.erp_measurements(neg_only_erp, "fractional_peak_latency"; peak_polarity = :positive, fractional_peak_fraction = 0.5).data[
+                    1,
+                    :Ch1,
+                ],
+            )
+
+            # Stale df.condition_name from erp_measurements! does not override condition_difference name
+            mut_c1 = EegFun.create_test_erp_data(participant = 1, condition = 1, fs = 100)
+            mut_c2 = EegFun.create_test_erp_data(participant = 1, condition = 2, fs = 100)
+            EegFun.erp_measurements!([mut_c1, mut_c2], "mean_amplitude")
+            diff_after_mut = EegFun.condition_difference([mut_c1, mut_c2], (1, 2))
+            res_after_mut = EegFun.erp_measurements(diff_after_mut, "mean_amplitude")
+            @test res_after_mut.data[1, :condition_name] == "difference_1_2"
+
+            # Function interval, times() baseline_interval, and single-timepoint snap
+            res_fn = EegFun.erp_measurements(
+                mut_c1,
+                "mean_amplitude";
+                analysis_interval = df -> 0.1 .<= df.time .<= 0.3,
+                baseline_interval = EegFun.times(),
+            )
+            @test res_fn isa EegFun.ErpMeasurementsResult
+            res_snap = EegFun.erp_measurements(mut_c1, "mean_amplitude"; analysis_interval = EegFun.times(0.1234))
+            @test res_snap isa EegFun.ErpMeasurementsResult
         end
 
         # Cleanup

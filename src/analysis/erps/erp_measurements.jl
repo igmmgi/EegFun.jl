@@ -180,20 +180,49 @@ end
     @minimal_error "area_boundary must be :rectified, :positive, :negative, or :signed, got: $mode"
 end
 
+@inline function _segment_area(y0::Float64, y1::Float64, dt::Float64, mode::Symbol)::Float64
+    mode === :signed && return 0.5 * (y0 + y1) * dt
+    if (y0 < 0.0 && y1 > 0.0) || (y0 > 0.0 && y1 < 0.0)
+        t_frac = -y0 / (y1 - y0)
+        if y0 < 0.0
+            neg_a = 0.5 * (-y0) * (t_frac * dt)
+            pos_a = 0.5 * y1 * ((1.0 - t_frac) * dt)
+        else
+            pos_a = 0.5 * y0 * (t_frac * dt)
+            neg_a = 0.5 * (-y1) * ((1.0 - t_frac) * dt)
+        end
+        mode === :positive && return pos_a
+        mode === :negative && return neg_a
+        mode === :rectified && return pos_a + neg_a
+        @minimal_error "area_boundary must be :rectified, :positive, :negative, or :signed, got: $mode"
+    end
+    return 0.5 * (_area_sample(y0, mode) + _area_sample(y1, mode)) * dt
+end
+
 function _trapezoidal_area(data::AbstractVector, time_col::AbstractVector, mode::Symbol)::Float64
     n = min(length(data), length(time_col))
     n <= 1 && return 0.0
     total = 0.0
-    prev_y = _area_sample(Float64(data[1]), mode)
+    prev_y = Float64(data[1])
     prev_t = Float64(time_col[1])
     @inbounds for i = 2:n
-        cur_y = _area_sample(Float64(data[i]), mode)
+        cur_y = Float64(data[i])
         cur_t = Float64(time_col[i])
-        total += 0.5 * (prev_y + cur_y) * (cur_t - prev_t)
+        total += _segment_area(prev_y, cur_y, cur_t - prev_t, mode)
         prev_y = cur_y
         prev_t = cur_t
     end
     return total
+end
+
+@inline function _advance_area_subseg(cum::Float64, target_area::Float64, total_area::Float64, t0::Float64, t1::Float64, seg_a::Float64)
+    next_cum = cum + seg_a
+    crossed = total_area > 0.0 ? (next_cum >= target_area) : (next_cum <= target_area)
+    if crossed
+        lat = abs(seg_a) < 1e-14 ? t0 : t0 + (target_area - cum) * (t1 - t0) / seg_a
+        return true, lat
+    end
+    return false, next_cum
 end
 
 function _fractional_area_latency(data::AbstractVector, time_col::AbstractVector, fraction::Real; area_boundary::Symbol = :rectified)
@@ -204,27 +233,40 @@ function _fractional_area_latency(data::AbstractVector, time_col::AbstractVector
     t_last = Float64(time_col[n])
     t_last - t_first <= 0.0 && return t_first
 
-    total_area = _trapezoidal_area(data, time_col, area_boundary)
-    abs(total_area) < 1e-12 && return t_first
-
     frac = Float64(fraction)
     frac <= 0.0 && return t_first
     frac >= 1.0 && return t_last
 
+    total_area = _trapezoidal_area(data, time_col, area_boundary)
+    if abs(total_area) < 1e-12
+        @minimal_warning "fractional_area_latency: total $(area_boundary) area is zero in analysis interval; returning NaN"
+        return NaN
+    end
+
     target_area = total_area * frac
     cum = 0.0
-    prev_y = _area_sample(Float64(data[1]), area_boundary)
+    prev_y = Float64(data[1])
     prev_t = t_first
 
     @inbounds for i = 2:n
-        cur_y = _area_sample(Float64(data[i]), area_boundary)
+        cur_y = Float64(data[i])
         cur_t = Float64(time_col[i])
-        y0 = cum
-        cum = y0 + 0.5 * (prev_y + cur_y) * (cur_t - prev_t)
-        crossed = total_area > 0.0 ? (cum >= target_area) : (cum <= target_area)
-        if crossed
-            abs(cum - y0) < 1e-14 && return prev_t
-            return prev_t + (target_area - y0) * (cur_t - prev_t) / (cum - y0)
+        dt = cur_t - prev_t
+        if area_boundary !== :signed && ((prev_y < 0.0 && cur_y > 0.0) || (prev_y > 0.0 && cur_y < 0.0))
+            t_cross = prev_t - prev_y * dt / (cur_y - prev_y)
+            seg1 = _segment_area(prev_y, 0.0, t_cross - prev_t, area_boundary)
+            hit1, val1 = _advance_area_subseg(cum, target_area, total_area, prev_t, t_cross, seg1)
+            hit1 && return val1
+            cum = val1
+            seg2 = _segment_area(0.0, cur_y, cur_t - t_cross, area_boundary)
+            hit2, val2 = _advance_area_subseg(cum, target_area, total_area, t_cross, cur_t, seg2)
+            hit2 && return val2
+            cum = val2
+        else
+            seg = _segment_area(prev_y, cur_y, dt, area_boundary)
+            hit, val = _advance_area_subseg(cum, target_area, total_area, prev_t, cur_t, seg)
+            hit && return val
+            cum = val
         end
         prev_y = cur_y
         prev_t = cur_t
@@ -234,6 +276,8 @@ end
 
 function _fractional_peak_latency(data::AbstractVector, time_col::AbstractVector, peak_idx::Int, fraction::Float64, direction::Symbol)
     (isempty(data) || isempty(time_col) || peak_idx < 1 || peak_idx > length(data)) && return NaN
+    fraction <= 0.0 && return (direction === :onset ? Float64(time_col[1]) : Float64(time_col[end]))
+    fraction >= 1.0 && return Float64(time_col[peak_idx])
     peak_val = Float64(data[peak_idx])
     abs(peak_val) < 1e-12 && return Float64(time_col[peak_idx])
     target_val = peak_val * fraction
@@ -248,6 +292,7 @@ function _fractional_peak_latency(data::AbstractVector, time_col::AbstractVector
                 return x0 + (target_val - yi) * (x1 - x0) / (y1 - yi)
             end
         end
+        @minimal_warning "fractional_peak_latency: onset did not reach $(fraction) of peak within analysis interval; clamping to window start"
         return Float64(time_col[1])
     else
         @inbounds for i = (peak_idx+1):length(data)
@@ -259,6 +304,7 @@ function _fractional_peak_latency(data::AbstractVector, time_col::AbstractVector
                 return x0 + (target_val - y0) * (x1 - x0) / (yi - y0)
             end
         end
+        @minimal_warning "fractional_peak_latency: offset did not reach $(fraction) of peak within analysis interval; clamping to window end"
         return Float64(time_col[end])
     end
 end
@@ -299,10 +345,18 @@ function _eval_channel_measurement(
     elseif m === :fractional_peak_latency
         pol = spec.peak_polarity
         peak_idx = if pol === :positive
-            _, idx = _compute_peak_measurement(chan_data, :max, spec.local_interval, channel_name)
+            pv, idx = _compute_peak_measurement(chan_data, :max, spec.local_interval, channel_name)
+            if pv <= 0.0
+                @minimal_warning "Channel $channel_name: No positive (> 0) peak found in analysis interval (max = $(round(pv; digits = 4))); returning NaN"
+                return NaN
+            end
             idx
         elseif pol === :negative
-            _, idx = _compute_peak_measurement(chan_data, :min, spec.local_interval, channel_name)
+            nv, idx = _compute_peak_measurement(chan_data, :min, spec.local_interval, channel_name)
+            if nv >= 0.0
+                @minimal_warning "Channel $channel_name: No negative (< 0) peak found in analysis interval (min = $(round(nv; digits = 4))); returning NaN"
+                return NaN
+            end
             idx
         else
             max_v, max_i = _compute_peak_measurement(chan_data, :max, spec.local_interval, channel_name)
@@ -336,6 +390,30 @@ function _resolve_in_memory_participant(dat::Union{ErpData,EpochData}, participa
     return any(isdigit, stem) ? _extract_participant_id(basename(dat.file)) : 0
 end
 
+function _resolve_df_interval_range(df::DataFrame, interval::Interval)::UnitRange{Int}
+    (isnothing(interval) || interval isa AllSelection) && return 1:nrow(df)
+    if interval isa Function
+        idxs = findall(interval(df))
+        return isempty(idxs) ? (1:0) : (first(idxs):last(idxs))
+    end
+    s_t, e_t = _normalize_interval(interval)
+    t_col = df.time
+    s_i, e_i = _find_idx_start_end(t_col, s_t, e_t)
+    if s_i > e_i && s_t == e_t && !isempty(t_col)
+        best_idx = 1
+        best_dist = abs(Float64(t_col[1]) - s_t)
+        @inbounds for i = 2:length(t_col)
+            d = abs(Float64(t_col[i]) - s_t)
+            if d < best_dist
+                best_dist = d
+                best_idx = i
+            end
+        end
+        return best_idx:best_idx
+    end
+    return s_i:e_i
+end
+
 function _apply_baseline_correction!(dfs::AbstractVector{DataFrame}, baseline_interval::Interval, all_channels::AbstractVector{Symbol})
     (isnothing(baseline_interval) || isempty(dfs)) && return dfs
     first_df = first(dfs)
@@ -344,13 +422,12 @@ function _apply_baseline_correction!(dfs::AbstractVector{DataFrame}, baseline_in
         @minimal_warning "No EEG channels found for baseline correction"
         return dfs
     end
-    baseline_int = _normalize_interval(baseline_interval)
-    start_idx, stop_idx = _find_idx_start_end(first_df.time, baseline_int[1], baseline_int[2])
-    if start_idx <= stop_idx
-        @info "Applying baseline correction to $(length(eeg_channels)) channels using interval: $baseline_int"
-        _apply_baseline!(dfs, eeg_channels, (start_idx, stop_idx))
+    bl_range = _resolve_df_interval_range(first_df, baseline_interval)
+    if !isempty(bl_range)
+        @info "Applying baseline correction to $(length(eeg_channels)) channels using interval: $baseline_interval"
+        _apply_baseline!(dfs, eeg_channels, (first(bl_range), last(bl_range)))
     else
-        @minimal_warning "No samples found in baseline interval $baseline_int; skipping baseline correction"
+        @minimal_warning "No samples found in baseline interval $baseline_interval; skipping baseline correction"
     end
     return dfs
 end
@@ -371,7 +448,7 @@ function _fill_channel_measurements!(
     for r in eachindex(valid_idxs)
         df = dfs[valid_idxs[r]]
         t_range = time_ranges[r]
-        raw_col = (col_idx > 0 && ncol(df) >= col_idx) ? df[!, col_idx] : df[!, ch]
+        raw_col = (col_idx > 0 && ncol(df) >= col_idx && DataFrames.index(df).names[col_idx] === ch) ? df[!, col_idx] : df[!, ch]
         t_col = time_vecs[r]
         sel_times = @view t_col[t_range]
         bl_r = bl_ranges[r]
@@ -429,9 +506,10 @@ function _extract_measurements_df(
         return nothing
     end
 
-    use_all_times = isnothing(analysis_interval) || analysis_interval isa AllSelection
-    ai_norm = use_all_times ? nothing : _normalize_interval(analysis_interval)
-    bl_norm = isnothing(baseline_interval) ? nothing : _normalize_interval(baseline_interval)
+    use_explicit_ai_bounds = !isnothing(analysis_interval) && !(analysis_interval isa AllSelection) && !(analysis_interval isa Function)
+    ai_norm = use_explicit_ai_bounds ? _normalize_interval(analysis_interval) : nothing
+    use_explicit_bl_bounds = !isnothing(baseline_interval) && !(baseline_interval isa AllSelection) && !(baseline_interval isa Function)
+    bl_norm = use_explicit_bl_bounds ? _normalize_interval(baseline_interval) : nothing
 
     n_dfs = length(dfs)
     valid_idxs = Int[]
@@ -444,6 +522,10 @@ function _extract_measurements_df(
     sizehint!(ai_starts, n_dfs)
     ai_ends = Float64[]
     sizehint!(ai_ends, n_dfs)
+    bl_starts = Union{Float64,Missing}[]
+    sizehint!(bl_starts, n_dfs)
+    bl_ends = Union{Float64,Missing}[]
+    sizehint!(bl_ends, n_dfs)
 
     for k = 1:n_dfs
         df = dfs[k]
@@ -454,29 +536,30 @@ function _extract_measurements_df(
         hasproperty(df, :time) || @minimal_error "DataFrame must have a :time column"
         t_col = df.time
 
-        t_range = if use_all_times
-            1:nrow(df)
-        else
-            s_i, e_i = _find_idx_start_end(t_col, ai_norm[1], ai_norm[2])
-            s_i:e_i
-        end
+        t_range = _resolve_df_interval_range(df, analysis_interval)
         if isempty(t_range)
             @minimal_warning "No time points found matching analysis interval"
             continue
         end
 
-        bl_r = if apply_baseline && !isnothing(bl_norm)
-            bs_i, be_i = _find_idx_start_end(t_col, bl_norm[1], bl_norm[2])
-            bs_i:be_i
-        else
-            1:0
-        end
+        bl_r = (apply_baseline && !isnothing(baseline_interval)) ? _resolve_df_interval_range(df, baseline_interval) : (1:0)
 
         push!(valid_idxs, k)
         push!(time_ranges, t_range)
         push!(bl_ranges, bl_r)
-        push!(ai_starts, use_all_times ? Float64(t_col[first(t_range)]) : ai_norm[1])
-        push!(ai_ends, use_all_times ? Float64(t_col[last(t_range)]) : ai_norm[2])
+        push!(ai_starts, use_explicit_ai_bounds ? ai_norm[1] : Float64(t_col[first(t_range)]))
+        push!(ai_ends, use_explicit_ai_bounds ? ai_norm[2] : Float64(t_col[last(t_range)]))
+        if isnothing(baseline_interval)
+            push!(bl_starts, missing)
+            push!(bl_ends, missing)
+        elseif use_explicit_bl_bounds
+            push!(bl_starts, bl_norm[1])
+            push!(bl_ends, bl_norm[2])
+        else
+            bl_meta_r = _resolve_df_interval_range(df, baseline_interval)
+            push!(bl_starts, isempty(bl_meta_r) ? missing : Float64(t_col[first(bl_meta_r)]))
+            push!(bl_ends, isempty(bl_meta_r) ? missing : Float64(t_col[last(bl_meta_r)]))
+        end
     end
 
     n_valid = length(valid_idxs)
@@ -485,15 +568,17 @@ function _extract_measurements_df(
     out_df = DataFrame(; copycols = false)
     out_df[!, :file] = fill(dat.file, n_valid)
     out_df[!, :participant] = fill(participant, n_valid)
-    out_df[!, :condition] = [hasproperty(dfs[k], :condition) ? dfs[k][1, :condition] : dat.condition for k in valid_idxs]
-    out_df[!, :condition_name] =
-        String[hasproperty(dfs[k], :condition_name) ? String(dfs[k][1, :condition_name]) : dat.condition_name for k in valid_idxs]
+    out_df[!, :condition] = fill(dat.condition, n_valid)
+    out_df[!, :condition_name] = fill(dat.condition_name, n_valid)
     if hasproperty(dfs[valid_idxs[1]], :epoch)
         out_df[!, :epoch] = [dfs[k][1, :epoch] for k in valid_idxs]
     end
     out_df[!, :analysis_type] = fill(analysis_type_str, n_valid)
-    out_df[!, :baseline_interval_start] = isnothing(bl_norm) ? fill(missing, n_valid) : fill(bl_norm[1], n_valid)
-    out_df[!, :baseline_interval_end] = isnothing(bl_norm) ? fill(missing, n_valid) : fill(bl_norm[2], n_valid)
+    out_df[!, :baseline_interval_start] =
+        isnothing(baseline_interval) ? fill(missing, n_valid) :
+        (all(!ismissing, bl_starts) ? Float64[x::Float64 for x in bl_starts] : bl_starts)
+    out_df[!, :baseline_interval_end] =
+        isnothing(baseline_interval) ? fill(missing, n_valid) : (all(!ismissing, bl_ends) ? Float64[x::Float64 for x in bl_ends] : bl_ends)
     out_df[!, :analysis_interval_start] = ai_starts
     out_df[!, :analysis_interval_end] = ai_ends
 

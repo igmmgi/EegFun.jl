@@ -601,6 +601,34 @@ using Logging
             # Invalid non-JLD2 extension throws EegFunError
             @test_throws EegFun.EegFunError EegFun.save_data(joinpath(test_dir, "bad.csv"), erp1)
         end
+
+        @testset "Natural sort, participant ID suffixes, grand_average exclusion, and clean_pattern" begin
+            nat_dir = joinpath(test_dir, "nat_sort")
+            mkpath(nat_dir)
+            for id in (1, 2, 10)
+                jldsave(joinpath(nat_dir, "$(id)_erps_good.jld2"); data = [EegFun.create_test_erp_data(participant = id, condition = 1)])
+            end
+            jldsave(joinpath(nat_dir, "grand_average_erps_good.jld2"); data = [EegFun.create_test_erp_data(participant = 1, condition = 1)])
+
+            found = EegFun._find_batch_files("erps_good", nat_dir)
+            @test found == ["1_erps_good.jld2", "2_erps_good.jld2", "10_erps_good.jld2"]
+            @test EegFun._find_batch_files("grand_average_erps_good", nat_dir) == ["grand_average_erps_good.jld2"]
+            @test EegFun._find_batch_files(r"^[12]_erps_good\.jld2$", nat_dir) == ["1_erps_good.jld2", "2_erps_good.jld2"]
+
+            @test EegFun._extract_participant_id("3_erps_cond1.jld2") == 3
+            @test EegFun._extract_participant_id("01_erps_lp30.jld2") == 1
+            @test EegFun._extract_participant_id("pp07_run1_erps.jld2") == 7
+            @test EegFun._extract_participant_id("vp07_run1_erps.jld2") == 7
+            @test EegFun._extract_participant_id("S07_cond2.jld2") == 7
+
+            @test EegFun.clean_pattern("./erps_good") == "erps_good"
+            @test EegFun.clean_pattern("../dir/erps_0.1_30Hz.jld2") == "erps_0.1_30Hz"
+            @test EegFun.clean_pattern("erps_0.1_30Hz") == "erps_0.1_30Hz"
+
+            c2 = EegFun.create_test_erp_data(participant = 1, condition = 2)
+            c5 = EegFun.create_test_erp_data(participant = 1, condition = 5)
+            @test EegFun._condition_select([c2, c5], [5]) == [c5]
+        end
     end
 
     # Cleanup: restore state and remove temporary files

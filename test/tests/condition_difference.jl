@@ -482,6 +482,22 @@ end
         diffs = EegFun.condition_difference(mp, [(1, 2)])
         @test length(diffs) == 2
         @test [d.file for d in diffs] == [mp[1].file, mp[3].file]
+
+        # Derived extra float channels (:vEOG / channel_difference!) are subtracted, single-pair batch works, invalid pairs error
+        d1 = EegFun.create_test_erp_data(participant = 1, condition = 1)
+        d2 = EegFun.create_test_erp_data(participant = 1, condition = 2)
+        d1.data[!, :vEOG] = fill(25.0, nrow(d1.data))
+        d2.data[!, :vEOG] = fill(10.0, nrow(d2.data))
+        diff_ex = EegFun.condition_difference([d1, d2], (1, 2))
+        @test all(≈(15.0), diff_ex[1].data.vEOG)
+        @test_throws EegFun.EegFunError EegFun.condition_difference([d1, d2], [[1]])
+        @test_throws EegFun.EegFunError EegFun.condition_difference([d1, d2], [[1, 2, 3]])
+
+        mktempdir() do tmp_sp
+            jldsave(joinpath(tmp_sp, "1_erps.jld2"); data = [d1, d2])
+            res_sp = EegFun.condition_difference("erps", (1, 2); input_dir = tmp_sp)
+            @test res_sp.success == 1
+        end
     end
 
     rm(test_dir, recursive = true)

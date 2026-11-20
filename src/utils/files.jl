@@ -26,7 +26,12 @@ function get_files(directory::String, files::Vector{String}; recursive::Bool = f
     return [joinpath(directory, file) for file in files]
 end
 
-clean_pattern(pattern::String) = string(first(split(pattern, '.')))
+function clean_pattern(pattern::String)
+    base = basename(rstrip(pattern, ('/', '\\')))
+    isempty(base) && return ""
+    stem, ext = splitext(base)
+    return lowercase(ext) in (".jld2", ".bdf", ".edf", ".vhdr", ".fif", ".fiff", ".set", ".xdf", ".csv") ? stem : base
+end
 
 """
     find_file(filename::String, search_dir::String;

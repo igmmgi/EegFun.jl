@@ -11,8 +11,12 @@ end
 
 function _extract_participant_id(filename::String)
     name_without_ext, _ = splitext(basename(filename))
-    m = match(r"(?:^|[^a-zA-Z])(?:sub|subj|subject|participant|part)[_-]?(\d+)"i, name_without_ext)
+    m = match(r"(?:^|[^a-zA-Z])(?:sub|subj|subject|participant|part|pp|vp)[_-]?(\d+)"i, name_without_ext)
     !isnothing(m) && return parse(Int, m.captures[1])
+    m_sp = match(r"^[sp][_-]?(\d+)(?:[_-]|$)"i, name_without_ext)
+    !isnothing(m_sp) && return parse(Int, m_sp.captures[1])
+    m_lead = match(r"^(\d+)(?:[_-]|$)", name_without_ext)
+    !isnothing(m_lead) && return parse(Int, m_lead.captures[1])
     cu = codeunits(name_without_ext)
     i = length(cu)
     while i >= 1 && !(0x30 <= cu[i] <= 0x39)
@@ -30,12 +34,25 @@ function _extract_participant_id(filename::String)
     return participant
 end
 
+function _matches_batch_pattern(filename::String, pattern::String, rx::Union{Regex,Nothing})::Bool
+    endswith(lowercase(filename), ".jld2") || return false
+    if !occursin("grand_av", lowercase(pattern)) && occursin(r"^grand_av(?:erage|g)(?:_|\.)", lowercase(filename))
+        return false
+    end
+    return isnothing(rx) ? contains(filename, pattern) : occursin(rx, filename)
+end
+
 function _find_batch_files(pattern::String, dir::String, @nospecialize(participant_selection = participants()))
     part_func = _to_participant_func(participant_selection)
-    files = filter(f -> endswith(f, ".jld2") && contains(f, pattern), readdir(dir))
-    ids = [_extract_participant_id(f) for f in files]
+    rx = occursin(r"[\^$\\\[\]|+?()*]", pattern) ? Regex(pattern) : nothing
+    files = filter(f -> _matches_batch_pattern(f, pattern, rx), readdir(dir))
+    sort!(files; by = _natural_sort_key)
+    ids = Int[_extract_participant_id(f) for f in files]
     return files[part_func(ids)]
 end
+
+_find_batch_files(rx::Regex, dir::String, @nospecialize(participant_selection = participants())) =
+    _find_batch_files(rx.pattern, dir, participant_selection)
 
 _find_batch_files(pattern::String, dir::String, ids::Int) = _find_batch_files(pattern, dir, x -> x .== ids)
 _find_batch_files(pattern::String, dir::String, ids::Vector{Int}) = _find_batch_files(pattern, dir, x -> [id in ids for id in x])
@@ -120,7 +137,16 @@ function _condition_select(data, condition_selection::Function = conditions())
     return data isa AbstractVector{<:EegFunData} ? data[get_selected_conditions(data, condition_selection)] :
            data[condition_selection(1:length(data))]
 end
-_condition_select(data, condition_selection::Vector{Int}) = isempty(data) ? data : data[condition_selection]
+function _condition_select(data, condition_selection::Vector{Int})
+    isempty(data) && return data
+    if data isa AbstractVector{<:EegFunData} &&
+       all(>(0), condition_selection) &&
+       all(d -> hasfield(typeof(d), :condition) && d.condition isa Integer && d.condition > 0, data)
+        cond_nums = Int[Int(d.condition) for d in data]
+        all(c -> c in cond_nums, condition_selection) && return data[_match_condition_indices(data, condition_selection)]
+    end
+    return data[condition_selection]
+end
 _condition_select(data, condition_selection::Int) = _condition_select(data, [condition_selection])
 _condition_select(data, ::Nothing) = _condition_select(data, x -> trues(length(x)))
 
@@ -222,6 +248,7 @@ function _validate_condition_groups(groups::AbstractVector)
     isempty(groups) && return "Condition groups cannot be empty"
     all_conditions = Set{Int}()
     for (group_idx, group) in enumerate(groups)
+        isempty(group) && return "Condition group $group_idx cannot be empty"
         unique_group = unique(group)
         if length(unique_group) != length(group)
             duplicates = [x for x in group if count(==(x), group) > 1]
@@ -243,6 +270,9 @@ end
 function _validate_condition_pairs(pairs::AbstractVector)
     isempty(pairs) && return "Condition pairs cannot be empty"
     for (i, pair) in enumerate(pairs)
+        (pair isa Tuple || pair isa AbstractVector) || return "Condition pair $i must be a Tuple or Vector, got $(typeof(pair))"
+        length(pair) == 2 || return "Condition pair $i must contain exactly 2 conditions, got $(length(pair))"
+        (pair[1] isa Integer && pair[2] isa Integer) || return "Condition pair $i elements must be integers"
         if pair[1] == pair[2]
             @minimal_warning "Condition pair $i: ($(pair[1]), $(pair[2])) has identical conditions. Difference will be zero."
         end

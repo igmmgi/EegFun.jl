@@ -528,12 +528,11 @@ function get_selected_channels(layout::Layout, channel_selection::Function)
     all_channels = layout.data.label
     selected = all_channels[channel_selection(all_channels)]
 
-    selection_type = typeof(channel_selection)
-    if hasfield(selection_type, :channel_names)
-        ordered = _handle_channel_names_order(getfield(channel_selection, :channel_names), all_channels, selected)
+    if channel_selection isa _ChannelNamesSelector
+        ordered = _handle_channel_names_order(channel_selection.channel_names, all_channels, selected)
         !isnothing(ordered) && (selected = ordered)
-    elseif hasfield(selection_type, :channel_numbers)
-        ordered = _handle_channel_numbers_order(getfield(channel_selection, :channel_numbers), all_channels, selected)
+    elseif channel_selection isa _ChannelNumbersSelector
+        ordered = _handle_channel_numbers_order(channel_selection.channel_numbers, all_channels, selected)
         !isnothing(ordered) && (selected = ordered)
     end
     return selected

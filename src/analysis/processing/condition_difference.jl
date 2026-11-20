@@ -108,6 +108,8 @@ function condition_difference(data::AbstractVector{T}, condition_pairs) where {T
         else
             condition_pairs
         end
+    error_msg = _validate_condition_pairs(pairs)
+    !isnothing(error_msg) && @minimal_error(error_msg)
 
     tag = _kind_tag(T)
     @info "Creating $(tag)condition difference waves..."
@@ -144,3 +146,8 @@ function condition_difference(
         return batch_process(process_fn, file_pattern, input_dir, output_dir, participant_selection, "Creating differences")
     end
 end
+
+condition_difference(file_pattern::String, condition_pair::Tuple{Integer,Integer}; kwargs...) =
+    condition_difference(file_pattern, [condition_pair]; kwargs...)
+condition_difference(file_pattern::String, condition_pair::AbstractVector{<:Integer}; kwargs...) =
+    condition_difference(file_pattern, [collect(Int, condition_pair)]; kwargs...)

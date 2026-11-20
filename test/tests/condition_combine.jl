@@ -643,5 +643,14 @@ end
         mp_comb = EegFun.condition_combine([mp1_c1, mp1_c2, mp2_c1, mp2_c2], [[1, 2]])
         @test length(mp_comb) == 2
         @test [EegFun.n_epochs(d) for d in mp_comb] == [5, 6]
+
+        # Batch condition_combine works on filenames without literal "epochs" (e.g. "trials")
+        mktempdir() do tmp_trials
+            jldsave(joinpath(tmp_trials, "1_trials_clean.jld2"); data = [ep_c2, ep_c5])
+            res_tr = EegFun.condition_combine("trials_clean", [[2, 5]]; input_dir = tmp_trials)
+            @test res_tr.success == 1
+            comb_tr = EegFun.read_data(joinpath(tmp_trials, "combined_trials_clean_2-5", "1_trials_clean.jld2"))
+            @test length(comb_tr) == 1 && EegFun.n_epochs(comb_tr[1]) == 5
+        end
     end
 end
