@@ -138,6 +138,7 @@ function plot_topography(
 
     if interactive
         deregister_interaction!(ax, :rectanglezoom)
+        deregister_interaction!(ax, :dragpan)
         _setup_topo_keyboard_handlers!(fig, ax; zoom_step = plot_kwargs[:zoom_step])
         dat isa ErpData && _setup_topo_selection!(fig, ax, dat, interval_selection)
     end
@@ -316,6 +317,7 @@ function plot_topography(
 
     if interactive
         deregister_interaction!.(axes, :rectanglezoom)
+        deregister_interaction!.(axes, :dragpan)
         _setup_topo_keyboard_handlers!(fig, axes; zoom_step = plot_kwargs[:zoom_step])
         if all(d -> d isa ErpData, dat)
             _setup_shared_topo_selection!(fig, dat, TopoSelectionState(axes, interval_selection))
@@ -372,6 +374,12 @@ function plot_topography(
         interval_selection = interval_selection,
         kwargs...,
     )
+
+    if plot_kwargs[:interactive]
+        deregister_interaction!(ax, :rectanglezoom)
+        deregister_interaction!(ax, :dragpan)
+        _setup_topo_keyboard_handlers!(fig, ax; zoom_step = plot_kwargs[:zoom_step])
+    end
 
     display_plot && _display_figure(fig)
     _set_window_title("Makie")
@@ -1432,6 +1440,7 @@ function _plot_topography_scrubber(dat::SingleDataFrameEeg; display_plot = true,
     hidespines!(ax)
     deregister_interaction!(ax, :rectanglezoom)
     deregister_interaction!(ax, :scrollzoom)
+    deregister_interaction!(ax, :dragpan)
 
     co = contourf!(
         ax,

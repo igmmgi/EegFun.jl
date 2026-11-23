@@ -20,6 +20,7 @@ using EegFun
         @test res1.fig isa Figure
         @test res1.axes isa Vector{Axis}
         @test length(res1.axes) == 1
+        @test !haskey(res1.axes[1].interactions, :dragpan)
 
         res_bins = EegFun.plot_topography(erp1; colorrange = (-4.0, 4.0), n_topo = 3, display_plot = false)
         @test res_bins.fig isa Figure

@@ -163,10 +163,13 @@ function plot_topography(ica::InfoIca; component_selection = components(), kwarg
 
         ax = if colorbar_plot
             sg = GridLayout(fig[base_row, base_col])
-            Axis(sg[1, 1], title = ax_title)
+            Axis(sg[1, 1], aspect = DataAspect(), title = ax_title)
         else
-            Axis(fig[base_row, base_col], title = ax_title)
+            Axis(fig[base_row, base_col], aspect = DataAspect(), title = ax_title)
         end
+        deregister_interaction!(ax, :rectanglezoom)
+        deregister_interaction!(ax, :scrollzoom)
+        deregister_interaction!(ax, :dragpan)
         axes[i] = ax
 
         comp_levels = isnothing(levels_result) ? nothing : (use_global ? levels_result : levels_result[i])
@@ -289,7 +292,8 @@ function _calculate_topo_levels(
         final_min, final_max = Float64(global_min), Float64(global_max)
     else
         has_val, lo, hi = _finite_matrix_extrema(data)
-        final_min, final_max = has_val ? (lo, hi) : (-1.0, 1.0)
+        max_abs = has_val ? max(abs(lo), abs(hi)) : 0.0
+        final_min, final_max = max_abs > 0.0 ? (-max_abs, max_abs) : (-1.0, 1.0)
     end
 
     if final_min == final_max
@@ -319,8 +323,12 @@ function _calculate_ica_topo_levels(
             end
         end
         has_any || @minimal_error "No valid (non-NaN) data. Cannot calculate topographic levels."
-        min_val = isnothing(global_min) ? lo_all : Float64(global_min)
-        max_val = isnothing(global_max) ? hi_all : Float64(global_max)
+        if !isnothing(global_min) && !isnothing(global_max)
+            min_val, max_val = Float64(global_min), Float64(global_max)
+        else
+            max_abs_all = max(abs(lo_all), abs(hi_all))
+            min_val, max_val = max_abs_all > 0.0 ? (-max_abs_all, max_abs_all) : (-1.0, 1.0)
+        end
         if min_val == max_val
             min_val -= 0.1
             max_val += 0.1
@@ -371,7 +379,18 @@ function _plot_topo_on_axis!(
     x_range = range(x_bounds[1], x_bounds[2], length = size(data, 1))
     y_range = range(y_bounds[1], y_bounds[2], length = size(data, 2))
     actual_cmap = _resolve_theme_colormap(ax, colormap)
-    co = contourf!(ax, x_range, y_range, data; levels = levels, colormap = actual_cmap, nan_color = :transparent)
+    co = contourf!(
+        ax,
+        x_range,
+        y_range,
+        data;
+        levels = levels,
+        colormap = actual_cmap,
+        extendlow = :auto,
+        extendhigh = :auto,
+        nan_color = :transparent,
+    )
+    co.colorrange = (first(levels), last(levels))
 
     _draw_smooth_circle_mask!(ax, x_bounds, y_bounds)
     plot_layout_2d!(
@@ -428,8 +447,11 @@ function _plot_ica_topography_impl!(
         data;
         levels = levels,
         colormap = actual_cmap,
+        extendlow = :auto,
+        extendhigh = :auto,
         nan_color = :transparent,
     )
+    co.colorrange = (first(levels), last(levels))
 
     colorbar_plot_numbers = plot_kwargs[:colorbar_plot_numbers]
     if colorbar_plot && (isempty(colorbar_plot_numbers) || component in colorbar_plot_numbers)
@@ -600,6 +622,9 @@ function _create_component_activation_plots!(fig, state::IcaComponentState)
 
     for i = 1:num_plots
         topo_ax = Axis(fig[i, 1], aspect = DataAspect(), titlevisible = false)
+        deregister_interaction!(topo_ax, :rectanglezoom)
+        deregister_interaction!(topo_ax, :scrollzoom)
+        deregister_interaction!(topo_ax, :dragpan)
         push!(state.topo_axs, topo_ax)
 
         comp_idx = _get_component_index(state, i)
@@ -622,6 +647,8 @@ function _create_component_activation_plots!(fig, state::IcaComponentState)
             yticklabelspace = 0.0,
             yautolimitmargin = (0, 0),
         )
+        deregister_interaction!(ax, :rectanglezoom)
+        deregister_interaction!(ax, :dragpan)
         push!(state.axs, ax)
         push!(state.channel_axs, nothing)
         push!(state.overlay.plots, Any[])

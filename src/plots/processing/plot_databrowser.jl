@@ -454,6 +454,7 @@ _has_column(state::EpochedDataState, col::Symbol) = hasproperty(state.current[].
 # UI
 function _setup_ui_base(fig, ax, state, dat, ica = nothing)
     deregister_interaction!(ax, :rectanglezoom)
+    deregister_interaction!(ax, :dragpan)
     _set_axes!(ax, state)
     _handle_mouse_events!(ax, state)
     _handle_keyboard_events!(fig, ax, state)
@@ -943,7 +944,10 @@ function _show_ica_component_preview(
     preview_fig = _eegfun_figure(size = (1050, 680))
 
     topo_grid = preview_fig[1, 1] = GridLayout()
-    ax_topo = Axis(topo_grid[1, 1], title = @sprintf("%s (%.1f%%)", comp_name, var_pct))
+    ax_topo = Axis(topo_grid[1, 1], aspect = DataAspect(), title = @sprintf("%s (%.1f%%)", comp_name, var_pct))
+    deregister_interaction!(ax_topo, :rectanglezoom)
+    deregister_interaction!(ax_topo, :scrollzoom)
+    deregister_interaction!(ax_topo, :dragpan)
     _plot_topography!(
         preview_fig,
         ax_topo,
@@ -954,9 +958,12 @@ function _show_ica_component_preview(
         point_plot = true,
         label_plot = false,
     )
+    _setup_topo_keyboard_handlers!(preview_fig, ax_topo)
 
     spec_grid = preview_fig[1, 2] = GridLayout()
     ax_spec = Axis(spec_grid[1, 1])
+    deregister_interaction!(ax_spec, :rectanglezoom)
+    deregister_interaction!(ax_spec, :dragpan)
     sr = orig_dat.sample_rate > 0 ? Float64(orig_dat.sample_rate) : 256.0
     _plot_power_spectrum!(
         spec_grid,
@@ -980,6 +987,8 @@ function _show_ica_component_preview(
     end
 
     ax_act = Axis(act_grid[1, 1], xlabel = "Time (s)", ylabel = "Activation (a.u.)", title = act_title)
+    deregister_interaction!(ax_act, :rectanglezoom)
+    deregister_interaction!(ax_act, :dragpan)
     browser_listeners = Makie.Observables.ObserverFunction[]
 
     if state.data isa ContinuousDataState
@@ -1534,7 +1543,7 @@ function _set_window_duration!(state::ContinuousDataBrowserState, duration_sec::
 end
 
 function _create_sliders(fig, state::ContinuousDataBrowserState, dat)
-    extreme_widgets = state.ica.is_active ? nothing : _create_extreme_slider(fig, state)
+    extreme_widgets = _create_extreme_slider(fig, state)
 
     sr = dat.sample_rate > 0 ? Float64(dat.sample_rate) : 1.0
     n_total = nrow(state.data.current[].data)
@@ -1599,7 +1608,7 @@ function _create_sliders(fig, state::ContinuousDataBrowserState, dat)
     return extreme_widgets
 end
 
-_create_sliders(fig, state::EpochedDataBrowserState, dat) = state.ica.is_active ? nothing : _create_extreme_slider(fig, state)
+_create_sliders(fig, state::EpochedDataBrowserState, dat) = _create_extreme_slider(fig, state)
 
 function _show_extra_channel_menu(state, ax, dat)
     all_extras = extra_labels(dat)
@@ -1929,7 +1938,7 @@ function _apply_channel_visual_state!(ax, state)
             line_handle = state.channels.data_lines[col]
             label_handle = state.channels.data_labels[col]
             if state.channels.selected[idx] || _is_channel_repaired(state, col)
-                line_handle.colormap[] = [sel_color, sel_color, sel_color]
+                line_handle.colormap[] = [sel_color, sel_color, :red]
                 line_handle.linewidth[] = selected_lw
                 label_handle.color[] = :red
             else
@@ -2651,7 +2660,7 @@ function _draw(ax, state::DataBrowserState{<:AbstractDataState})
             end
 
             if is_selected || _is_channel_repaired(state, col)
-                line_colormap = [sel_color, sel_color, sel_color]
+                line_colormap = [sel_color, sel_color, :red]
                 line_width = normal_lw * 2
             elseif state.ica.is_active
                 line_colormap = track(

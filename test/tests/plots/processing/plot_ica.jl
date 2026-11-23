@@ -146,4 +146,15 @@ using EegFun
         vcf2 = only(filter(p -> p isa Makie.Contourf, topo_axes[2].scene.plots))
         @test collect(vcf1.levels[]) == collect(vcf2.levels[])
     end
+
+    @testset "symmetric zero-centered ICA topography levels and extend clipping" begin
+        ica_uni = deepcopy(ica_res)
+        ica_uni.mixing[:, 1] .= [-0.12, -0.05, -0.01, 0.002]
+        res_uni = EegFun.plot_topography(ica_uni; component_selection = EegFun.components(1), gridscale = 15, display_plot = false)
+        @test !haskey(res_uni.axes[1].interactions, :dragpan)
+        cf_uni = only(filter(p -> p isa Makie.Contourf, res_uni.axes[1].scene.plots))
+        @test first(cf_uni.levels[]) ≈ -last(cf_uni.levels[])
+        @test cf_uni.extendlow[] === :auto
+        @test cf_uni.extendhigh[] === :auto
+    end
 end

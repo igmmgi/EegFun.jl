@@ -676,6 +676,20 @@ using DataFrames
         prev1 = EegFun._show_ica_component_preview(state, ica_res, 1; display_plot = false)
         @test prev1.fig isa Figure
         @test length(prev1.axes) == 3
+        @test !haskey(prev1.axes[1].interactions, :dragpan)
+        @test !haskey(prev1.axes[2].interactions, :dragpan)
+        @test !haskey(prev1.axes[3].interactions, :dragpan)
+
+        # Up/Down arrow keys adjust the ICA preview topography scale and keep colorrange synced
+        cf_prev = only(filter(p -> p isa Makie.Contourf, prev1.axes[1].scene.plots))
+        init_hi = last(cf_prev.levels[])
+        @test first(cf_prev.levels[]) ≈ -init_hi
+        events(prev1.fig).keyboardbutton[] = Makie.KeyEvent(Keyboard.up, Keyboard.press)
+        @test last(cf_prev.levels[]) ≈ init_hi * 0.8
+        @test cf_prev.colorrange[][2] ≈ init_hi * 0.8
+        events(prev1.fig).keyboardbutton[] = Makie.KeyEvent(Keyboard.down, Keyboard.press)
+        @test last(cf_prev.levels[]) ≈ init_hi
+        @test cf_prev.colorrange[][2] ≈ init_hi
 
         prev2 = EegFun._show_ica_component_preview(state, ica_res, 1; corr_channel = :my_eog, display_plot = false)
         @test prev2.fig isa Figure
@@ -763,5 +777,23 @@ using DataFrames
         # (Data - ICA) + (ICA Activation) == Data at every sample (including t = 0 under causal filt), without 50_000 uV leakage
         @test maximum(abs, orig_y .- off2) < 100.0
         @test ((clean_y .- off2) .+ (sub_y .- off2)) ≈ (orig_y .- off2) atol = 1e-10
+    end
+
+    @testset "right-click pan disabled, Extreme slider kept with ICA, and selected channel extreme highlight" begin
+        cdat_e = EegFun.create_test_continuous_data(n = 600, n_channels = 3, seed = 21)
+        ica_e = EegFun.run_ica(cdat_e; params = EegFun.IcaPrms(max_iter = 5))
+        res_e = EegFun.plot_databrowser(cdat_e, ica_e; display_plot = false)
+        @test !haskey(res_e.ax.interactions, :dragpan)
+        ext_labels = [b for b in res_e.fig.content if b isa Label && startswith(string(b.text[]), "Extreme:")]
+        @test length(ext_labels) == 1
+
+        pkw = EegFun._merge_plot_kwargs(EegFun.PLOT_DATABROWSER_KWARGS, Dict{Symbol,Any}())
+        fig = Figure()
+        ax = Axis(fig[1, 1])
+        st = EegFun._create_browser_state(cdat_e, cdat_e.layout.data.label, ax, ica_e, pkw)
+        EegFun._draw(ax, st)
+        EegFun._toggle_channel_selection!(ax, st, 1)
+        ch1 = st.channels.labels[1]
+        @test st.channels.data_lines[ch1].colormap[][end] == :red
     end
 end
