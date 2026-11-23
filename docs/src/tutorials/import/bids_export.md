@@ -161,6 +161,6 @@ of validator warnings.
 
 ## API Reference
 
-```@docs
+```@docs; canonical=false
 EegFun.export_bids
 ```

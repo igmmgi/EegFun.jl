@@ -197,6 +197,7 @@ if build_pdf
     end
 
     # Remove Layouts gallery from PDF build because it embeds hundreds of images
+    rm(joinpath(@__DIR__, src_dir, "explanations", "layouts.md"); force = true)
     for section in pages
         if section[1] == "Explanations"
             filter!(p -> p[1] != "Layouts", section[2])
@@ -216,6 +217,7 @@ try
         repo = "https://github.com/igmmgi/EegFun.jl",
         format = build_format,
         checkdocs = :public,
+        pagesonly = true,
         warnonly = [:linkcheck],
         draft = false,
         source = src_dir,

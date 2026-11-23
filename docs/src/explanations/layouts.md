@@ -711,7 +711,7 @@ Cartesian coordinates are computed on-demand from polar coordinates:
 
 Layout management and manipulation:
 
-```@docs
+```@docs; canonical=false
 EegFun.read_layout
 EegFun.validate_layout
 EegFun.polar_to_cartesian_xy!
@@ -723,7 +723,7 @@ EegFun.rename_channel!
 
 Layout visualization:
 
-```@docs
+```@docs; canonical=false
 EegFun.plot_layout_2d
 EegFun.plot_layout_3d
 ```
@@ -731,5 +731,5 @@ EegFun.plot_layout_3d
 ## See Also
 
 - [Layout plotting demo](../tutorials/plotting/plot_layout.md)
-- [Layout types](../reference/types.md#Layout-Types)
+- [Layout types](../reference/types.md)
 - [Data structures](data-structures.md)
