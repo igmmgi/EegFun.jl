@@ -443,10 +443,11 @@ The walk-through in Part 1 gave you the general idea of a single-participant ana
 
 ### 2.1 Batch Preprocessing
 
-The `preprocess` pipeline automates all single-participant steps across every BDF file:
+The `preprocess` pipeline automates all single-participant steps across every BDF file, and `pipeline_report` writes an HTML summary and `pipeline_qc_summary.csv` into the output directory:
 
 ```julia
 EegFun.preprocess("pipeline.toml")
+EegFun.pipeline_report("./preprocessed_files")
 ```
 
 For each participant, the pipeline runs through the following stages:
@@ -950,6 +951,7 @@ using EegFun
 
 # ── 2.1 Batch Preprocessing ──
 EegFun.preprocess("pipeline.toml")
+EegFun.pipeline_report("./preprocessed_files")
 
 # ── 2.2 Batch Filter ERPs ──
 EegFun.lowpass_filter("erps_final", 30.0)

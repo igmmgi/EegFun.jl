@@ -228,6 +228,7 @@ Order = [:function, :macro]
 Pages = [
     "src/config/config.jl",
     "src/pipelines/pipeline.jl",
+    "src/pipelines/report.jl",
     "src/pipelines/utils/repair.jl",
     "src/pipelines/utils/repair_info.jl",
     "src/pipelines/utils/summaries.jl",

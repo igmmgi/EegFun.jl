@@ -71,6 +71,16 @@ Quick reference for common EEG processing tasks in EegFun.jl.
 | Log before/after rejection table | `EegFun.log_epochs_table(before, after)` |
 | Repair artifacts (interpolation) | `EegFun.repair_artifacts(epochs, artifacts)` |
 
+## Batch Pipelines
+
+| I want to... | Function |
+| --- | --- |
+| Generate default TOML config | `EegFun.generate_config_template(filename="pipeline.toml")` |
+| Run preprocessing pipeline | `EegFun.preprocess("pipeline.toml")` |
+| Generate HTML & CSV QC report | `EegFun.pipeline_report("preprocessed_files")` |
+| Exclude low-retention participants | `EegFun.subset_bad_data("preprocessed_files", 70.0)` |
+| Generate custom pipeline script | `EegFun.generate_pipeline_template("my_pipeline.jl", "my_preprocess")` |
+
 ## ERP Operations
 
 | I want to... | Function |

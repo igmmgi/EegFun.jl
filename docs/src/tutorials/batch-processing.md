@@ -136,10 +136,10 @@ The pipeline saves intermediate and final outputs as JLD2 files (controlled by `
 | --- | --- |
 | `_continuous_raw` | Raw continuous data after import |
 | `_continuous_corrected` | Continuous data after filtering, ICA, and repair |
-| `_epochs_uncorrected` | Epochs before artifact handling |
-| `_epochs_unrejected` | Epochs after channel repair |
-| `_epochs_final` | Epochs after rejection (final clean data) |
-| `_erps_uncorrected` / `_erps_unrejected` / `_erps_final` | Averaged ERPs at each stage |
+| `_epochs_raw` | Epochs before ICA and artifact rejection |
+| `_epochs_corrected` | Epochs after ICA and per-epoch channel repair (before rejection) |
+| `_epochs` | Final cleaned epochs after rejection |
+| `_erps_raw` / `_erps_corrected` / `_erps` | Averaged ERPs at each corresponding stage |
 | `_ica` | ICA decomposition results |
 | `_artifact_info` | Artifact tracking (repaired channels, rejected epochs, ICA components) |
 
@@ -160,13 +160,34 @@ my_preprocess("config.toml")
 
 ## Post-Processing
 
-After batch preprocessing, use `subset_bad_data` to exclude participants with too much data loss:
+### Quality-Control Report
+
+Generate an HTML report and summary CSV from the pipeline output directory (load `CairoMakie` or `GLMakie` to include plots):
+
+```julia
+using EegFun, CairoMakie
+
+EegFun.pipeline_report("preprocessed_files")
+```
+
+This writes `pipeline_report.html` and `pipeline_qc_summary.csv` in `"preprocessed_files"`. Optional `[files.output]` saves add sections when present: `_ica` adds removed component topographies, `_epochs` computes single-trial Welch PSDs (falling back to `_erps`), and `_erps_raw` (or `_epochs_raw`) adds pre- vs. post-cleaning overlays.
+
+`pipeline_qc_summary.csv` stores numeric epoch, per-condition, channel-repair, and ICA counts for participant filtering:
+
+```julia
+using CSV, DataFrames
+qc = CSV.read("preprocessed_files/pipeline_qc_summary.csv", DataFrame)
+```
+
+Key options: `low_epoch_threshold = 70.0`, `max_ica_pct = 15.0`, `save_csv = true`, and `include_plots = true` (see the [API Reference](../reference/analysis.md)).
+
+### Excluding High-Artifact Files
+
+Use `subset_bad_data` to move participants below a retention threshold to an `"excluded"` subdirectory:
 
 ```julia
 EegFun.subset_bad_data("preprocessed_files", 70.0)
 ```
-
-This moves participants with less than 70% data retention to an "excluded" subdirectory.
 
 ## Philosophy
 

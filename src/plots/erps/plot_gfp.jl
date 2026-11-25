@@ -111,6 +111,7 @@ function plot_gfp(
         panel_idx += 1
     end
 
+    cond_labels = [isempty(strip(d.condition_name)) ? "Condition $(d.condition)" : d.condition_name for d in datasets_filtered]
     _plot_gfp_panels!(
         fig,
         axes,
@@ -121,6 +122,7 @@ function plot_gfp(
         start_panel = panel_idx,
         has_erp_traces = show_erp_traces,
         add_cond_labels = length(datasets_filtered) > 1,
+        cond_labels = cond_labels,
     )
 
     plot_kwargs[:display_plot] && _display_figure(fig)
@@ -254,6 +256,7 @@ function _plot_gfp_panels!(
     start_panel::Int = 1,
     has_erp_traces::Bool = false,
     add_cond_labels::Bool = length(dfs) > 1,
+    cond_labels::Union{Nothing,Vector{String}} = nothing,
 )
     ax_gfp = Axis(fig[start_panel, 1])
     push!(axes, ax_gfp)
@@ -266,15 +269,14 @@ function _plot_gfp_panels!(
 
     for (i, df) in enumerate(dfs)
         c = colors[mod1(i, length(colors))]
-        lines!(
-            ax_gfp,
-            df[!, :time],
-            df[!, :gfp];
-            color = c,
-            linewidth = lw,
-            linestyle = resolved_linestyle,
-            label = add_cond_labels ? "Condition $i" : nothing,
-        )
+        lbl = if !add_cond_labels
+            nothing
+        elseif !isnothing(cond_labels) && i <= length(cond_labels)
+            cond_labels[i]
+        else
+            "Condition $i"
+        end
+        lines!(ax_gfp, df[!, :time], df[!, :gfp]; color = c, linewidth = lw, linestyle = resolved_linestyle, label = lbl)
     end
 
     if plot_kwargs[:show_title]

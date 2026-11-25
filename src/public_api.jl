@@ -372,6 +372,7 @@ public check_files_exist
 public check_raw_data
 public generate_config_template
 public generate_pipeline_template
+public pipeline_report
 public preprocess
 public print_config
 public show_parameter_info

@@ -59,6 +59,7 @@ end
     @testset "Config & Pipelines" begin
         include("tests/config/config.jl")
         include("tests/pipelines/pipeline.jl")
+        include("tests/pipelines/report.jl")
     end
 
     @testset "Analysis — Processing" begin

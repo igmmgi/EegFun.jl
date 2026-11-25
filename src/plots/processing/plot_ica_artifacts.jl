@@ -194,14 +194,21 @@ end
 """
     plot_artifact_components(ica::InfoIca, artifacts::ArtifactComponents; kwargs...) -> NamedTuple
 
-Plot scalp topographies for all identified ICA artifact components grouped by category (`vEOG`, `hEOG`, `ECG`, `Line Noise`, `Channel Noise`).
+Plot scalp topographies for all identified ICA artifact components grouped by category (`vEOG`, `hEOG`, `ECG`, `Line Noise`, `Channel Noise`, `Manual`).
 
 $(_generate_kwargs_doc(PLOT_TOPOGRAPHY_KWARGS))
 """
 function plot_artifact_components(ica::InfoIca, artifacts::ArtifactComponents; kwargs...)
-    merged_kwargs = Dict{Symbol,Any}(:colorbar_label => "a.u.", pairs(kwargs)...)
+    merged_kwargs = Dict{Symbol,Any}(:colorbar_label => "a.u.", :label_plot => false, :point_markersize => 5, pairs(kwargs)...)
     plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, merged_kwargs)
 
+    has_spatial =
+        has_valid_coordinates(ica.layout) ||
+        (has_2d_coords(ica.layout) && (_any_nonzero(ica.layout.data.x2) || _any_nonzero(ica.layout.data.y2)))
+    if !has_spatial
+        @minimal_warning "Cannot create ICA artifact topography plot: layout has no valid spatial coordinates."
+        return (fig = _eegfun_figure(), axes = Axis[])
+    end
     _ensure_coordinates_2d!(ica.layout)
     _ensure_coordinates_3d!(ica.layout)
 
@@ -214,17 +221,25 @@ function plot_artifact_components(ica::InfoIca, artifacts::ArtifactComponents; k
     show_title = plot_kwargs[:show_title]
 
     categories = (
-        ("vEOG", artifacts.eog[:vEOG]),
-        ("hEOG", artifacts.eog[:hEOG]),
+        ("vEOG", get(artifacts.eog, :vEOG, Int[])),
+        ("hEOG", get(artifacts.eog, :hEOG, Int[])),
         ("ECG", artifacts.ecg),
         ("Line Noise", artifacts.line_noise),
         ("Channel Noise", artifacts.channel_noise),
+        ("Manual", artifacts.manual),
     )
 
-    entries = Tuple{String,Int}[]
+    comp_order = Int[]
+    comp_labels = Dict{Int,Vector{String}}()
     for (name, comps) in categories, c in comps
-        push!(entries, (name, c))
+        if !haskey(comp_labels, c)
+            push!(comp_order, c)
+            comp_labels[c] = [name]
+        elseif name ∉ comp_labels[c]
+            push!(comp_labels[c], name)
+        end
     end
+    entries = Tuple{String,Int}[(join(comp_labels[c], " + "), c) for c in comp_order]
 
     if isempty(entries)
         @minimal_warning "No artifact components found to plot"
@@ -234,9 +249,9 @@ function plot_artifact_components(ica::InfoIca, artifacts::ArtifactComponents; k
     end
 
     total_comps = length(entries)
-    n_cols = min(4, total_comps)
+    n_cols = min(6, total_comps)
     n_rows = cld(total_comps, n_cols)
-    fig = _eegfun_figure(size = (n_cols * 200, n_rows * 200))
+    fig = _eegfun_figure(size = (max(300, n_cols * 190), n_rows * 195 + (show_title ? 45 : 15)))
 
     unique_comps = unique([c for (_, c) in entries])
     all_topo_data, x_bounds, y_bounds = _prepare_ica_topo_data(ica, unique_comps, method, gridscale)
@@ -279,13 +294,20 @@ function plot_artifact_components(ica::InfoIca, artifacts::ArtifactComponents; k
             head_linewidth = plot_kwargs[:head_linewidth],
             head_radius = plot_kwargs[:head_radius],
             point_plot = plot_kwargs[:point_plot],
+            point_marker = plot_kwargs[:point_marker],
+            point_markersize = plot_kwargs[:point_markersize],
+            point_color = plot_kwargs[:point_color],
             label_plot = plot_kwargs[:label_plot],
+            label_fontsize = plot_kwargs[:label_fontsize],
+            label_color = plot_kwargs[:label_color],
+            label_xoffset = plot_kwargs[:label_xoffset],
+            label_yoffset = plot_kwargs[:label_yoffset],
         )
         hidedecorations!(ax, grid = false)
     end
 
     if show_title
-        Label(fig[0, :], something(plot_kwargs[:plot_title], "ICA Artifact Components"), fontsize = 18, font = :bold)
+        Label(fig[0, :], something(plot_kwargs[:plot_title], "ICA Artifact Components"), fontsize = 16, font = :bold)
     end
 
     display_plot && _display_figure(fig)
