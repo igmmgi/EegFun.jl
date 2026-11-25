@@ -435,16 +435,14 @@ function _find_closest_channel(mouse_time, mouse_amp, current_epoch, selected_ch
     closest_time_idx = _closest_time_idx_typed(tcol, mt)
     closest_time_idx == 0 && return nothing, Inf
 
-    lookup = DataFrames.index(current_epoch).lookup
-    cols = DataFrames._columns(current_epoch)
     min_distance = Inf
     closest_channel = nothing
     mouse_amp_f64 = Float64(mouse_amp)
 
     for ch in selected_channels
-        col_idx = get(lookup, ch, 0)
-        if col_idx != 0
-            col = cols[col_idx]
+        col_idx = DataFrames.columnindex(current_epoch, ch)
+        if col_idx > 0
+            col = current_epoch[!, col_idx]
             val = col isa Vector{Float64} ? (@inbounds col[closest_time_idx]) : _col_val_f64(col, closest_time_idx)
             distance = abs(val - mouse_amp_f64)
             if distance < min_distance

@@ -265,8 +265,10 @@ function signal_example_ica_separation()
         lbl_w2.text = "$(round(v; digits=2))"
     end
 
+    in_programmatic_update = Ref(false)
     for b in (mix_amount_obs, brain_freq_obs, blink_size_obs, noise_lvl_obs, manual_w1_obs, manual_w2_obs)
         on(b) do _
+            in_programmatic_update[] && return
             use_ica_obs[] = false
             update()
         end
@@ -293,15 +295,25 @@ function signal_example_ica_separation()
         w1e = clamp(-W[1, 2] / W[1, 1], 0.0, 1.5)
         w2e = clamp(-W[2, 1] / W[2, 2], 0.0, 1.5)
         use_ica_obs[] = true
-        set_close_to!(sl_w1, w1e)
-        set_close_to!(sl_w2, w2e)
+        in_programmatic_update[] = true
+        try
+            set_close_to!(sl_w1, w1e)
+            set_close_to!(sl_w2, w2e)
+        finally
+            in_programmatic_update[] = false
+        end
         update()
     end
 
     on(btn_reset.clicks) do _
         use_ica_obs[] = false
-        set_close_to!(sl_w1, 0.0)
-        set_close_to!(sl_w2, 0.0)
+        in_programmatic_update[] = true
+        try
+            set_close_to!(sl_w1, 0.0)
+            set_close_to!(sl_w2, 0.0)
+        finally
+            in_programmatic_update[] = false
+        end
         update()
     end
 

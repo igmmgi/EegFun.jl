@@ -16,14 +16,15 @@ Run the EEG preprocessing pipeline defined by TOML file `config`.
 - `dry_run::Bool = false`: Validate configuration, paths, and input files without writing outputs or processing data.
 """
 function preprocess(
-    config::String;
-    base_dir::Union{String,Nothing} = nothing,
+    config::AbstractString;
+    base_dir::Union{AbstractString,Nothing} = nothing,
     log_level::Symbol = :info,
     skip_existing::Bool = false,
     dry_run::Bool = false,
 )
-    isnothing(base_dir) && (base_dir = abspath(dirname(abspath(config))))
-    @info "Using base directory for relative paths: $base_dir"
+    config_s = String(config)
+    base_dir_s = isnothing(base_dir) ? abspath(dirname(abspath(config_s))) : String(base_dir)
+    @info "Using base directory for relative paths: $base_dir_s"
 
     log_filename = "preprocess_log_$(Dates.format(now(), "yyyy-mm-dd_HH-MM-SS")).txt"
     setup_global_logging(log_filename; log_level = log_level)
@@ -32,7 +33,7 @@ function preprocess(
     all_epoch_counts = DataFrame[]
 
     try
-        setup = _pipeline_setup(config, base_dir, dry_run, output_directory_ref)
+        setup = _pipeline_setup(config_s, base_dir_s, dry_run, output_directory_ref)
         output_directory = setup.output_directory
         raw_data_files = setup.raw_data_files
 
@@ -103,11 +104,11 @@ function preprocess(
 end
 
 """
-    validate_config(config::String; base_dir::Union{String,Nothing} = nothing)
+    validate_config(config::AbstractString; base_dir::Union{AbstractString,Nothing} = nothing)
 
 Validate a preprocessing pipeline configuration file (`dry_run = true`) without processing data or writing output files.
 """
-function validate_config(config::String; base_dir::Union{String,Nothing} = nothing)
+function validate_config(config::AbstractString; base_dir::Union{AbstractString,Nothing} = nothing)
     preprocess(config; base_dir = base_dir, log_level = :info, dry_run = true)
 end
 
@@ -719,9 +720,11 @@ function _pipeline_epoch_and_reject!(
     epochs = reject_epochs(epochs, rejection_info_step2)
 
     @info subsection("Artifact Information")
+    saved_epoch_rejections =
+        rejection_info_step1 === rejection_info_step2 ? copy(rejection_info_step2) : vcat(rejection_info_step1, rejection_info_step2)
     artifact_info = ArtifactInfo(
         !isnothing(continuous_repair_info) ? [continuous_repair_info] : ContinuousRepairInfo[],
-        vcat(rejection_info_step1, rejection_info_step2),
+        saved_epoch_rejections,
         component_artifacts,
     )
     jldsave(

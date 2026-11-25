@@ -46,8 +46,9 @@ function is_peak_to_peak(
 )
     _validate_detector_args(mode, threshold, window_size)
     window_samples = round(Int, window_size * dat.sample_rate)
+    ws = ntuple(_ -> Vector{Float64}(undef, max(1, window_samples)), 6)
     return _detect_artifacts(
-        (buf, sig) -> _is_peak_to_peak!(buf, sig, threshold, window_samples),
+        (buf, sig) -> _is_peak_to_peak!(buf, sig, threshold, window_samples, ws),
         dat,
         ch -> Symbol("is_peak_to_peak_$(ch)");
         channel_selection,
@@ -113,8 +114,9 @@ function is_peak_to_peak!(
     window_samples = round(Int, window_size * dat.sample_rate)
     combined_col = something(channel_out, :is_peak_to_peak)
     sep_fn = ch -> Symbol("$(combined_col)_$(ch)")
+    ws = ntuple(_ -> Vector{Float64}(undef, max(1, window_samples)), 6)
     return _flag_artifacts!(
-        (buf, sig) -> _is_peak_to_peak!(buf, sig, threshold, window_samples),
+        (buf, sig) -> _is_peak_to_peak!(buf, sig, threshold, window_samples, ws),
         dat,
         combined_col,
         sep_fn;

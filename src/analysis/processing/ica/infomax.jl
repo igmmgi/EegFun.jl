@@ -330,6 +330,8 @@ function _infomax_optimize_cpu!(
 
     kurtsize = extended ? min(6000, n_samples) : 0
     old_kurtosis = extended ? zeros(Float64, n_channels) : Float64[]
+    u2_mean_sq = extended ? Vector{Float64}(undef, n_channels) : Float64[]
+    u4_mean = extended ? Vector{Float64}(undef, n_channels) : Float64[]
     signs = extended ? Float64[(is_sub_gaussian::BitVector)[i] ? -1.0 : 1.0 for i = 1:n_channels] : nothing
     kurt_data = (extended && kurtsize < n_samples) ? Matrix{Float64}(undef, n_channels, kurtsize) : Matrix{Float64}(undef, 0, 0)
     activations = extended ? Matrix{Float64}(undef, n_channels, kurtsize) : Matrix{Float64}(undef, 0, 0)
@@ -413,27 +415,21 @@ function _infomax_optimize_cpu!(
             end
 
             inv_k = 1.0 / kurtsize
-            signs_changed = _update_extended_kurtosis_signs!(
-                sub_flags,
-                old_kurtosis,
-                i -> begin
-                    s2 = 0.0
-                    @inbounds @simd for j = 1:kurtsize
-                        v = activations[i, j]
-                        s2 += v * v
-                    end
-                    (s2 * inv_k)^2
-                end,
-                i -> begin
-                    s4 = 0.0
-                    @inbounds @simd for j = 1:kurtsize
-                        v2 = activations[i, j]^2
-                        s4 += v2 * v2
-                    end
-                    s4 * inv_k
-                end,
-                n_channels,
-            )
+            fill!(u2_mean_sq, 0.0)
+            fill!(u4_mean, 0.0)
+            for j = 1:kurtsize
+                @simd for i = 1:n_channels
+                    v = activations[i, j]
+                    v2 = v * v
+                    u2_mean_sq[i] += v2
+                    u4_mean[i] += v2 * v2
+                end
+            end
+            @simd for i = 1:n_channels
+                u2_mean_sq[i] = (u2_mean_sq[i] * inv_k)^2
+                u4_mean[i] *= inv_k
+            end
+            signs_changed = _update_extended_kurtosis_signs!(sub_flags, old_kurtosis, i -> u2_mean_sq[i], i -> u4_mean[i], n_channels)
             if signs_changed
                 signs_vec = signs::Vector{Float64}
                 for i = 1:n_channels

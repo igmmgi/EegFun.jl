@@ -419,7 +419,21 @@ end
 
 Non-mutating version of [`reject_epochs!`](@ref).
 """
-reject_epochs(dat::EpochData, info::EpochRejectionInfo)::EpochData = reject_epochs!(copy(dat), info)
+function reject_epochs(dat::EpochData, info::EpochRejectionInfo)::EpochData
+    if isempty(info.rejected)
+        @info "No epochs to reject"
+        return copy(dat)
+    end
+    n_eps = n_epochs(dat)
+    rejected_indices = unique(Int[r.epoch for r in info.rejected])
+    keep_mask = trues(n_eps)
+    for ep in rejected_indices
+        1 <= ep <= n_eps && (keep_mask[ep] = false)
+    end
+    kept_dfs = DataFrame[copy(dat.data[i]) for i = 1:n_eps if keep_mask[i]]
+    @info "Condition $(dat.condition) ($(dat.condition_name)) - Rejected $(length(rejected_indices)) of $(info.info.n) epochs."
+    return EpochData(dat.file, dat.condition, dat.condition_name, kept_dfs, copy(dat.layout), dat.sample_rate, copy(dat.analysis_info))
+end
 
 function reject_epochs(dat::AbstractVector{<:EpochData}, info::AbstractVector{<:EpochRejectionInfo})
     length(dat) == length(info) ||
@@ -427,7 +441,36 @@ function reject_epochs(dat::AbstractVector{<:EpochData}, info::AbstractVector{<:
     return reject_epochs.(dat, info)
 end
 
-reject_epochs(dat::EpochData, bad_columns::AbstractVector{Symbol})::EpochData = reject_epochs!(copy(dat), bad_columns)
+function reject_epochs(dat::EpochData, bad_columns::AbstractVector{Symbol})::EpochData
+    isempty(dat.data) && @minimal_error("Cannot remove bad epochs from empty EpochData")
+    isempty(bad_columns) && return copy(dat)
+    first_epoch = first(dat.data)
+    col_indices = Vector{Int}(undef, length(bad_columns))
+    for (i, col) in enumerate(bad_columns)
+        hasproperty(first_epoch, col) || @minimal_error("Column '$col' not found in epoch data")
+        col_indices[i] = columnindex(first_epoch, col)
+        col_type = eltype(first_epoch[!, col_indices[i]])
+        col_type != Bool && @minimal_warning("Column '$col' is not Boolean type ($(col_type)). Non-zero values will be treated as 'true'")
+    end
+    n_eps = n_epochs(dat)
+    good_epochs = sizehint!(DataFrame[], n_eps)
+    n_removed = 0
+    for epoch_df in dat.data
+        has_bad = false
+        for col_idx in col_indices
+            col_vals = epoch_df[!, col_idx]
+            if eltype(col_vals) == Bool ? any(col_vals) : any(!iszero, col_vals)
+                has_bad = true
+                break
+            end
+        end
+        has_bad ? (n_removed += 1) : push!(good_epochs, copy(epoch_df))
+    end
+    if n_removed > 0
+        @info "Condition $(dat.condition) ($(dat.condition_name)) removed $n_removed of $n_eps epochs ($(round(100*n_removed/n_eps, digits=1))%)"
+    end
+    return EpochData(dat.file, dat.condition, dat.condition_name, good_epochs, copy(dat.layout), dat.sample_rate, copy(dat.analysis_info))
+end
 
 reject_epochs(dat::EpochData, bad_column::Symbol) = reject_epochs(dat, [bad_column])
 

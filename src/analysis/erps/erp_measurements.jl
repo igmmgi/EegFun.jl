@@ -743,7 +743,7 @@ function _fill_channel_measurements!(
     for r in eachindex(valid_idxs)
         df = dfs[valid_idxs[r]]
         t_range = time_ranges[r]
-        raw_col = (col_idx > 0 && ncol(df) >= col_idx && DataFrames.index(df).names[col_idx] === ch) ? df[!, col_idx] : df[!, ch]
+        raw_col = df[!, ch]
         t_col = time_vecs[r]
         sel_times = @view t_col[t_range]
         bl_r = bl_ranges[r]

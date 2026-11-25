@@ -280,7 +280,7 @@ function _convert_any_arrays!(config::Dict; path::String = "")
 end
 
 function _merge_configs(default_config::Dict, user_config::Dict)
-    result = copy(default_config)
+    result = deepcopy(default_config)
     _merge_nested!(result, user_config)
     return result
 end

@@ -229,14 +229,14 @@ get_neighbors_xyz!(dat::EegFunData, distance_criterion::Real) = (get_neighbors_x
 
 Return a copy of `layout` with channels renamed according to `rename_dict`.
 """
-rename_channel(layout::Layout, rename_dict::Dict{Symbol,Symbol}) = rename_channel!(copy(layout), rename_dict)
+rename_channel(layout::Layout, rename_dict::AbstractDict{Symbol,Symbol}) = rename_channel!(copy(layout), rename_dict)
 
 """
-    rename_channel!(layout::Layout, rename_dict::Dict{Symbol,Symbol}) -> Layout
+    rename_channel!(layout::Layout, rename_dict::AbstractDict{Symbol,Symbol}) -> Layout
 
 Rename channels in `layout` in place according to `rename_dict` (`old => new`), clearing cached neighbors.
 """
-function rename_channel!(layout::Layout, rename_dict::Dict{Symbol,Symbol})
+function rename_channel!(layout::Layout, rename_dict::AbstractDict{Symbol,Symbol})
     isempty(rename_dict) && return layout
     labels = layout.data.label
 
@@ -366,6 +366,35 @@ function _ensure_coordinates_3d!(layout::Layout)
         polar_to_cartesian_xyz!(layout)
     end
     return layout
+end
+
+_with_2d_coords(layout::Layout)::Layout = has_2d_coords(layout) ? layout : _ensure_coordinates_2d!(copy(layout))
+
+_with_3d_coords(layout::Layout)::Layout = has_3d_coords(layout) ? layout : _ensure_coordinates_3d!(copy(layout))
+
+function _with_2d_3d_coords(layout::Layout)::Layout
+    (has_2d_coords(layout) && has_3d_coords(layout)) && return layout
+    lay = copy(layout)
+    _ensure_coordinates_2d!(lay)
+    _ensure_coordinates_3d!(lay)
+    return lay
+end
+
+function _ica_with_plot_coords(ica::InfoIca)::InfoIca
+    (has_2d_coords(ica.layout) && has_3d_coords(ica.layout)) && return ica
+    return InfoIca(
+        ica.filename,
+        ica.unmixing,
+        ica.mixing,
+        ica.sphere,
+        ica.variance,
+        ica.scale,
+        ica.mean,
+        ica.ica_label,
+        ica.removed_activations,
+        _with_2d_3d_coords(ica.layout),
+        ica.is_sub_gaussian,
+    )
 end
 
 function _check_polar_cols(df::DataFrame)

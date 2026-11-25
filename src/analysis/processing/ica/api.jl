@@ -246,9 +246,9 @@ function _estimate_ica_rank(dat_ica::Matrix{Float64})
         ambiguous_lo = 1e-16 * l_max
         ambiguous_hi = 1e-10 * l_max
         if !any(ev -> ambiguous_lo < ev < ambiguous_hi, evals)
-            s_max = sqrt(l_max)
-            tol = max(1e-7 * s_max, max(n_channels, n_samples) * eps(Float64) * s_max, 1e-10)
-            return count(ev -> ev > 0.0 && sqrt(ev) >= tol, evals)
+            s_max_cov = sqrt(l_max)
+            tol_cov = max(1e-7 * s_max_cov, max(n_channels, n_samples) * eps(Float64) * s_max_cov, 1e-10)
+            return count(ev -> ev > 0.0 && sqrt(ev) >= tol_cov, evals)
         end
     end
 

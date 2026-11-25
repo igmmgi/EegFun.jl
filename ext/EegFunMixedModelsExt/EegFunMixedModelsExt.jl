@@ -70,10 +70,48 @@ struct BlockDesign
     lambda_blocks::Vector{Vector{Tuple{Int,Int}}} # per block: (term index, column offset) for each level
 end
 
+# Preallocated per-pixel CR2 & Woodbury workspaces
+struct Cr2Workspace
+    lams::Vector{Matrix{Float64}}
+    XtVX_s::Vector{Matrix{Float64}}
+    XtVy_s::Vector{Vector{Float64}}
+    Λ_s::Vector{Matrix{Float64}}
+    Zty_s::Vector{Vector{Float64}}
+    Gty_s::Vector{Vector{Float64}}
+    GtX_s::Vector{Matrix{Float64}}
+    FGX_s::Vector{Matrix{Float64}}
+    ZΛ_s::Vector{Matrix{Float64}}
+    C_s::Vector{Matrix{Float64}}
+    Xty::Vector{Float64}
+    XtVX::Matrix{Float64}
+    XtVy::Vector{Float64}
+    chol_buf::Matrix{Float64}
+    M::Matrix{Float64}
+    R::Matrix{Float64}
+    Hs_pre::Vector{Matrix{Float64}}
+    As_pre::Vector{Matrix{Float64}}
+    tmp_pp::Matrix{Float64}
+    tmp_pp2::Matrix{Float64}
+    W::Matrix{Float64}
+    B::Matrix{Float64}
+    F::Matrix{Float64}
+    FtF::Matrix{Float64}
+    Q::Matrix{Float64}
+    Q_eta::Matrix{Float64}
+    G::Matrix{Float64}
+    psi::Vector{Float64}
+    d::Vector{Float64}
+    cs::Vector{Float64}
+    fs::Vector{Float64}
+    vs::Vector{Float64}
+    q_obs::Vector{Float64}
+end
+
 # 5. PER-PIXEL WORK (one LMM fit + closed-form pivotal CR2 sign-flip null)
 struct LmmScratch{M<:LinearMixedModel}
     m::M
     design::Union{BlockDesign,Nothing}
+    cr2_ws::Union{Cr2Workspace,Nothing}
     y::Vector{Float64}
     beta::Vector{Float64}
     se::Vector{Float64}
@@ -614,8 +652,93 @@ end
     return copysign(invlogccdf(Normal(), lp), t)
 end
 
+function _make_cr2_workspace(m::LinearMixedModel, design::BlockDesign, p::Int, n_flips::Int)
+    S = length(design.rows)
+    lams = Matrix{Float64}[Matrix{Float64}(undef, size(A.λ)) for A in m.reterms]
+    XtVX_s = [Matrix{Float64}(undef, p, p) for _ = 1:S]
+    XtVy_s = [Vector{Float64}(undef, p) for _ = 1:S]
+    Λ_s = [zeros(Float64, size(design.Z[s], 2), size(design.Z[s], 2)) for s = 1:S]
+    Zty_s = [Vector{Float64}(undef, size(design.Z[s], 2)) for s = 1:S]
+    Gty_s = [Vector{Float64}(undef, size(design.Z[s], 2)) for s = 1:S]
+    GtX_s = [Matrix{Float64}(undef, size(design.Z[s], 2), p) for s = 1:S]
+    FGX_s = [Matrix{Float64}(undef, size(design.Z[s], 2), p) for s = 1:S]
+    ZΛ_s = [Matrix{Float64}(undef, size(design.Z[s], 2), size(design.Z[s], 2)) for s = 1:S]
+    C_s = [Matrix{Float64}(undef, size(design.Z[s], 2), size(design.Z[s], 2)) for s = 1:S]
+    return Cr2Workspace(
+        lams,
+        XtVX_s,
+        XtVy_s,
+        Λ_s,
+        Zty_s,
+        Gty_s,
+        GtX_s,
+        FGX_s,
+        ZΛ_s,
+        C_s,
+        Vector{Float64}(undef, p),
+        Matrix{Float64}(undef, p, p),
+        Vector{Float64}(undef, p),
+        Matrix{Float64}(undef, p, p),
+        Matrix{Float64}(undef, p, p),
+        Matrix{Float64}(undef, p, p),
+        [Matrix{Float64}(undef, p, p) for _ = 1:S],
+        [Matrix{Float64}(undef, p, p) for _ = 1:S],
+        Matrix{Float64}(undef, p, p),
+        Matrix{Float64}(undef, p, p),
+        Matrix{Float64}(undef, p, S),
+        Matrix{Float64}(undef, S, p),
+        Matrix{Float64}(undef, S, p),
+        Matrix{Float64}(undef, p, p),
+        Matrix{Float64}(undef, p, S),
+        Matrix{Float64}(undef, p, n_flips),
+        Matrix{Float64}(undef, S, n_flips),
+        Vector{Float64}(undef, S),
+        Vector{Float64}(undef, S),
+        Vector{Float64}(undef, p),
+        Vector{Float64}(undef, p),
+        Vector{Float64}(undef, p),
+        Vector{Float64}(undef, p),
+    )
+end
+
 # Per-block GLS sufficient statistics at the model's current θ, with V_s = I + Z_s Λ_s Λ_s' Z_s':
 #   XtVX_s = X_s' V_s⁻¹ X_s,  XtVy_s = X_s' V_s⁻¹ y_s   (Woodbury)
+function _block_gls_stats!(ws::Cr2Workspace, design::BlockDesign, lams::Vector{Matrix{Float64}}, y::AbstractVector{Float64})
+    n_blocks = length(design.rows)
+    for s = 1:n_blocks
+        ys = view(y, design.rows[s])
+        Λ = ws.Λ_s[s]
+        fill!(Λ, 0.0)
+        for (k, off) in design.lambda_blocks[s]
+            λ = lams[k]
+            qk = size(λ, 1)
+            @inbounds for j = 1:qk, i = 1:qk
+                Λ[off+i, off+j] = λ[i, j]
+            end
+        end
+        mul!(ws.Xty, design.X[s]', ys)
+        mul!(ws.Zty_s[s], design.Z[s]', ys)
+        mul!(ws.Gty_s[s], Λ', ws.Zty_s[s])
+        GtX = ws.GtX_s[s]
+        mul!(GtX, Λ', design.ZtX[s])
+        mul!(ws.ZΛ_s[s], design.ZtZ[s], Λ)
+        C_mat = ws.C_s[s]
+        mul!(C_mat, Λ', ws.ZΛ_s[s])
+        @inbounds for i = 1:size(C_mat, 1)
+            C_mat[i, i] += 1.0
+        end
+        C = cholesky!(Symmetric(C_mat))
+        FGX = ws.FGX_s[s]
+        copyto!(FGX, GtX)
+        ldiv!(C, FGX)
+        copyto!(ws.XtVX_s[s], design.XtX[s])
+        mul!(ws.XtVX_s[s], GtX', FGX, -1.0, 1.0)
+        copyto!(ws.XtVy_s[s], ws.Xty)
+        mul!(ws.XtVy_s[s], FGX', ws.Gty_s[s], -1.0, 1.0)
+    end
+    return ws.XtVX_s, ws.XtVy_s
+end
+
 function _block_gls_stats(design::BlockDesign, lams::Vector{Matrix{Float64}}, y::AbstractVector{Float64})
     n_blocks = length(design.rows)
     XtVX = Vector{Matrix{Float64}}(undef, n_blocks)
@@ -655,6 +778,7 @@ function _cr2_pivotal_z!(
     R_pre::Union{Nothing,Matrix{Float64}} = nothing,
     XtVX_pre::Union{Nothing,Matrix{Float64}} = nothing,
     XtVy_pre::Union{Nothing,Vector{Float64}} = nothing,
+    cr2_ws::Union{Nothing,Cr2Workspace} = nothing,
 )
     p = size(first(XtVX_s), 1)
     S = length(XtVy_s)
@@ -673,29 +797,40 @@ function _cr2_pivotal_z!(
     end
     M[pc, pc] > 0 || (fill!(out_null, NaN); return NaN)
 
-    idx = [1:(pc-1); (pc+1):p]
-    if isempty(idx)
-        γ = Float64[]
+    has_ws = !isnothing(cr2_ws)
+    W = has_ws ? cr2_ws.W : Matrix{Float64}(undef, p, S)
+
+    if p == 1
+        @inbounds for s = 1:S
+            W[1, s] = XtVy_s[s][1]
+        end
     else
+        idx = [1:(pc-1); (pc+1):p]
         chol_r = cholesky(Symmetric(XtVX[idx, idx]); check = false)
         issuccess(chol_r) || (fill!(out_null, NaN); return NaN)
         γ = chol_r \ XtVy[idx]
-    end
-
-    W = Matrix{Float64}(undef, p, S)
-    for s = 1:S
-        if isempty(idx)
-            W[:, s] .= XtVy_s[s]
-        else
-            W[:, s] .= XtVy_s[s] .- view(XtVX_s[s], :, idx) * γ
+        @inbounds for s = 1:S
+            Xs = XtVX_s[s]
+            ys_v = XtVy_s[s]
+            for i = 1:p
+                acc = ys_v[i]
+                for (k, col_k) in enumerate(idx)
+                    acc -= Xs[i, col_k] * γ[k]
+                end
+                W[i, s] = acc
+            end
         end
     end
 
-    a = R[pc, :]
-    psi = Vector{Float64}(undef, S)
-    B = Matrix{Float64}(undef, S, p)
-    d = Vector{Float64}(undef, S)
-    F = Matrix{Float64}(undef, S, p)
+    a = @view R[pc, :]
+    psi = has_ws ? cr2_ws.psi : Vector{Float64}(undef, S)
+    B = has_ws ? cr2_ws.B : Matrix{Float64}(undef, S, p)
+    d = has_ws ? cr2_ws.d : Vector{Float64}(undef, S)
+    F = has_ws ? cr2_ws.F : Matrix{Float64}(undef, S, p)
+    FtF = has_ws ? cr2_ws.FtF : Matrix{Float64}(undef, p, p)
+    cs = has_ws ? cr2_ws.cs : Vector{Float64}(undef, p)
+    fs = has_ws ? cr2_ws.fs : Vector{Float64}(undef, p)
+    vs = has_ws ? cr2_ws.vs : Vector{Float64}(undef, p)
 
     for s = 1:S
         if isnothing(Hs_pre) || isnothing(As_pre)
@@ -709,28 +844,52 @@ function _cr2_pivotal_z!(
             Hs = Hs_pre[s]
             As = As_pre[s]
         end
-        cs = As * a
-        fs = Hs * cs
+        mul!(cs, As, a)
+        mul!(fs, Hs, cs)
         d[s] = dot(cs, fs)
-        F[s, :] .= fs
-        vs = R * cs
+        @inbounds for j = 1:p
+            F[s, j] = fs[j]
+        end
+        mul!(vs, R, cs)
         psi[s] = dot(vs, view(W, :, s))
-        B[s, :] .= XtVX_s[s] * vs
+        mul!(cs, XtVX_s[s], vs)
+        @inbounds for j = 1:p
+            B[s, j] = cs[j]
+        end
     end
 
     tr1 = 0.0
-    for s = 1:S
-        tr1 += max(0.0, d[s] - sum(abs2, view(F, s, :)))
+    @inbounds for s = 1:S
+        f_ss = 0.0
+        for j = 1:p
+            v = F[s, j]
+            f_ss += v * v
+        end
+        tr1 += max(0.0, d[s] - f_ss)
     end
-    FtF = F' * F
-    tr2 = sum(abs2, d) - 2.0 * sum(d[s] * sum(abs2, view(F, s, :)) for s = 1:S) + sum(abs2, FtF)
+    mul!(FtF, F', F)
+    cross_sum = 0.0
+    @inbounds for s = 1:S
+        f_ss = 0.0
+        for j = 1:p
+            v = F[s, j]
+            f_ss += v * v
+        end
+        cross_sum += d[s] * f_ss
+    end
+    tr2 = sum(abs2, d) - 2.0 * cross_sum + sum(abs2, FtF)
     (tr1 >= (1.0 - 1e-5) * M[pc, pc] && tr2 > 0 && isfinite(tr1) && isfinite(tr2)) || (fill!(out_null, NaN); return NaN)
     raw_df = tr1^2 / tr2
     raw_df >= 1.0 - 1e-6 || (fill!(out_null, NaN); return NaN)
     df_bm = clamp(raw_df, 1.0, Float64(max(1, S - 1)))
 
-    Q = M * W
-    q_obs = vec(sum(Q; dims = 2))
+    Q = has_ws ? cr2_ws.Q : Matrix{Float64}(undef, p, S)
+    mul!(Q, M, W)
+    q_obs = has_ws ? cr2_ws.q_obs : Vector{Float64}(undef, p)
+    fill!(q_obs, 0.0)
+    @inbounds for s = 1:S, i = 1:p
+        q_obs[i] += Q[i, s]
+    end
     ss_obs = 0.0
     @inbounds for s = 1:S
         gs = psi[s] - dot(view(B, s, :), q_obs)
@@ -742,8 +901,10 @@ function _cr2_pivotal_z!(
     isfinite(z_obs) || (fill!(out_null, NaN); return NaN)
 
     if n_flips > 0
-        Q_eta = Q * H
-        G = B * Q_eta
+        Q_eta = (has_ws && size(cr2_ws.Q_eta, 2) == n_flips) ? cr2_ws.Q_eta : Matrix{Float64}(undef, p, n_flips)
+        G = (has_ws && size(cr2_ws.G, 2) == n_flips) ? cr2_ws.G : Matrix{Float64}(undef, S, n_flips)
+        mul!(Q_eta, Q, H)
+        mul!(G, B, Q_eta)
         @inbounds for col = 1:n_flips
             ss = 0.0
             for s = 1:S
@@ -799,11 +960,13 @@ function _create_scratch(f, meta_df_init, est_cols, block_ids, n_flips, n_tested
     m.optsum.maxfeval = MAX_EVALS
     X = Matrix{Float64}(modelmatrix(m)[:, invperm(MixedModels.pivot(m))][:, est_cols])
     design = isnothing(block_ids) ? nothing : BlockDesign(m, X, block_ids)
+    cr2_ws = (!isnothing(design) && n_flips > 0) ? _make_cr2_workspace(m, design, length(est_cols), n_flips) : nothing
     n_obs = length(m.y)
     n_coefs = length(coefnames(m))
     return LmmScratch(
         m,
         design,
+        cr2_ws,
         zeros(n_obs),
         zeros(n_coefs),
         zeros(n_coefs),
@@ -845,25 +1008,66 @@ function _compute_pixel!(scr::LmmScratch, ctx)
 
     ctx.n_flips == 0 && return status
 
-    lams = Matrix{Float64}[Matrix(A.λ) for A in m.reterms]
-    XtVX_s, XtVy_s = _block_gls_stats(scr.design, lams, scr.y)
+    ws = scr.cr2_ws::Cr2Workspace
+    for (k, A) in enumerate(m.reterms)
+        copyto!(ws.lams[k], A.λ)
+    end
+    XtVX_s, XtVy_s = _block_gls_stats!(ws, scr.design::BlockDesign, ws.lams, scr.y)
     p = length(ctx.est_cols)
     S = length(XtVy_s)
-    XtVX = sum(XtVX_s)
-    XtVy = sum(XtVy_s)
-    chol_X = cholesky(Symmetric(XtVX); check = false)
-    issuccess(chol_X) || return STATUS_ERROR
-    M = inv(chol_X)
-    R = Matrix(chol_X.U) \ Matrix{Float64}(I, p, p)
+    XtVX = ws.XtVX
+    XtVy = ws.XtVy
+    fill!(XtVX, 0.0)
+    fill!(XtVy, 0.0)
+    @inbounds for s = 1:S
+        Xs = XtVX_s[s]
+        ys = XtVy_s[s]
+        for j = 1:p
+            XtVy[j] += ys[j]
+            for i = 1:p
+                XtVX[i, j] += Xs[i, j]
+            end
+        end
+    end
 
-    Hs_pre = Vector{Matrix{Float64}}(undef, S)
-    As_pre = Vector{Matrix{Float64}}(undef, S)
+    copyto!(ws.chol_buf, XtVX)
+    chol_X = cholesky!(Symmetric(ws.chol_buf); check = false)
+    issuccess(chol_X) || return STATUS_ERROR
+    M = ws.M
+    R = ws.R
+    fill!(M, 0.0)
+    fill!(R, 0.0)
+    @inbounds for i = 1:p
+        M[i, i] = 1.0
+        R[i, i] = 1.0
+    end
+    ldiv!(chol_X, M)
+    ldiv!(chol_X.U, R)
+
+    Hs_pre = ws.Hs_pre
+    As_pre = ws.As_pre
+    tmp_pp = ws.tmp_pp
+    tmp_pp2 = ws.tmp_pp2
     for s = 1:S
-        Hs = Matrix(Symmetric(R' * XtVX_s[s] * R))
-        eig = eigen(Symmetric(Hs))
-        inv_sqrt = [ev < 1.0 - 1e-8 ? 1.0 / sqrt(1.0 - ev) : 0.0 for ev in eig.values]
-        Hs_pre[s] = Hs
-        As_pre[s] = eig.vectors * Diagonal(inv_sqrt) * eig.vectors'
+        Hs = Hs_pre[s]
+        mul!(tmp_pp, XtVX_s[s], R)
+        mul!(Hs, R', tmp_pp)
+        @inbounds for j = 1:p, i = 1:(j-1)
+            avg_ij = 0.5 * (Hs[i, j] + Hs[j, i])
+            Hs[i, j] = avg_ij
+            Hs[j, i] = avg_ij
+        end
+        copyto!(tmp_pp, Hs)
+        eig = eigen!(Symmetric(tmp_pp))
+        V = eig.vectors
+        ev = eig.values
+        @inbounds for k = 1:p
+            w_k = ev[k] < 1.0 - 1e-8 ? (1.0 / sqrt(1.0 - ev[k])) : 0.0
+            for i = 1:p
+                tmp_pp2[i, k] = V[i, k] * w_k
+            end
+        end
+        mul!(As_pre[s], tmp_pp2, V')
     end
 
     fill!(scr.z_perm_obs, NaN)
@@ -881,6 +1085,7 @@ function _compute_pixel!(scr::LmmScratch, ctx)
             R_pre = R,
             XtVX_pre = XtVX,
             XtVy_pre = XtVy,
+            cr2_ws = ws,
         )
         (isfinite(z_obs) && all(isfinite, zn)) || return STATUS_ERROR
         scr.z_perm_obs[ctx.tested[j]] = z_obs

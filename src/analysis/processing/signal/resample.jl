@@ -22,9 +22,47 @@ const _ResampleData = Union{ContinuousData,ErpData,EpochData}
 
 Non-mutating or batch JLD2 version of [`resample!`](@ref).
 """
-function resample(dat::_ResampleData, target_rate::Real)
-    _validate_target_rate(target_rate)
-    return resample!(copy(dat), target_rate)
+function resample(dat::Union{ContinuousData,ErpData}, target_rate::Real)
+    target_rate_int = _validate_target_rate(target_rate)
+    if target_rate_int == dat.sample_rate
+        @info "Target rate matches current sample rate, no resampling needed"
+        return copy(dat)
+    end
+    @info "Resampling data from $(dat.sample_rate) Hz to $(target_rate_int) Hz"
+    new_df = _resample_dataframe(dat.data, dat.sample_rate, target_rate_int, channel_labels(dat), :trigger, extra_labels(dat))
+    hasproperty(new_df, :sample) && (new_df.sample = collect(1:nrow(new_df)))
+    out = _create_subset(dat, new_df, copy(dat.layout))
+    out.sample_rate = target_rate_int
+    out.analysis_info.sample_rate = Float64(target_rate_int)
+    @info "Resampling complete. New sample rate: $(out.sample_rate) Hz, $(n_samples(out)) samples"
+    return out
+end
+
+function resample(dat::EpochData, target_rate::Real)
+    target_rate_int = _validate_target_rate(target_rate)
+    if target_rate_int == dat.sample_rate
+        @info "Target rate matches current sample rate, no resampling needed"
+        return copy(dat)
+    end
+    @info "Resampling $(n_epochs(dat)) epochs from $(dat.sample_rate) Hz to $(target_rate_int) Hz"
+    old_rate = dat.sample_rate
+    rate_spec, rate, h = _prepare_resample_spec(old_rate, target_rate_int)
+    ch_set = Set(channel_labels(dat))
+    ex_set = Set(extra_labels(dat))
+    n_ep = length(dat.data)
+    out_dfs = Vector{DataFrame}(undef, n_ep)
+    if n_ep > 1
+        Threads.@threads :static for i = 1:n_ep
+            out_dfs[i] = _resample_single_epoch(dat.data[i], old_rate, target_rate_int, rate_spec, rate, h, ch_set, ex_set, false)
+        end
+    elseif n_ep == 1
+        out_dfs[1] = _resample_single_epoch(dat.data[1], old_rate, target_rate_int, rate_spec, rate, h, ch_set, ex_set, true)
+    end
+    out = _create_subset(dat, out_dfs, copy(dat.layout))
+    out.sample_rate = target_rate_int
+    out.analysis_info.sample_rate = Float64(target_rate_int)
+    !isempty(out.data) && @info "Resampling complete. New sample rate: $(out.sample_rate) Hz, $(nrow(out.data[1])) samples per epoch"
+    return out
 end
 
 function resample(data_vec::AbstractVector{<:_ResampleData}, target_rate::Real)

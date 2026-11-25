@@ -19,9 +19,9 @@ Metadata and DSP filter object for a configured digital EEG filter.
 - `n_taps::Union{Nothing,Int}`: Tap count for FIR filters (`nothing` for IIR)
 - `transition_band::Float64`: Transition band width in Hz
 """
-struct FilterInfo
+struct FilterInfo{F<:Union{ZeroPoleGain,Vector{Float64}}}
     filter_type::Symbol
-    filter_object::Union{ZeroPoleGain,Vector{Float64}}
+    filter_object::F
     filter_method::Symbol
     cutoff_freq::Float64
     sample_rate::Float64
@@ -29,6 +29,26 @@ struct FilterInfo
     n_taps::Union{Nothing,Int}
     transition_band::Float64
 end
+
+FilterInfo(
+    filter_type::Symbol,
+    filter_object::F,
+    filter_method::Symbol,
+    cutoff_freq::Real,
+    sample_rate::Real,
+    order::Integer,
+    n_taps::Union{Nothing,Integer},
+    transition_band::Real,
+) where {F<:Union{ZeroPoleGain,Vector{Float64}}} = FilterInfo{F}(
+    filter_type,
+    filter_object,
+    filter_method,
+    Float64(cutoff_freq),
+    Float64(sample_rate),
+    Int(order),
+    isnothing(n_taps) ? nothing : Int(n_taps),
+    Float64(transition_band),
+)
 
 ######################################
 ########### User Functions ###########

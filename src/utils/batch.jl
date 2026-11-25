@@ -52,21 +52,22 @@ function save_data(filepath::AbstractString, data::Union{EegFunData,AbstractVect
 end
 
 """
-    read_data(filepath::String)
+    read_data(filepath::AbstractString)
 
 Read `EegFunData` (or a vector of `EegFunData`) from a JLD2 file, returning `nothing` if the file
 is missing, empty, or contains no `EegFunData` objects.
 """
-function read_data(filepath::String)::Union{EegFunData,Vector{<:EegFunData},Nothing}
-    if !isfile(filepath)
-        @minimal_warning "File does not exist: $filepath"
+function read_data(filepath::AbstractString)::Union{EegFunData,Vector{<:EegFunData},Nothing}
+    path = String(filepath)
+    if !isfile(path)
+        @minimal_warning "File does not exist: $path"
         return nothing
     end
-    jldopen(filepath, "r") do file
+    jldopen(path, "r") do file
         if haskey(file, "format_version")
             v = file["format_version"]
             if v > EEGFUN_FORMAT_VERSION
-                @minimal_warning "File $filepath was written with EegFun format_version $v, but this version only supports up to $EEGFUN_FORMAT_VERSION."
+                @minimal_warning "File $path was written with EegFun format_version $v, but this version only supports up to $EEGFUN_FORMAT_VERSION."
             end
         end
         haskey(file, "data") && return _read_data(file["data"])
@@ -78,14 +79,14 @@ function read_data(filepath::String)::Union{EegFunData,Vector{<:EegFunData},Noth
 end
 
 """
-    read_all_data(path_pattern::String, participant_selection = participants())
-    read_all_data(::Type{T}, path_pattern::String, participant_selection = participants())
+    read_all_data(path_pattern::AbstractString, participant_selection = participants())
+    read_all_data(::Type{T}, path_pattern::AbstractString, participant_selection = participants())
 
 Find and load EEG data from `.jld2` files in `dirname(path_pattern)` whose names contain
 `basename(path_pattern)`, optionally filtered by `participant_selection`.
 """
-function read_all_data(path_pattern::String, @nospecialize(participant_selection = participants()))
-    input_dir, pattern = _split_path_pattern(path_pattern)
+function read_all_data(path_pattern::AbstractString, @nospecialize(participant_selection = participants()))
+    input_dir, pattern = _split_path_pattern(String(path_pattern))
     files = _find_batch_files(pattern, input_dir, participant_selection)
     data = _read_all_data_core(EegData, files, input_dir)
     isempty(data) && return data
@@ -93,8 +94,8 @@ function read_all_data(path_pattern::String, @nospecialize(participant_selection
     return all(x -> x isa T, data) ? Vector{T}(data) : data
 end
 
-function read_all_data(::Type{T}, path_pattern::String, @nospecialize(participant_selection = participants())) where {T}
-    input_dir, pattern = _split_path_pattern(path_pattern)
+function read_all_data(::Type{T}, path_pattern::AbstractString, @nospecialize(participant_selection = participants())) where {T}
+    input_dir, pattern = _split_path_pattern(String(path_pattern))
     files = _find_batch_files(pattern, input_dir, participant_selection)
     return _read_all_data_core(T, files, input_dir)
 end

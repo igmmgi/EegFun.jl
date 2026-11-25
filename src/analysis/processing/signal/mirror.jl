@@ -11,7 +11,26 @@
 Mirror data by reflecting time-reversed copies at boundaries (`:pre`, `:post`, or `:both`) on a copy of `dat`
 to suppress edge artifacts during filtering. Call [`unmirror`](@ref) with the same `side` afterward.
 """
-mirror(dat::EegData, side::Symbol = :both) = mirror!(copy(dat), side)
+function mirror(dat::SingleDataFrameEeg, side::Symbol = :both)
+    _validate_mirror_side(side)
+    @info "Mirroring data on side: $side"
+    return _create_subset(dat, _mirror_dataframe!(dat.data, side), copy(dat.layout))
+end
+
+function mirror(dat::EpochData, side::Symbol = :both)
+    _validate_mirror_side(side)
+    @info "Mirroring epoched data on side: $side"
+    n_ep = length(dat.data)
+    out_dfs = Vector{DataFrame}(undef, n_ep)
+    if n_ep > 1
+        Threads.@threads :static for i = 1:n_ep
+            out_dfs[i] = _mirror_dataframe!(dat.data[i], side)
+        end
+    elseif n_ep == 1
+        out_dfs[1] = _mirror_dataframe!(dat.data[1], side)
+    end
+    return _create_subset(dat, out_dfs, copy(dat.layout))
+end
 
 mirror(data_vec::Vector{<:EegData}, side::Symbol = :both) = [mirror(dat, side) for dat in data_vec]
 
@@ -55,7 +74,26 @@ end
 
 Remove mirrored boundary segments on a copy of `dat`, restoring original length. `side` must match [`mirror`](@ref).
 """
-unmirror(dat::EegData, side::Symbol = :both) = unmirror!(copy(dat), side)
+function unmirror(dat::SingleDataFrameEeg, side::Symbol = :both)
+    _validate_mirror_side(side)
+    @info "Unmirroring data on side: $side"
+    return _create_subset(dat, _unmirror_dataframe!(dat.data, side), copy(dat.layout))
+end
+
+function unmirror(dat::EpochData, side::Symbol = :both)
+    _validate_mirror_side(side)
+    @info "Unmirroring epoched data on side: $side"
+    n_ep = length(dat.data)
+    out_dfs = Vector{DataFrame}(undef, n_ep)
+    if n_ep > 1
+        Threads.@threads :static for i = 1:n_ep
+            out_dfs[i] = _unmirror_dataframe!(dat.data[i], side)
+        end
+    elseif n_ep == 1
+        out_dfs[1] = _unmirror_dataframe!(dat.data[1], side)
+    end
+    return _create_subset(dat, out_dfs, copy(dat.layout))
+end
 
 unmirror(data_vec::Vector{<:EegData}, side::Symbol = :both) = [unmirror(dat, side) for dat in data_vec]
 

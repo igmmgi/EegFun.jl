@@ -5,17 +5,18 @@
 ######################################
 
 """
-    read_fieldtrip(filepath::String, layout::Layout)
+    read_fieldtrip(filepath::AbstractString, layout::Layout)
 
 Load a FieldTrip `.mat` file and convert it to `ContinuousData`, `EpochData`, or `ErpData`.
 
 # Arguments
-- `filepath::String`: Path to FieldTrip `.mat` file
+- `filepath::AbstractString`: Path to FieldTrip `.mat` file
 - `layout::Layout`: Channel layout
 """
-function read_fieldtrip(filepath::String, layout::Layout)
-    @info "Loading FieldTrip .mat file: $filepath"
-    mat_data = matread(filepath)
+function read_fieldtrip(filepath::AbstractString, layout::Layout)
+    filepath_str = String(filepath)
+    @info "Loading FieldTrip .mat file: $filepath_str"
+    mat_data = matread(filepath_str)
 
     ft = nothing
     is_erp = false
@@ -42,7 +43,7 @@ function read_fieldtrip(filepath::String, layout::Layout)
             @minimal_error("Invalid ERP data: time vector has only $(length(time_vec)) point(s). Cannot infer sample rate.")
         sample_rate = round(Int, 1.0 / (time_vec[2] - time_vec[1]))
         @info "Detected averaged ERP data, inferred sample rate: $sample_rate Hz"
-        return _fieldtrip_to_erpdata(ft, filepath, layout, sample_rate)
+        return _fieldtrip_to_erpdata(ft, filepath_str, layout, sample_rate)
     end
 
     n_trials = length(ft["trial"])
@@ -50,10 +51,10 @@ function read_fieldtrip(filepath::String, layout::Layout)
     @info "Found $n_trials trial(s), sample rate: $sample_rate Hz"
     if n_trials == 1
         @info "Detected continuous data"
-        return _fieldtrip_to_continuousdata(ft, filepath, layout, sample_rate)
+        return _fieldtrip_to_continuousdata(ft, filepath_str, layout, sample_rate)
     end
     @info "Detected epoched data with $n_trials trials"
-    return _fieldtrip_to_epochdata(ft, filepath, layout, sample_rate)
+    return _fieldtrip_to_epochdata(ft, filepath_str, layout, sample_rate)
 end
 
 ######################################

@@ -11,8 +11,6 @@
 Apply interactive `AnalysisSettings` (filtering, rereferencing, channel repair, region selection,
 and optional ICA component subtraction) to a copy of `dat`, leaving `dat` unmodified.
 """
-apply_analysis_settings(dat::EegData, ica::InfoIca, settings) = apply_analysis_settings!(copy(dat), copy(ica), settings)
-
 apply_analysis_settings(dat::EegData, args...; kwargs...) = apply_analysis_settings!(copy(dat), args...; kwargs...)
 
 """

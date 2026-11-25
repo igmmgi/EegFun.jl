@@ -779,7 +779,7 @@ function _find_unidirectional_peaks(
                 j != k && (suppressed[j] = true)
             end
         end
-        peaks = [peaks[j] for j in eachindex(peaks) if !suppressed[j]]
+        keepat!(peaks, .!suppressed)
     end
 
     return peaks

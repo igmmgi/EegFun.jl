@@ -25,6 +25,8 @@ struct TFBuffers
     conv_trials::Array{ComplexF64,3}
     power_avg::Matrix{Float64}       # num_frex × n_times
     conv_avg::Matrix{ComplexF64}
+    time_power_accum::Vector{Float64}
+    time_conv_accum::Vector{ComplexF64}
 end
 
 struct TFOutput{TFreq}
@@ -49,6 +51,8 @@ function TFBuffers(g::TFGeometry; host_outputs::Bool = true)
         (host_outputs && rt && rp) ? Array{ComplexF64,3}(undef, g.n_trials, g.num_frex, g.n_times) : Array{ComplexF64,3}(undef, 0, 0, 0),
         (host_outputs && !rt) ? Matrix{Float64}(undef, g.num_frex, g.n_times) : Matrix{Float64}(undef, 0, 0),
         (host_outputs && !rt && rp) ? Matrix{ComplexF64}(undef, g.num_frex, g.n_times) : Matrix{ComplexF64}(undef, 0, 0),
+        (host_outputs && !rt && !g.itc) ? Vector{Float64}(undef, g.n_times) : Vector{Float64}(undef, 0),
+        (host_outputs && !rt && (rp || g.itc)) ? Vector{ComplexF64}(undef, g.n_times) : Vector{ComplexF64}(undef, 0),
     )
 end
 
@@ -543,6 +547,7 @@ function _tf_single_taper_channel!(
         local_conv_result = buf.conv_result
         eegpower_trials, eegconv_trials = buf.power_trials, buf.conv_trials
         eegpower_avg, eegconv_avg = buf.power_avg, buf.conv_avg
+        p_acc, c_acc = buf.time_power_accum, buf.time_conv_accum
 
         for fi = 1:num_frex
             curr_wavelet = wavelet_ffts[fi]
@@ -556,53 +561,55 @@ function _tf_single_taper_channel!(
             off = sample_offsets[fi]
             if return_trials
                 if return_phase
-                    @inbounds for ti = 1:n_times
-                        idx = time_indices[ti] + off
-                        @simd for tr = 1:n_trials
-                            val = local_conv_result[idx, tr]
+                    @inbounds for tr = 1:n_trials
+                        @simd for ti = 1:n_times
+                            val = local_conv_result[time_indices[ti]+off, tr]
                             eegpower_trials[tr, fi, ti] = abs2(val)
                             eegconv_trials[tr, fi, ti] = val
                         end
                     end
                 else
-                    @inbounds for ti = 1:n_times
-                        idx = time_indices[ti] + off
-                        @simd for tr = 1:n_trials
-                            eegpower_trials[tr, fi, ti] = abs2(local_conv_result[idx, tr])
+                    @inbounds for tr = 1:n_trials
+                        @simd for ti = 1:n_times
+                            eegpower_trials[tr, fi, ti] = abs2(local_conv_result[time_indices[ti]+off, tr])
                         end
                     end
                 end
             elseif g.itc
-                @inbounds for ti = 1:n_times
-                    idx = time_indices[ti] + off
-                    u_sum = 0.0im
-                    for tr = 1:n_trials
-                        u_sum += _unit_phasor(local_conv_result[idx, tr])
+                fill!(c_acc, 0.0im)
+                @inbounds for tr = 1:n_trials
+                    @simd for ti = 1:n_times
+                        c_acc[ti] += _unit_phasor(local_conv_result[time_indices[ti]+off, tr])
                     end
-                    eegpower_avg[fi, ti] = abs(u_sum) * inv_n_trials
-                    eegconv_avg[fi, ti] = u_sum * inv_n_trials
+                end
+                @inbounds for ti = 1:n_times
+                    u_mean = c_acc[ti] * inv_n_trials
+                    eegpower_avg[fi, ti] = abs(u_mean)
+                    eegconv_avg[fi, ti] = u_mean
                 end
             elseif return_phase
-                @inbounds for ti = 1:n_times
-                    idx = time_indices[ti] + off
-                    p_sum = 0.0
-                    c_sum = 0.0im
-                    @simd for tr = 1:n_trials
-                        val = local_conv_result[idx, tr]
-                        p_sum += abs2(val)
-                        c_sum += val
+                fill!(p_acc, 0.0)
+                fill!(c_acc, 0.0im)
+                @inbounds for tr = 1:n_trials
+                    @simd for ti = 1:n_times
+                        val = local_conv_result[time_indices[ti]+off, tr]
+                        p_acc[ti] += abs2(val)
+                        c_acc[ti] += val
                     end
-                    eegpower_avg[fi, ti] = p_sum * inv_n_trials
-                    eegconv_avg[fi, ti] = c_sum * inv_n_trials
+                end
+                @inbounds @simd for ti = 1:n_times
+                    eegpower_avg[fi, ti] = p_acc[ti] * inv_n_trials
+                    eegconv_avg[fi, ti] = c_acc[ti] * inv_n_trials
                 end
             else
-                @inbounds for ti = 1:n_times
-                    idx = time_indices[ti] + off
-                    p_sum = 0.0
-                    @simd for tr = 1:n_trials
-                        p_sum += abs2(local_conv_result[idx, tr])
+                fill!(p_acc, 0.0)
+                @inbounds for tr = 1:n_trials
+                    @simd for ti = 1:n_times
+                        p_acc[ti] += abs2(local_conv_result[time_indices[ti]+off, tr])
                     end
-                    eegpower_avg[fi, ti] = p_sum * inv_n_trials
+                end
+                @inbounds @simd for ti = 1:n_times
+                    eegpower_avg[fi, ti] = p_acc[ti] * inv_n_trials
                 end
             end
         end

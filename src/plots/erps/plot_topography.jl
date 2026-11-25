@@ -254,7 +254,7 @@ function plot_topography(
     yb_shared = nothing
 
     if can_batch
-        _ensure_coordinates_2d!(first_layout)
+        first_layout = _with_2d_coords(first_layout)
         labels = first_layout.data.label
         channel_mat = Matrix{Float64}(undef, length(labels), n_datasets)
         for j = 1:n_datasets
@@ -532,7 +532,7 @@ function _plot_topography!(
         @minimal_warning "Cannot create topographic plot: layout has no spatial coordinates."
         return
     end
-    _ensure_coordinates_2d!(layout)
+    layout = _with_2d_coords(layout)
 
     plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs)
 
@@ -800,7 +800,7 @@ function _data_interpolation_topo_spherical_spline(
     n_legendre_terms::Int = 15,
 )
     length(layout_idx) == size(dat, 1) || @minimal_error "Data has $(size(dat, 1)) channels but layout_idx has $(length(layout_idx))"
-    _ensure_coordinates_2d!(layout)
+    layout = _with_2d_coords(layout)
 
     finite = dat isa AbstractVector ? isfinite.(dat) : _row_all_finite(dat)
     all_fin = all(finite)
@@ -881,7 +881,7 @@ function _data_interpolation_topo(
     layout_idx::AbstractVector{Int} = 1:size(dat, 1),
 )
     length(layout_idx) == size(dat, 1) || @minimal_error "Data has $(size(dat, 1)) channels but layout_idx has $(length(layout_idx))"
-    _ensure_coordinates_2d!(layout)
+    layout = _with_2d_coords(layout)
 
     finite = dat isa AbstractVector ? isfinite.(dat) : _row_all_finite(dat)
     all_fin = all(finite)
@@ -1387,7 +1387,7 @@ function _plot_topography_scrubber(dat::SingleDataFrameEeg; display_plot = true,
         @minimal_warning "Cannot create topographic plot: layout has no spatial coordinates."
         return
     end
-    _ensure_coordinates_2d!(layout)
+    layout = _with_2d_coords(layout)
 
     df = dat.data
     df_props = Set(propertynames(df))

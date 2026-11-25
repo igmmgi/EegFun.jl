@@ -10,14 +10,14 @@
 Return a copy of `dat` with channels in both data and `Layout` renamed according to `rename_dict` (`old => new`),
 supporting simultaneous swaps (e.g., `Dict(:A => :B, :B => :A)`).
 """
-rename_channel(dat::EegData, rename_dict::Dict{Symbol,Symbol}) = rename_channel!(copy(dat), rename_dict)
+rename_channel(dat::EegData, rename_dict::AbstractDict{Symbol,Symbol}) = rename_channel!(copy(dat), rename_dict)
 
 """
-    rename_channel!(dat::EegData, rename_dict::Dict{Symbol,Symbol})
+    rename_channel!(dat::EegData, rename_dict::AbstractDict{Symbol,Symbol})
 
 In-place mutating version of [`rename_channel`](@ref).
 """
-function rename_channel!(dat::EegData, rename_dict::Dict{Symbol,Symbol})
+function rename_channel!(dat::EegData, rename_dict::AbstractDict{Symbol,Symbol})
     original_channels = Set{Symbol}(dat.layout.data.label)
     n_found = count(ch -> ch in original_channels, keys(rename_dict))
     if n_found == 0
@@ -36,7 +36,7 @@ end
 ######### Internal Functions #########
 ######################################
 
-function _rename_data_columns!(df::DataFrame, rename_dict::Dict{Symbol,Symbol}, existing_channels::Set{Symbol})
+function _rename_data_columns!(df::DataFrame, rename_dict::AbstractDict{Symbol,Symbol}, existing_channels::Set{Symbol})
     pairs = Pair{Symbol,Symbol}[]
     targets = Symbol[]
     renamed_cols = Set{Symbol}()
@@ -63,7 +63,7 @@ function _rename_data_columns!(df::DataFrame, rename_dict::Dict{Symbol,Symbol}, 
     return nothing
 end
 
-function _rename_data_columns!(dat::EegData, rename_dict::Dict{Symbol,Symbol}, existing_channels::Set{Symbol})
+function _rename_data_columns!(dat::EegData, rename_dict::AbstractDict{Symbol,Symbol}, existing_channels::Set{Symbol})
     for container in _data_frames(dat)
         _foreach_df(df -> _rename_data_columns!(df, rename_dict, existing_channels), container)
     end

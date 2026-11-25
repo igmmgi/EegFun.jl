@@ -472,7 +472,8 @@ function _check_interactive_demo_backend(demo_name::String = "Interactive demo")
     if isdefined(Main, :GLMakie)
         try
             Main.GLMakie.activate!(inline = false)
-        catch
+        catch e
+            e isa InterruptException && rethrow()
         end
     end
     backend = Makie.current_backend()

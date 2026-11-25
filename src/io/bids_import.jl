@@ -16,8 +16,10 @@ const _BIDS_RAW_EXTENSIONS = (".bdf", ".edf", ".vhdr", ".fif", ".fiff", ".set", 
 Discover all BIDS recordings in `dataset_dir` for `datatype` and return a `DataFrame`
 with columns `subject`, `session`, `task`, `run`, `datatype`, and `file`.
 """
-function list_bids_runs(dataset_dir::String; datatype::String = "eeg")::DataFrame
-    !isdir(dataset_dir) && @minimal_error "BIDS dataset directory not found: $dataset_dir"
+function list_bids_runs(dataset_dir::AbstractString; datatype::AbstractString = "eeg")::DataFrame
+    dataset_dir_s = String(dataset_dir)
+    datatype_s = String(datatype)
+    !isdir(dataset_dir_s) && @minimal_error "BIDS dataset directory not found: $dataset_dir_s"
 
     subjects = String[]
     sessions = String[]
@@ -26,20 +28,21 @@ function list_bids_runs(dataset_dir::String; datatype::String = "eeg")::DataFram
     datatypes = String[]
     files_out = String[]
 
-    sub_dirs = sort!(filter(d -> startswith(d, "sub-") && isdir(joinpath(dataset_dir, d)), readdir(dataset_dir)); by = _natural_sort_key)
-    dt_escaped = _bids_regex_escape(datatype)
+    sub_dirs =
+        sort!(filter(d -> startswith(d, "sub-") && isdir(joinpath(dataset_dir_s, d)), readdir(dataset_dir_s)); by = _natural_sort_key)
+    dt_escaped = _bids_regex_escape(datatype_s)
     entity_rx = Regex("^sub-([^_]+)(?:_ses-([^_]+))?_task-([^_]+)(?:_.*?_run-(\\d+)|_run-(\\d+))?(?:_.*)?_$(dt_escaped)\$")
 
     for sub_dir in sub_dirs
-        sub_path = joinpath(dataset_dir, sub_dir)
+        sub_path = joinpath(dataset_dir_s, sub_dir)
         candidate_dirs = Tuple{String,String}[]
 
-        direct_dt = joinpath(sub_path, datatype)
+        direct_dt = joinpath(sub_path, datatype_s)
         isdir(direct_dt) && push!(candidate_dirs, ("", direct_dt))
 
         for entry in sort!(readdir(sub_path); by = _natural_sort_key)
             if startswith(entry, "ses-") && isdir(joinpath(sub_path, entry))
-                ses_dt = joinpath(sub_path, entry, datatype)
+                ses_dt = joinpath(sub_path, entry, datatype_s)
                 isdir(ses_dt) && push!(candidate_dirs, (replace(entry, r"^ses-" => ""), ses_dt))
             end
         end
@@ -56,7 +59,7 @@ function list_bids_runs(dataset_dir::String; datatype::String = "eeg")::DataFram
                 push!(sessions, isnothing(m.captures[2]) ? ses_default : String(m.captures[2]))
                 push!(tasks, String(m.captures[3]))
                 push!(runs, isnothing(run_cap) ? 0 : something(tryparse(Int, run_cap), 0))
-                push!(datatypes, datatype)
+                push!(datatypes, datatype_s)
                 push!(files_out, joinpath(dt_dir, fname))
             end
         end
@@ -70,30 +73,39 @@ function list_bids_runs(dataset_dir::String; datatype::String = "eeg")::DataFram
 end
 
 """
-    read_bids(dataset_dir::String; subject::String, task::String, session::String = "", run::Int = 0, datatype::String = "eeg") -> ContinuousData
+    read_bids(dataset_dir::AbstractString; subject::AbstractString, task::AbstractString, session::AbstractString = "", run::Int = 0, datatype::AbstractString = "eeg") -> ContinuousData
 
 Read an EEG recording from a BIDS dataset, integrating `electrodes.tsv` 3D coordinates and `events.tsv` annotations when present.
 
 # Keyword Arguments
-- `subject::String`: Participant ID (e.g., `"01"` or `"sub-01"`).
-- `task::String`: Task label (e.g., `"posner"`).
-- `session::String`: Optional session label.
+- `subject::AbstractString`: Participant ID (e.g., `"01"` or `"sub-01"`).
+- `task::AbstractString`: Task label (e.g., `"posner"`).
+- `session::AbstractString`: Optional session label.
 - `run::Int`: Optional run number (`0` omits the run entity).
-- `datatype::String`: BIDS data type folder (default: `"eeg"`).
+- `datatype::AbstractString`: BIDS data type folder (default: `"eeg"`).
 """
-function read_bids(dataset_dir::String; subject::String, task::String, session::String = "", run::Int = 0, datatype::String = "eeg")
-    sub = replace(subject, r"^sub-" => "")
-    ses = replace(session, r"^ses-" => "")
+function read_bids(
+    dataset_dir::AbstractString;
+    subject::AbstractString,
+    task::AbstractString,
+    session::AbstractString = "",
+    run::Int = 0,
+    datatype::AbstractString = "eeg",
+)
+    dataset_dir_s = String(dataset_dir)
+    datatype_s = String(datatype)
+    sub = replace(String(subject), r"^sub-" => "")
+    ses = replace(String(session), r"^ses-" => "")
 
     sub_prefix = "sub-$(sub)"
     ses_prefix = isempty(ses) ? "" : "_ses-$(ses)"
     base_prefix = "$(sub_prefix)$(ses_prefix)_task-$(task)"
 
-    eeg_dir = isempty(ses) ? joinpath(dataset_dir, sub_prefix, datatype) : joinpath(dataset_dir, sub_prefix, "ses-$(ses)", datatype)
+    eeg_dir = isempty(ses) ? joinpath(dataset_dir_s, sub_prefix, datatype_s) : joinpath(dataset_dir_s, sub_prefix, "ses-$(ses)", datatype_s)
     !isdir(eeg_dir) && @minimal_error "BIDS directory not found: $eeg_dir"
 
     files = sort!(readdir(eeg_dir); by = _natural_sort_key)
-    dt_escaped = _bids_regex_escape(datatype)
+    dt_escaped = _bids_regex_escape(datatype_s)
     base_escaped = _bids_regex_escape(base_prefix)
     run_rx =
         run > 0 ? Regex("^$(base_escaped)(?:_.*)?_run-0*$(run)(?:_.*)?_$(dt_escaped)\$") :

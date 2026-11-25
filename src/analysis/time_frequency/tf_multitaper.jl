@@ -208,8 +208,8 @@ end
 function MultitaperAccumulators(g::TFGeometry; host_outputs::Bool = true)
     rt, rp = g.return_trials, g.return_phase
     return MultitaperAccumulators(
-        (host_outputs && rt) ? Matrix{Float64}(undef, g.n_trials, g.n_times) : Matrix{Float64}(undef, 0, 0),
-        (host_outputs && rt && rp) ? Matrix{ComplexF64}(undef, g.n_trials, g.n_times) : Matrix{ComplexF64}(undef, 0, 0),
+        (host_outputs && rt) ? Matrix{Float64}(undef, g.n_times, g.n_trials) : Matrix{Float64}(undef, 0, 0),
+        (host_outputs && rt && rp) ? Matrix{ComplexF64}(undef, g.n_times, g.n_trials) : Matrix{ComplexF64}(undef, 0, 0),
         (host_outputs && !rt) ? Vector{Float64}(undef, g.n_times) : Vector{Float64}(undef, 0),
         (host_outputs && !rt && rp) ? Vector{ComplexF64}(undef, g.n_times) : Vector{ComplexF64}(undef, 0),
     )
@@ -328,63 +328,55 @@ function _process_multitaper_channel!(
 
                 if return_trials
                     if accum_phase
-                        @inbounds for ti = 1:n_times
-                            adjusted_idx = time_indices[ti] + off
-                            @simd for tr = 1:n_trials
-                                val = local_conv_result[adjusted_idx, tr]
-                                power_accum_trials[tr, ti] += abs2(val)
-                                complex_accum_trials[tr, ti] += val
+                        @inbounds for tr = 1:n_trials
+                            @simd for ti = 1:n_times
+                                val = local_conv_result[time_indices[ti]+off, tr]
+                                power_accum_trials[ti, tr] += abs2(val)
+                                complex_accum_trials[ti, tr] += val
                             end
                         end
                     else
-                        @inbounds for ti = 1:n_times
-                            adjusted_idx = time_indices[ti] + off
-                            @simd for tr = 1:n_trials
-                                power_accum_trials[tr, ti] += abs2(local_conv_result[adjusted_idx, tr])
+                        @inbounds for tr = 1:n_trials
+                            @simd for ti = 1:n_times
+                                power_accum_trials[ti, tr] += abs2(local_conv_result[time_indices[ti]+off, tr])
                             end
                         end
                     end
                 elseif accum_phase
-                    @inbounds for ti = 1:n_times
-                        adjusted_idx = time_indices[ti] + off
-                        p_sum = 0.0
-                        c_sum = 0.0im
-                        @simd for tr = 1:n_trials
-                            val = local_conv_result[adjusted_idx, tr]
-                            p_sum += abs2(val)
-                            c_sum += val
+                    @inbounds for tr = 1:n_trials
+                        @simd for ti = 1:n_times
+                            val = local_conv_result[time_indices[ti]+off, tr]
+                            power_accum_avg[ti] += abs2(val)
+                            complex_accum_avg[ti] += val
                         end
-                        power_accum_avg[ti] += p_sum
-                        complex_accum_avg[ti] += c_sum
                     end
                 else
-                    @inbounds for ti = 1:n_times
-                        adjusted_idx = time_indices[ti] + off
-                        p_sum = 0.0
-                        @simd for tr = 1:n_trials
-                            p_sum += abs2(local_conv_result[adjusted_idx, tr])
+                    @inbounds for tr = 1:n_trials
+                        @simd for ti = 1:n_times
+                            power_accum_avg[ti] += abs2(local_conv_result[time_indices[ti]+off, tr])
                         end
-                        power_accum_avg[ti] += p_sum
                     end
                 end
             end
 
             if return_trials
-                @inbounds for ti = 1:n_times
-                    @simd for tr = 1:n_trials
-                        eegpower_trials[tr, fi, ti] = power_accum_trials[tr, ti] * inv_n_tapers
+                @inbounds for tr = 1:n_trials
+                    @simd for ti = 1:n_times
+                        eegpower_trials[tr, fi, ti] = power_accum_trials[ti, tr] * inv_n_tapers
                     end
                     if return_phase
-                        @simd for tr = 1:n_trials
-                            eegconv_trials[tr, fi, ti] = complex_accum_trials[tr, ti]
+                        @simd for ti = 1:n_times
+                            eegconv_trials[tr, fi, ti] = complex_accum_trials[ti, tr]
                         end
                     end
                 end
             else
                 factor = inv_n_tapers * inv_n_trials
-                @inbounds for ti = 1:n_times
+                @inbounds @simd for ti = 1:n_times
                     eegpower_avg[fi, ti] = power_accum_avg[ti] * factor
-                    if return_phase
+                end
+                if return_phase
+                    @inbounds @simd for ti = 1:n_times
                         eegconv_avg[fi, ti] = complex_accum_avg[ti] * inv_n_trials
                     end
                 end

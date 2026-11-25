@@ -209,7 +209,12 @@ Return the sample rate in Hz.
 """
 sample_rate(dat::EegData)::Int = dat.sample_rate
 
-sample_rate(dat::DataFrame)::Int = round(Int, 1 / mean(diff(dat.time)))
+function sample_rate(dat::DataFrame)::Int
+    t = dat.time
+    n = length(t)
+    n < 2 && @minimal_error("Cannot compute sample_rate from DataFrame with fewer than 2 time samples")
+    return round(Int, (n - 1) / (Float64(last(t)) - Float64(first(t))))
+end
 
 """
     reference(dat) -> Symbol

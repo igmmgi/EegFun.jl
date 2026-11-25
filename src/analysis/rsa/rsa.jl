@@ -553,8 +553,43 @@ function _compute_rdm!(
     condition_patterns::Vector{<:AbstractVector{Float64}},
     measure::Symbol;
     inv_covariance_matrix::Union{Matrix{Float64},Nothing} = nothing,
+    u_patterns::Union{Nothing,Matrix{Float64}} = nothing,
+    has_var_buf::Union{Nothing,BitVector} = nothing,
+    rank_buf::Union{Nothing,Vector{Float64}} = nothing,
+    rank_perm::Union{Nothing,Vector{Int}} = nothing,
 )
     n_conditions = length(condition_patterns)
+    if (measure == :spearman || measure == :correlation || measure == :pearson) && n_conditions >= 2
+        n_feat = length(condition_patterns[1])
+        if n_feat >= 2 && all(p -> length(p) == n_feat && all(isfinite, p), condition_patterns)
+            U = isnothing(u_patterns) ? Matrix{Float64}(undef, n_feat, n_conditions) : u_patterns
+            hv = isnothing(has_var_buf) ? BitVector(undef, n_conditions) : has_var_buf
+            if measure == :spearman
+                rb = isnothing(rank_buf) ? Vector{Float64}(undef, n_feat) : rank_buf
+                rp = isnothing(rank_perm) ? Vector{Int}(undef, n_feat) : rank_perm
+                for i = 1:n_conditions
+                    _tiedrank!(rb, rp, condition_patterns[i])
+                    hv[i] = _zscore_unit_norm!(@view(U[:, i]), rb)
+                end
+            else
+                for i = 1:n_conditions
+                    hv[i] = _zscore_unit_norm!(@view(U[:, i]), condition_patterns[i])
+                end
+            end
+            @inbounds for i = 1:n_conditions
+                rdm[i, i] = 0.0
+                ui = @view U[:, i]
+                vi = hv[i]
+                for j = (i+1):n_conditions
+                    dissim = (vi && hv[j]) ? (1.0 - clamp(dot(ui, @view(U[:, j])), -1.0, 1.0)) : NaN
+                    rdm[i, j] = dissim
+                    rdm[j, i] = dissim
+                end
+            end
+            return rdm
+        end
+    end
+
     @inbounds for i = 1:n_conditions
         rdm[i, i] = 0.0
         for j = (i+1):n_conditions
@@ -639,8 +674,13 @@ function _compute_rdms_from_data(
     end
 
     use_mahal = dissimilarity_measure == :mahalanobis
+    use_corr_rdm = dissimilarity_measure in (:spearman, :correlation, :pearson)
     cov_ws = use_mahal ? _PooledCovWorkspace(n_channels, sum(size(d, 3) for d in data_arrays)) : nothing
     inv_pooled_cov = use_mahal ? Matrix{Float64}(undef, n_channels, n_channels) : nothing
+    u_patterns = use_corr_rdm ? Matrix{Float64}(undef, n_channels, n_conditions) : nothing
+    has_var_buf = use_corr_rdm ? BitVector(undef, n_conditions) : nothing
+    rank_buf_rdm = dissimilarity_measure == :spearman ? Vector{Float64}(undef, n_channels) : nothing
+    rank_perm_rdm = dissimilarity_measure == :spearman ? Vector{Int}(undef, n_channels) : nothing
     condition_patterns = [Vector{Float64}(undef, n_channels) for _ = 1:n_conditions]
 
     for t = 1:n_timepoints
@@ -656,7 +696,16 @@ function _compute_rdms_from_data(
             end
         end
 
-        _compute_rdm!(rdm_buffer, condition_patterns, dissimilarity_measure; inv_covariance_matrix = inv_pooled_cov)
+        _compute_rdm!(
+            rdm_buffer,
+            condition_patterns,
+            dissimilarity_measure;
+            inv_covariance_matrix = inv_pooled_cov,
+            u_patterns = u_patterns,
+            has_var_buf = has_var_buf,
+            rank_buf = rank_buf_rdm,
+            rank_perm = rank_perm_rdm,
+        )
         @inbounds for j = 1:n_conditions, i = 1:n_conditions
             rdms[t, i, j] = rdm_buffer[i, j]
         end
@@ -689,22 +738,24 @@ function _validate_model_rdms(model_rdms, n_conditions::Int, n_times::Int)
     return is_temporal
 end
 
+function _gen_heap_perms!(perms::Vector{Vector{Int}}, cur::Vector{Int}, k::Int)
+    if k == 1
+        push!(perms, copy(cur))
+        return nothing
+    end
+    _gen_heap_perms!(perms, cur, k - 1)
+    @inbounds for i = 1:(k-1)
+        swap_idx = iseven(k) ? i : 1
+        cur[swap_idx], cur[k] = cur[k], cur[swap_idx]
+        _gen_heap_perms!(perms, cur, k - 1)
+    end
+    return nothing
+end
+
 function _all_permutations(n::Int)
     perms = sizehint!(Vector{Vector{Int}}(), factorial(n))
     cur = collect(1:n)
-    function _gen!(k::Int)
-        if k == 1
-            push!(perms, copy(cur))
-            return
-        end
-        _gen!(k - 1)
-        for i = 1:(k-1)
-            swap_idx = iseven(k) ? i : 1
-            cur[swap_idx], cur[k] = cur[k], cur[swap_idx]
-            _gen!(k - 1)
-        end
-    end
-    _gen!(n)
+    _gen_heap_perms!(perms, cur, n)
     return perms
 end
 
@@ -722,6 +773,11 @@ function _fill_mantel_unit_matrix!(
     model_vec::AbstractVector{Float64},
     correlation_type::Symbol,
 )
+    if length(model_vec) < 2 || any(!isfinite, model_vec)
+        fill!(u_buf, 0.0)
+        fill!(U, 0.0)
+        return false
+    end
     src = correlation_type == :spearman ? _tiedrank!(rank_buf, rank_perm, model_vec) : model_vec
     has_var = _zscore_unit_norm!(u_buf, src)
     N = size(U, 1)
@@ -792,6 +848,8 @@ function _compute_model_correlations(
     tail::Symbol = :right,
     rng::AbstractRNG = Random.default_rng(),
 )
+    correlation_type in (:spearman, :pearson) || @minimal_error("Unknown correlation type: $correlation_type. Use :spearman or :pearson")
+
     n_times = length(rsa_data.times)
     n_models = length(model_rdms)
     n_conditions = length(rsa_data.condition_names)
@@ -801,9 +859,11 @@ function _compute_model_correlations(
     p_values = n_permutations > 0 ? zeros(Float64, n_times, n_models) : nothing
 
     static_model_vecs = Vector{Union{Nothing,Vector{Float64}}}(nothing, n_models)
+    static_u_vecs = Vector{Union{Nothing,Vector{Float64}}}(nothing, n_models)
     temporal_model_vecs = Vector{Union{Nothing,Matrix{Float64}}}(nothing, n_models)
     static_U_models = Vector{Union{Nothing,Matrix{Float64}}}(nothing, n_models)
     static_has_var = falses(n_models)
+    static_is_finite = falses(n_models)
 
     rank_buf = Vector{Float64}(undef, n_upper)
     rank_perm = Vector{Int}(undef, n_upper)
@@ -820,10 +880,32 @@ function _compute_model_correlations(
         else
             m_vec = _symmetrized_upper_triangular(model_rdm)
             static_model_vecs[model_idx] = m_vec
-            if n_permutations > 0 && n_conditions >= 3 && n_upper >= 2
-                U = zeros(Float64, n_conditions, n_conditions)
-                static_has_var[model_idx] = _fill_mantel_unit_matrix!(U, u_buf, rank_buf, rank_perm, m_vec, correlation_type)
-                static_U_models[model_idx] = U
+            fin_m = n_upper >= 2 && all(isfinite, m_vec)
+            static_is_finite[model_idx] = fin_m
+            if fin_m
+                u_m = Vector{Float64}(undef, n_upper)
+                src_m = correlation_type == :spearman ? _tiedrank!(rank_buf, rank_perm, m_vec) : m_vec
+                hv_m = _zscore_unit_norm!(u_m, src_m)
+                static_has_var[model_idx] = hv_m
+                static_u_vecs[model_idx] = u_m
+                if n_permutations > 0 && n_conditions >= 3
+                    U = zeros(Float64, n_conditions, n_conditions)
+                    if hv_m
+                        k = 1
+                        @inbounds for i = 1:n_conditions
+                            U[i, i] = 0.0
+                            for j = (i+1):n_conditions
+                                v = u_m[k]
+                                U[i, j] = v
+                                U[j, i] = v
+                                k += 1
+                            end
+                        end
+                    end
+                    static_U_models[model_idx] = U
+                end
+            elseif n_permutations > 0 && n_conditions >= 3 && n_upper >= 2
+                static_U_models[model_idx] = zeros(Float64, n_conditions, n_conditions)
             end
         end
     end
@@ -836,10 +918,12 @@ function _compute_model_correlations(
 
     for t = 1:n_times
         _extract_upper_triangular!(neural_vec, @view(rsa_data.rdm[t, :, :]))
-        neural_has_var = false
-        if n_permutations > 0 && n_conditions >= 3
+        neural_finite = n_upper >= 2 && all(isfinite, neural_vec)
+        neural_has_var = if neural_finite
             n_src = correlation_type == :spearman ? _tiedrank!(rank_buf, rank_perm, neural_vec) : neural_vec
-            neural_has_var = _zscore_unit_norm!(u_neural, n_src)
+            _zscore_unit_norm!(u_neural, n_src)
+        else
+            false
         end
 
         for model_idx = 1:n_models
@@ -847,17 +931,40 @@ function _compute_model_correlations(
             model_vec =
                 is_temp ? @view((temporal_model_vecs[model_idx]::Matrix{Float64})[:, t]) : static_model_vecs[model_idx]::Vector{Float64}
 
-            # Observe correlation using pre-computed unit vectors when valid, or fallback to _correlate_vectors for exact NaN behavior
-            corr = _correlate_vectors(neural_vec, model_vec, correlation_type)
+            temp_has_var = false
+            corr = if !is_temp
+                if neural_has_var && static_has_var[model_idx]
+                    clamp(dot(u_neural, static_u_vecs[model_idx]::Vector{Float64}), -1.0, 1.0)
+                elseif neural_finite && static_is_finite[model_idx]
+                    NaN
+                else
+                    _correlate_vectors(neural_vec, model_vec, correlation_type)
+                end
+            else
+                m_finite = n_upper >= 2 && all(isfinite, model_vec)
+                if neural_has_var && m_finite
+                    if n_permutations > 0 && n_conditions >= 3
+                        temp_has_var =
+                            _fill_mantel_unit_matrix!(U_temp::Matrix{Float64}, u_buf, rank_buf, rank_perm, model_vec, correlation_type)
+                        temp_has_var ? clamp(dot(u_neural, u_buf), -1.0, 1.0) : NaN
+                    else
+                        src_t = correlation_type == :spearman ? _tiedrank!(rank_buf, rank_perm, model_vec) : model_vec
+                        _zscore_unit_norm!(u_buf, src_t) ? clamp(dot(u_neural, u_buf), -1.0, 1.0) : NaN
+                    end
+                elseif neural_finite && m_finite
+                    NaN
+                else
+                    _correlate_vectors(neural_vec, model_vec, correlation_type)
+                end
+            end
             correlations[t, model_idx] = corr
 
             if n_permutations > 0
                 p_val = if isnan(corr) || n_conditions < 3 || !neural_has_var
                     1.0
                 elseif is_temp
-                    U_t = U_temp::Matrix{Float64}
-                    _fill_mantel_unit_matrix!(U_t, u_buf, rank_buf, rank_perm, model_vec, correlation_type) ?
-                    _mantel_pvalue(u_neural, U_t, corr, n_permutations, tail, exact_perms, perm_buf, rng) : 1.0
+                    temp_has_var ?
+                    _mantel_pvalue(u_neural, U_temp::Matrix{Float64}, corr, n_permutations, tail, exact_perms, perm_buf, rng) : 1.0
                 else
                     static_has_var[model_idx] ?
                     _mantel_pvalue(

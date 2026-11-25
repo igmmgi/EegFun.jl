@@ -13,11 +13,10 @@ _as_symbol_vec(v::AbstractVector{Symbol}) = v
 _as_symbol_vec(v::AbstractVector) = Symbol[Symbol(x) for x in v]
 
 function _channel_cols(layout_channels::AbstractVector{Symbol}, df::DataFrame)::Vector{Symbol}
-    lookup = DataFrames.index(df).lookup
     out = Vector{Symbol}(undef, length(layout_channels))
     k = 0
     @inbounds for ch in layout_channels
-        if haskey(lookup, ch)
+        if DataFrames.columnindex(df, ch) > 0
             dup = false
             for j = 1:k
                 if out[j] === ch
@@ -36,37 +35,33 @@ function _channel_cols(layout_channels::AbstractVector{Symbol}, df::DataFrame)::
 end
 
 function _meta_cols(layout_channels::AbstractVector{Symbol}, df::DataFrame)::Vector{Symbol}
-    idx = DataFrames.index(df)
-    names_vec = idx.names
-    isempty(layout_channels) && return copy(names_vec)
-    lookup = idx.lookup
+    names_vec = propertynames(df)
+    isempty(layout_channels) && return names_vec
     first_idx = typemax(Int)
     @inbounds for ch in layout_channels
-        pos = get(lookup, ch, typemax(Int))
-        pos < first_idx && (first_idx = pos)
+        pos = DataFrames.columnindex(df, ch)
+        (pos > 0 && pos < first_idx) && (first_idx = pos)
     end
-    return first_idx == typemax(Int) ? copy(names_vec) : names_vec[1:(first_idx-1)]
+    return first_idx == typemax(Int) ? names_vec : resize!(names_vec, first_idx - 1)
 end
 
 function _extra_cols(layout_channels::AbstractVector{Symbol}, df::DataFrame)::Vector{Symbol}
     isempty(layout_channels) && return Symbol[]
-    idx = DataFrames.index(df)
-    lookup = idx.lookup
     last_idx = 0
     @inbounds for ch in layout_channels
-        pos = get(lookup, ch, 0)
+        pos = DataFrames.columnindex(df, ch)
         pos > last_idx && (last_idx = pos)
     end
-    names_vec = idx.names
-    return (last_idx == 0 || last_idx >= length(names_vec)) ? Symbol[] : names_vec[(last_idx+1):end]
+    (last_idx == 0 || last_idx >= ncol(df)) && return Symbol[]
+    names_vec = propertynames(df)
+    return names_vec[(last_idx+1):end]
 end
 
 function _count_channels(layout_channels::AbstractVector{Symbol}, df::DataFrame)::Int
-    lookup = DataFrames.index(df).lookup
     cnt = 0
     @inbounds for i in eachindex(layout_channels)
         ch = layout_channels[i]
-        if haskey(lookup, ch)
+        if DataFrames.columnindex(df, ch) > 0
             dup = false
             for j = 1:(i-1)
                 if layout_channels[j] === ch

@@ -104,7 +104,7 @@ function plot_layout_2d!(
     correlation_matrix::Union{DataFrame,Nothing} = nothing,
     kwargs...,
 )
-    _ensure_coordinates_2d!(layout)
+    layout = _with_2d_coords(layout)
 
     head_color = _layout_kw(kwargs, PLOT_LAYOUT_HEAD_KWARGS, :head_color)
     head_lw = _layout_kw(kwargs, PLOT_LAYOUT_HEAD_KWARGS, :head_linewidth)
@@ -263,7 +263,7 @@ plot_layout_3d(dat::EegFunData; kwargs...) = plot_layout_3d(dat.layout; kwargs..
 In-place axis version of [`plot_layout_3d`](@ref), drawing onto `ax` and returning `ax`.
 """
 function plot_layout_3d!(fig::Figure, ax::Axis3, layout::Layout; neighbors::Bool = false, kwargs...)
-    _ensure_coordinates_3d!(layout)
+    layout = _with_3d_coords(layout)
 
     plot_points = _layout_kw(kwargs, PLOT_LAYOUT_POINT_KWARGS, :point_plot)
     point_marker = _layout_kw(kwargs, PLOT_LAYOUT_POINT_KWARGS, :point_marker)

@@ -424,7 +424,8 @@ end
 function _has_renderable_makie_backend()::Bool
     backend = try
         Makie.current_backend()
-    catch
+    catch e
+        e isa InterruptException && rethrow()
         missing
     end
     return !ismissing(backend) && !isnothing(backend)
@@ -432,23 +433,25 @@ end
 
 function _fig_to_data_uri(fig::Figure; px_per_unit::Float64 = 1.0)::Union{String,Nothing}
     try
+        if showable(MIME"image/png"(), fig)
+            buf = IOBuffer()
+            show(IOContext(buf, :px_per_unit => px_per_unit), MIME"image/png"(), fig)
+            bytes = take!(buf)
+            !isempty(bytes) && return "data:image/png;base64," * _base64_encode(bytes)
+        end
+    catch e
+        e isa InterruptException && rethrow()
+    end
+    try
         saved_bytes = mktempdir() do tmp
             png_path = joinpath(tmp, "fig.png")
             Makie.save(png_path, fig; px_per_unit = px_per_unit)
             read(png_path)
         end
         !isempty(saved_bytes) && return "data:image/png;base64," * _base64_encode(saved_bytes)
-    catch
-    end
-    try
-        buf = IOBuffer()
-        if showable(MIME"image/png"(), fig)
-            show(buf, MIME"image/png"(), fig)
-            bytes = take!(buf)
-            !isempty(bytes) && return "data:image/png;base64," * _base64_encode(bytes)
-        end
         return nothing
     catch e
+        e isa InterruptException && rethrow()
         @debug "Failed to encode figure for pipeline report" exception = e
         return nothing
     end
@@ -488,6 +491,7 @@ function _safe_load_pipeline_cfg(cfg_path::String)::Union{PipelineConfig,Nothing
     try
         return PipelineConfig(TOML.parsefile(cfg_path))
     catch e
+        e isa InterruptException && rethrow()
         @minimal_warning "Could not parse $cfg_path for report: $(sprint(showerror, e))"
         return nothing
     end
@@ -498,7 +502,8 @@ function _safe_load_jld2_df(path::String)::Union{DataFrame,Nothing}
     try
         val = JLD2.load(path, "data")
         return val isa DataFrame ? val : nothing
-    catch
+    catch e
+        e isa InterruptException && rethrow()
         return nothing
     end
 end
@@ -508,7 +513,8 @@ function _safe_read_jld2_typed(path::String, ::Type{T}) where {T}
     try
         val = read_data(path)
         return val isa T ? val : nothing
-    catch
+    catch e
+        e isa InterruptException && rethrow()
         return nothing
     end
 end
@@ -652,34 +658,62 @@ function _build_condition_rejection_df(
         rejs = artifact_info.epoch_rejections
         step1 = filter(r -> r.name == "rejection_step1", rejs)
         step2 = filter(r -> r.name == "rejection_step2", rejs)
-        if !isempty(step1) && length(step1) == length(step2)
+        inter_stage = filter(r -> r.name == "interactive_rejection", rejs)
+
+        if !isempty(step1) && length(step1) == length(step2) && isempty(inter_stage)
             cmp = compare_rejections(step1, step2)
-            n_kept = cmp.n_original .- cmp.rejected_after_repair
+            kept_cmp = cmp.n_original .- cmp.rejected_after_repair
             return DataFrame(
                 condition = cmp.condition,
                 condition_name = cmp.condition_name,
                 n_original = cmp.n_original,
                 n_repaired = cmp.successfully_repaired,
                 n_rejected = cmp.rejected_after_repair,
-                n_kept = n_kept,
+                n_kept = kept_cmp,
                 pct_kept = cmp.pct_final_kept,
             )
         else
-            conds = [r.info.number for r in rejs]
-            cnames = [r.info.name for r in rejs]
-            n_orig = [r.info.n for r in rejs]
-            n_rej = [length(unique_epochs(r)) for r in rejs]
-            n_rep = [isnothing(r.repaired) ? 0 : count(!isempty, values(r.repaired)) for r in rejs]
-            n_kept = n_orig .- n_rej
-            pct = [n_orig[i] > 0 ? round(100.0 * n_kept[i] / n_orig[i]; digits = 1) : 0.0 for i in eachindex(n_orig)]
+            final_rejs = !isempty(inter_stage) ? inter_stage : rejs
+            auto_stage = filter(r -> r.name == "autoreject", rejs)
+            repair_src = if !isempty(step1) && length(step1) == length(final_rejs)
+                step1
+            elseif !isempty(auto_stage) && length(auto_stage) == length(final_rejs)
+                auto_stage
+            else
+                final_rejs
+            end
+            n_cond = length(final_rejs)
+            conds_u = Vector{Int}(undef, n_cond)
+            cnames_u = Vector{String}(undef, n_cond)
+            orig_u = Vector{Int}(undef, n_cond)
+            rep_u = Vector{Int}(undef, n_cond)
+            rej_u = Vector{Int}(undef, n_cond)
+            kept_u = Vector{Int}(undef, n_cond)
+            pct_u = Vector{Float64}(undef, n_cond)
+            for idx = 1:n_cond
+                r_fin = final_rejs[idx]
+                r_rep = repair_src[idx]
+                rej_set = Set(unique_epochs(r_fin))
+                n_o = r_rep.info.n
+                n_rj = length(rej_set)
+                n_rp = isnothing(r_rep.repaired) ? 0 : count(kv -> !isempty(kv[2]) && !(kv[1] in rej_set), r_rep.repaired)
+                n_kp = n_o - n_rj
+                conds_u[idx] = r_fin.info.number
+                cnames_u[idx] = r_fin.info.name
+                orig_u[idx] = n_o
+                rep_u[idx] = n_rp
+                rej_u[idx] = n_rj
+                kept_u[idx] = n_kp
+                pct_u[idx] = n_o > 0 ? round(100.0 * n_kp / n_o; digits = 1) : 0.0
+            end
             return DataFrame(
-                condition = conds,
-                condition_name = cnames,
-                n_original = n_orig,
-                n_repaired = n_rep,
-                n_rejected = n_rej,
-                n_kept = n_kept,
-                pct_kept = pct,
+                condition = conds_u,
+                condition_name = cnames_u,
+                n_original = orig_u,
+                n_repaired = rep_u,
+                n_rejected = rej_u,
+                n_kept = kept_u,
+                pct_kept = pct_u,
             )
         end
     end
@@ -687,19 +721,19 @@ function _build_condition_rejection_df(
     if !isnothing(epoch_summary_df) && hasproperty(epoch_summary_df, :file)
         sub = epoch_summary_df[epoch_summary_df.file .== stem, :]
         if !isempty(sub)
-            n_orig = hasproperty(sub, :original) ? sub.original : sub.final
-            n_kept = hasproperty(sub, :final) ? sub.final : n_orig
-            pct =
+            orig_es = hasproperty(sub, :original) ? sub.original : sub.final
+            kept_es = hasproperty(sub, :final) ? sub.final : orig_es
+            pct_es =
                 hasproperty(sub, :percentage) ? Float64.(sub.percentage) :
-                [o > 0 ? round(100.0 * k / o; digits = 1) : 0.0 for (o, k) in zip(n_orig, n_kept)]
+                [o > 0 ? round(100.0 * k / o; digits = 1) : 0.0 for (o, k) in zip(orig_es, kept_es)]
             return DataFrame(
                 condition = hasproperty(sub, :condition_num) ? sub.condition_num : collect(1:nrow(sub)),
                 condition_name = hasproperty(sub, :condition_name) ? string.(sub.condition_name) : fill("Condition", nrow(sub)),
-                n_original = n_orig,
+                n_original = orig_es,
                 n_repaired = zeros(Int, nrow(sub)),
-                n_rejected = n_orig .- n_kept,
-                n_kept = n_kept,
-                pct_kept = pct,
+                n_rejected = orig_es .- kept_es,
+                n_kept = kept_es,
+                pct_kept = pct_es,
             )
         end
     end
@@ -743,11 +777,15 @@ function _extract_epoch_channel_repairs(art::Union{ArtifactInfo,Nothing})::Dict{
     (isnothing(art) || isempty(art.epoch_rejections)) && return counts
     rejs = art.epoch_rejections
     step1 = filter(r -> r.name == "rejection_step1", rejs)
-    step2 = filter(r -> r.name == "rejection_step2", rejs)
-    target_rejs = !isempty(step1) ? step1 : rejs
+    auto_stage = filter(r -> r.name == "autoreject", rejs)
+    post = filter(r -> r.name == "interactive_rejection", rejs)
+    isempty(post) && (post = filter(r -> r.name == "rejection_step2", rejs))
+
+    target_rejs = !isempty(step1) ? step1 : (!isempty(auto_stage) ? auto_stage : rejs)
+    final_rejs = !isempty(post) ? post : target_rejs
     for (idx, r) in enumerate(target_rejs)
         isnothing(r.repaired) && continue
-        rej_epochs = (!isempty(step1) && idx <= length(step2)) ? Set(unique_epochs(step2[idx])) : Set{Int}()
+        rej_epochs = idx <= length(final_rejs) ? Set(unique_epochs(final_rejs[idx])) : Set(unique_epochs(r))
         for (ep_i, chs) in r.repaired
             ep_i in rej_epochs && continue
             for ch in chs
@@ -943,20 +981,38 @@ function _baseline_for_display(erps::Vector{ErpData})::Vector{ErpData}
     return out
 end
 
+function _accum_gfp_sum!(acc::Vector{Float64}, col::AbstractVector{<:Real})
+    @inbounds @simd for i in eachindex(acc, col)
+        acc[i] += Float64(col[i])
+    end
+    return nothing
+end
+
+function _accum_gfp_sqdiff!(ss::Vector{Float64}, mean_vec::Vector{Float64}, col::AbstractVector{<:Real})
+    @inbounds @simd for i in eachindex(ss, mean_vec, col)
+        d = Float64(col[i]) - mean_vec[i]
+        ss[i] += d * d
+    end
+    return nothing
+end
+
 function _quiet_gfp_vector(erp::ErpData)::Vector{Float64}
     chs = get_selected_channels(erp, channels(); include_meta = false, include_extra = false)
     n_t = nrow(erp.data)
-    (isempty(chs) || n_t == 0) && return zeros(Float64, n_t)
-    mat = Matrix{Float64}(undef, n_t, length(chs))
-    @inbounds for (j, ch) in enumerate(chs)
-        col = erp.data[!, ch]
-        for i = 1:n_t
-            mat[i, j] = Float64(col[i])
-        end
+    n_c = length(chs)
+    (n_c == 0 || n_t == 0) && return zeros(Float64, n_t)
+    mean_vec = zeros(Float64, n_t)
+    for ch in chs
+        _accum_gfp_sum!(mean_vec, erp.data[!, ch])
     end
-    out = Vector{Float64}(undef, n_t)
-    @inbounds for i = 1:n_t
-        out[i] = std(@view(mat[i, :]); corrected = false)
+    inv_c = 1.0 / n_c
+    mean_vec .*= inv_c
+    out = zeros(Float64, n_t)
+    for ch in chs
+        _accum_gfp_sqdiff!(out, mean_vec, erp.data[!, ch])
+    end
+    @inbounds @simd for i = 1:n_t
+        out[i] = sqrt(out[i] * inv_c)
     end
     return out
 end
@@ -1131,6 +1187,7 @@ function _render_cohort_sensor_heatmap_uri(records::Vector{_ParticipantReportDat
 
         _fig_to_data_uri(fig)
     catch e
+        e isa InterruptException && rethrow()
         @debug "Skipping cohort sensor heatmap in pipeline report" exception = e
         nothing
     end
@@ -1275,6 +1332,7 @@ function _render_sensor_status_uri(rec::_ParticipantReportData)::Union{String,No
         has_legend && axislegend(ax; position = :rb, labelsize = 10)
         _fig_to_data_uri(fig)
     catch e
+        e isa InterruptException && rethrow()
         @debug "Skipping sensor status figure in pipeline report" exception = e
         nothing
     end
@@ -1294,6 +1352,7 @@ function _render_ica_artifacts_uri(rec::_ParticipantReportData)::Union{String,No
         )
         isempty(res.axes) ? nothing : _fig_to_data_uri(res.fig)
     catch e
+        e isa InterruptException && rethrow()
         @debug "Skipping ICA artifacts figure in pipeline report" exception = e
         nothing
     end
@@ -1311,6 +1370,7 @@ function _render_erp_gfp_uri(
         resize!(res.fig, fig_size...)
         _fig_to_data_uri(res.fig)
     catch e
+        e isa InterruptException && rethrow()
         @debug "Skipping ERP/GFP figure in pipeline report" exception = e
         nothing
     end
@@ -1399,6 +1459,7 @@ function _render_grand_topo_uri(grand_erps::Vector{ErpData})::Union{String,Nothi
         resize!(res.fig, w, h)
         _fig_to_data_uri(res.fig)
     catch e
+        e isa InterruptException && rethrow()
         @debug "Skipping grand-average topography figure in pipeline report" exception = e
         nothing
     end
@@ -1478,6 +1539,7 @@ function _render_cohort_psd_uri(records::Vector{_ParticipantReportData})::Union{
 
         _fig_to_data_uri(fig)
     catch e
+        e isa InterruptException && rethrow()
         @debug "Skipping cohort PSD figure in pipeline report" exception = e
         nothing
     end
@@ -1509,6 +1571,7 @@ function _render_participant_psd_uri(
         axislegend(ax; position = :rt, labelsize = 9)
         _fig_to_data_uri(fig)
     catch e
+        e isa InterruptException && rethrow()
         @debug "Skipping participant PSD figure in pipeline report" exception = e
         nothing
     end
@@ -1592,6 +1655,7 @@ function _render_cohort_raw_vs_clean_uri(records::Vector{_ParticipantReportData}
 
         _fig_to_data_uri(fig)
     catch e
+        e isa InterruptException && rethrow()
         @debug "Skipping cohort raw-vs-clean figure in pipeline report" exception = e
         nothing
     end
@@ -1628,6 +1692,7 @@ function _render_participant_raw_vs_clean_uri(rec::_ParticipantReportData)::Unio
 
         _fig_to_data_uri(fig)
     catch e
+        e isa InterruptException && rethrow()
         @debug "Skipping participant raw-vs-clean figure in pipeline report" exception = e
         nothing
     end
@@ -1661,7 +1726,8 @@ function _resolve_avg_neighbors(
                 val = Float64(meta["average_neighbors_per_electrode"])
                 isfinite(val) && return round(val; digits = 2)
             end
-        catch
+        catch e
+            e isa InterruptException && rethrow()
         end
     end
 
@@ -1677,7 +1743,8 @@ function _resolve_avg_neighbors(
                 if has_neighbors(lay_tmp) && !isempty(lay_tmp.neighbors)
                     return round(mean(length(nb.channels) for nb in values(lay_tmp.neighbors)); digits = 2)
                 end
-            catch
+            catch e
+                e isa InterruptException && rethrow()
             end
         end
     end
@@ -2166,7 +2233,8 @@ $_REPORT_CSS
         ga_erps = if !isempty(all_erps)
             try
                 length(records) > 1 ? grand_average(all_erps) : all_erps
-            catch
+            catch e
+                e isa InterruptException && rethrow()
                 ErpData[]
             end
         else

@@ -481,8 +481,8 @@ function _channel_joint_probability(
         end
     end
 
-    jp, indelec = _normalize_and_threshold_jp!(jp, threshold, normval)
-    return DataFrame(channel = copy(selected_channels), jp = jp, rejection = indelec; copycols = false)
+    jp_out, indelec = _normalize_and_threshold_jp!(jp, threshold, normval)
+    return DataFrame(channel = copy(selected_channels), jp = jp_out, rejection = indelec; copycols = false)
 end
 
 function _joint_probability(signal::AbstractMatrix{<:Real}, threshold::Real, normalize::Int, discret::Int = 1000)

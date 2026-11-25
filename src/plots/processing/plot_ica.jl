@@ -129,8 +129,7 @@ function plot_topography(ica::InfoIca; component_selection = components(), kwarg
     show_title = plot_kwargs[:show_title]
     colorbar_plot = plot_kwargs[:colorbar_plot]
 
-    _ensure_coordinates_2d!(ica.layout)
-    _ensure_coordinates_3d!(ica.layout)
+    ica = _ica_with_plot_coords(ica)
 
     fontsize_kw = isnothing(plot_kwargs[:theme_fontsize]) ? (;) : (; fontsize = plot_kwargs[:theme_fontsize])
     comps = get_selected_components(ica, component_selection)
@@ -215,8 +214,7 @@ function plot_ica_component_activation(dat::ContinuousData, ica::InfoIca; artifa
     merged_kwargs = Dict{Symbol,Any}(:colorbar_label => "a.u.", pairs(kwargs)...)
     plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, merged_kwargs)
 
-    _ensure_coordinates_2d!(ica.layout)
-    _ensure_coordinates_3d!(ica.layout)
+    ica = _ica_with_plot_coords(ica)
 
     component_selection = pop!(plot_kwargs, :component_selection)
     selected_components = findall(component_selection(1:length(ica.ica_label)))
@@ -483,8 +481,7 @@ end
 
 function _plot_topography!(fig::Figure, ax::Axis, ica::InfoIca, component::Int; precomputed_topo = nothing, kwargs...)
     plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs)
-    _ensure_coordinates_2d!(ica.layout)
-    _ensure_coordinates_3d!(ica.layout)
+    ica = _ica_with_plot_coords(ica)
     return _plot_ica_topography_impl!(
         fig,
         ax,

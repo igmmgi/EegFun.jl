@@ -262,20 +262,21 @@ function _spline_geometry(d, ch::Vector{Int})
         inc = Float64.(d.inc[ch]) .* rad_factor
         azi = Float64.(d.azi[ch]) .* rad_factor
         U = hcat(sin.(inc) .* cos.(azi), sin.(inc) .* sin.(azi), cos.(inc))
-        θ = abs.(inc)
+        θ_pol = abs.(inc)
         denom = dot(ρe, ρe)
-        k = denom > 0 ? dot(ρe, θ) / denom : (π / 2)
-        if maximum(abs, θ .- k .* ρe) > 1e-3
+        k_pol = denom > 0 ? dot(ρe, θ_pol) / denom : (π / 2)
+        if maximum(abs, θ_pol .- k_pol .* ρe) > 1e-3
             @warn "x2/y2 are not an azimuthal-equidistant image of inc/azi; spline map may be distorted." maxlog = 1
         end
+        return U, k_pol
     else
         @warn "Layout has no :inc/:azi; assuming azimuthal-equidistant x2/y2 with ρ=1 at the equator." maxlog = 1
-        k = π / 2
-        θ = min.(k .* ρe, π)
-        sx = [ρe[i] > 0 ? sin(θ[i]) / ρe[i] : 0.0 for i in eachindex(ρe)]
-        U = hcat(sx .* d.x2[ch], sx .* d.y2[ch], cos.(θ))
+        k_eq = π / 2
+        θ_eq = min.(k_eq .* ρe, π)
+        sx = ifelse.(ρe .> 0.0, sin.(θ_eq) ./ ifelse.(ρe .> 0.0, ρe, 1.0), 0.0)
+        U = hcat(sx .* d.x2[ch], sx .* d.y2[ch], cos.(θ_eq))
+        return U, k_eq
     end
-    return U, k
 end
 
 function _spline_good_to_bad(U_good::Matrix{Float64}, U_bad::Matrix{Float64}, f::Vector{Float64}, λ::Real)

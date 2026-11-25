@@ -247,28 +247,48 @@ function _perm_ttest_indep!(t_flat::AbstractVector{Float64}, X::Matrix{Float64},
     return nothing
 end
 
-function _build_perm_source(data1::Array{Float64,M}, data2::Array{Float64,M}, design::Symbol) where {M}
+function _build_perm_source(data1::AbstractArray{Float64,M}, data2::AbstractArray{Float64,M}, design::Symbol) where {M}
     n_A = size(data1, 1)
     n_B = size(data2, 1)
     n_voxels = div(length(data1), n_A)
+    vox_cis = CartesianIndices(Base.tail(axes(data1)))
     if design == :paired
         D = Matrix{Float64}(undef, n_A, n_voxels)
-        d1 = reshape(data1, n_A, n_voxels)
-        d2 = reshape(data2, n_A, n_voxels)
-        @inbounds @simd for i in eachindex(D)
-            D[i] = d1[i] - d2[i]
+        if data1 isa Array{Float64,M} && data2 isa Array{Float64,M}
+            d1 = reshape(data1, n_A, n_voxels)
+            d2 = reshape(data2, n_A, n_voxels)
+            @inbounds @simd for i in eachindex(D)
+                D[i] = d1[i] - d2[i]
+            end
+        else
+            @inbounds for (v, ci) in enumerate(vox_cis)
+                @simd for p = 1:n_A
+                    D[p, v] = data1[p, ci] - data2[p, ci]
+                end
+            end
         end
         return D
     else
         X = Matrix{Float64}(undef, n_A + n_B, n_voxels)
-        d1 = reshape(data1, n_A, n_voxels)
-        d2 = reshape(data2, n_B, n_voxels)
-        @inbounds for v = 1:n_voxels
-            @simd for p = 1:n_A
-                X[p, v] = d1[p, v]
+        if data1 isa Array{Float64,M} && data2 isa Array{Float64,M}
+            d1 = reshape(data1, n_A, n_voxels)
+            d2 = reshape(data2, n_B, n_voxels)
+            @inbounds for v = 1:n_voxels
+                @simd for p = 1:n_A
+                    X[p, v] = d1[p, v]
+                end
+                @simd for p = 1:n_B
+                    X[n_A+p, v] = d2[p, v]
+                end
             end
-            @simd for p = 1:n_B
-                X[n_A+p, v] = d2[p, v]
+        else
+            @inbounds for (v, ci) in enumerate(vox_cis)
+                @simd for p = 1:n_A
+                    X[p, v] = data1[p, ci]
+                end
+                @simd for p = 1:n_B
+                    X[n_A+p, v] = data2[p, ci]
+                end
             end
         end
         return X
@@ -276,8 +296,8 @@ function _build_perm_source(data1::Array{Float64,M}, data2::Array{Float64,M}, de
 end
 
 function _collect_perm_t_generic(
-    data1::Array{Float64,M},
-    data2::Array{Float64,M},
+    data1::AbstractArray{Float64,M},
+    data2::AbstractArray{Float64,M},
     design::Symbol,
     plan::AbstractMatrix,
     show_progress::Bool,
@@ -322,8 +342,8 @@ _collect_permutation_t_matrices(prepared::StatisticalData, plan::AbstractMatrix,
 )
 
 _collect_permutation_t_matrices_tf(
-    data1::Array{Float64,4},
-    data2::Array{Float64,4},
+    data1::AbstractArray{Float64,4},
+    data2::AbstractArray{Float64,4},
     design::Symbol,
     plan::AbstractMatrix,
     show_progress::Bool = true,
@@ -581,7 +601,13 @@ function _stream_nonparametric_threshold_individual_tf(
     thresholds_neg = Array{Float64,3}(undef, n_electrodes, n_freqs, n_time)
 
     for e = 1:n_electrodes
-        perm_e = _collect_permutation_t_matrices_tf(data1[:, e:e, :, :], data2[:, e:e, :, :], design, plan, show_progress && e == 1)
+        perm_e = _collect_permutation_t_matrices_tf(
+            @view(data1[:, e:e, :, :]),
+            @view(data2[:, e:e, :, :]),
+            design,
+            plan,
+            show_progress && e == 1,
+        )
         tp_e, tn_e = _compute_nonparametric_threshold_individual_tf(perm_e, alpha, tail)
         thresholds_pos[e:e, :, :] .= tp_e
         thresholds_neg[e:e, :, :] .= tn_e

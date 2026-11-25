@@ -17,16 +17,18 @@ Pass the returned `XdfData` to [`create_eegfun_data`](@ref) to convert it into `
 - `handle_clock_resets::Bool = true`: Detect and correct clock resets within the recording
 """
 function read_xdf(
-    filepath::String;
-    select_streams::Union{Nothing,Vector{Int}} = nothing,
+    filepath::AbstractString;
+    select_streams::Union{Nothing,AbstractVector{<:Integer}} = nothing,
     sync::Bool = true,
     dejitter_timestamps::Bool = true,
     handle_clock_resets::Bool = true,
 )
-    @info "Reading XDF data: $(basename(filepath))"
+    path = String(filepath)
+    streams = isnothing(select_streams) ? nothing : (select_streams isa Vector{Int} ? select_streams : collect(Int, select_streams))
+    @info "Reading XDF data: $(basename(path))"
     return ExtensibleDataFormat.read_xdf(
-        filepath;
-        select_streams = select_streams,
+        path;
+        select_streams = streams,
         sync = sync,
         dejitter_timestamps = dejitter_timestamps,
         handle_clock_resets = handle_clock_resets,

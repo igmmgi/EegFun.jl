@@ -99,14 +99,20 @@ function tf_baseline!(tf_data::TimeFreqEpochData, baseline_interval::Tuple{Real,
     ch_labels = channel_labels(tf_data)
     @info "Applying $(eff_method) baseline correction to $(length(tf_data.data_power)) TF epochs ($(baseline_interval[1])s to $(baseline_interval[2])s)"
 
-    Threads.@threads for ep_idx in eachindex(tf_data.data_power)
-        df = tf_data.data_power[ep_idx]
-        if regular_ref && nrow(df) == n_grid && df.time[1] == times[1] && df.time[end] == times[end]
-            for ch in ch_labels
-                _baseline_df_col!(df, ch, n_freqs, n_times, base_range, eff_method)
+    _foreach_chunk(length(tf_data.data_power)) do ep_range
+        bm_buf = Vector{Float64}(undef, n_freqs)
+        cnt_buf = Vector{Int}(undef, n_freqs)
+        work_buf = Vector{Float64}(undef, n_freqs)
+        for ep_idx in ep_range
+            df = tf_data.data_power[ep_idx]
+            if regular_ref && nrow(df) == n_grid && df.time[1] == times[1] && df.time[end] == times[end]
+                cols = _ensure_f64_channel_cols!(df, ch_labels)
+                for col in cols
+                    _tf_baseline_grid!(reshape(col, n_freqs, n_times), base_range, eff_method, bm_buf, cnt_buf, work_buf)
+                end
+            else
+                _tf_baseline_df!(df, ch_labels, baseline_interval, eff_method; parallel_channels = false)
             end
-        else
-            _tf_baseline_df!(df, ch_labels, baseline_interval, eff_method; parallel_channels = false)
         end
     end
     tf_data.baseline = BaselineInfo(method = eff_method, window = (Float64(baseline_interval[1]), Float64(baseline_interval[2])))
@@ -160,7 +166,7 @@ function tf_baseline(
 )
     _with_batch_logging("TF baseline", "tf_baseline.log", input_dir, output_dir) do ctx
         @log_call "tf_baseline"
-        output_dir = _prepare_output_dir!(ctx, joinpath(input_dir, "tf_baseline_$(_clean_pattern(file_pattern))"))
+        out_dir = _prepare_output_dir!(ctx, joinpath(input_dir, "tf_baseline_$(_clean_pattern(file_pattern))"))
         @info "baseline: $baseline_interval, method: $(something(method, :auto))"
 
         process_fn = (input_path, output_path) -> begin
@@ -175,7 +181,7 @@ function tf_baseline(
             return BatchResult(true, filename, "Baseline corrected")
         end
 
-        batch_process(process_fn, file_pattern, input_dir, output_dir, participant_selection, "TF baseline")
+        batch_process(process_fn, file_pattern, input_dir, out_dir, participant_selection, "TF baseline")
     end
 end
 
@@ -232,16 +238,20 @@ function _validate_and_resolve_tf_baseline_times(times::Vector{Float64}, baselin
     return minmax(i1, i2)
 end
 
-@inline function _baseline_df_col!(df::DataFrame, ch::Symbol, n_freqs::Int, n_times::Int, base_range::UnitRange{Int}, method::Symbol)
-    col = df[!, ch]
-    if col isa Vector{Float64}
-        _tf_baseline_grid!(reshape(col, n_freqs, n_times), base_range, method)
-    else
-        col_f64 = Float64.(col)
-        _tf_baseline_grid!(reshape(col_f64, n_freqs, n_times), base_range, method)
-        df[!, ch] = col_f64
+function _ensure_f64_channel_cols!(df::DataFrame, ch_labels::Vector{Symbol})::Vector{Vector{Float64}}
+    n_ch = length(ch_labels)
+    cols = Vector{Vector{Float64}}(undef, n_ch)
+    for (ci, ch) in enumerate(ch_labels)
+        col = df[!, ch]
+        if col isa Vector{Float64}
+            cols[ci] = col
+        else
+            col_f64 = Float64.(col)
+            df[!, ch] = col_f64
+            cols[ci] = col_f64
+        end
     end
-    return nothing
+    return cols
 end
 
 function _tf_baseline_df!(
@@ -258,41 +268,53 @@ function _tf_baseline_df!(
     b1, b2 = _validate_and_resolve_tf_baseline_times(times, baseline_interval)
     base_range = b1:b2
     is_regular = (nrow(df) == n_freqs * n_times) && (n_freqs > 0 && n_times > 0) && (df.time[1] == df.time[min(n_freqs, end)])
+    cols = _ensure_f64_channel_cols!(df, ch_labels)
 
     if is_regular
         if parallel_channels && n_channels > 1
-            Threads.@threads for ch in ch_labels
-                _baseline_df_col!(df, ch, n_freqs, n_times, base_range, method)
+            _foreach_chunk(n_channels) do ch_range
+                local bm_buf = Vector{Float64}(undef, n_freqs)
+                local cnt_buf = Vector{Int}(undef, n_freqs)
+                local work_buf = Vector{Float64}(undef, n_freqs)
+                for ci in ch_range
+                    _tf_baseline_grid!(reshape(cols[ci], n_freqs, n_times), base_range, method, bm_buf, cnt_buf, work_buf)
+                end
             end
         else
-            for ch in ch_labels
-                _baseline_df_col!(df, ch, n_freqs, n_times, base_range, method)
+            bm_seq = Vector{Float64}(undef, n_freqs)
+            cnt_seq = Vector{Int}(undef, n_freqs)
+            work_seq = Vector{Float64}(undef, n_freqs)
+            for col in cols
+                _tf_baseline_grid!(reshape(col, n_freqs, n_times), base_range, method, bm_seq, cnt_seq, work_seq)
             end
         end
     else
         row_index = _tf_build_row_index(df)
         power_3d = fill(NaN, n_channels, n_freqs, n_times)
-        for (fi, f) in enumerate(freqs_unique)
+        @inbounds for (fi, f) in enumerate(freqs_unique)
             rf = round(f, digits = 6)
             for (ti, t) in enumerate(times)
                 row = get(row_index, (rf, round(t, digits = 6)), nothing)
                 if !isnothing(row)
-                    for (ci, ch) in enumerate(ch_labels)
-                        power_3d[ci, fi, ti] = Float64(df[row, ch])
+                    for ci = 1:n_channels
+                        power_3d[ci, fi, ti] = cols[ci][row]
                     end
                 end
             end
         end
+        bm_irr = Vector{Float64}(undef, n_freqs)
+        cnt_irr = Vector{Int}(undef, n_freqs)
+        work_irr = Vector{Float64}(undef, n_freqs)
         for ci = 1:n_channels
-            _tf_baseline_grid!(@view(power_3d[ci, :, :]), base_range, method)
+            _tf_baseline_grid!(@view(power_3d[ci, :, :]), base_range, method, bm_irr, cnt_irr, work_irr)
         end
-        for (fi, f) in enumerate(freqs_unique)
+        @inbounds for (fi, f) in enumerate(freqs_unique)
             rf = round(f, digits = 6)
             for (ti, t) in enumerate(times)
                 row = get(row_index, (rf, round(t, digits = 6)), nothing)
                 if !isnothing(row)
-                    for (ci, ch) in enumerate(ch_labels)
-                        df[row, ch] = power_3d[ci, fi, ti]
+                    for ci = 1:n_channels
+                        cols[ci][row] = power_3d[ci, fi, ti]
                     end
                 end
             end
@@ -301,62 +323,28 @@ function _tf_baseline_df!(
     return nothing
 end
 
-function _tf_baseline_grid!(mat::AbstractMatrix{Float64}, base_range::UnitRange{Int}, method::Symbol)
+function _tf_baseline_grid!(
+    mat::AbstractMatrix{Float64},
+    base_range::UnitRange{Int},
+    method::Symbol,
+    bm_buf::Vector{Float64} = Vector{Float64}(undef, size(mat, 1)),
+    cnt_buf::Vector{Int} = Vector{Int}(undef, size(mat, 1)),
+    work_buf::Vector{Float64} = Vector{Float64}(undef, size(mat, 1)),
+)
     n_freqs, n_times = size(mat)
-    n_base = length(base_range)
-
-    @inbounds for fi = 1:n_freqs
-        s = 0.0
-        cnt = 0
-        for ti in base_range
-            v = mat[fi, ti]
-            if !isnan(v)
-                s += v
-                cnt += 1
-            end
-        end
-        bm = cnt > 0 ? s / cnt : NaN
-        if isnan(bm)
-            for ti = 1:n_times
-                mat[fi, ti] = NaN
-            end
-            continue
-        end
-
-        if method === :absolute
-            @simd for ti = 1:n_times
-                mat[fi, ti] -= bm
-            end
-        elseif method === :relative
-            if bm == 0.0
-                for ti = 1:n_times
-                    mat[fi, ti] = NaN
-                end
-            else
-                inv_bm = 1.0 / bm
-                @simd for ti = 1:n_times
-                    mat[fi, ti] *= inv_bm
+    if method === :db
+        @inbounds for fi = 1:n_freqs
+            s = 0.0
+            cnt = 0
+            for ti in base_range
+                v = mat[fi, ti]
+                if !isnan(v)
+                    s += v
+                    cnt += 1
                 end
             end
-        elseif method === :relchange || method === :percent
-            if bm == 0.0
-                for ti = 1:n_times
-                    mat[fi, ti] = NaN
-                end
-            else
-                scale = (method === :percent ? 100.0 : 1.0) / bm
-                @simd for ti = 1:n_times
-                    mat[fi, ti] = (mat[fi, ti] - bm) * scale
-                end
-            end
-        elseif method === :normchange
-            for ti = 1:n_times
-                p = mat[fi, ti]
-                denom = p + bm
-                mat[fi, ti] = denom == 0.0 ? NaN : (p - bm) / denom
-            end
-        elseif method === :db
-            if bm <= 0.0
+            bm = cnt > 0 ? s / cnt : NaN
+            if isnan(bm) || bm <= 0.0
                 for ti = 1:n_times
                     mat[fi, ti] = NaN
                 end
@@ -367,25 +355,81 @@ function _tf_baseline_grid!(mat::AbstractMatrix{Float64}, base_range::UnitRange{
                     mat[fi, ti] = (isnan(p) || p <= 0.0) ? NaN : 10.0 * log10(p * inv_bm)
                 end
             end
-        elseif method === :zscore
-            ssq = 0.0
-            for ti in base_range
+        end
+        return mat
+    end
+
+    fill!(bm_buf, 0.0)
+    fill!(cnt_buf, 0)
+    @inbounds for ti in base_range
+        for fi = 1:n_freqs
+            v = mat[fi, ti]
+            if !isnan(v)
+                bm_buf[fi] += v
+                cnt_buf[fi] += 1
+            end
+        end
+    end
+    @inbounds for fi = 1:n_freqs
+        c = cnt_buf[fi]
+        bm_buf[fi] = c > 0 ? (bm_buf[fi] / c) : NaN
+    end
+
+    if method === :absolute
+        @inbounds for ti = 1:n_times
+            @simd for fi = 1:n_freqs
+                mat[fi, ti] -= bm_buf[fi]
+            end
+        end
+    elseif method === :relative
+        @inbounds for fi = 1:n_freqs
+            bm = bm_buf[fi]
+            work_buf[fi] = (isnan(bm) || bm == 0.0) ? NaN : (1.0 / bm)
+        end
+        @inbounds for ti = 1:n_times
+            @simd for fi = 1:n_freqs
+                mat[fi, ti] *= work_buf[fi]
+            end
+        end
+    elseif method === :relchange || method === :percent
+        num = method === :percent ? 100.0 : 1.0
+        @inbounds for fi = 1:n_freqs
+            bm = bm_buf[fi]
+            work_buf[fi] = (isnan(bm) || bm == 0.0) ? NaN : (num / bm)
+        end
+        @inbounds for ti = 1:n_times
+            @simd for fi = 1:n_freqs
+                mat[fi, ti] = (mat[fi, ti] - bm_buf[fi]) * work_buf[fi]
+            end
+        end
+    elseif method === :normchange
+        @inbounds for ti = 1:n_times
+            for fi = 1:n_freqs
+                bm = bm_buf[fi]
+                p = mat[fi, ti]
+                denom = p + bm
+                mat[fi, ti] = denom == 0.0 ? NaN : (p - bm) / denom
+            end
+        end
+    elseif method === :zscore
+        fill!(work_buf, 0.0)
+        @inbounds for ti in base_range
+            for fi = 1:n_freqs
                 v = mat[fi, ti]
                 if !isnan(v)
-                    d = v - bm
-                    ssq += d * d
+                    d = v - bm_buf[fi]
+                    work_buf[fi] += d * d
                 end
             end
-            bstd = cnt >= 2 ? sqrt(ssq / (cnt - 1)) : NaN
-            if isnan(bstd) || bstd == 0.0
-                for ti = 1:n_times
-                    mat[fi, ti] = NaN
-                end
-            else
-                inv_std = 1.0 / bstd
-                @simd for ti = 1:n_times
-                    mat[fi, ti] = (mat[fi, ti] - bm) * inv_std
-                end
+        end
+        @inbounds for fi = 1:n_freqs
+            c = cnt_buf[fi]
+            bstd = c >= 2 ? sqrt(work_buf[fi] / (c - 1)) : NaN
+            work_buf[fi] = (isnan(bstd) || bstd == 0.0) ? NaN : (1.0 / bstd)
+        end
+        @inbounds for ti = 1:n_times
+            @simd for fi = 1:n_freqs
+                mat[fi, ti] = (mat[fi, ti] - bm_buf[fi]) * work_buf[fi]
             end
         end
     end

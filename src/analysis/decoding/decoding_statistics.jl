@@ -70,7 +70,7 @@ Perform a right-tailed one-sample t-test against chance level across participant
 # Returns
 - `DecodingStatisticsResult`
 """
-function test_against_chance(decoded_list::Vector{DecodedData}; alpha::Real = 0.05, correction_method::Symbol = :none)
+function test_against_chance(decoded_list::AbstractVector{<:DecodedData}; alpha::Real = 0.05, correction_method::Symbol = :none)
     correction_method == :no && (correction_method = :none)
     correction_method ∈ (:none, :bonferroni) || @minimal_error("correction_method must be :none or :bonferroni, got :$correction_method")
 
@@ -86,7 +86,7 @@ end
 
 """
     test_against_chance_cluster(
-        decoded_list::Vector{DecodedData};
+        decoded_list::AbstractVector{<:DecodedData};
         alpha::Real = 0.05,
         n_permutations::Int = 1000,
         cluster_statistic::Symbol = :sum,
@@ -108,7 +108,7 @@ across participants.
 - `DecodingStatisticsResult`
 """
 function test_against_chance_cluster(
-    decoded_list::Vector{DecodedData};
+    decoded_list::AbstractVector{<:DecodedData};
     alpha::Real = 0.05,
     n_permutations::Int = 1000,
     cluster_statistic::Symbol = :sum,

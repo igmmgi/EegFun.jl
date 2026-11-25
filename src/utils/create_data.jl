@@ -322,22 +322,22 @@ Returns `(times, signal)` where `signal` is `(n_samples × n_trials)`.
 """
 function generate_signal(
     n_trials::Int,
-    time_window::Vector{Float64},
+    time_window::AbstractVector{<:Real},
     sample_rate::Real,
-    signal_freqs::Vector{<:Real},
-    signal_amps::Vector{<:Real},
-    signal_times::Vector{Vector{Float64}},
+    signal_freqs::AbstractVector{<:Real},
+    signal_amps::AbstractVector{<:Real},
+    signal_times::AbstractVector{<:AbstractVector{<:Real}},
     noise::Real,
 )
-    dt = 1 / sample_rate
-    x_time = range(time_window[1], time_window[2] - dt, step = dt)
+    dt = 1.0 / Float64(sample_rate)
+    x_time = range(Float64(time_window[1]), Float64(time_window[2]) - dt, step = dt)
     n_samples = length(x_time)
     time_zero = x_time[_find_closest_time_index(x_time, 0.0)]
 
     base_signal = zeros(Float64, n_samples)
     for (freq, amp, times) in zip(signal_freqs, signal_amps, signal_times)
-        i1 = searchsortedfirst(x_time, time_zero + times[1])
-        i2 = searchsortedfirst(x_time, time_zero + times[2]) - 1
+        i1 = searchsortedfirst(x_time, time_zero + Float64(times[1]))
+        i2 = searchsortedfirst(x_time, time_zero + Float64(times[2])) - 1
         two_pi_f = 2π * Float64(freq)
         amp_f = Float64(amp)
         @inbounds @simd for i = i1:i2
@@ -375,10 +375,12 @@ function signal_to_data(
     signal,
     channel_name::Symbol,
     sample_rate::Real;
-    file::String = "synthetic",
+    file::AbstractString = "synthetic",
     condition::Int = 1,
-    condition_name::String = "test",
+    condition_name::AbstractString = "test",
 )
+    file_s = String(file)
+    cond_s = String(condition_name)
     ndims(signal) == 1 && (signal = reshape(signal, :, 1))
     n_samples, n_trials = size(signal)
     times_vec = collect(Float64, times)
@@ -390,10 +392,10 @@ function signal_to_data(
 
     if n_trials == 1
         erp_df = DataFrame(:time => times_vec, channel_name => signal[:, 1])
-        return ErpData(file, condition, condition_name, erp_df, layout, fs_int, analysis_info, 1)
+        return ErpData(file_s, condition, cond_s, erp_df, layout, fs_int, analysis_info, 1)
     end
     trial_dfs = [DataFrame(:time => copy(times_vec), channel_name => signal[:, t], :epoch => fill(t, n_samples)) for t = 1:n_trials]
-    return EpochData(file, condition, condition_name, trial_dfs, layout, fs_int, analysis_info)
+    return EpochData(file_s, condition, cond_s, trial_dfs, layout, fs_int, analysis_info)
 end
 
 """
@@ -403,34 +405,38 @@ Generate synthetic trial-averaged `TimeFreqData` for time-frequency and statisti
 """
 function create_test_tf_data(;
     participant::Int = 1,
-    file::String = "participant$participant",
+    file::AbstractString = "participant$participant",
     condition::Int = 1,
-    condition_name::String = "condition_$condition",
+    condition_name::AbstractString = "condition_$condition",
     n_channels::Int = 3,
-    frequencies::Vector{Float64} = [4.0, 8.0, 12.0, 16.0],
-    time_points::Vector{Float64} = [0.0, 0.1, 0.2, 0.3, 0.4],
-    power_offset::Float64 = 0.0,
-    noise::Float64 = 0.1,
+    frequencies::AbstractVector{<:Real} = [4.0, 8.0, 12.0, 16.0],
+    time_points::AbstractVector{<:Real} = [0.0, 0.1, 0.2, 0.3, 0.4],
+    power_offset::Real = 0.0,
+    noise::Real = 0.1,
     fs::Int = 256,
 )
     labels = _generate_channel_labels(n_channels)
-    n_freqs = length(frequencies)
-    n_time = length(time_points)
+    freqs_f = collect(Float64, frequencies)
+    times_f = collect(Float64, time_points)
+    offset_f = Float64(power_offset)
+    noise_f = Float64(noise)
+    n_freqs = length(freqs_f)
+    n_time = length(times_f)
     n_rows = n_freqs * n_time
-    time_col = repeat(time_points, inner = n_freqs)
-    freq_col = repeat(frequencies, outer = n_time)
+    time_col = repeat(times_f, inner = n_freqs)
+    freq_col = repeat(freqs_f, outer = n_time)
 
     power_df = DataFrame(time = time_col, freq = freq_col)
     phase_df = DataFrame(time = copy(time_col), freq = copy(freq_col))
     for ch in labels
-        power_df[!, ch] = power_offset .+ noise .* randn(n_rows)
+        power_df[!, ch] = offset_f .+ noise_f .* randn(n_rows)
         phase_df[!, ch] = zeros(n_rows)
     end
 
     return TimeFreqData(
-        file,
+        String(file),
         condition,
-        condition_name,
+        String(condition_name),
         power_df,
         phase_df,
         create_test_layout(n_channels = n_channels),
@@ -448,23 +454,27 @@ Generate synthetic single-trial `TimeFreqEpochData` across `n_epochs` epochs.
 """
 function create_test_tf_epoch_data(;
     participant::Int = 1,
-    file::String = "participant$participant",
+    file::AbstractString = "participant$participant",
     condition::Int = 1,
-    condition_name::String = "condition_$condition",
+    condition_name::AbstractString = "condition_$condition",
     n_channels::Int = 3,
     n_epochs::Int = 10,
-    frequencies::Vector{Float64} = [4.0, 8.0, 12.0, 16.0],
-    time_points::Vector{Float64} = [0.0, 0.1, 0.2, 0.3, 0.4],
-    power_offset::Float64 = 0.0,
-    noise::Float64 = 0.1,
+    frequencies::AbstractVector{<:Real} = [4.0, 8.0, 12.0, 16.0],
+    time_points::AbstractVector{<:Real} = [0.0, 0.1, 0.2, 0.3, 0.4],
+    power_offset::Real = 0.0,
+    noise::Real = 0.1,
     fs::Int = 256,
 )
     labels = _generate_channel_labels(n_channels)
-    n_freqs = length(frequencies)
-    n_time = length(time_points)
+    freqs_f = collect(Float64, frequencies)
+    times_f = collect(Float64, time_points)
+    offset_f = Float64(power_offset)
+    noise_f = Float64(noise)
+    n_freqs = length(freqs_f)
+    n_time = length(times_f)
     n_rows = n_freqs * n_time
-    time_col = repeat(time_points, inner = n_freqs)
-    freq_col = repeat(frequencies, outer = n_time)
+    time_col = repeat(times_f, inner = n_freqs)
+    freq_col = repeat(freqs_f, outer = n_time)
     layout = create_test_layout(n_channels = n_channels)
 
     power_dfs = Vector{DataFrame}(undef, n_epochs)
@@ -473,7 +483,7 @@ function create_test_tf_epoch_data(;
         power_df = DataFrame(time = copy(time_col), freq = copy(freq_col))
         phase_df = DataFrame(time = copy(time_col), freq = copy(freq_col))
         for ch in labels
-            power_df[!, ch] = power_offset .+ noise .* randn(n_rows)
+            power_df[!, ch] = offset_f .+ noise_f .* randn(n_rows)
             phase_df[!, ch] = zeros(n_rows)
         end
         power_dfs[epoch] = power_df
@@ -481,9 +491,9 @@ function create_test_tf_epoch_data(;
     end
 
     return TimeFreqEpochData(
-        file,
+        String(file),
         condition,
-        condition_name,
+        String(condition_name),
         power_dfs,
         phase_dfs,
         layout,

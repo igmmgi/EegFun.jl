@@ -815,10 +815,28 @@ function _amica_optimize_gpu!(
     fp_z_y = _gpu_array(zeros(Float32, N, n, m))
     dlambda_tmp = _gpu_array(zeros(Float32, N, n, m))
     dmu_denom_1 = _gpu_array(zeros(Float32, N, n, m))
-    dmu_denom_2 = _gpu_array(zeros(Float32, N, n, m))
+
+    drho_numer_3d = _gpu_array(zeros(Float32, 1, n, m))
+    sum_z_3d = _gpu_array(zeros(Float32, 1, n, m))
+    dmu_numer_3d = _gpu_array(zeros(Float32, 1, n, m))
+    kp_3d = _gpu_array(zeros(Float32, 1, n, m))
+    dmu_denom_3d = _gpu_array(zeros(Float32, 1, n, m))
+    dbeta_denom_3d = _gpu_array(zeros(Float32, 1, n, m))
+    dlambda_numer_3d = _gpu_array(zeros(Float32, 1, n, m))
+    Lt_sum_3d = _gpu_array(zeros(Float32, 1, n, 1))
+    newton_s2_2d = _gpu_array(zeros(Float32, 1, n))
 
     qconst_cpu = zeros(Float32, 1, n, m)
+    qconst = _gpu_array(zeros(Float32, 1, n, m))
+    W_cpu = zeros(Float32, n, n)
+    W = _gpu_array(zeros(Float32, n, n))
+    scale_f32 = zeros(Float32, n, m)
+    loc_f32 = zeros(Float32, n, m)
+    shape_f32 = zeros(Float32, n, m)
+    prop_f32 = zeros(Float32, n, m)
     source_signals = _gpu_array(zeros(Float32, N, n))
+    src_sq = _gpu_array(zeros(Float32, N, n))
+    g_times_sources = _gpu_array(zeros(Float32, n, n))
 
     scale = _gpu_array(Float32.(scale_cpu))
     location = _gpu_array(Float32.(location_cpu))
@@ -829,6 +847,8 @@ function _amica_optimize_gpu!(
     location_3d = reshape(location, 1, n, m)
     shape_3d = reshape(shape, 1, n, m)
     dA = _gpu_array(zeros(Float32, n, n))
+    newton_kappa_c = zeros(Float64, n)
+    newton_lambda_c = zeros(Float64, n)
 
     maxiter = params.amica_max_iter > 0 ? params.amica_max_iter : 2000
     LL = fill(-Inf, maxiter)
@@ -850,7 +870,8 @@ function _amica_optimize_gpu!(
         last_iter = iter
         _save_amica_snap!(cur_snap, A_cpu, scale_cpu, location_cpu, shape_cpu, proportions_cpu)
 
-        W = _gpu_array(Float32.(inv(A_cpu)))
+        W_cpu .= Float32.(inv(A_cpu))
+        copyto!(W, W_cpu)
         mul!(source_signals, dat_gpu, transpose(W))
 
         for j = 1:m, i = 1:n
@@ -859,7 +880,7 @@ function _amica_optimize_gpu!(
                 log(Float32(proportions_cpu[i, j])) +
                 log(Float32(scale_cpu[i, j]))
         end
-        qconst = _gpu_array(qconst_cpu)
+        copyto!(qconst, qconst_cpu)
         ss_3d = reshape(source_signals, N, n, 1)
 
         @. y = scale_3d * (ss_3d - location_3d)
@@ -878,31 +899,32 @@ function _amica_optimize_gpu!(
         @. fp = y_rho * sign(y) * shape_3d
         @. sc = y_rho * abs(y)
         @. sc = ifelse(sc >= 1.0f-16, z * log(sc) * sc, 0.0f0)
-        drho_numer = dropdims(sum(sc, dims = 1), dims = 1)
+        sum!(drho_numer_3d, sc)
 
         @. scale_z_fp = scale_3d * z * fp
         sum!(g_block_sum, scale_z_fp)
-        g_times_sources = transpose(dropdims(g_block_sum, dims = 3)) * source_signals
-        newton_sigma2 = dropdims(sum(source_signals .^ 2, dims = 1), dims = 1) ./ Float32(N)
+        mul!(g_times_sources, transpose(reshape(g_block_sum, N, n)), source_signals)
+        @. src_sq = source_signals^2
+        sum!(newton_s2_2d, src_sq)
 
-        sum_z = dropdims(sum(z, dims = 1), dims = 1)
-        dmu_numer = dropdims(sum(fp .* z, dims = 1), dims = 1)
-        kp = dropdims(sum(fp .* z .* fp, dims = 1), dims = 1)
+        sum!(sum_z_3d, z)
+        @. scratch3 = fp * z
+        sum!(dmu_numer_3d, scratch3)
+        @. scratch3 = scratch3 * fp
+        sum!(kp_3d, scratch3)
 
-        mask = shape_3d .<= 2.0f0
-        y_safe = @. ifelse(y == 0.0f0, 1.0f-16, y)
-        @. dmu_denom_1 = (z * fp / y_safe) * scale_3d
-        @. dmu_denom_2 = (z * fp * fp) * scale_3d
-        dmu_denom = dropdims(sum(ifelse.(mask, dmu_denom_1, dmu_denom_2), dims = 1), dims = 1)
+        @. dmu_denom_1 = ifelse(shape_3d <= 2.0f0, (z * fp / ifelse(y == 0.0f0, 1.0f-16, y)) * scale_3d, (z * fp * fp) * scale_3d)
+        sum!(dmu_denom_3d, dmu_denom_1)
 
         @. fp_z_y = fp * z * y
-        dbeta_denom = dropdims(sum(fp_z_y, dims = 1), dims = 1)
+        sum!(dbeta_denom_3d, fp_z_y)
 
         @. dlambda_tmp = z * (fp * y - 1.0f0)^2
-        dlambda_numer = dropdims(sum(dlambda_tmp, dims = 1), dims = 1)
+        sum!(dlambda_numer_3d, dlambda_tmp)
 
         ldet = -logabsdet(A_cpu)[1]
-        Lt_sum = sum(Float64, Array(vec(sum(logexp, dims = 1))))
+        sum!(Lt_sum_3d, logexp)
+        Lt_sum = sum(Float64, Array(Lt_sum_3d))
         LL_iter = (Float64(ldet + LLdetS) * Float64(N) + Lt_sum) / Float64(N * n)
 
         if !isfinite(LL_iter)
@@ -921,14 +943,14 @@ function _amica_optimize_gpu!(
         @. dA = -g_times_sources / Float32(N)
         dA[diagind(dA)] .+= 1.0f0
 
-        sum_z_c = Float64.(Array(sum_z))
-        dmu_numer_c = Float64.(Array(dmu_numer))
-        dmu_denom_c = Float64.(Array(dmu_denom))
-        dbeta_denom_c = Float64.(Array(dbeta_denom))
-        drho_numer_c = Float64.(Array(drho_numer))
-        kp_c = Float64.(Array(kp))
-        dlambda_numer_c = Float64.(Array(dlambda_numer))
-        newton_sigma2_c = Float64.(Array(newton_sigma2))
+        sum_z_c = reshape(Float64.(Array(sum_z_3d)), n, m)
+        dmu_numer_c = reshape(Float64.(Array(dmu_numer_3d)), n, m)
+        dmu_denom_c = reshape(Float64.(Array(dmu_denom_3d)), n, m)
+        dbeta_denom_c = reshape(Float64.(Array(dbeta_denom_3d)), n, m)
+        drho_numer_c = reshape(Float64.(Array(drho_numer_3d)), n, m)
+        kp_c = reshape(Float64.(Array(kp_3d)), n, m)
+        dlambda_numer_c = reshape(Float64.(Array(dlambda_numer_3d)), n, m)
+        newton_sigma2_c = vec(Float64.(Array(newton_s2_2d))) ./ Float64(N)
 
         if m > 1
             raw_prop = max.(sum_z_c ./ Float64(N), 1.0e-4)
@@ -938,11 +960,11 @@ function _amica_optimize_gpu!(
         newton_active = do_newton && iter >= newt_start_iter
         if newton_active
             dkap = @. (kp_c / (proportions_cpu * N)) * scale_cpu^2
-            newton_kappa_c = vec(sum(proportions_cpu .* dkap, dims = 2))
-            newton_lambda_c = vec(sum(proportions_cpu .* (dlambda_numer_c ./ sum_z_c .+ dkap .* location_cpu .^ 2), dims = 2))
+            newton_kappa_c .= vec(sum(proportions_cpu .* dkap, dims = 2))
+            newton_lambda_c .= vec(sum(proportions_cpu .* (dlambda_numer_c ./ sum_z_c .+ dkap .* location_cpu .^ 2), dims = 2))
         else
-            newton_kappa_c = zeros(Float64, n)
-            newton_lambda_c = zeros(Float64, n)
+            fill!(newton_kappa_c, 0.0)
+            fill!(newton_lambda_c, 0.0)
         end
 
         if m > 1
@@ -960,12 +982,14 @@ function _amica_optimize_gpu!(
                 lrate.minrho,
                 lrate.maxrho,
             )
+            shape_f32 .= Float32.(shape_cpu)
+            copyto!(shape, shape_f32)
         end
 
-        scale .= _gpu_array(Float32.(scale_cpu))
-        location .= _gpu_array(Float32.(location_cpu))
-        shape .= _gpu_array(Float32.(shape_cpu))
-        proportions .= _gpu_array(Float32.(proportions_cpu))
+        if m > 1
+            prop_f32 .= Float32.(proportions_cpu)
+            copyto!(proportions, prop_f32)
+        end
 
         no_newton = _update_amica_mixing!(
             A_cpu,
@@ -981,8 +1005,10 @@ function _amica_optimize_gpu!(
         )
 
         _reparameterize_amica!(A_cpu, location_cpu, scale_cpu)
-        location .= _gpu_array(Float32.(location_cpu))
-        scale .= _gpu_array(Float32.(scale_cpu))
+        loc_f32 .= Float32.(location_cpu)
+        copyto!(location, loc_f32)
+        scale_f32 .= Float32.(scale_cpu)
+        copyto!(scale, scale_f32)
 
         if iter > 1
             if _calculate_amica_lrate!(LL, iter, newt_start_iter, do_newton, lrate)

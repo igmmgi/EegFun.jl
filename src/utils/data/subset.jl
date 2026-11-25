@@ -14,6 +14,14 @@ struct _ChannelNumbersSelector <: Function
     channel_numbers::Vector{Int}
 end
 
+struct _SampleIndicesSelector <: Function
+    indices::Vector{Int}
+end
+
+struct _EpochNumbersSelector <: Function
+    epoch_numbers::Vector{Int}
+end
+
 ######################################
 ########### User Functions ###########
 ######################################
@@ -274,10 +282,7 @@ Create an epoch selection predicate for `epoch_selection` arguments.
 """
 epochs() = x -> fill(true, length(x))
 
-epochs(epoch_numbers::AbstractVector{<:Integer}) =
-    let nums = collect(Int, epoch_numbers)
-        x -> Bool[i in nums for i = 1:length(x)]
-    end
+epochs(epoch_numbers::AbstractVector{<:Integer}) = _EpochNumbersSelector(collect(Int, epoch_numbers))
 
 epochs(epoch_numbers::AbstractRange{<:Integer}) = epochs(collect(Int, epoch_numbers))
 
@@ -418,25 +423,35 @@ Resolve `sample_selection` into 1-based row indices.
 """
 get_selected_samples(dat::SingleDataFrameEeg, ::Union{Nothing,AllSelection,Colon,_AllSamples}) = collect(1:nrow(dat.data))
 
+get_selected_samples(dat::SingleDataFrameEeg, s::_SampleIndicesSelector) = _resolve_sample_indices(nrow(dat.data), s.indices)
+
 function get_selected_samples(dat::SingleDataFrameEeg, sample_selection::Function)
     sample_selection === Colon() && return collect(1:nrow(dat.data))
-    return findall(sample_selection(dat.data))
+    res = sample_selection(dat.data)
+    return res isa AbstractVector{Bool} ? findall(res) : res
 end
 
 get_selected_samples(dat::MultiDataFrameEeg, ::Union{Nothing,AllSelection,Colon,_AllSamples}) =
     isempty(dat.data) ? Int[] : collect(1:nrow(dat.data[1]))
 
+get_selected_samples(dat::MultiDataFrameEeg, s::_SampleIndicesSelector) =
+    isempty(dat.data) ? Int[] : _resolve_sample_indices(nrow(dat.data[1]), s.indices)
+
 function get_selected_samples(dat::MultiDataFrameEeg, sample_selection::Function)
     isempty(dat.data) && return Int[]
     sample_selection === Colon() && return collect(1:nrow(dat.data[1]))
-    return findall(sample_selection(dat.data[1]))
+    res = sample_selection(dat.data[1])
+    return res isa AbstractVector{Bool} ? findall(res) : res
 end
 
 get_selected_samples(dat::DataFrame, ::Union{Nothing,AllSelection,Colon,_AllSamples}) = collect(1:nrow(dat))
 
+get_selected_samples(dat::DataFrame, s::_SampleIndicesSelector) = _resolve_sample_indices(nrow(dat), s.indices)
+
 function get_selected_samples(dat::DataFrame, sample_selection::Function)
     sample_selection === Colon() && return collect(1:nrow(dat))
-    return findall(sample_selection(dat))
+    res = sample_selection(dat)
+    return res isa AbstractVector{Bool} ? findall(res) : res
 end
 
 get_selected_samples(dat::Union{SingleDataFrameEeg,MultiDataFrameEeg,DataFrame}, sel::Union{TimeSelection,Tuple{Real,Real}}) =
@@ -451,6 +466,8 @@ get_selected_samples(dat::Union{SingleDataFrameEeg,MultiDataFrameEeg,DataFrame},
 Resolve `epoch_selection` into 1-based epoch indices.
 """
 get_selected_epochs(dat::MultiDataFrameEeg, ::Union{Nothing,Colon}) = collect(1:length(dat.data))
+
+get_selected_epochs(dat::MultiDataFrameEeg, s::_EpochNumbersSelector) = _resolve_sample_indices(length(dat.data), s.epoch_numbers)
 
 get_selected_epochs(dat::MultiDataFrameEeg, epoch_selection) = get_selected_epochs(dat, _to_epoch_func(epoch_selection))
 
@@ -505,6 +522,31 @@ _subset_dataframes(
 (s::_ChannelNamesSelector)(x) = x .∈ Ref(s.channel_names)
 
 (s::_ChannelNumbersSelector)(x) = Bool[i in s.channel_numbers for i = 1:length(x)]
+
+function (s::_EpochNumbersSelector)(x)
+    n = length(x)
+    mask = fill(false, n)
+    @inbounds for idx in s.epoch_numbers
+        1 <= idx <= n && (mask[idx] = true)
+    end
+    return mask
+end
+
+function _resolve_sample_indices(n_rows::Int, indices::Vector{Int})::Vector{Int}
+    @inbounds for idx in indices
+        (1 <= idx <= n_rows) || return Int[i for i in indices if 1 <= i <= n_rows]
+    end
+    return copy(indices)
+end
+
+function (s::_SampleIndicesSelector)(x::DataFrame)
+    n = nrow(x)
+    mask = falses(n)
+    @inbounds for idx in s.indices
+        1 <= idx <= n && (mask[idx] = true)
+    end
+    return mask
+end
 
 function _subset_common(dat, channel_selection, sample_selection, include_extra)
     @debug "Subsetting $(typeof(dat)): selecting channels and samples"
@@ -590,6 +632,14 @@ function _combine_interval_sample(interval::Interval, sample_selection)
     (interval isa Nothing || interval isa AllSelection) && return sample_func
     interval_sel = _interval_to_samples(interval)
     sample_func isa _AllSamples && return interval_sel
+    if sample_func isa _SampleIndicesSelector
+        idxs = sample_func.indices
+        return x -> begin
+            mask = interval_sel(x)
+            n = length(mask)
+            Int[i for i in idxs if 1 <= i <= n && mask[i]]
+        end
+    end
     return x -> interval_sel(x) .& sample_func(x)
 end
 
@@ -729,9 +779,16 @@ _to_sample_func(mask::AbstractVector{Bool}) =
         length(mask) == nrow(x) ? collect(Bool, mask) :
         @minimal_error("Boolean sample mask length ($(length(mask))) must match number of samples ($(nrow(x)))")
 
-_to_sample_func(idx::Integer) = x -> Bool[i == idx for i = 1:nrow(x)]
+_to_sample_func(idx::Integer) = _SampleIndicesSelector(Int[Int(idx)])
 
-_to_sample_func(idx) = x -> Bool[i in idx for i = 1:nrow(x)]
+_to_sample_func(idx::AbstractVector{<:Integer}) = _SampleIndicesSelector(collect(Int, idx))
+
+_to_sample_func(idx::AbstractRange{<:Integer}) = _SampleIndicesSelector(collect(Int, idx))
+
+function _to_sample_func(idx)
+    set = Set(idx)
+    return x -> Bool[i in set for i = 1:nrow(x)]
+end
 
 _to_channel_func(::Nothing) = channels()
 

@@ -458,7 +458,7 @@ function _decode_iteration!(
 
     n_classes = length(data_arrays)
     n_features = size(data_arrays[1], 1)
-    n_timepoints = size(all_accuracies, 3)
+    n_timepoints = size(all_accuracies, 2)
     n_folds = length(cv_splits)
     total_trials = sum(eff_trials_per_condition)
     local_max_train = maximum(length(first(s)) for s in cv_splits)
@@ -471,6 +471,8 @@ function _decode_iteration!(
     X_test_buf = Matrix{Float64}(undef, n_features, local_max_test)
     y_train_buf = Vector{Int}(undef, local_max_train)
     y_test_buf = Vector{Int}(undef, local_max_test)
+    μ_buf = Vector{Float64}(undef, n_features)
+    inv_σ_buf = Vector{Float64}(undef, n_features)
     class_correct = Vector{Int}(undef, n_classes)
     class_total = Vector{Int}(undef, n_classes)
     ws = LiblinearWorkspace(n_features, local_max_train, cost, n_classes)
@@ -507,25 +509,39 @@ function _decode_iteration!(
                 y_test_buf[i] = labels[idx]
             end
 
-            # Within-fold z-score standardization strictly from training-fold statistics
+            # Within-fold z-score standardization strictly from training-fold statistics (column-major)
+            fill!(μ_buf, 0.0)
+            @inbounds for i = 1:n_train
+                @simd for f = 1:n_features
+                    μ_buf[f] += X_train_buf[f, i]
+                end
+            end
+            inv_n_train = 1.0 / n_train
+            @inbounds @simd for f = 1:n_features
+                μ_buf[f] *= inv_n_train
+            end
+
+            fill!(inv_σ_buf, 0.0)
+            @inbounds for i = 1:n_train
+                @simd for f = 1:n_features
+                    d = X_train_buf[f, i] - μ_buf[f]
+                    inv_σ_buf[f] += d * d
+                end
+            end
+            inv_df = n_train > 1 ? (1.0 / (n_train - 1)) : 0.0
             @inbounds for f = 1:n_features
-                sum_f = 0.0
-                @simd for i = 1:n_train
-                    sum_f += X_train_buf[f, i]
+                σ_f = n_train > 1 ? sqrt(max(inv_σ_buf[f] * inv_df, 0.0)) : 0.0
+                inv_σ_buf[f] = (σ_f == 0.0 || !isfinite(σ_f)) ? 1.0 : (1.0 / σ_f)
+            end
+
+            @inbounds for i = 1:n_train
+                @simd for f = 1:n_features
+                    X_train_buf[f, i] = (X_train_buf[f, i] - μ_buf[f]) * inv_σ_buf[f]
                 end
-                μ_f = sum_f / n_train
-                ss_f = 0.0
-                @simd for i = 1:n_train
-                    d = X_train_buf[f, i] - μ_f
-                    ss_f += d * d
-                end
-                σ_f = n_train > 1 ? sqrt(max(ss_f / (n_train - 1), 0.0)) : 0.0
-                inv_σ = (σ_f == 0.0 || !isfinite(σ_f)) ? 1.0 : (1.0 / σ_f)
-                @simd for i = 1:n_train
-                    X_train_buf[f, i] = (X_train_buf[f, i] - μ_f) * inv_σ
-                end
-                @simd for i = 1:n_test
-                    X_test_buf[f, i] = (X_test_buf[f, i] - μ_f) * inv_σ
+            end
+            @inbounds for i = 1:n_test
+                @simd for f = 1:n_features
+                    X_test_buf[f, i] = (X_test_buf[f, i] - μ_buf[f]) * inv_σ_buf[f]
                 end
             end
 
@@ -577,7 +593,7 @@ function _decode_iteration!(
             end
 
             if equalize_trials
-                all_accuracies[iter, fold, t] = n_correct / n_test
+                all_accuracies[fold, t, iter] = n_correct / n_test
             else
                 recall_sum = 0.0
                 n_present = 0
@@ -587,14 +603,14 @@ function _decode_iteration!(
                         n_present += 1
                     end
                 end
-                all_accuracies[iter, fold, t] = n_present > 0 ? (recall_sum / n_present) : 0.0
+                all_accuracies[fold, t, iter] = n_present > 0 ? (recall_sum / n_present) : 0.0
             end
         end
 
         if !isnothing(completed) && !should_stop[]
             Threads.atomic_add!(completed, 1)
+            yield()
         end
-        yield()
     end
 
     return nothing
@@ -637,7 +653,7 @@ function _decode_core(
         )
     end
 
-    all_accuracies = zeros(Float64, n_iterations, n_folds, n_timepoints)
+    all_accuracies = zeros(Float64, n_folds, n_timepoints, n_iterations)
     max_test_size = sum(div(n_tr, n_folds) for n_tr in eff_trials_per_condition)
     all_predictions = save_raw_predictions ? Array{Float64,4}(undef, n_iterations, n_folds, n_timepoints, max_test_size) : nothing
     iter_confusions = [zeros(Float64, n_timepoints, n_classes, n_classes) for _ = 1:n_iterations]
@@ -679,9 +695,9 @@ function _decode_core(
     end
 
     # Average across folds and iterations; iteration SD is a Monte Carlo dispersion, not divided by sqrt(n_iterations)
-    iter_scores = mean(all_accuracies, dims = 2)
-    average_score = vec(mean(iter_scores, dims = 1))
-    stderror = n_iterations > 1 ? vec(std(iter_scores, dims = 1)) : vec(std(all_accuracies, dims = 2) ./ sqrt(n_folds))
+    iter_scores = mean(all_accuracies, dims = 1)
+    average_score = vec(mean(iter_scores, dims = 3))
+    stderror = n_iterations > 1 ? vec(std(iter_scores, dims = 3)) : vec(std(all_accuracies, dims = 1) ./ sqrt(n_folds))
 
     confusion_matrices = zeros(Float64, n_timepoints, n_classes, n_classes)
     for ic in iter_confusions

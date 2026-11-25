@@ -69,9 +69,9 @@ mutable struct EpochRejectionInfo
     name::String
     info::EpochInfo
     n_artifacts::Int
-    abs_criterion::Real
+    abs_criterion::Float64
     abs_rejections::Union{Vector{Rejection},Nothing}
-    z_criterion::Real
+    z_criterion::Float64
     z_rejections::Union{ZScoreRejectionInfo,Nothing}
     rejected::Vector{Rejection}
     repaired::Union{OrderedDict{Int,Vector{Symbol}},Nothing}

@@ -52,21 +52,9 @@ function tf_itc(tf::TimeFreqEpochData)::TimeFreqData
         for tr = 1:n_trials
             pcol = tf.data_phase[tr][!, ch]
             if has_power && hasproperty(tf.data_power[tr], ch)
-                pwcol = tf.data_power[tr][!, ch]
-                @inbounds for i in eachindex(phasor_sum, pcol, pwcol)
-                    ph = pcol[i]
-                    pw = pwcol[i]
-                    if isnan(ph) || isnan(pw)
-                        phasor_sum[i] = NaN + NaN * im
-                    elseif isfinite(ph) && isfinite(pw) && (!raw_unbaselined || pw > 0.0)
-                        phasor_sum[i] += cis(ph)
-                    end
-                end
+                _accum_itc_trial!(phasor_sum, pcol, tf.data_power[tr][!, ch], raw_unbaselined)
             else
-                @inbounds for i in eachindex(phasor_sum, pcol)
-                    ph = pcol[i]
-                    phasor_sum[i] += isnan(ph) ? (NaN + NaN * im) : cis(ph)
-                end
+                _accum_itc_trial!(phasor_sum, pcol)
             end
         end
         itc_df[!, ch] = abs.(phasor_sum) .* inv_n
@@ -92,6 +80,32 @@ tf_itc(tfs::AbstractVector{<:TimeFreqEpochData}) = [tf_itc(tf) for tf in tfs]
 ######################################
 ######### Internal Functions #########
 ######################################
+
+function _accum_itc_trial!(
+    phasor_sum::Vector{ComplexF64},
+    pcol::AbstractVector{<:Real},
+    pwcol::AbstractVector{<:Real},
+    raw_unbaselined::Bool,
+)
+    @inbounds for i in eachindex(phasor_sum, pcol, pwcol)
+        ph = Float64(pcol[i])
+        pw = Float64(pwcol[i])
+        if isnan(ph) || isnan(pw)
+            phasor_sum[i] = NaN + NaN * im
+        elseif isfinite(ph) && isfinite(pw) && (!raw_unbaselined || pw > 0.0)
+            phasor_sum[i] += cis(ph)
+        end
+    end
+    return nothing
+end
+
+function _accum_itc_trial!(phasor_sum::Vector{ComplexF64}, pcol::AbstractVector{<:Real})
+    @inbounds for i in eachindex(phasor_sum, pcol)
+        ph = Float64(pcol[i])
+        phasor_sum[i] += isnan(ph) ? (NaN + NaN * im) : cis(ph)
+    end
+    return nothing
+end
 
 # ITC results are ordinary TimeFreqData tagged via the `method` field (e.g. :wavelet_itc)
 _is_itc(tf::Union{TimeFreqData,TimeFreqEpochData}) = endswith(String(tf.method), "_itc")

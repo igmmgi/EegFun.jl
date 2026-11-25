@@ -191,7 +191,8 @@ function _bdf_file_integrity(filepath::String)
     end
     hdr = try
         read_raw_data(filepath; header_only = true)
-    catch
+    catch e
+        e isa InterruptException && rethrow()
         return (;
             hdr = nothing,
             actual_bytes,

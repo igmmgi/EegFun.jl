@@ -209,8 +209,7 @@ function plot_artifact_components(ica::InfoIca, artifacts::ArtifactComponents; k
         @minimal_warning "Cannot create ICA artifact topography plot: layout has no valid spatial coordinates."
         return (fig = _eegfun_figure(), axes = Axis[])
     end
-    _ensure_coordinates_2d!(ica.layout)
-    _ensure_coordinates_3d!(ica.layout)
+    ica = _ica_with_plot_coords(ica)
 
     method = plot_kwargs[:method]
     gridscale = plot_kwargs[:gridscale]

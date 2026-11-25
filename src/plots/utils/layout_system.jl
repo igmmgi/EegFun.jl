@@ -30,7 +30,7 @@ Defines how multi-channel axes are arranged inside a Makie `Figure` (`:single`, 
 """
 struct PlotLayout
     type::Symbol
-    dims::AbstractVector{Int}
+    dims::Vector{Int}
     positions::Vector{Tuple{Float64,Float64}}
     channels::Vector{Symbol}
     metadata::Dict{Symbol,Any}
@@ -214,7 +214,7 @@ end
 
 function _create_topo_layout(layout::Layout, channels::Vector{Symbol}; kwargs...)
     topo_kwargs = _merge_plot_kwargs(LAYOUT_KWARGS, kwargs; validate = false)
-    _ensure_coordinates_2d!(layout)
+    layout = _with_2d_coords(layout)
     positions = _compute_topo_positions(layout.data[!, :label], layout.data[!, :x2], layout.data[!, :y2], channels)
     return PlotLayout(:topo, [0, 0], positions, channels, topo_kwargs)
 end

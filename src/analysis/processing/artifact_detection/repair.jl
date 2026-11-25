@@ -113,14 +113,16 @@ function _repair_artifacts_spherical_spline!(dat::EpochData, artifacts::EpochRej
     artifacts.repaired = OrderedDict{Int,Vector{Symbol}}()
     artifacts.skipped = OrderedDict{Int,Vector{Symbol}}()
     all_channels = channel_labels(dat)
+    ch_set = Set{Symbol}(all_channels)
+    repair_groups = OrderedDict{Vector{Symbol},Vector{Int}}()
 
     for epoch_idx in sort(unique(r.epoch for r in artifacts.rejected))
         bad_channels = unique(r.channel for r in artifacts.rejected if r.epoch == epoch_idx)
         isempty(bad_channels) && continue
 
-        present_bad = [ch for ch in bad_channels if ch in all_channels]
-        missing_bad = [ch for ch in bad_channels if ch ∉ all_channels]
-        if isempty(setdiff(all_channels, present_bad))
+        present_bad = [ch for ch in bad_channels if ch in ch_set]
+        missing_bad = [ch for ch in bad_channels if ch ∉ ch_set]
+        if length(present_bad) == length(all_channels)
             @minimal_warning "Epoch $epoch_idx: Cannot repair channels $(bad_channels) using spherical spline interpolation (all channels are bad)"
             artifacts.skipped[epoch_idx] = bad_channels
             continue
@@ -128,10 +130,14 @@ function _repair_artifacts_spherical_spline!(dat::EpochData, artifacts::EpochRej
 
         if !isempty(present_bad)
             @info "Repairing epoch $epoch_idx channels $(present_bad) using spherical spline interpolation"
-            repair_channels!(dat, present_bad; method = :spherical_spline, epoch_selection = epochs([epoch_idx]), m = m, lambda = lambda)
             artifacts.repaired[epoch_idx] = present_bad
+            push!(get!(Vector{Int}, repair_groups, present_bad), epoch_idx)
         end
         !isempty(missing_bad) && (artifacts.skipped[epoch_idx] = missing_bad)
+    end
+
+    for (present_bad, epoch_indices) in repair_groups
+        repair_channels!(dat, present_bad; method = :spherical_spline, epoch_selection = epochs(epoch_indices), m = m, lambda = lambda)
     end
     return dat
 end

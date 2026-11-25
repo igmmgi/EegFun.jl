@@ -5,18 +5,19 @@
 ######################################
 
 """
-    read_eeglab(filepath::String; preserve_radial_distance::Bool = true)
+    read_eeglab(filepath::AbstractString; preserve_radial_distance::Bool = true)
 
 Load an EEGLAB `.set` file and return `ContinuousData`, `EpochData`, or `ErpData`
 (or `(eeg_data, ica_data::InfoIca)` when ICA decomposition weights are present).
 
 # Arguments
-- `filepath::String`: Path to `.set` file
+- `filepath::AbstractString`: Path to `.set` file
 - `preserve_radial_distance::Bool`: Preserve radial distances for electrodes with `inc > 90°` (default: `true`)
 """
-function read_eeglab(filepath::String; preserve_radial_distance::Bool = true)
-    @info "Loading EEGLAB .set file: $filepath"
-    mat_data = matread(filepath)
+function read_eeglab(filepath::AbstractString; preserve_radial_distance::Bool = true)
+    path = String(filepath)
+    @info "Loading EEGLAB .set file: $path"
+    mat_data = matread(path)
     eeg = haskey(mat_data, "EEG") ? mat_data["EEG"] : mat_data
 
     n_trials = Int(eeg["trials"])
@@ -25,18 +26,18 @@ function read_eeglab(filepath::String; preserve_radial_distance::Bool = true)
     eeg_data = if n_trials == 1
         if xmin < 0
             @info "Detected averaged ERP data (xmin=$xmin < 0)"
-            _eeglab_to_erpdata(eeg, filepath, preserve_radial_distance)
+            _eeglab_to_erpdata(eeg, path, preserve_radial_distance)
         else
             @info "Detected continuous data (xmin=$xmin >= 0)"
-            _eeglab_to_continuousdata(eeg, filepath, preserve_radial_distance)
+            _eeglab_to_continuousdata(eeg, path, preserve_radial_distance)
         end
     else
-        _eeglab_to_epochdata(eeg, filepath, preserve_radial_distance)
+        _eeglab_to_epochdata(eeg, path, preserve_radial_distance)
     end
 
     if haskey(eeg, "icaweights") && !isempty(eeg["icaweights"])
         @info "ICA decomposition detected, loading ICA data"
-        return eeg_data, _extract_ica_info(eeg, filepath, eeg_data.layout)
+        return eeg_data, _extract_ica_info(eeg, path, eeg_data.layout)
     end
     return eeg_data
 end

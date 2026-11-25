@@ -202,7 +202,7 @@ Result of a mass-univariate linear mixed model fit across a channels × time gri
   `contrasts`, `n_obs`, `formula`, `df_parametric`, `z_perm_obs`)
 - `epochs::Union{EpochData,Nothing}`: The input epochs (EpochData method only; used for plotting)
 """
-struct LmmStatsResult <: EegFunData
+struct LmmStatsResult{IT<:NamedTuple} <: EegFunData
     coefficients::Vector{String}
     channels::Vector{Symbol}
     time_points::Vector{Float64}
@@ -215,7 +215,7 @@ struct LmmStatsResult <: EegFunData
     tested::Vector{Int}
     singular_fits::Matrix{Bool}
     fit_status::Matrix{UInt8}
-    inference::NamedTuple
+    inference::IT
     epochs::Union{EpochData,Nothing}
 end
 

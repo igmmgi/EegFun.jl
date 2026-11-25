@@ -249,7 +249,7 @@ function _has_channel(dat::EegData, sym::Symbol)::Bool
     df = _first_df(dat)
     labels = dat.layout.data[!, :label]
     isnothing(df) && return _symbol_in(sym, labels)
-    return haskey(DataFrames.index(df).lookup, sym) && _symbol_in(sym, labels)
+    return DataFrames.columnindex(df, sym) > 0 && _symbol_in(sym, labels)
 end
 
 @generated function _fields_equal(a::T, b::T) where {T}

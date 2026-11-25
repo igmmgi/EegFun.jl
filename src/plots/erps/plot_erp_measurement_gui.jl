@@ -161,8 +161,9 @@ function plot_erp_measurement_gui(
     Label(controls_grid[20, 1], "Result:", fontsize = 14, font = :bold, halign = :right, justification = :right)
     result_label = Label(controls_grid[21, 1], "—", fontsize = 16, halign = :right, justification = :right)
 
+    topo_layout = _with_2d_coords(first_erp.layout)
     ax_topo = Axis(controls_grid[22, 1], aspect = DataAspect())
-    plot_layout_2d!(fig, ax_topo, first_erp.layout, point_plot = true, label_plot = false, head_linewidth = 1)
+    plot_layout_2d!(fig, ax_topo, topo_layout, point_plot = true, label_plot = false, head_linewidth = 1)
     hidedecorations!(ax_topo)
     hidespines!(ax_topo)
     deregister_interaction!(ax_topo, :rectanglezoom)
@@ -198,7 +199,7 @@ function plot_erp_measurement_gui(
             x1, x2 = minmax(ch_selection_start[][1], current_pos[1])
             y1, y2 = minmax(ch_selection_start[][2], current_pos[2])
 
-            layout_df = first_erp.layout.data
+            layout_df = topo_layout.data
             lx = layout_df[!, :x2]
             ly = layout_df[!, :y2]
             ll = layout_df[!, :label]
