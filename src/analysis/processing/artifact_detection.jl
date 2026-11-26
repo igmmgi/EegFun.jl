@@ -1,6 +1,12 @@
 # Detection, reporting, and repair of artifacts in continuous and epoched EEG data.
 
 ######################################
+######### Types & Constants ##########
+######################################
+
+const _DetectableEeg = Union{SingleDataFrameEeg,MultiDataFrameEeg}
+
+######################################
 ######### Internal Functions #########
 ######################################
 
@@ -25,8 +31,44 @@ end
     return buf
 end
 
+function _detect_df_combined!(
+    out::AbstractVector{Bool},
+    buf::BitVector,
+    detect_into!::D,
+    df::DataFrame,
+    selected_channels::Vector{Symbol},
+    sample_mask::Union{Nothing,BitVector},
+) where {D}
+    fill!(out, false)
+    resize!(buf, nrow(df))
+    for ch in selected_channels
+        detect_into!(buf, df[!, ch])
+        _apply_sample_mask!(buf, sample_mask)
+        out .|= buf
+    end
+    return out
+end
+
+function _detect_df_separate(
+    detect_into!::D,
+    df::DataFrame,
+    selected_channels::Vector{Symbol},
+    sep_cols::Vector{Symbol},
+    sample_mask::Union{Nothing,BitVector},
+) where {D}
+    n = nrow(df)
+    pairs = Vector{Pair{Symbol,BitVector}}(undef, length(selected_channels))
+    for (ci, ch) in enumerate(selected_channels)
+        col_mask = falses(n)
+        detect_into!(col_mask, df[!, ch])
+        _apply_sample_mask!(col_mask, sample_mask)
+        pairs[ci] = sep_cols[ci] => col_mask
+    end
+    return pairs
+end
+
 function _flag_artifacts!(
-    detect_into!::F,
+    make_detector::F,
     dat::SingleDataFrameEeg,
     combined_col::Symbol,
     sep_col_fn::G;
@@ -38,31 +80,23 @@ function _flag_artifacts!(
     selected_channels = get_selected_channels(dat, channel_selection; include_meta = false, include_extra = false)
     isempty(selected_channels) && @minimal_error("No channels selected")
 
+    detect_into! = make_detector()
     n = n_samples(dat)
     sample_mask = _selected_sample_mask(dat.data, _combine_interval_sample(interval_selection, sample_selection))
 
     if mode == :combined
-        out = falses(n)
-        buf = falses(n)
-        for ch in selected_channels
-            detect_into!(buf, dat.data[!, ch])
-            _apply_sample_mask!(buf, sample_mask)
-            out .|= buf
-        end
-        dat.data[!, combined_col] = out
+        dat.data[!, combined_col] = _detect_df_combined!(falses(n), falses(n), detect_into!, dat.data, selected_channels, sample_mask)
     else
-        for ch in selected_channels
-            col_mask = falses(n)
-            detect_into!(col_mask, dat.data[!, ch])
-            _apply_sample_mask!(col_mask, sample_mask)
-            dat.data[!, sep_col_fn(ch)] = col_mask
+        sep_cols = Symbol[sep_col_fn(ch) for ch in selected_channels]
+        for (col, col_mask) in _detect_df_separate(detect_into!, dat.data, selected_channels, sep_cols, sample_mask)
+            dat.data[!, col] = col_mask
         end
     end
     return dat
 end
 
 function _flag_artifacts!(
-    detect_into!::F,
+    make_detector::F,
     dat::MultiDataFrameEeg,
     combined_col::Symbol,
     sep_col_fn::G;
@@ -77,7 +111,7 @@ function _flag_artifacts!(
     selected_epochs = get_selected_epochs(dat, epoch_selection)
     isempty(selected_epochs) && @minimal_error("No epochs selected")
 
-    out_cols = mode == :combined ? [combined_col] : [sep_col_fn(ch) for ch in selected_channels]
+    out_cols = mode == :combined ? Symbol[combined_col] : Symbol[sep_col_fn(ch) for ch in selected_channels]
     if length(selected_epochs) < length(dat.data)
         selected_set = Set(selected_epochs)
         for (idx, epoch_df) in enumerate(dat.data)
@@ -89,25 +123,19 @@ function _flag_artifacts!(
     end
 
     combined_sel = _combine_interval_sample(interval_selection, sample_selection)
-    Threads.@threads for epoch_idx in selected_epochs
-        epoch_df = dat.data[epoch_idx]
-        n = nrow(epoch_df)
-        sample_mask = _selected_sample_mask(epoch_df, combined_sel)
-        if mode == :combined
-            out = falses(n)
-            buf = falses(n)
-            for ch in selected_channels
-                detect_into!(buf, epoch_df[!, ch])
-                _apply_sample_mask!(buf, sample_mask)
-                out .|= buf
-            end
-            epoch_df[!, combined_col] = out
-        else
-            for (ci, ch) in enumerate(selected_channels)
-                col_mask = falses(n)
-                detect_into!(col_mask, epoch_df[!, ch])
-                _apply_sample_mask!(col_mask, sample_mask)
-                epoch_df[!, out_cols[ci]] = col_mask
+    _foreach_chunk(length(selected_epochs)) do chunk
+        detect_into! = make_detector()
+        buf = BitVector()
+        for k in chunk
+            epoch_df = dat.data[selected_epochs[k]]
+            sample_mask = _selected_sample_mask(epoch_df, combined_sel)
+            if mode == :combined
+                epoch_df[!, combined_col] =
+                    _detect_df_combined!(falses(nrow(epoch_df)), buf, detect_into!, epoch_df, selected_channels, sample_mask)
+            else
+                for (col, col_mask) in _detect_df_separate(detect_into!, epoch_df, selected_channels, out_cols, sample_mask)
+                    epoch_df[!, col] = col_mask
+                end
             end
         end
     end
@@ -115,7 +143,7 @@ function _flag_artifacts!(
 end
 
 function _detect_artifacts(
-    detect_into!::F,
+    make_detector::F,
     dat::SingleDataFrameEeg,
     sep_col_fn::G;
     channel_selection = channels(),
@@ -126,33 +154,20 @@ function _detect_artifacts(
     selected_channels = get_selected_channels(dat, channel_selection; include_meta = false, include_extra = false)
     isempty(selected_channels) && @minimal_error("No channels selected")
 
+    detect_into! = make_detector()
     n = n_samples(dat)
     sample_mask = _selected_sample_mask(dat.data, _combine_interval_sample(interval_selection, sample_selection))
 
     if mode == :combined
-        out = zeros(Bool, n)
-        buf = falses(n)
-        for ch in selected_channels
-            detect_into!(buf, dat.data[!, ch])
-            _apply_sample_mask!(buf, sample_mask)
-            out .|= buf
-        end
-        return out
+        return _detect_df_combined!(zeros(Bool, n), falses(n), detect_into!, dat.data, selected_channels, sample_mask)
     else
-        pairs = Pair{Symbol,BitVector}[]
-        sizehint!(pairs, length(selected_channels))
-        for ch in selected_channels
-            col_mask = falses(n)
-            detect_into!(col_mask, dat.data[!, ch])
-            _apply_sample_mask!(col_mask, sample_mask)
-            push!(pairs, sep_col_fn(ch) => col_mask)
-        end
-        return DataFrame(pairs; copycols = false)
+        sep_cols = Symbol[sep_col_fn(ch) for ch in selected_channels]
+        return DataFrame(_detect_df_separate(detect_into!, dat.data, selected_channels, sep_cols, sample_mask); copycols = false)
     end
 end
 
 function _detect_artifacts(
-    detect_into!::F,
+    make_detector::F,
     dat::MultiDataFrameEeg,
     sep_col_fn::G;
     channel_selection = channels(),
@@ -171,20 +186,19 @@ function _detect_artifacts(
 
     if mode == :combined
         results = [zeros(Bool, nrow(ep_df)) for ep_df in dat.data]
-        Threads.@threads for epoch_idx in selected_epochs
-            epoch_df = dat.data[epoch_idx]
-            out = results[epoch_idx]
-            buf = falses(nrow(epoch_df))
-            sample_mask = _selected_sample_mask(epoch_df, combined_sel)
-            for ch in selected_channels
-                detect_into!(buf, epoch_df[!, ch])
-                _apply_sample_mask!(buf, sample_mask)
-                out .|= buf
+        _foreach_chunk(length(selected_epochs)) do chunk
+            detect_into! = make_detector()
+            buf = BitVector()
+            for k in chunk
+                epoch_idx = selected_epochs[k]
+                epoch_df = dat.data[epoch_idx]
+                sample_mask = _selected_sample_mask(epoch_df, combined_sel)
+                _detect_df_combined!(results[epoch_idx], buf, detect_into!, epoch_df, selected_channels, sample_mask)
             end
         end
         return results
     else
-        sep_cols = [sep_col_fn(ch) for ch in selected_channels]
+        sep_cols = Symbol[sep_col_fn(ch) for ch in selected_channels]
         results = Vector{DataFrame}(undef, n_ep)
         if length(selected_epochs) < n_ep
             selected_set = Set(selected_epochs)
@@ -194,25 +208,56 @@ function _detect_artifacts(
                 results[idx] = DataFrame([col => falses(n) for col in sep_cols]; copycols = false)
             end
         end
-        Threads.@threads for epoch_idx in selected_epochs
-            epoch_df = dat.data[epoch_idx]
-            n = nrow(epoch_df)
-            sample_mask = _selected_sample_mask(epoch_df, combined_sel)
-            pairs = Vector{Pair{Symbol,BitVector}}(undef, length(selected_channels))
-            for (ci, ch) in enumerate(selected_channels)
-                col_mask = falses(n)
-                detect_into!(col_mask, epoch_df[!, ch])
-                _apply_sample_mask!(col_mask, sample_mask)
-                pairs[ci] = sep_cols[ci] => col_mask
+        _foreach_chunk(length(selected_epochs)) do chunk
+            detect_into! = make_detector()
+            for k in chunk
+                epoch_idx = selected_epochs[k]
+                epoch_df = dat.data[epoch_idx]
+                sample_mask = _selected_sample_mask(epoch_df, combined_sel)
+                results[epoch_idx] =
+                    DataFrame(_detect_df_separate(detect_into!, epoch_df, selected_channels, sep_cols, sample_mask); copycols = false)
             end
-            results[epoch_idx] = DataFrame(pairs; copycols = false)
         end
         return results
     end
 end
 
+function _count_artifacts_dfs(
+    detect_into!::D,
+    dfs,
+    selected_channels::Vector{Symbol},
+    combined_sel,
+    count_col::Symbol,
+    mode::Symbol,
+) where {D}
+    buf = BitVector()
+    if mode == :combined
+        out = BitVector()
+        total = 0
+        for df in dfs
+            resize!(out, nrow(df))
+            sample_mask = _selected_sample_mask(df, combined_sel)
+            _detect_df_combined!(out, buf, detect_into!, df, selected_channels, sample_mask)
+            total += count(out)
+        end
+        return total
+    else
+        counts = zeros(Int, length(selected_channels))
+        for df in dfs
+            resize!(buf, nrow(df))
+            sample_mask = _selected_sample_mask(df, combined_sel)
+            for (ci, ch) in enumerate(selected_channels)
+                detect_into!(buf, df[!, ch])
+                _apply_sample_mask!(buf, sample_mask)
+                counts[ci] += count(buf)
+            end
+        end
+        return DataFrame(:channel => selected_channels, count_col => counts)
+    end
+end
+
 function _count_artifacts(
-    detect_into!::F,
+    make_detector::F,
     dat::SingleDataFrameEeg,
     count_col::Symbol;
     channel_selection = channels(),
@@ -222,32 +267,12 @@ function _count_artifacts(
 ) where {F}
     selected_channels = get_selected_channels(dat, channel_selection; include_meta = false, include_extra = false)
     isempty(selected_channels) && @minimal_error("No channels selected")
-
-    n = n_samples(dat)
-    sample_mask = _selected_sample_mask(dat.data, _combine_interval_sample(interval_selection, sample_selection))
-    buf = falses(n)
-
-    if mode == :combined
-        out = falses(n)
-        for ch in selected_channels
-            detect_into!(buf, dat.data[!, ch])
-            _apply_sample_mask!(buf, sample_mask)
-            out .|= buf
-        end
-        return count(out)
-    else
-        counts = Vector{Int}(undef, length(selected_channels))
-        for (ci, ch) in enumerate(selected_channels)
-            detect_into!(buf, dat.data[!, ch])
-            _apply_sample_mask!(buf, sample_mask)
-            counts[ci] = count(buf)
-        end
-        return DataFrame(:channel => selected_channels, count_col => counts)
-    end
+    combined_sel = _combine_interval_sample(interval_selection, sample_selection)
+    return _count_artifacts_dfs(make_detector(), (dat.data,), selected_channels, combined_sel, count_col, mode)
 end
 
 function _count_artifacts(
-    detect_into!::F,
+    make_detector::F,
     dat::MultiDataFrameEeg,
     count_col::Symbol;
     channel_selection = channels(),
@@ -260,39 +285,8 @@ function _count_artifacts(
     isempty(selected_channels) && @minimal_error("No channels selected")
     selected_epochs = get_selected_epochs(dat, epoch_selection)
     isempty(selected_epochs) && @minimal_error("No epochs selected")
-
     combined_sel = _combine_interval_sample(interval_selection, sample_selection)
-
-    if mode == :combined
-        total = 0
-        for epoch_idx in selected_epochs
-            epoch_df = dat.data[epoch_idx]
-            n = nrow(epoch_df)
-            sample_mask = _selected_sample_mask(epoch_df, combined_sel)
-            out = falses(n)
-            buf = falses(n)
-            for ch in selected_channels
-                detect_into!(buf, epoch_df[!, ch])
-                _apply_sample_mask!(buf, sample_mask)
-                out .|= buf
-            end
-            total += count(out)
-        end
-        return total
-    else
-        counts = zeros(Int, length(selected_channels))
-        for epoch_idx in selected_epochs
-            epoch_df = dat.data[epoch_idx]
-            buf = falses(nrow(epoch_df))
-            sample_mask = _selected_sample_mask(epoch_df, combined_sel)
-            for (ci, ch) in enumerate(selected_channels)
-                detect_into!(buf, epoch_df[!, ch])
-                _apply_sample_mask!(buf, sample_mask)
-                counts[ci] += count(buf)
-            end
-        end
-        return DataFrame(:channel => selected_channels, count_col => counts)
-    end
+    return _count_artifacts_dfs(make_detector(), @view(dat.data[selected_epochs]), selected_channels, combined_sel, count_col, mode)
 end
 
 include("artifact_detection/eog_onsets.jl")

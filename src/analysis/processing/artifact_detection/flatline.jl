@@ -11,49 +11,15 @@
 Detect flatline artifacts without modifying `dat`. Returns a `Vector{Bool}` (or per-epoch vector)
 in `:combined` mode, or a `DataFrame` (or per-epoch vector) in `:separate` mode.
 """
-function is_flatline(
-    dat::SingleDataFrameEeg,
-    threshold::Real,
-    window_size::Real;
-    channel_selection = channels(),
-    sample_selection = samples(),
-    interval_selection::Interval = times(),
-    mode::Symbol = :combined,
-)
+function is_flatline(dat::_DetectableEeg, threshold::Real, window_size::Real; mode::Symbol = :combined, kwargs...)
     _validate_detector_args(mode, threshold, window_size)
     window_samples = round(Int, window_size * dat.sample_rate)
     return _detect_artifacts(
-        (buf, sig) -> _is_flatline!(buf, sig, threshold, window_samples),
+        () -> (buf, sig) -> _is_flatline!(buf, sig, threshold, window_samples),
         dat,
         ch -> Symbol("is_flatline_$(ch)");
-        channel_selection,
-        sample_selection,
-        interval_selection,
         mode,
-    )
-end
-
-function is_flatline(
-    dat::MultiDataFrameEeg,
-    threshold::Real,
-    window_size::Real;
-    channel_selection = channels(),
-    sample_selection = samples(),
-    interval_selection::Interval = times(),
-    epoch_selection = epochs(),
-    mode::Symbol = :combined,
-)
-    _validate_detector_args(mode, threshold, window_size)
-    window_samples = round(Int, window_size * dat.sample_rate)
-    return _detect_artifacts(
-        (buf, sig) -> _is_flatline!(buf, sig, threshold, window_samples),
-        dat,
-        ch -> Symbol("is_flatline_$(ch)");
-        channel_selection,
-        sample_selection,
-        interval_selection,
-        epoch_selection,
-        mode,
+        kwargs...,
     )
 end
 
@@ -71,65 +37,29 @@ Detect flatline artifacts in sliding windows of `window_size` seconds where `std
 storing boolean flag columns in-place (`:is_flatline` or `:is_flatline_<ch>` by default).
 """
 function is_flatline!(
-    dat::SingleDataFrameEeg,
+    dat::_DetectableEeg,
     threshold::Real,
     window_size::Real;
-    channel_selection = channels(),
-    sample_selection = samples(),
-    interval_selection::Interval = times(),
     mode::Symbol = :combined,
     channel_out::Union{Symbol,Nothing} = nothing,
+    kwargs...,
 )
     _validate_detector_args(mode, threshold, window_size)
     window_samples = round(Int, window_size * dat.sample_rate)
     combined_col = something(channel_out, :is_flatline)
     sep_fn = ch -> Symbol("$(combined_col)_$(ch)")
     return _flag_artifacts!(
-        (buf, sig) -> _is_flatline!(buf, sig, threshold, window_samples),
+        () -> (buf, sig) -> _is_flatline!(buf, sig, threshold, window_samples),
         dat,
         combined_col,
         sep_fn;
-        channel_selection,
-        sample_selection,
-        interval_selection,
         mode,
+        kwargs...,
     )
 end
 
-function is_flatline!(
-    dat::MultiDataFrameEeg,
-    threshold::Real,
-    window_size::Real;
-    channel_selection = channels(),
-    sample_selection = samples(),
-    interval_selection::Interval = times(),
-    epoch_selection = epochs(),
-    mode::Symbol = :combined,
-    channel_out::Union{Symbol,Nothing} = nothing,
-)
-    _validate_detector_args(mode, threshold, window_size)
-    window_samples = round(Int, window_size * dat.sample_rate)
-    combined_col = something(channel_out, :is_flatline)
-    sep_fn = ch -> Symbol("$(combined_col)_$(ch)")
-    return _flag_artifacts!(
-        (buf, sig) -> _is_flatline!(buf, sig, threshold, window_samples),
-        dat,
-        combined_col,
-        sep_fn;
-        channel_selection,
-        sample_selection,
-        interval_selection,
-        epoch_selection,
-        mode,
-    )
-end
-
-function is_flatline!(dat::AbstractVector{<:EpochData}, threshold::Real, window_size::Real; kwargs...)
-    for d in dat
-        is_flatline!(d, threshold, window_size; kwargs...)
-    end
-    return dat
-end
+is_flatline!(dat::AbstractVector{<:EpochData}, threshold::Real, window_size::Real; kwargs...) =
+    (foreach(d -> is_flatline!(d, threshold, window_size; kwargs...), dat); dat)
 
 """
     n_flatline(dat, threshold::Real, window_size::Real; channel_selection = channels(),
@@ -137,50 +67,10 @@ end
 
 Count flatline samples across selected channels, returning a total `Int` (`:combined`) or a per-channel `DataFrame` (`:separate`).
 """
-function n_flatline(
-    dat::SingleDataFrameEeg,
-    threshold::Real,
-    window_size::Real;
-    channel_selection = channels(),
-    sample_selection = samples(),
-    interval_selection::Interval = times(),
-    mode::Symbol = :combined,
-)
+function n_flatline(dat::_DetectableEeg, threshold::Real, window_size::Real; mode::Symbol = :combined, kwargs...)
     _validate_detector_args(mode, threshold, window_size)
     window_samples = round(Int, window_size * dat.sample_rate)
-    return _count_artifacts(
-        (buf, sig) -> _is_flatline!(buf, sig, threshold, window_samples),
-        dat,
-        :n_flatline;
-        channel_selection,
-        sample_selection,
-        interval_selection,
-        mode,
-    )
-end
-
-function n_flatline(
-    dat::MultiDataFrameEeg,
-    threshold::Real,
-    window_size::Real;
-    channel_selection = channels(),
-    sample_selection = samples(),
-    interval_selection::Interval = times(),
-    epoch_selection = epochs(),
-    mode::Symbol = :combined,
-)
-    _validate_detector_args(mode, threshold, window_size)
-    window_samples = round(Int, window_size * dat.sample_rate)
-    return _count_artifacts(
-        (buf, sig) -> _is_flatline!(buf, sig, threshold, window_samples),
-        dat,
-        :n_flatline;
-        channel_selection,
-        sample_selection,
-        interval_selection,
-        epoch_selection,
-        mode,
-    )
+    return _count_artifacts(() -> (buf, sig) -> _is_flatline!(buf, sig, threshold, window_samples), dat, :n_flatline; mode, kwargs...)
 end
 
 n_flatline(dat::AbstractVector{<:EpochData}, threshold::Real, window_size::Real; kwargs...) =

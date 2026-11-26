@@ -11,50 +11,11 @@
 Detect extreme values (`|x| > threshold`) without modifying `dat`. Returns a `Vector{Bool}` (or per-epoch vector)
 in `:combined` mode, or a `DataFrame` (or per-epoch vector of `DataFrame`s) in `:separate` mode.
 """
-function is_extreme_value(
-    dat::SingleDataFrameEeg,
-    threshold::Real;
-    channel_selection = channels(),
-    sample_selection = samples(),
-    interval_selection::Interval = times(),
-    mode::Symbol = :combined,
-)
+function is_extreme_value(dat::_DetectableEeg, threshold::Real; mode::Symbol = :combined, kwargs...)
     _validate_detector_args(mode, threshold)
     thresh_f = Float64(threshold)
     sep_fn = ch -> Symbol("is_extreme_value_$(ch)_$(threshold)")
-    return _detect_artifacts(
-        (buf, sig) -> _is_extreme_value!(buf, sig, thresh_f),
-        dat,
-        sep_fn;
-        channel_selection,
-        sample_selection,
-        interval_selection,
-        mode,
-    )
-end
-
-function is_extreme_value(
-    dat::MultiDataFrameEeg,
-    threshold::Real;
-    channel_selection = channels(),
-    sample_selection = samples(),
-    interval_selection::Interval = times(),
-    epoch_selection = epochs(),
-    mode::Symbol = :combined,
-)
-    _validate_detector_args(mode, threshold)
-    thresh_f = Float64(threshold)
-    sep_fn = ch -> Symbol("is_extreme_value_$(ch)_$(threshold)")
-    return _detect_artifacts(
-        (buf, sig) -> _is_extreme_value!(buf, sig, thresh_f),
-        dat,
-        sep_fn;
-        channel_selection,
-        sample_selection,
-        interval_selection,
-        epoch_selection,
-        mode,
-    )
+    return _detect_artifacts(() -> (buf, sig) -> _is_extreme_value!(buf, sig, thresh_f), dat, sep_fn; mode, kwargs...)
 end
 
 is_extreme_value(dat::AbstractVector{<:EpochData}, threshold::Real; kwargs...) = [is_extreme_value(d, threshold; kwargs...) for d in dat]
@@ -71,63 +32,21 @@ Detect extreme values (`|x| > threshold`) and store boolean flag columns in-plac
 in `:combined` mode, or `:is_extreme_value_<ch>_<threshold>` in `:separate` mode).
 """
 function is_extreme_value!(
-    dat::SingleDataFrameEeg,
+    dat::_DetectableEeg,
     threshold::Real;
-    channel_selection = channels(),
-    sample_selection = samples(),
-    interval_selection::Interval = times(),
     mode::Symbol = :combined,
     channel_out::Union{Symbol,Nothing} = nothing,
+    kwargs...,
 )
     _validate_detector_args(mode, threshold)
     thresh_f = Float64(threshold)
     combined_col = something(channel_out, Symbol("is_extreme_value_$(threshold)"))
     sep_fn = ch -> Symbol("is_extreme_value_$(ch)_$(threshold)")
-    return _flag_artifacts!(
-        (buf, sig) -> _is_extreme_value!(buf, sig, thresh_f),
-        dat,
-        combined_col,
-        sep_fn;
-        channel_selection,
-        sample_selection,
-        interval_selection,
-        mode,
-    )
+    return _flag_artifacts!(() -> (buf, sig) -> _is_extreme_value!(buf, sig, thresh_f), dat, combined_col, sep_fn; mode, kwargs...)
 end
 
-function is_extreme_value!(
-    dat::MultiDataFrameEeg,
-    threshold::Real;
-    channel_selection = channels(),
-    sample_selection = samples(),
-    interval_selection::Interval = times(),
-    epoch_selection = epochs(),
-    mode::Symbol = :combined,
-    channel_out::Union{Symbol,Nothing} = nothing,
-)
-    _validate_detector_args(mode, threshold)
-    thresh_f = Float64(threshold)
-    combined_col = something(channel_out, Symbol("is_extreme_value_$(threshold)"))
-    sep_fn = ch -> Symbol("is_extreme_value_$(ch)_$(threshold)")
-    return _flag_artifacts!(
-        (buf, sig) -> _is_extreme_value!(buf, sig, thresh_f),
-        dat,
-        combined_col,
-        sep_fn;
-        channel_selection,
-        sample_selection,
-        interval_selection,
-        epoch_selection,
-        mode,
-    )
-end
-
-function is_extreme_value!(dat::AbstractVector{<:EpochData}, threshold::Real; kwargs...)
-    for d in dat
-        is_extreme_value!(d, threshold; kwargs...)
-    end
-    return dat
-end
+is_extreme_value!(dat::AbstractVector{<:EpochData}, threshold::Real; kwargs...) =
+    (foreach(d -> is_extreme_value!(d, threshold; kwargs...), dat); dat)
 
 """
     n_extreme_value(dat, threshold::Real; channel_selection = channels(), sample_selection = samples(),
@@ -136,48 +55,10 @@ end
 Count extreme values (`|x| > threshold`) across selected channels, returning a total `Int` (`:combined`)
 or a per-channel `DataFrame` (`:separate`).
 """
-function n_extreme_value(
-    dat::SingleDataFrameEeg,
-    threshold::Real;
-    channel_selection = channels(),
-    sample_selection = samples(),
-    interval_selection::Interval = times(),
-    mode::Symbol = :combined,
-)
+function n_extreme_value(dat::_DetectableEeg, threshold::Real; mode::Symbol = :combined, kwargs...)
     _validate_detector_args(mode, threshold)
     thresh_f = Float64(threshold)
-    return _count_artifacts(
-        (buf, sig) -> _is_extreme_value!(buf, sig, thresh_f),
-        dat,
-        :n_extreme;
-        channel_selection,
-        sample_selection,
-        interval_selection,
-        mode,
-    )
-end
-
-function n_extreme_value(
-    dat::MultiDataFrameEeg,
-    threshold::Real;
-    channel_selection = channels(),
-    sample_selection = samples(),
-    interval_selection::Interval = times(),
-    epoch_selection = epochs(),
-    mode::Symbol = :combined,
-)
-    _validate_detector_args(mode, threshold)
-    thresh_f = Float64(threshold)
-    return _count_artifacts(
-        (buf, sig) -> _is_extreme_value!(buf, sig, thresh_f),
-        dat,
-        :n_extreme;
-        channel_selection,
-        sample_selection,
-        interval_selection,
-        epoch_selection,
-        mode,
-    )
+    return _count_artifacts(() -> (buf, sig) -> _is_extreme_value!(buf, sig, thresh_f), dat, :n_extreme; mode, kwargs...)
 end
 
 n_extreme_value(dat::AbstractVector{<:EpochData}, threshold::Real; kwargs...) = [n_extreme_value(d, threshold; kwargs...) for d in dat]
