@@ -214,19 +214,7 @@ function signal_example_ica_optimization()
 
     is_running = Ref(false)
     on(btn_run.clicks) do _
-        is_running[] && return
-        is_running[] = true
-        @async begin
-            try
-                for _ = 1:20
-                    (!is_running[] || !events(fig).window_open[]) && break
-                    execute_ica_step()
-                    sleep(0.05)
-                end
-            finally
-                is_running[] = false
-            end
-        end
+        _demo_run_async!(_ -> execute_ica_step(), fig, is_running, 1:20; dt = 0.05)
     end
 
     rowsize!(fig.layout, 0, Relative(0.05))

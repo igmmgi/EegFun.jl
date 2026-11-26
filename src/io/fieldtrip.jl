@@ -77,13 +77,13 @@ end
 _as_ft_vec(x) = x isa AbstractArray ? vec(x) : Any[x]
 
 function _set_ft_event!(trigger_vec::Vector{Int}, trigger_info_vec::Vector{String}, n_timepoints::Int, raw_sample, raw_val, raw_typ)
-    s_raw = raw_sample isa AbstractArray ? (isempty(raw_sample) ? nothing : first(raw_sample)) : raw_sample
+    s_raw = _unwrap_mat_scalar(raw_sample, nothing)
     (s_raw isa Number && isfinite(s_raw)) || return nothing
     s = round(Int, s_raw)
     (1 <= s <= n_timepoints) || return nothing
 
     if !isnothing(raw_val)
-        v = raw_val isa AbstractArray ? (isempty(raw_val) ? nothing : first(raw_val)) : raw_val
+        v = _unwrap_mat_scalar(raw_val, nothing)
         if v isa Number && isfinite(v)
             trigger_vec[s] = round(Int, v)
         elseif v isa AbstractString
@@ -93,9 +93,18 @@ function _set_ft_event!(trigger_vec::Vector{Int}, trigger_info_vec::Vector{Strin
     end
 
     if !isnothing(raw_typ)
-        trigger_info_vec[s] = raw_typ isa AbstractArray ? (isempty(raw_typ) ? "" : string(first(raw_typ))) : string(raw_typ)
+        t_val = _unwrap_mat_scalar(raw_typ, "")
+        trigger_info_vec[s] = string(t_val)
     end
     return nothing
+end
+
+function _set_ft_event_vecs!(trigger_vec::Vector{Int}, trigger_info_vec::Vector{String}, n_timepoints::Int, samples, vals, types)
+    for i in eachindex(samples)
+        val = (!isnothing(vals) && i <= length(vals)) ? vals[i] : nothing
+        typ = (!isnothing(types) && i <= length(types)) ? types[i] : nothing
+        _set_ft_event!(trigger_vec, trigger_info_vec, n_timepoints, samples[i], val, typ)
+    end
 end
 
 function _extract_ft_events!(trigger_vec::Vector{Int}, trigger_info_vec::Vector{String}, events, n_timepoints::Int)
@@ -105,11 +114,7 @@ function _extract_ft_events!(trigger_vec::Vector{Int}, trigger_info_vec::Vector{
         @info "Extracting $(length(samples)) events from cfg.event"
         vals = haskey(events, "value") ? _as_ft_vec(events["value"]) : nothing
         types = haskey(events, "type") ? _as_ft_vec(events["type"]) : nothing
-        for i in eachindex(samples)
-            val = (!isnothing(vals) && i <= length(vals)) ? vals[i] : nothing
-            typ = (!isnothing(types) && i <= length(types)) ? types[i] : nothing
-            _set_ft_event!(trigger_vec, trigger_info_vec, n_timepoints, samples[i], val, typ)
-        end
+        _set_ft_event_vecs!(trigger_vec, trigger_info_vec, n_timepoints, samples, vals, types)
     elseif events isa AbstractArray
         @info "Extracting $(length(events)) events from cfg.event"
         for ev in events
@@ -131,11 +136,7 @@ function _extract_ft_events!(trigger_vec::Vector{Int}, trigger_info_vec::Vector{
         type_idx = findfirst(==("type"), events.names)
         vals = !isnothing(value_idx) ? _as_ft_vec(events.values[value_idx]) : nothing
         types = !isnothing(type_idx) ? _as_ft_vec(events.values[type_idx]) : nothing
-        for i in eachindex(samples)
-            val = (!isnothing(vals) && i <= length(vals)) ? vals[i] : nothing
-            typ = (!isnothing(types) && i <= length(types)) ? types[i] : nothing
-            _set_ft_event!(trigger_vec, trigger_info_vec, n_timepoints, samples[i], val, typ)
-        end
+        _set_ft_event_vecs!(trigger_vec, trigger_info_vec, n_timepoints, samples, vals, types)
     end
     return nothing
 end
@@ -152,19 +153,11 @@ function _fieldtrip_to_continuousdata(ft::AbstractDict, filepath::String, layout
 
     trigger_vec = zeros(Int, n_timepoints)
     trigger_info_vec = fill("", n_timepoints)
-
     if haskey(ft, "cfg") && ft["cfg"] isa AbstractDict && haskey(ft["cfg"], "event") && !isempty(ft["cfg"]["event"])
         _extract_ft_events!(trigger_vec, trigger_info_vec, ft["cfg"]["event"], n_timepoints)
     end
 
-    cols = Vector{AbstractVector}(undef, 4 + n_channels)
-    cols[1] = time_vec
-    cols[2] = collect(1:n_timepoints)
-    cols[3] = trigger_vec
-    cols[4] = trigger_info_vec
-    _extract_channel_cols!(cols, 4, data_matrix, n_channels, n_timepoints)
-    df = DataFrame(cols, vcat([:time, :sample, :trigger, :trigger_info], ch_names); copycols = false)
-
+    df = _matrix_to_eeg_df(data_matrix, ch_names, time_vec; trigger = trigger_vec, trigger_info = trigger_info_vec)
     continuous_data = ContinuousData(filepath, df, copy(layout), sample_rate, AnalysisInfo(sample_rate = Float64(sample_rate)))
     @info "Successfully converted to ContinuousData"
     return continuous_data
@@ -182,30 +175,20 @@ function _fieldtrip_to_epochdata(ft::AbstractDict, filepath::String, layout::Lay
     has_ti = haskey(ft, "trialinfo") && !isempty(ft["trialinfo"])
     trial_triggers = has_ti ? vec(ft["trialinfo"]) : nothing
 
-    epoch_dataframes = Vector{DataFrame}(undef, n_trials)
-    time_zero_idx = _find_closest_time_index(times, 0.0)
-    col_names = vcat([:time, :sample, :epoch, :trigger, :trigger_info], ch_names)
-    sample_template = collect(1:n_timepoints)
-
-    @inbounds for trial_idx = 1:n_trials
-        cols = Vector{AbstractVector}(undef, 5 + n_channels)
-        cols[1] = copy(times)
-        cols[2] = copy(sample_template)
-        cols[3] = fill(trial_idx, n_timepoints)
-        trig_vec = zeros(Int, n_timepoints)
-        info_vec = fill("", n_timepoints)
-        if !isnothing(trial_triggers) && trial_idx <= length(trial_triggers)
-            code = round(Int, trial_triggers[trial_idx])
+    trigger_codes = zeros(Int, n_trials)
+    trigger_info = fill("", n_trials)
+    if !isnothing(trial_triggers)
+        for i = 1:min(n_trials, length(trial_triggers))
+            code = round(Int, trial_triggers[i])
             if code != 0
-                trig_vec[time_zero_idx] = code
-                info_vec[time_zero_idx] = string(code)
+                trigger_codes[i] = code
+                trigger_info[i] = string(code)
             end
         end
-        cols[4] = trig_vec
-        cols[5] = info_vec
-        _extract_channel_cols!(cols, 5, trials[trial_idx], n_channels, n_timepoints)
-        epoch_dataframes[trial_idx] = DataFrame(cols, copy(col_names); copycols = false)
     end
+
+    time_zero_idx = _find_closest_time_index(times, 0.0)
+    epoch_dataframes = _trials_to_epoch_dfs(i -> trials[i], n_trials, ch_names, times, trigger_codes, trigger_info, time_zero_idx)
 
     epoch_data = EpochData(
         filepath,
@@ -230,14 +213,7 @@ function _fieldtrip_to_erpdata(ft::AbstractDict, filepath::String, layout::Layou
     n_timepoints = size(data_matrix, 2)
     @info "Data: $n_channels channels × $n_timepoints timepoints"
 
-    cols = Vector{AbstractVector}(undef, 4 + n_channels)
-    cols[1] = time_vec
-    cols[2] = collect(1:n_timepoints)
-    cols[3] = zeros(Int, n_timepoints)
-    cols[4] = fill("", n_timepoints)
-    _extract_channel_cols!(cols, 4, data_matrix, n_channels, n_timepoints)
-    df = DataFrame(cols, vcat([:time, :sample, :trigger, :trigger_info], ch_names); copycols = false)
-
+    df = _matrix_to_eeg_df(data_matrix, ch_names, time_vec; trigger = zeros(Int, n_timepoints), trigger_info = fill("", n_timepoints))
     erp_data = ErpData(filepath, 1, basename(filepath), df, copy(layout), sample_rate, AnalysisInfo(sample_rate = Float64(sample_rate)), 1)
     @info "Successfully converted to ErpData"
     return erp_data

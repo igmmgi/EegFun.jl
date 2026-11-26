@@ -4,6 +4,8 @@
 ######### Types & Constants ##########
 ######################################
 
+abstract type _AbstractPipelineConfig end
+
 """
     FilterSection
 
@@ -17,7 +19,7 @@ Settings for a single high-pass or low-pass filter stage (`apply`, `type`, `freq
 - `method::Symbol = :iir`: Filter design family (`:iir` or `:fir`)
 - `order::Int = 2`: Filter order
 """
-@kwdef struct FilterSection
+@kwdef struct FilterSection <: _AbstractPipelineConfig
     apply::Bool = false
     type::Symbol = :hp
     freq::Float64 = 0.1
@@ -37,7 +39,7 @@ High-pass and low-pass filter settings for main preprocessing and ICA preparatio
 - `ica_highpass::FilterSection`: High-pass filter settings applied before ICA training
 - `ica_lowpass::FilterSection`: Low-pass filter settings applied before ICA training
 """
-@kwdef struct FilterConfig
+@kwdef struct FilterConfig <: _AbstractPipelineConfig
     highpass::FilterSection = FilterSection(apply = true, type = :hp, freq = 0.1, order = 1)
     lowpass::FilterSection = FilterSection(apply = false, type = :lp, freq = 30.0, order = 3)
     ica_highpass::FilterSection = FilterSection(apply = true, type = :hp, freq = 1.0, order = 1)
@@ -55,7 +57,7 @@ Vertical and horizontal EOG bipolar channel definitions and artifact thresholds 
 - `vEOG_channels::Vector{Vector{String}}`: `[superior_channels, inferior_channels, [output_label]]` specification for bipolar vEOG
 - `hEOG_channels::Vector{Vector{String}}`: `[left_channels, right_channels, [output_label]]` specification for bipolar hEOG
 """
-@kwdef struct EogConfig
+@kwdef struct EogConfig <: _AbstractPipelineConfig
     vEOG_criterion::Float64 = 50.0
     hEOG_criterion::Float64 = 30.0
     vEOG_channels::Vector{Vector{String}} = [["Fp1", "Fp2"], ["IO1", "IO2"], ["vEOG"]]
@@ -75,7 +77,7 @@ EEG rereferencing and amplitude/z-score artifact rejection thresholds (μV).
 - `artifact_interval_start::Union{Nothing,Float64} = nothing`: Optional start time (s) for epoch artifact detection
 - `artifact_interval_end::Union{Nothing,Float64} = nothing`: Optional end time (s) for epoch artifact detection
 """
-@kwdef struct EegConfig
+@kwdef struct EegConfig <: _AbstractPipelineConfig
     rereference::Union{Symbol,Vector{Symbol}} = :avg
     artifact_value_abs_criterion::Float64 = 100.0
     artifact_value_z_criterion::Float64 = 0.0
@@ -94,7 +96,7 @@ ICA decomposition and artifact component identification settings for preprocessi
 - `percentage_of_data::Float64 = 100.0`: Percentage of clean samples subsampled for ICA training
 - `component_method::Symbol = :correlation`: Automated artifact IC selection method
 """
-@kwdef struct IcaConfig
+@kwdef struct IcaConfig <: _AbstractPipelineConfig
     apply::Bool = true
     percentage_of_data::Float64 = 100.0
     component_method::Symbol = :correlation
@@ -116,7 +118,7 @@ Multi-taper CleanLine sinusoidal line-noise removal settings.
 - `p_value::Float64 = 0.05`: F-test significance threshold for sinusoidal component removal
 - `pad::Int = 2`: Zero-padding factor exponent for FFT resolution
 """
-@kwdef struct CleanLineConfig
+@kwdef struct CleanLineConfig <: _AbstractPipelineConfig
     apply::Bool = false
     line_frequencies::Vector{Float64} = [50.0]
     bandwidth::Float64 = 2.0
@@ -137,7 +139,7 @@ Resampling settings (`apply` and `target_rate` in Hz).
 - `apply::Bool = false`: Whether to resample continuous data
 - `target_rate::Int = 512`: Target sampling frequency in Hz
 """
-@kwdef struct ResampleConfig
+@kwdef struct ResampleConfig <: _AbstractPipelineConfig
     apply::Bool = false
     target_rate::Int = 512
 end
@@ -157,7 +159,7 @@ Adaptive cross-validated Autoreject artifact rejection and channel repair settin
 - `repair_method::Symbol = :spherical_spline`: Spatial interpolation method used during repair
 - `seed::Union{Int,Nothing} = 42`: Random seed for fold partitioning (`nothing` for non-deterministic)
 """
-@kwdef struct AutoRejectConfig
+@kwdef struct AutoRejectConfig <: _AbstractPipelineConfig
     apply::Bool = false
     mode::Symbol = :local
     n_folds::Int = 10
@@ -190,7 +192,7 @@ Complete EEG preprocessing configuration combining filtering, CleanLine, resampl
 - `interactive_ica::Bool = false`: Open interactive ICA component review GUI
 - `interactive_epochs::Bool = false`: Open interactive epoch rejection GUI
 """
-@kwdef struct PreprocessConfig
+@kwdef struct PreprocessConfig <: _AbstractPipelineConfig
     reference_channel::Union{Symbol,Vector{Symbol}} = :avg
     epoch_start::Float64 = -1.0
     epoch_end::Float64 = 1.0
@@ -220,7 +222,7 @@ Pipeline input directory, file pattern, layout file, and epoch condition file se
 - `layout_file::String = "biosemi72.csv"`: Electrode layout filename or path
 - `epoch_condition_file::String = ""`: Path to TOML/Julia epoch condition definition file
 """
-@kwdef struct InputFilesConfig
+@kwdef struct InputFilesConfig <: _AbstractPipelineConfig
     directory::String = "."
     raw_data_files::Union{Vector{String},String} = "\\.bdf"
     recursive::Bool = false
@@ -245,7 +247,7 @@ Pipeline output directory and intermediate/final stage saving flags.
 - `save_erp_data_corrected::Bool = false`: Save condition-averaged ERPs after repair
 - `save_erp_data::Bool = true`: Save final clean `ErpData`
 """
-@kwdef struct OutputFilesConfig
+@kwdef struct OutputFilesConfig <: _AbstractPipelineConfig
     directory::String = "./preprocessed_files"
     save_continuous_data_raw::Bool = false
     save_continuous_data_corrected::Bool = false
@@ -267,7 +269,7 @@ Input and output file configuration for preprocessing pipelines.
 - `input::InputFilesConfig`: Input file discovery and layout configuration
 - `output::OutputFilesConfig`: Output directory and stage-saving flags
 """
-@kwdef struct FilesConfig
+@kwdef struct FilesConfig <: _AbstractPipelineConfig
     input::InputFilesConfig = InputFilesConfig()
     output::OutputFilesConfig = OutputFilesConfig()
 end
@@ -281,7 +283,7 @@ Top-level pipeline configuration bundling `files::FilesConfig` and `preprocess::
 - `files::FilesConfig`: Input/output file settings
 - `preprocess::PreprocessConfig`: Signal processing and artifact handling settings
 """
-@kwdef struct PipelineConfig
+@kwdef struct PipelineConfig <: _AbstractPipelineConfig
     files::FilesConfig = FilesConfig()
     preprocess::PreprocessConfig = PreprocessConfig()
 end
@@ -290,31 +292,7 @@ end
 ########### User Functions ###########
 ######################################
 
-FilterSection(cfg::AbstractDict) = _from_dict(FilterSection, cfg)
-
-FilterConfig(cfg::AbstractDict) = _from_dict(FilterConfig, cfg)
-
-EogConfig(cfg::AbstractDict) = _from_dict(EogConfig, cfg)
-
-EegConfig(cfg::AbstractDict) = _from_dict(EegConfig, cfg)
-
-IcaConfig(cfg::AbstractDict) = _from_dict(IcaConfig, cfg)
-
-CleanLineConfig(cfg::AbstractDict) = _from_dict(CleanLineConfig, cfg)
-
-ResampleConfig(cfg::AbstractDict) = _from_dict(ResampleConfig, cfg)
-
-AutoRejectConfig(cfg::AbstractDict) = _from_dict(AutoRejectConfig, cfg)
-
-PreprocessConfig(cfg::AbstractDict) = _from_dict(PreprocessConfig, cfg)
-
-InputFilesConfig(cfg::AbstractDict) = _from_dict(InputFilesConfig, cfg)
-
-OutputFilesConfig(cfg::AbstractDict) = _from_dict(OutputFilesConfig, cfg)
-
-FilesConfig(cfg::AbstractDict) = _from_dict(FilesConfig, cfg)
-
-PipelineConfig(cfg::AbstractDict) = _from_dict(PipelineConfig, cfg)
+(::Type{T})(cfg::AbstractDict) where {T<:_AbstractPipelineConfig} = _from_dict(T, cfg)
 
 ######################################
 ######### Internal Functions #########

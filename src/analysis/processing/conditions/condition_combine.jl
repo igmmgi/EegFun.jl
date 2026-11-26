@@ -77,23 +77,21 @@ function condition_combine(
 
         combined_condition_name = join([cond.condition_name for cond in condition_data], "_")
         combined_data_frames = Vector{DataFrame}(undef, total_eps)
+        copy_sync_epoch = function (i::Int)
+            df_copy = copy(src_dfs[i])
+            if hasproperty(df_copy, :epoch)
+                df_copy.epoch isa Vector{Int} ? fill!(df_copy.epoch, i) : (df_copy[!, :epoch] = fill(i, nrow(df_copy)))
+            end
+            _sync_condition_cols!(df_copy, group_idx, combined_condition_name)
+            combined_data_frames[i] = df_copy
+        end
         if total_eps >= 16 && Threads.nthreads() > 1
             Threads.@threads :static for i = 1:total_eps
-                df_copy = copy(src_dfs[i])
-                if hasproperty(df_copy, :epoch)
-                    df_copy.epoch isa Vector{Int} ? fill!(df_copy.epoch, i) : (df_copy[!, :epoch] = fill(i, nrow(df_copy)))
-                end
-                _sync_condition_cols!(df_copy, group_idx, combined_condition_name)
-                combined_data_frames[i] = df_copy
+                copy_sync_epoch(i)
             end
         else
             for i = 1:total_eps
-                df_copy = copy(src_dfs[i])
-                if hasproperty(df_copy, :epoch)
-                    df_copy.epoch isa Vector{Int} ? fill!(df_copy.epoch, i) : (df_copy[!, :epoch] = fill(i, nrow(df_copy)))
-                end
-                _sync_condition_cols!(df_copy, group_idx, combined_condition_name)
-                combined_data_frames[i] = df_copy
+                copy_sync_epoch(i)
             end
         end
         combined_data[group_idx] = EpochData(
@@ -122,22 +120,32 @@ function condition_combine(
     output_dir::Union{String,Nothing} = nothing,
 )
     _with_batch_logging("condition_combine", "condition_combine.log", input_dir, output_dir) do ctx
+        _ = output_dir
         @log_call "condition_combine"
-
         error_msg = _validate_epochs_pattern_combine(file_pattern)
         !isnothing(error_msg) && @minimal_error(error_msg)
-
         for (group_idx, grp) in enumerate(condition_groups)
             isempty(grp) && @minimal_error("Condition group $group_idx cannot be empty")
         end
-
         cleaned_groups = Vector{Int}[collect(Int, grp) for grp in condition_groups]
         error_msg = _validate_condition_groups(cleaned_groups)
         !isnothing(error_msg) && @minimal_error(error_msg)
 
-        output_dir = _prepare_output_dir!(ctx, _condition_combine_default_output_dir(input_dir, file_pattern, cleaned_groups))
-        process_fn = (input_path, output_path) -> _condition_combine_process_file(input_path, output_path, cleaned_groups)
-        return batch_process(process_fn, file_pattern, input_dir, output_dir, participant_selection, "Combining conditions")
+        groups_str = join([join(group, "-") for group in cleaned_groups], "_")
+        default_dir = joinpath(input_dir, "combined_$(_clean_pattern(file_pattern))_$(groups_str)")
+        return _batch_jld2_files(
+            data -> (
+                comb = condition_combine(data, cleaned_groups);
+                (comb, "Combined into $(length(cleaned_groups)) group(s) with $(sum(n_epochs, comb; init = 0)) total epochs")
+            ),
+            Vector{<:EpochData},
+            ctx,
+            default_dir,
+            file_pattern,
+            input_dir,
+            participant_selection,
+            "Combining conditions",
+        )
     end
 end
 
@@ -153,26 +161,4 @@ function _validate_epochs_pattern_combine(pattern::String)
         return "condition_combine only works with epoch data, not ERP files (got pattern: '$pattern'). Use condition_average for ERPs."
     end
     return nothing
-end
-
-function _condition_combine_default_output_dir(input_dir::String, pattern::String, groups::AbstractVector{<:AbstractVector{<:Integer}})
-    groups_str = join([join(group, "-") for group in groups], "_")
-    return joinpath(input_dir, "combined_$(_clean_pattern(pattern))_$(groups_str)")
-end
-
-function _condition_combine_process_file(
-    filepath::String,
-    output_path::String,
-    condition_groups::AbstractVector{<:AbstractVector{<:Integer}},
-)
-    filename = basename(filepath)
-    data = read_data(filepath)
-    isnothing(data) && return BatchResult(false, filename, "No data variables found")
-    !(data isa Vector{<:EpochData}) && return BatchResult(false, filename, "Invalid data type: expected Vector{EpochData}")
-
-    combined_data = condition_combine(data, condition_groups)
-    jldsave(output_path; data = combined_data, format_version = EEGFUN_FORMAT_VERSION)
-
-    total_epochs = sum(n_epochs(cond) for cond in combined_data)
-    return BatchResult(true, filename, "Combined into $(length(condition_groups)) group(s) with $total_epochs total epochs")
 end

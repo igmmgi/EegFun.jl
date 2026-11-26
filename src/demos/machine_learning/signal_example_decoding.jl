@@ -240,32 +240,60 @@ function signal_example_decoding()
     ylims!(ax_acc, 0.35, 0.85)
 
     ctrl = GridLayout(fig[3, 1], colgap = 16)
-    sl_ss, lbl_ss = _demo_labelled_slider(ctrl, 1, "Signal Strength", 0.0:0.1:3.0, 1.0, v -> "$(round(v, digits=1))", ctrl_sz)
-    sl_nl, lbl_nl = _demo_labelled_slider(ctrl, 2, "Noise Level", 0.1:0.1:5.0, 1.0, v -> "$(round(v, digits=1))", ctrl_sz)
-    sl_nt, lbl_nt = _demo_labelled_slider(ctrl, 3, "N Trials", 10:10:200, 50, string, ctrl_sz)
-    sl_nc, lbl_nc = _demo_labelled_slider(ctrl, 4, "N Channels", 1:1:10, 3, string, ctrl_sz)
-    sl_eo, lbl_eo = _demo_labelled_slider(ctrl, 5, "Effect Onset", -0.2:0.05:0.8, 0.1, v -> "$(round(v, digits=2)) s", ctrl_sz)
-    sl_ed, lbl_ed = _demo_labelled_slider(ctrl, 6, "Effect Duration", 0.05:0.05:0.8, 0.4, v -> "$(round(v, digits=2)) s", ctrl_sz)
+    function _on_param_change(_)
+        current_data[] = generate_data()
+        status_text[] = "Parameters changed — press [Decode!]"
+    end
+    _demo_labelled_slider(
+        ctrl,
+        1,
+        "Signal Strength",
+        0.0:0.1:3.0,
+        1.0,
+        v -> "$(round(v, digits=1))",
+        ctrl_sz;
+        obs = sig_strength,
+        on_change = _on_param_change,
+    )
+    _demo_labelled_slider(
+        ctrl,
+        2,
+        "Noise Level",
+        0.1:0.1:5.0,
+        1.0,
+        v -> "$(round(v, digits=1))",
+        ctrl_sz;
+        obs = noise_level,
+        on_change = _on_param_change,
+    )
+    _demo_labelled_slider(ctrl, 3, "N Trials", 10:10:200, 50, string, ctrl_sz; obs = n_trials, on_change = _on_param_change)
+    _demo_labelled_slider(ctrl, 4, "N Channels", 1:1:10, 3, string, ctrl_sz; obs = n_channels, on_change = _on_param_change)
+    _demo_labelled_slider(
+        ctrl,
+        5,
+        "Effect Onset",
+        -0.2:0.05:0.8,
+        0.1,
+        v -> "$(round(v, digits=2)) s",
+        ctrl_sz;
+        obs = effect_onset,
+        on_change = _on_param_change,
+    )
+    _demo_labelled_slider(
+        ctrl,
+        6,
+        "Effect Duration",
+        0.05:0.05:0.8,
+        0.4,
+        v -> "$(round(v, digits=2)) s",
+        ctrl_sz;
+        obs = effect_duration,
+        on_change = _on_param_change,
+    )
 
     btn_decode = Button(ctrl[2, 7], label = "Decode!", fontsize = ctrl_sz)
     Label(ctrl[1, 7], "", fontsize = ctrl_sz, halign = :center)
     Label(ctrl[3, 7], "", fontsize = ctrl_sz, halign = :center)
-
-    function _bind_param!(sl, obs, lbl, fmt)
-        on(sl.value) do v
-            obs[] = v
-            lbl.text = fmt(v)
-            current_data[] = generate_data()
-            status_text[] = "Parameters changed — press [Decode!]"
-        end
-    end
-
-    _bind_param!(sl_ss, sig_strength, lbl_ss, v -> "$(round(v, digits=1))")
-    _bind_param!(sl_nl, noise_level, lbl_nl, v -> "$(round(v, digits=1))")
-    _bind_param!(sl_nt, n_trials, lbl_nt, string)
-    _bind_param!(sl_nc, n_channels, lbl_nc, string)
-    _bind_param!(sl_eo, effect_onset, lbl_eo, v -> "$(round(v, digits=2)) s")
-    _bind_param!(sl_ed, effect_duration, lbl_ed, v -> "$(round(v, digits=2)) s")
 
     on(btn_decode.clicks) do _
         is_decoding[] && return

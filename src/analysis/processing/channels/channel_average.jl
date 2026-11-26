@@ -103,12 +103,7 @@ function channel_average!(
     return dat
 end
 
-function channel_average!(dat::AbstractVector{<:EegData}; kwargs...)
-    for d in dat
-        channel_average!(d; kwargs...)
-    end
-    return dat
-end
+channel_average!(dat::AbstractVector{<:EegData}; kwargs...) = (foreach(d -> channel_average!(d; kwargs...), dat); dat)
 
 function channel_average(
     file_pattern::String,
@@ -121,19 +116,28 @@ function channel_average(
     reduce::Bool = false,
 )
     _with_batch_logging("channel averaging", "channel_average.log", input_dir, output_dir) do ctx
+        _ = output_dir
         @log_call "channel_average"
-        if isnothing(output_labels)
-            output_labels = [Symbol("avg_$i") for i = 1:length(channel_selections)]
-        end
-        length(output_labels) == length(channel_selections) || @minimal_error(
-            "Number of output_labels ($(length(output_labels))) must match number of channel_selections ($(length(channel_selections)))"
+        labels = something(output_labels, Symbol[Symbol("avg_$i") for i = 1:length(channel_selections)])
+        length(labels) == length(channel_selections) || @minimal_error(
+            "Number of output_labels ($(length(labels))) must match number of channel_selections ($(length(channel_selections)))"
         )
-
-        output_dir = _prepare_output_dir!(ctx, _default_channel_average_output_dir(input_dir, file_pattern))
-        process_fn =
-            (input_path, output_path) ->
-                _process_channel_average_file(input_path, output_path, channel_selections, output_labels, condition_selection, reduce)
-        return batch_process(process_fn, file_pattern, input_dir, output_dir, participant_selection, "Averaging channels")
+        default_dir = joinpath(input_dir, "averaged_channels_$(_clean_pattern(file_pattern))")
+        return _batch_jld2_files(
+            data -> (
+                channel_average!(data; channel_selections = channel_selections, output_labels = labels, reduce = reduce),
+                "Averaged $(length(channel_selections)) channel group(s)",
+            ),
+            AbstractVector{<:Union{ErpData,EpochData}},
+            ctx,
+            default_dir,
+            file_pattern,
+            input_dir,
+            participant_selection,
+            "Averaging channels";
+            condition_selection = condition_selection,
+            expected_label = "Vector{ErpData} or Vector{EpochData}",
+        )
     end
 end
 
@@ -141,42 +145,8 @@ end
 ######### Internal Functions #########
 ######################################
 
-function _linear_colmeans_idx(df::DataFrame, idxs::Vector{Int})::Vector{Float64}
-    n = nrow(df)
-    isempty(idxs) && return Float64[]
-    out = Vector{Float64}(undef, n)
-    c1 = df[!, idxs[1]]
-    if c1 isa Vector{Float64}
-        v1 = c1::Vector{Float64}
-        @inbounds @simd for i = 1:n
-            out[i] = v1[i]
-        end
-    else
-        @inbounds @simd for i = 1:n
-            out[i] = Float64(c1[i])
-        end
-    end
-    for m = 2:length(idxs)
-        cm = df[!, idxs[m]]
-        if cm isa Vector{Float64}
-            vm = cm::Vector{Float64}
-            @inbounds @simd for i = 1:n
-                out[i] += vm[i]
-            end
-        else
-            @inbounds @simd for i = 1:n
-                out[i] += Float64(cm[i])
-            end
-        end
-    end
-    if length(idxs) > 1
-        k_f64 = Float64(length(idxs))
-        @inbounds @simd for i = 1:n
-            out[i] /= k_f64
-        end
-    end
-    return out
-end
+_linear_colmeans_idx(df::DataFrame, idxs::Vector{Int})::Vector{Float64} =
+    isempty(idxs) ? Float64[] : _fill_colmeans_idx!(Vector{Float64}(undef, nrow(df)), df, idxs)
 
 function _circular_colmeans_idx(df::DataFrame, idxs::Vector{Int})::Vector{Float64}
     n = nrow(df)
@@ -245,32 +215,6 @@ function _assign_group_mean!(
         end
     end
     return nothing
-end
-
-_default_channel_average_output_dir(input_dir::String, pattern::String) =
-    joinpath(input_dir, "averaged_channels_$(_clean_pattern(pattern))")
-
-function _process_channel_average_file(
-    filepath::String,
-    output_path::String,
-    channel_selections::AbstractVector,
-    output_labels::AbstractVector{Symbol},
-    condition_selection,
-    reduce::Bool,
-)
-    filename = basename(filepath)
-    data = read_data(filepath)
-    isnothing(data) && return BatchResult(false, filename, "No data variables found")
-    if !(data isa AbstractVector{<:Union{ErpData,EpochData}})
-        return BatchResult(false, filename, "Invalid data type: expected Vector{ErpData} or Vector{EpochData}")
-    end
-
-    data = _condition_select(data, condition_selection)
-    for item in data
-        channel_average!(item; channel_selections = channel_selections, output_labels = output_labels, reduce = reduce)
-    end
-    jldsave(output_path; data = data, format_version = EEGFUN_FORMAT_VERSION)
-    return BatchResult(true, filename, "Averaged $(length(channel_selections)) channel group(s)")
 end
 
 function _reduced_df(df::DataFrame, meta_cols::AbstractVector{Symbol}, labels::AbstractVector{Symbol})

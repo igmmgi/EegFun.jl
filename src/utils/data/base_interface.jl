@@ -15,38 +15,21 @@ const _FieldwiseEq = Union{Layout,AnalysisInfo,Neighbors}
 ######################################
 
 Base.axes(dat::SingleDataFrameEeg) = (Base.OneTo(n_samples(dat)), Base.OneTo(n_channels(dat)))
-
 Base.axes(dat::MultiDataFrameEeg) = (Base.OneTo(n_epochs(dat)), Base.OneTo(n_samples(dat)), Base.OneTo(n_channels(dat)))
-
 Base.axes(dat::EegData, d::Int) = d <= length(axes(dat)) ? axes(dat)[d] : Base.OneTo(1)
-
 Base.size(dat::SingleDataFrameEeg) = (n_samples(dat), n_channels(dat))
-
 Base.size(dat::SingleDataFrameEeg, d::Int) = d == 1 ? n_samples(dat) : (d == 2 ? n_channels(dat) : 1)
-
 Base.size(dat::MultiDataFrameEeg) = (n_epochs(dat), n_samples(dat), n_channels(dat))
-
 Base.size(dat::MultiDataFrameEeg, d::Int) = d == 1 ? n_epochs(dat) : (d == 2 ? n_samples(dat) : (d == 3 ? n_channels(dat) : 1))
-
 Base.ndims(::Type{<:SingleDataFrameEeg}) = 2
-
 Base.ndims(::Type{<:MultiDataFrameEeg}) = 3
-
 Base.ndims(dat::EegData) = ndims(typeof(dat))
-
-Base.isempty(dat::SingleDataFrameEeg) = isempty(dat.data)
-
-Base.isempty(dat::MultiDataFrameEeg) = isempty(dat.data)
-
+Base.isempty(dat::EegData) = isempty(dat.data)
 Base.firstindex(::EegData, d::Int) = 1
-
 Base.lastindex(dat::EegData, d::Int) = Base.size(dat, d)
-
 Base.lastindex(dat::MultiDataFrameEeg) = length(dat.data)
-
 Base.getindex(dat::SingleDataFrameEeg, time_idx, chan_idx) =
     subset(dat; sample_selection = _to_sample_func(time_idx), channel_selection = _to_channel_func(chan_idx))
-
 Base.getindex(dat::MultiDataFrameEeg, epoch_idx, time_idx, chan_idx) = subset(
     dat;
     epoch_selection = _to_epoch_func(epoch_idx),
@@ -65,24 +48,15 @@ function Base.setindex!(dat::MultiDataFrameEeg, val, epoch_idx, time_idx, chan_i
 end
 
 Base.setindex!(dat::SingleDataFrameEeg, val, ci::CartesianIndex{2}) = (dat[ci[1], ci[2]] = val; dat)
-
 Base.setindex!(dat::MultiDataFrameEeg, val, ci::CartesianIndex{3}) = (dat[ci[1], ci[2], ci[3]] = val; dat)
-
 Base.getindex(dat::SingleDataFrameEeg, ci::CartesianIndex{2}) = dat[ci[1], ci[2]]
-
 Base.getindex(dat::MultiDataFrameEeg, ci::CartesianIndex{3}) = dat[ci[1], ci[2], ci[3]]
-
 Base.getindex(dat::EegData, chan::Union{Symbol,AbstractString}) = subset(dat; channel_selection = channels(Symbol(chan)))
-
 Base.getindex(dat::EegData, chans::AbstractVector{<:Union{Symbol,AbstractString}}) =
     subset(dat; channel_selection = channels(Symbol.(chans)))
-
 Base.iterate(dat::MultiDataFrameEeg, state = 1) = state > length(dat.data) ? nothing : (dat.data[state], state + 1)
-
 Base.length(dat::MultiDataFrameEeg) = length(dat.data)
-
 Base.eltype(::Type{<:MultiDataFrameEeg}) = DataFrame
-
 Base.IteratorSize(::Type{<:MultiDataFrameEeg}) = Base.HasLength()
 
 function Base.vcat(dats::EpochData...)
@@ -134,13 +108,8 @@ function Base.Matrix(dat::SingleDataFrameEeg)
 end
 
 Base.Array(dat::SingleDataFrameEeg) = Base.Matrix(dat)
-
-Base.Array{Float64}(dat::SingleDataFrameEeg) = Base.Matrix(dat)
-
-Base.Array{Float64}(dat::MultiDataFrameEeg) = Base.Array(dat)
-
+Base.Array{Float64}(dat::EegData) = Base.Array(dat)
 Base.Array{Float64,2}(dat::SingleDataFrameEeg) = Base.Matrix(dat)
-
 Base.Array{Float64,3}(dat::MultiDataFrameEeg) = Base.Array(dat)
 
 function Base.Array(dat::MultiDataFrameEeg)
@@ -160,45 +129,23 @@ function Base.Array(dat::MultiDataFrameEeg)
 end
 
 StatsBase.mean(dat::EpochData) = average_epochs(dat)
-
 StatsBase.mean(dats::Vector{EpochData}) = average_epochs(dats)
 
 Base.vec(dat::EegData) = vec(Base.Array(dat))
-
-Base.parent(dat::SingleDataFrameEeg) = dat.data
-
-Base.parent(dat::MultiDataFrameEeg) = dat.data
-
+Base.parent(dat::EegData) = dat.data
 Base.in(chan::Union{Symbol,AbstractString}, dat::EegData) = _has_channel(dat, Symbol(chan))
-
 Base.haskey(dat::EegData, chan::Union{Symbol,AbstractString}) = _has_channel(dat, Symbol(chan))
-
 Base.keys(dat::EegData) = channel_labels(dat)
-
 Base.:(==)(a::T, b::T) where {T<:_FieldwiseEq} = _fields_equal(a, b)
-
 Base.isequal(a::T, b::T) where {T<:_FieldwiseEq} = _fields_isequal(a, b)
-
 Base.hash(x::_FieldwiseEq, h::UInt) = _fields_hash(x, h)
-
 Base.:(==)(a::T, b::T) where {T<:EegData} = _fields_equal(a, b)
-
 Base.:(==)(::EegData, ::EegData) = false
-
 Base.isequal(a::T, b::T) where {T<:EegData} = _fields_isequal(a, b)
-
 Base.isequal(::EegData, ::EegData) = false
-
 Base.hash(x::EegData, h::UInt) = _fields_hash(x, h)
 
-function Base.isapprox(a::T, b::T; kwargs...) where {T<:SingleDataFrameEeg}
-    channel_labels(a) == channel_labels(b) || return false
-    size(a) == size(b) || return false
-    a.sample_rate == b.sample_rate || return false
-    return isapprox(Matrix(a), Matrix(b); kwargs...)
-end
-
-function Base.isapprox(a::T, b::T; kwargs...) where {T<:MultiDataFrameEeg}
+function Base.isapprox(a::T, b::T; kwargs...) where {T<:EegData}
     channel_labels(a) == channel_labels(b) || return false
     size(a) == size(b) || return false
     a.sample_rate == b.sample_rate || return false

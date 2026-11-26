@@ -44,12 +44,16 @@ function permutation_test(
     use_gpu::Bool = false,
     rng::AbstractRNG = Random.default_rng(),
 )
-    alpha_f = Float64(alpha)
-    cluster_alpha_f = Float64(cluster_alpha)
-
-    _validate_permutation_inputs(prepared, n_permutations, alpha_f, cluster_type, tail; cluster_alpha = cluster_alpha_f)
-    threshold_method ∈ _VALID_THRESHOLD_METHODS ||
-        @minimal_error("threshold_method must be :parametric, :nonparametric_common, or :nonparametric_individual. Got :$threshold_method")
+    alpha_f, cluster_alpha_f = Float64(alpha), Float64(cluster_alpha)
+    _validate_perm_params(
+        n_permutations,
+        alpha_f,
+        cluster_alpha_f,
+        tail,
+        threshold_method,
+        cluster_type,
+        (:spatial, :temporal, :spatiotemporal),
+    )
 
     gpu_active = false
     if use_gpu
@@ -63,11 +67,9 @@ function permutation_test(
 
     plan = _draw_permutation_plan(rng, prepared, n_permutations)
     permutation_t_matrices = gpu_active ? _collect_permutation_t_matrices_gpu(prepared, plan) : nothing
-
-    @debug "Computing t-statistics..."
     t_matrix, df, _, se_matrix = _compute_t_matrix(prepared; compute_p_values = false)
 
-    critical_t_values, threshold_for_permutations, mask_positive, mask_negative, permutation_t_matrices = _resolve_erp_thresholds(
+    critical_t_values, threshold_for_permutations, mask_positive, mask_negative, permutation_t_matrices = _resolve_perm_thresholds(
         prepared,
         t_matrix,
         df,
@@ -75,42 +77,20 @@ function permutation_test(
         threshold_method,
         cluster_alpha_f,
         tail,
-        show_progress,
-        permutation_t_matrices,
+        show_progress;
+        permutation_t_matrices = permutation_t_matrices,
     )
 
     electrodes = channel_labels(prepared.data[1])
     time_points = prepared.analysis.time_points
-    layout = prepared.data[1].layout
-    if cluster_type ∈ (:spatial, :spatiotemporal) && isnothing(layout.neighbors)
-        layout = copy(layout)
-        get_neighbors_xy!(layout, 0.35)
-    end
+    spatial_connectivity =
+        _prepare_clusters_masks!(mask_positive, mask_negative, electrodes, prepared.data[1].layout, cluster_type, min_num_neighbors)
 
-    @debug "Building connectivity matrix..."
-    spatial_connectivity = _build_connectivity_matrix(electrodes, layout, cluster_type)
+    pos_clusters, neg_clusters = _find_clusters(mask_positive, mask_negative, electrodes, time_points, spatial_connectivity, cluster_type)
+    pos_clusters, pos_stats = _score_clusters(pos_clusters, t_matrix)
+    neg_clusters, neg_stats = _score_clusters(neg_clusters, t_matrix)
 
-    if min_num_neighbors > 0 && cluster_type ∈ (:spatial, :spatiotemporal, :full)
-        @debug "Pre-filtering masks (min_num_neighbors=$min_num_neighbors)..."
-        _prefilter_mask_by_neighbors!(mask_positive, spatial_connectivity, min_num_neighbors)
-        _prefilter_mask_by_neighbors!(mask_negative, spatial_connectivity, min_num_neighbors)
-    end
-
-    @debug "Finding observed clusters..."
-    positive_clusters, negative_clusters =
-        _find_clusters(mask_positive, mask_negative, electrodes, time_points, spatial_connectivity, cluster_type)
-
-    cluster_stats_positive = Float64[]
-    cluster_stats_negative = Float64[]
-    if !isempty(positive_clusters)
-        positive_clusters, cluster_stats_positive = _compute_cluster_statistics(positive_clusters, t_matrix)
-    end
-    if !isempty(negative_clusters)
-        negative_clusters, cluster_stats_negative = _compute_cluster_statistics(negative_clusters, t_matrix)
-    end
-
-    @debug "Running $n_permutations permutations for cluster-level inference..."
-    permutation_max_positive, permutation_max_negative = _run_permutations(
+    perm_max_pos, perm_max_neg = _run_permutations(
         prepared,
         plan,
         threshold_for_permutations,
@@ -122,32 +102,10 @@ function permutation_test(
         permutation_t_matrices = permutation_t_matrices,
     )
 
-    @debug "Computing p-values..."
-    if !isempty(positive_clusters)
-        positive_clusters =
-            _compute_cluster_pvalues(positive_clusters, cluster_stats_positive, permutation_max_positive, n_permutations, alpha_f, tail)
-        sort!(positive_clusters, by = c -> (!c.is_significant, -abs(c.cluster_stat)))
-    end
-    if !isempty(negative_clusters)
-        negative_clusters =
-            _compute_cluster_pvalues(negative_clusters, cluster_stats_negative, permutation_max_negative, n_permutations, alpha_f, tail)
-        sort!(negative_clusters, by = c -> (!c.is_significant, -abs(c.cluster_stat)))
-    end
-
-    significant_mask_positive = falses(size(mask_positive))
-    significant_mask_negative = falses(size(mask_negative))
-    for cluster in positive_clusters
-        cluster.is_significant || continue
-        @inbounds for (e_idx, t_idx) in cluster.members
-            significant_mask_positive[e_idx, t_idx] = true
-        end
-    end
-    for cluster in negative_clusters
-        cluster.is_significant || continue
-        @inbounds for (e_idx, t_idx) in cluster.members
-            significant_mask_negative[e_idx, t_idx] = true
-        end
-    end
+    pos_clusters, sig_mask_pos =
+        _finalize_polarity_clusters(pos_clusters, pos_stats, perm_max_pos, n_permutations, alpha_f, tail, size(mask_positive))
+    neg_clusters, sig_mask_neg =
+        _finalize_polarity_clusters(neg_clusters, neg_stats, perm_max_neg, n_permutations, alpha_f, tail, size(mask_negative))
 
     result = PermutationResult(
         TestInfo(
@@ -160,9 +118,9 @@ function permutation_test(
         ),
         prepared.data,
         StatMatrix(t_matrix, nothing),
-        Masks(significant_mask_positive, significant_mask_negative),
-        Clusters(positive_clusters, negative_clusters),
-        PermutationDistribution(permutation_max_positive, permutation_max_negative),
+        Masks(sig_mask_pos, sig_mask_neg),
+        Clusters(pos_clusters, neg_clusters),
+        PermutationDistribution(perm_max_pos, perm_max_neg),
         electrodes,
         time_points,
         critical_t_values,
@@ -172,7 +130,7 @@ function permutation_test(
         prepared.se_diff,
     )
 
-    @info "Permutation test complete. Found $(length(positive_clusters)) positive and $(length(negative_clusters)) negative clusters."
+    @info "Permutation test complete. Found $(length(pos_clusters)) positive and $(length(neg_clusters)) negative clusters."
     return result
 end
 
@@ -188,61 +146,36 @@ function permutation_test(
     show_progress::Bool = true,
     rng::AbstractRNG = Random.default_rng(),
 )
-    alpha_f = Float64(alpha)
-    cluster_alpha_f = Float64(cluster_alpha)
-
-    n_permutations < 1 && @minimal_error "n_permutations must be >= 1, got $n_permutations"
-    (alpha_f <= 0.0 || alpha_f >= 1.0) && @minimal_error "alpha must be between 0 and 1, got $alpha_f"
-    (cluster_alpha_f <= 0.0 || cluster_alpha_f >= 1.0) && @minimal_error "cluster_alpha must be between 0 and 1, got $cluster_alpha_f"
-    cluster_type ∉ (:temporal, :spatial, :spectral, :spatiotemporal, :spectrotemporal, :full) &&
-        @minimal_error "cluster_type must be :temporal, :spatial, :spectral, :spatiotemporal, :spectrotemporal, or :full, got :$cluster_type"
-    tail ∉ (:both, :left, :right) && @minimal_error "tail must be :both, :left, or :right, got :$tail"
-    threshold_method ∈ _VALID_THRESHOLD_METHODS ||
-        @minimal_error "threshold_method must be :parametric, :nonparametric_common, or :nonparametric_individual, got :$threshold_method"
+    alpha_f, cluster_alpha_f = Float64(alpha), Float64(cluster_alpha)
+    _validate_perm_params(
+        n_permutations,
+        alpha_f,
+        cluster_alpha_f,
+        tail,
+        threshold_method,
+        cluster_type,
+        (:temporal, :spatial, :spectral, :spatiotemporal, :spectrotemporal, :full),
+    )
 
     plan = _draw_permutation_plan(rng, prepared, n_permutations)
-
-    @debug "Computing TF t-statistics..."
     t_matrix, df, _ = _compute_t_matrix_tf(prepared; tail = tail, compute_p_values = false)
 
     electrodes = channel_labels(prepared.data[1])
     frequencies = prepared.analysis.frequencies
     time_points = prepared.analysis.time_points
 
-    threshold_for_permutations, mask_positive, mask_negative, permutation_t_matrices =
-        _resolve_tf_thresholds(prepared, t_matrix, df, plan, threshold_method, cluster_alpha_f, tail, show_progress)
+    _, threshold_for_permutations, mask_positive, mask_negative, permutation_t_matrices =
+        _resolve_perm_thresholds(prepared, t_matrix, df, plan, threshold_method, cluster_alpha_f, tail, show_progress; stream_large = true)
 
-    layout = prepared.data[1].layout
-    if cluster_type ∈ (:spatial, :spatiotemporal, :full) && isnothing(layout.neighbors)
-        @minimal_warning "Layout.neighbors is not set. Computing with default distance criterion (0.35)."
-        layout = copy(layout)
-        get_neighbors_xy!(layout, 0.35)
-    end
+    spatial_connectivity =
+        _prepare_clusters_masks!(mask_positive, mask_negative, electrodes, prepared.data[1].layout, cluster_type, min_num_neighbors)
 
-    @debug "Building connectivity matrix..."
-    spatial_connectivity = _build_connectivity_matrix(electrodes, layout, cluster_type)
-
-    if min_num_neighbors > 0 && cluster_type ∈ (:spatial, :spatiotemporal, :full)
-        @debug "Pre-filtering masks (min_num_neighbors=$min_num_neighbors)..."
-        _prefilter_mask_by_neighbors_tf!(mask_positive, spatial_connectivity, min_num_neighbors)
-        _prefilter_mask_by_neighbors_tf!(mask_negative, spatial_connectivity, min_num_neighbors)
-    end
-
-    @debug "Finding observed clusters..."
-    positive_clusters, negative_clusters =
+    pos_clusters, neg_clusters =
         _find_clusters_tf(mask_positive, mask_negative, electrodes, frequencies, time_points, spatial_connectivity, cluster_type)
+    pos_clusters, pos_stats = _score_clusters(pos_clusters, t_matrix)
+    neg_clusters, neg_stats = _score_clusters(neg_clusters, t_matrix)
 
-    cluster_stats_positive = Float64[]
-    cluster_stats_negative = Float64[]
-    if !isempty(positive_clusters)
-        positive_clusters, cluster_stats_positive = _compute_cluster_statistics_tf(positive_clusters, t_matrix, electrodes)
-    end
-    if !isempty(negative_clusters)
-        negative_clusters, cluster_stats_negative = _compute_cluster_statistics_tf(negative_clusters, t_matrix, electrodes)
-    end
-
-    @debug "Running $n_permutations permutations for cluster-level inference..."
-    permutation_max_positive, permutation_max_negative = _run_permutations_tf(
+    perm_max_pos, perm_max_neg = _run_permutations_tf(
         prepared,
         plan,
         threshold_for_permutations,
@@ -257,32 +190,10 @@ function permutation_test(
         permutation_t_matrices = permutation_t_matrices,
     )
 
-    @debug "Computing p-values..."
-    if !isempty(positive_clusters)
-        positive_clusters =
-            _compute_tf_cluster_pvalues(positive_clusters, cluster_stats_positive, permutation_max_positive, n_permutations, alpha_f, tail)
-        sort!(positive_clusters, by = c -> (!c.is_significant, -abs(c.cluster_stat)))
-    end
-    if !isempty(negative_clusters)
-        negative_clusters =
-            _compute_tf_cluster_pvalues(negative_clusters, cluster_stats_negative, permutation_max_negative, n_permutations, alpha_f, tail)
-        sort!(negative_clusters, by = c -> (!c.is_significant, -abs(c.cluster_stat)))
-    end
-
-    significant_mask_positive = falses(size(mask_positive))
-    significant_mask_negative = falses(size(mask_negative))
-    for cluster in positive_clusters
-        cluster.is_significant || continue
-        @inbounds for pixel in cluster.pixels
-            significant_mask_positive[pixel] = true
-        end
-    end
-    for cluster in negative_clusters
-        cluster.is_significant || continue
-        @inbounds for pixel in cluster.pixels
-            significant_mask_negative[pixel] = true
-        end
-    end
+    pos_clusters, sig_mask_pos =
+        _finalize_polarity_clusters(pos_clusters, pos_stats, perm_max_pos, n_permutations, alpha_f, tail, size(mask_positive))
+    neg_clusters, sig_mask_neg =
+        _finalize_polarity_clusters(neg_clusters, neg_stats, perm_max_neg, n_permutations, alpha_f, tail, size(mask_negative))
 
     result = TFClusterPermutationResult(
         TestInfo(
@@ -295,15 +206,15 @@ function permutation_test(
         ),
         prepared.data,
         TFStatMatrix(t_matrix, nothing),
-        TFMasks(significant_mask_positive, significant_mask_negative),
-        TFClusters(positive_clusters, negative_clusters),
-        PermutationDistribution(permutation_max_positive, permutation_max_negative),
+        TFMasks(sig_mask_pos, sig_mask_neg),
+        TFClusters(pos_clusters, neg_clusters),
+        PermutationDistribution(perm_max_pos, perm_max_neg),
         electrodes,
         frequencies,
         time_points,
     )
 
-    @info "TF Permutation test complete. Found $(length(positive_clusters)) positive and $(length(negative_clusters)) negative clusters."
+    @info "TF Permutation test complete. Found $(length(pos_clusters)) positive and $(length(neg_clusters)) negative clusters."
     return result
 end
 
@@ -366,105 +277,106 @@ end
 ######### Internal Functions #########
 ######################################
 
-function _resolve_erp_thresholds(
-    prepared::StatisticalData,
-    t_matrix::Matrix{Float64},
+function _validate_perm_params(
+    n_permutations::Int,
+    alpha_f::Float64,
+    cluster_alpha_f::Float64,
+    tail::Symbol,
+    threshold_method::Symbol,
+    cluster_type::Symbol,
+    valid_cluster_types::Tuple,
+)
+    n_permutations < 1 && @minimal_error "n_permutations must be >= 1, got $n_permutations"
+    (0.0 < alpha_f < 1.0) || @minimal_error "alpha must be between 0 and 1, got $alpha_f"
+    (0.0 < cluster_alpha_f < 1.0) || @minimal_error "cluster_alpha must be between 0 and 1, got $cluster_alpha_f"
+    cluster_type ∈ valid_cluster_types || @minimal_error "cluster_type must be one of $valid_cluster_types, got :$cluster_type"
+    tail ∈ (:both, :left, :right) || @minimal_error "tail must be :both, :left, or :right, got :$tail"
+    threshold_method ∈ _VALID_THRESHOLD_METHODS ||
+        @minimal_error "threshold_method must be :parametric, :nonparametric_common, or :nonparametric_individual, got :$threshold_method"
+    return nothing
+end
+
+function _prepare_clusters_masks!(
+    mask_positive::BitArray{N},
+    mask_negative::BitArray{N},
+    electrodes::Vector{Symbol},
+    layout::Layout,
+    cluster_type::Symbol,
+    min_num_neighbors::Int,
+) where {N}
+    spatial_connectivity = _build_connectivity_matrix(electrodes, layout, cluster_type)
+    if min_num_neighbors > 0 && cluster_type ∈ (:spatial, :spatiotemporal, :full)
+        _prefilter_mask_by_neighbors!(mask_positive, spatial_connectivity, min_num_neighbors)
+        _prefilter_mask_by_neighbors!(mask_negative, spatial_connectivity, min_num_neighbors)
+    end
+    return spatial_connectivity
+end
+
+_score_clusters(clusters::Vector{C}, t_matrix::AbstractArray{<:AbstractFloat}) where {C<:Union{Cluster,TFCluster}} =
+    isempty(clusters) ? (clusters, Float64[]) : _compute_cluster_statistics(clusters, t_matrix)
+
+function _finalize_polarity_clusters(
+    clusters::Vector{C},
+    stats::Vector{Float64},
+    perm_max::Vector{Float64},
+    n_permutations::Int,
+    alpha_f::Float64,
+    tail::Symbol,
+    dims::NTuple{N,Int},
+) where {C<:Union{Cluster,TFCluster},N}
+    if !isempty(clusters)
+        clusters = _compute_cluster_pvalues(clusters, stats, perm_max, n_permutations, alpha_f, tail)
+        sort!(clusters, by = c -> (!c.is_significant, -abs(c.cluster_stat)))
+    end
+    return clusters, _significant_cluster_mask(clusters, dims)
+end
+
+function _resolve_perm_thresholds(
+    prepared::Union{StatisticalData,TFStatisticalData},
+    t_matrix::Array{Float64,N},
     df::Float64,
     plan::AbstractMatrix,
     threshold_method::Symbol,
     cluster_alpha_f::Float64,
     tail::Symbol,
-    show_progress::Bool,
-    permutation_t_matrices::Union{Nothing,Array{Float64,3}},
-)
+    show_progress::Bool;
+    permutation_t_matrices::Union{Nothing,Array{Float64}} = nothing,
+    stream_large::Bool = false,
+) where {N}
     if threshold_method == :parametric
-        @debug "Computing parametric critical t-values..."
         crit = _compute_critical_t_values(df, size(t_matrix), cluster_alpha_f, tail)
-        @debug "Thresholding observed data (parametric)..."
         mask_pos, mask_neg = _threshold_t_matrix_parametric(t_matrix, crit, tail)
         return crit, crit, mask_pos, mask_neg, permutation_t_matrices
     end
 
-    if isnothing(permutation_t_matrices)
-        @debug "Collecting permutation t-matrices for $(threshold_method) thresholding..."
-        permutation_t_matrices = _collect_permutation_t_matrices(prepared, plan, show_progress)
+    use_streaming = stream_large && length(t_matrix) * size(plan, 2) > _TF_PERM_CACHE_MAX_FLOATS
+    if !use_streaming && isnothing(permutation_t_matrices)
+        permutation_t_matrices = _collect_perm_t_generic(
+            prepared.analysis.data[1],
+            prepared.analysis.data[2],
+            prepared.analysis.design,
+            plan,
+            show_progress,
+            prepared isa TFStatisticalData ? "Collecting TF t-matrices: " : "Collecting permutation t-matrices: ",
+        )
     end
 
     if threshold_method == :nonparametric_common
-        @debug "Computing non-parametric common threshold..."
-        thresh_pos, thresh_neg = _compute_nonparametric_threshold_common(permutation_t_matrices, cluster_alpha_f, tail)
-        @debug "Thresholding observed data (non-parametric common)..."
+        thresh_pos, thresh_neg = if use_streaming
+            _stream_nonparametric_threshold_common_tf(prepared::TFStatisticalData, plan, cluster_alpha_f, tail, show_progress)
+        else
+            _compute_nonparametric_threshold_common(permutation_t_matrices, cluster_alpha_f, tail)
+        end
         mask_pos, mask_neg = _threshold_t_matrix_nonparametric(t_matrix, thresh_pos, thresh_neg, tail)
         return (thresh_pos, -thresh_neg), (thresh_pos, thresh_neg), mask_pos, mask_neg, permutation_t_matrices
     else
-        @debug "Computing non-parametric individual thresholds..."
-        thresh_pos_mat, thresh_neg_mat = _compute_nonparametric_threshold_individual(permutation_t_matrices, cluster_alpha_f, tail)
-        @debug "Thresholding observed data (non-parametric individual)..."
+        thresh_pos_mat, thresh_neg_mat = if use_streaming
+            _stream_nonparametric_threshold_individual_tf(prepared::TFStatisticalData, plan, cluster_alpha_f, tail, show_progress)
+        else
+            _compute_nonparametric_threshold_individual(permutation_t_matrices, cluster_alpha_f, tail)
+        end
         mask_pos, mask_neg = _threshold_t_matrix_nonparametric(t_matrix, thresh_pos_mat, thresh_neg_mat, tail)
         return (thresh_pos_mat, -thresh_neg_mat), (thresh_pos_mat, thresh_neg_mat), mask_pos, mask_neg, permutation_t_matrices
-    end
-end
-
-function _resolve_tf_thresholds(
-    prepared::TFStatisticalData,
-    t_matrix::Array{Float64,3},
-    df::Float64,
-    plan::AbstractMatrix,
-    threshold_method::Symbol,
-    cluster_alpha_f::Float64,
-    tail::Symbol,
-    show_progress::Bool,
-)
-    if threshold_method == :parametric
-        @debug "Computing parametric critical t-values..."
-        crit = _compute_critical_t_values_tf(df, size(t_matrix), cluster_alpha_f, tail)
-        @debug "Thresholding observed data (parametric)..."
-        mask_pos, mask_neg = _threshold_t_matrix_parametric_tf(t_matrix, crit, tail)
-        return crit, mask_pos, mask_neg, nothing
-    end
-
-    total_floats = length(t_matrix) * size(plan, 2)
-    permutation_t_matrices = nothing
-
-    if threshold_method == :nonparametric_common
-        if total_floats <= _TF_PERM_CACHE_MAX_FLOATS
-            @debug "Collecting TF permutation t-matrices in parallel..."
-            permutation_t_matrices = _collect_permutation_t_matrices_tf(
-                prepared.analysis.data[1],
-                prepared.analysis.data[2],
-                prepared.analysis.design,
-                plan,
-                show_progress,
-            )
-            @debug "Computing non-parametric common threshold..."
-            thresh_pos, thresh_neg = _compute_nonparametric_threshold_common_tf(permutation_t_matrices, cluster_alpha_f, tail)
-        else
-            @debug "Streaming non-parametric common threshold across chunks (avoiding large 4D allocation)..."
-            thresh_pos, thresh_neg = _stream_nonparametric_threshold_common_tf(prepared, plan, cluster_alpha_f, tail, show_progress)
-        end
-        @debug "Thresholding observed data (non-parametric common)..."
-        mask_pos, mask_neg = _threshold_t_matrix_nonparametric(t_matrix, thresh_pos, thresh_neg, tail)
-        return (thresh_pos, thresh_neg), mask_pos, mask_neg, permutation_t_matrices
-    else
-        if total_floats <= _TF_PERM_CACHE_MAX_FLOATS
-            @debug "Collecting TF permutation t-matrices in parallel..."
-            permutation_t_matrices = _collect_permutation_t_matrices_tf(
-                prepared.analysis.data[1],
-                prepared.analysis.data[2],
-                prepared.analysis.design,
-                plan,
-                show_progress,
-            )
-            @debug "Computing non-parametric individual thresholds..."
-            thresh_pos_mat, thresh_neg_mat = _compute_nonparametric_threshold_individual_tf(permutation_t_matrices, cluster_alpha_f, tail)
-        else
-            @debug "Streaming non-parametric individual thresholds per electrode (avoiding large 4D allocation)..."
-            thresh_pos_mat, thresh_neg_mat =
-                _stream_nonparametric_threshold_individual_tf(prepared, plan, cluster_alpha_f, tail, show_progress)
-        end
-        @debug "Thresholding observed data (non-parametric individual)..."
-        mask_pos, mask_neg = _threshold_t_matrix_nonparametric(t_matrix, thresh_pos_mat, thresh_neg_mat, tail)
-        return (thresh_pos_mat, thresh_neg_mat), mask_pos, mask_neg, permutation_t_matrices
     end
 end
 
@@ -479,21 +391,10 @@ function _validate_and_mask_analytic(
     (!isfinite(df) || df <= 0) && @minimal_error "Invalid degrees of freedom: df=$df!"
 
     thresh = if correction_method == :bonferroni
-        n_comp = 0
-        n_sig_raw = 0
-        @inbounds for i in eachindex(p_matrix)
-            p = p_matrix[i]
-            if !isnan(p)
-                n_comp += 1
-                p <= alpha_f && (n_sig_raw += 1)
-            end
-        end
+        n_comp = count(!isnan, p_matrix)
+        n_sig_raw = count(p -> !isnan(p) && p <= alpha_f, p_matrix)
         bonf_alpha = n_comp > 0 ? alpha_f / n_comp : 0.0
-        n_sig_bonf = 0
-        @inbounds for i in eachindex(p_matrix)
-            p = p_matrix[i]
-            (!isnan(p) && p <= bonf_alpha) && (n_sig_bonf += 1)
-        end
+        n_sig_bonf = count(p -> !isnan(p) && p <= bonf_alpha, p_matrix)
         @info "Bonferroni correction: n_comparisons=$n_comp, bonferroni_alpha=$bonf_alpha, raw_sig=$n_sig_raw, bonferroni_sig=$n_sig_bonf"
         bonf_alpha
     else
@@ -504,8 +405,7 @@ function _validate_and_mask_analytic(
     mask_negative = BitArray{N}(undef, size(t_matrix))
     if tail == :both
         @inbounds for i in eachindex(t_matrix)
-            p = p_matrix[i]
-            t = t_matrix[i]
+            p, t = p_matrix[i], t_matrix[i]
             sig = !isnan(p) && p <= thresh && !isnan(t)
             mask_positive[i] = sig && t > 0.0
             mask_negative[i] = sig && t < 0.0

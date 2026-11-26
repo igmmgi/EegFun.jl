@@ -157,33 +157,19 @@ const PLOT_ICA_QUALITY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :rejected_color => (:red, "Color for rejected components"),
 )
 
-const PLOT_ERP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
-    # Display parameters
+const _BASE_WAVEFORM_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :display_plot => (true, "Display the plot (true/false)"),
-    :window_title => ("", "Title for the OS plot window. If empty, it's generated automatically."),
-    :figure_title => ("", "Title drawn at the top of the entire figure canvas"),
-    :figure_title_fontsize => (24, "Font size for figure title"),
     :interactive => (true, "Enable interactive features (true/false)"),
     :zoom_step => (0.2, "Fractional zoom step for arrow keys (e.g. 0.2 means 20% zoom in/out)"),
     :selection_color => (:blue, "Color for interactive selection rectangles"),
     :selection_alpha => (0.3, "Alpha (transparency) for interactive selection rectangles"),
     :theme_fontsize => (nothing, "Font size for theme"),
-
-    # Axis limits and labels
     :xlim => (nothing, "X-axis limits as (min, max) tuple. If nothing, automatically determined"),
     :ylim => (nothing, "Y-axis limits as (min, max) tuple. If nothing, automatically determined"),
     :xlabel => ("Time (s)", "Label for x-axis"),
     :ylabel => ("μV", "Label for y-axis"),
     :yreversed => (false, "Whether to reverse the y-axis"),
-    :xticks => (nothing, "X-axis tick positions (e.g., -0.1:0.1:0.8 or [0, 0.2, 0.4]). If nothing, automatically determined"),
-    :yticks => (nothing, "Y-axis tick positions (e.g., -4:2:4 or [-2, 0, 2]). If nothing, automatically determined"),
-    :time_unit => (
-        :s,
-        "Time unit for x-axis display (:s or :ms). Only affects axis labels and tick formatting — all intervals remain in seconds.",
-    ),
-
-    # Title
-    :plot_title => (nothing, "Plot title"),
+    :plot_title => (nothing, "Plot title. If nothing, automatically determined"),
     :show_title => (true, "Show plot title (true/false)"),
     :plot_title_fontsize => (16, "Font size for plot titles"),
     :plot_title_position => (
@@ -191,18 +177,10 @@ const PLOT_ERP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
         "Relative (x, y) coordinates for the plot title (e.g., (0.5, 0.95)). If provided, the title is drawn inside the axis.",
     ),
     :plot_title_align => ((:center, :top), "Alignment of the inner plot title"),
-
-    # Line styling
-    :linewidth => (nothing, "Line width for ERPs"),
-    :color => (nothing, "Color for ERPs (single color or a vector of colors, one per dataset)"),
-    :linestyle => (nothing, "Line style for ERPs (single style or a vector of styles, one per dataset)"),
-    :colormap => (nothing, "Colormap for multi-channel plots"),
-
-    # Plot configuration
+    :linewidth => (nothing, "Line width for waveform traces"),
+    :color => (nothing, "Color for traces (single color or vector of colors)"),
+    :colormap => (nothing, "Colormap for multi-series plots"),
     :average_channels => (false, "Average across channels (true/false)"),
-    :error_bars => (:none, "Error bars type to plot: :none, :sem, :within_sem, :ci95"),
-
-    # Legend parameters
     :legend_kwargs => (
         NamedTuple(),
         "Additional kwargs passed directly to the Makie Legend block (see Makie's [Legend documentation](https://docs.makie.org/stable/reference/blocks/legend/) for available attributes).",
@@ -212,32 +190,41 @@ const PLOT_ERP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :legend_framevisible => (true, "Legend frame visible (true/false)"),
     :legend_position => (:lt, "Legend position (:lt, :rt, :lb, :rb, or tuple like (:left, :top), or (0.5, 0.5))"),
     :legend_channel => ([], "Which channel to put the legend on."),
-    :legend_labels => ([], "Legend labels."),
+    :legend_labels => ([], "Custom labels for conditions."),
     :legend_nbanks => (nothing, "Number of legend columns."),
-
-    # Individual axes grids
     :xgrid => (false, "Show x-axis grid (true/false)"),
     :ygrid => (false, "Show y-axis grid (true/false)"),
     :xminorgrid => (false, "Show x-axis minor grid (true/false)"),
     :yminorgrid => (false, "Show y-axis minor grid (true/false)"),
-
-    # Origin lines and scale indicator
     :add_xy_origin => (true, "Add origin lines at x=0 and y=0 (true/false)"),
     :axis_type => (:standard, "Type of axis to draw (:standard or :origin)"),
     :scale_x_value => (nothing, "X-axis scale value/step size (e.g. 0.1 for 100 ms)"),
     :scale_y_value => (nothing, "Y-axis scale value/step size (e.g. 5.0 for 5 μV)"),
-
-    # Layout parameters
     :layout_kwargs => (
         NamedTuple(),
         "Additional parameters to configure grid or topographical layouts (e.g., grid_dims, topo_plot_width, grid_rowgap)",
     ),
     :figure_padding => ((10, 30, 10, 10), "Padding around entire figure as (left, right, bottom, top) tuple (in pixels)"),
+)
 
-    # Highlight regions
-    :highlight_regions => (
-        nothing,
-        "Highlight regions as a NamedTuple or Vector of NamedTuples. Each region: (x1, x2, y1=-Inf, y2=Inf, color=:gray, alpha=0.3)",
+const PLOT_ERP_KWARGS = merge(
+    _BASE_WAVEFORM_KWARGS,
+    Dict{Symbol,Tuple{Any,String}}(
+        :window_title => ("", "Title for the OS plot window. If empty, it's generated automatically."),
+        :figure_title => ("", "Title drawn at the top of the entire figure canvas"),
+        :figure_title_fontsize => (24, "Font size for figure title"),
+        :xticks => (nothing, "X-axis tick positions (e.g., -0.1:0.1:0.8 or [0, 0.2, 0.4]). If nothing, automatically determined"),
+        :yticks => (nothing, "Y-axis tick positions (e.g., -4:2:4 or [-2, 0, 2]). If nothing, automatically determined"),
+        :time_unit => (
+            :s,
+            "Time unit for x-axis display (:s or :ms). Only affects axis labels and tick formatting — all intervals remain in seconds.",
+        ),
+        :linestyle => (nothing, "Line style for ERPs (single style or a vector of styles, one per dataset)"),
+        :error_bars => (:none, "Error bars type to plot: :none, :sem, :within_sem, :ci95"),
+        :highlight_regions => (
+            nothing,
+            "Highlight regions as a NamedTuple or Vector of NamedTuples. Each region: (x1, x2, y1=-Inf, y2=Inf, color=:gray, alpha=0.3)",
+        ),
     ),
 )
 
@@ -831,4 +818,46 @@ function _create_baseline_textbox(layout, row, label, obs, placeholder, width)
     tb.stored_string[] = obs[]
     hasproperty(tb, :displayed_string) ? connect!(obs, tb.displayed_string) : connect!(obs, tb.stored_string)
     return tb
+end
+
+function _require_batch_files(pattern::String, input_dir::String, participant_selection; kind::String = "")
+    files = _find_batch_files(pattern, input_dir, participant_selection)
+    if isempty(files)
+        all_matching = _find_batch_files(pattern, input_dir)
+        label = isempty(kind) ? "files" : "$kind files"
+        if isempty(all_matching)
+            @minimal_error "No $label matching pattern '$pattern' in $input_dir"
+        else
+            avail_ids = sort(unique(_extract_participant_id.(all_matching)))
+            @minimal_error "Pattern '$pattern' matched $(length(all_matching)) file(s), but none passed the participant selection. Available participant IDs: $avail_ids"
+        end
+    end
+    return sort(files, by = _natural_sort_key)
+end
+
+function _read_plot_file(filepath::String)
+    data = read_data(filepath)
+    isnothing(data) && @minimal_error "No data found in file: $filepath"
+    return data
+end
+
+function _dispatch_plot_filepath(
+    plot_fn,
+    filepath::String;
+    input_dir::String = pwd(),
+    participant_selection = participants(),
+    kind::String = "",
+)
+    if endswith(filepath, ".jld2")
+        return plot_fn(_read_plot_file(_resolve_input_filepath(filepath, input_dir)))
+    end
+    files = _require_batch_files(filepath, input_dir, participant_selection; kind = kind)
+    results = NamedTuple[]
+    for file in files
+        @info "Plotting: $file"
+        data = read_data(joinpath(input_dir, file))
+        isnothing(data) && continue
+        push!(results, plot_fn(data))
+    end
+    return results
 end

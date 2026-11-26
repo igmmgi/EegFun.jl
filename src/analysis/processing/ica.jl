@@ -1,8 +1,0 @@
-# Independent Component Analysis (ICA)
-
-include("ica/api.jl")
-include("ica/infomax.jl")
-include("ica/picard.jl")
-include("ica/amica.jl")
-include("ica/components.jl")
-include("ica/artifact_id.jl")

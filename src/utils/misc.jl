@@ -115,40 +115,6 @@ function example_path(relative_path::String)
     return path
 end
 
-Base.copy(dat::ContinuousData)::ContinuousData =
-    ContinuousData(dat.file, copy(dat.data, copycols = true), copy(dat.layout), dat.sample_rate, copy(dat.analysis_info))
-
-Base.copy(dat::EpochData)::EpochData = EpochData(
-    dat.file,
-    dat.condition,
-    dat.condition_name,
-    [copy(epoch, copycols = true) for epoch in dat],
-    copy(dat.layout),
-    dat.sample_rate,
-    copy(dat.analysis_info),
-)
-
-Base.copy(dat::ErpData)::ErpData = ErpData(
-    dat.file,
-    dat.condition,
-    dat.condition_name,
-    copy(dat.data, copycols = true),
-    copy(dat.layout),
-    dat.sample_rate,
-    copy(dat.analysis_info),
-    dat.n_epochs,
-)
-
-Base.copy(info::AnalysisInfo)::AnalysisInfo = AnalysisInfo(
-    reference = info.reference,
-    hp_filter = info.hp_filter,
-    lp_filter = info.lp_filter,
-    sample_rate = info.sample_rate,
-    n_ica_components_removed = info.n_ica_components_removed,
-    n_channels_repaired = info.n_channels_repaired,
-    repaired_channels = copy(info.repaired_channels),
-)
-
 ######################################
 ######### Internal Functions #########
 ######################################
@@ -278,11 +244,11 @@ function _merge_plot_kwargs(defaults_dict::Dict{Symbol,Tuple{Any,String}}, user_
     return defaults
 end
 
-_merge_plot_kwargs(defaults_dict::Dict{Symbol,Tuple{Any,String}}, user_kwargs::Dict; validate::Bool = true)::Dict{Symbol,Any} =
-    _merge_plot_kwargs(defaults_dict, NamedTuple(user_kwargs); validate = validate)
-
-_merge_plot_kwargs(defaults_dict::Dict{Symbol,Tuple{Any,String}}, user_kwargs::Base.Pairs; validate::Bool = true)::Dict{Symbol,Any} =
-    _merge_plot_kwargs(defaults_dict, NamedTuple(user_kwargs); validate = validate)
+_merge_plot_kwargs(
+    defaults_dict::Dict{Symbol,Tuple{Any,String}},
+    user_kwargs::Union{Dict,Base.Pairs};
+    validate::Bool = true,
+)::Dict{Symbol,Any} = _merge_plot_kwargs(defaults_dict, NamedTuple(user_kwargs); validate = validate)
 
 function _generate_kwargs_doc(kwargs_dict::Dict{Symbol,Tuple{Any,String}})::String
     doc_lines = [
@@ -346,30 +312,7 @@ function _combine_boolean_columns!(dat::ContinuousData, columns::Vector{Symbol},
     end
     operation in (:and, :or, :nand, :nor) || @minimal_error "Invalid operation :$operation. Must be one of: :and, :or, :nand, :nor"
 
-    n = nrow(dat.data)
-    result = Vector{Bool}(undef, n)
-    _copy_bools!(result, dat.data[!, columns[1]])
-    if operation === :and || operation === :nand
-        for k = 2:length(columns)
-            _and_bools!(result, dat.data[!, columns[k]])
-        end
-        if operation === :nand
-            @inbounds for i = 1:n
-                result[i] = !result[i]
-            end
-        end
-    else
-        for k = 2:length(columns)
-            _or_bools!(result, dat.data[!, columns[k]])
-        end
-        if operation === :nor
-            @inbounds for i = 1:n
-                result[i] = !result[i]
-            end
-        end
-    end
-
-    dat.data[!, output_column] = result
+    dat.data[!, output_column] = _combine_sample_cols(dat.data, columns, operation in (:or, :nor), operation in (:nand, :nor))
     @info "_combine_boolean_columns!: Combined $(length(columns)) columns using :$operation operation into column :$output_column"
 end
 

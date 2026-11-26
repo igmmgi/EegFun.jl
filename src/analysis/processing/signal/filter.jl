@@ -121,13 +121,7 @@ Apply a digital lowpass filter to a copy of `dat` (or a `Vector` of `EegData`, o
 """
 lowpass_filter(dat::EegData, args...; kwargs...) = lowpass_filter!(copy(dat), args...; kwargs...)
 
-lowpass_filter(dat::AbstractVector{<:EegData}, cutoff_freq::Real; kwargs...) = [lowpass_filter(d, cutoff_freq; kwargs...) for d in dat]
-
-lowpass_filter(dat::EegData, filter_cfg::FilterConfig; section::Symbol = :lowpass) =
-    lowpass_filter!(copy(dat), filter_cfg; section = section)
-
-lowpass_filter(dat::AbstractVector{<:EegData}, filter_cfg::FilterConfig; section::Symbol = :lowpass) =
-    [lowpass_filter(d, filter_cfg; section = section) for d in dat]
+lowpass_filter(dat::AbstractVector{<:EegData}, args...; kwargs...) = [lowpass_filter(d, args...; kwargs...) for d in dat]
 
 """
     lowpass_filter!(dat::EegData, cutoff_freq::Real; kwargs...)
@@ -154,25 +148,13 @@ lowpass_filter!(
     filter_func = filter_func,
 )
 
-function lowpass_filter!(dat::AbstractVector{<:EegData}, cutoff_freq::Real; kwargs...)
-    for d in dat
-        lowpass_filter!(d, cutoff_freq; kwargs...)
-    end
-    return dat
-end
-
 function lowpass_filter!(dat::EegData, filter_cfg::FilterConfig; section::Symbol = :lowpass)
     sec = getfield(filter_cfg, section)
     sec.apply && lowpass_filter!(dat, sec.freq; order = sec.order, filter_method = sec.method, filter_func = sec.func)
     return dat
 end
 
-function lowpass_filter!(dat::AbstractVector{<:EegData}, filter_cfg::FilterConfig; section::Symbol = :lowpass)
-    for d in dat
-        lowpass_filter!(d, filter_cfg; section = section)
-    end
-    return dat
-end
+lowpass_filter!(dat::AbstractVector{<:EegData}, args...; kwargs...) = (foreach(d -> lowpass_filter!(d, args...; kwargs...), dat); dat)
 
 lowpass_filter(
     file_pattern::String,
@@ -204,13 +186,7 @@ Apply a digital highpass filter to a copy of `dat` (or a `Vector` of `EegData`, 
 """
 highpass_filter(dat::EegData, args...; kwargs...) = highpass_filter!(copy(dat), args...; kwargs...)
 
-highpass_filter(dat::AbstractVector{<:EegData}, cutoff_freq::Real; kwargs...) = [highpass_filter(d, cutoff_freq; kwargs...) for d in dat]
-
-highpass_filter(dat::EegData, filter_cfg::FilterConfig; section::Symbol = :highpass) =
-    highpass_filter!(copy(dat), filter_cfg; section = section)
-
-highpass_filter(dat::AbstractVector{<:EegData}, filter_cfg::FilterConfig; section::Symbol = :highpass) =
-    [highpass_filter(d, filter_cfg; section = section) for d in dat]
+highpass_filter(dat::AbstractVector{<:EegData}, args...; kwargs...) = [highpass_filter(d, args...; kwargs...) for d in dat]
 
 """
     highpass_filter!(dat::EegData, cutoff_freq::Real; kwargs...)
@@ -237,25 +213,13 @@ highpass_filter!(
     filter_func = filter_func,
 )
 
-function highpass_filter!(dat::AbstractVector{<:EegData}, cutoff_freq::Real; kwargs...)
-    for d in dat
-        highpass_filter!(d, cutoff_freq; kwargs...)
-    end
-    return dat
-end
-
 function highpass_filter!(dat::EegData, filter_cfg::FilterConfig; section::Symbol = :highpass)
     sec = getfield(filter_cfg, section)
     sec.apply && highpass_filter!(dat, sec.freq; order = sec.order, filter_method = sec.method, filter_func = sec.func)
     return dat
 end
 
-function highpass_filter!(dat::AbstractVector{<:EegData}, filter_cfg::FilterConfig; section::Symbol = :highpass)
-    for d in dat
-        highpass_filter!(d, filter_cfg; section = section)
-    end
-    return dat
-end
+highpass_filter!(dat::AbstractVector{<:EegData}, args...; kwargs...) = (foreach(d -> highpass_filter!(d, args...; kwargs...), dat); dat)
 
 highpass_filter(
     file_pattern::String,
@@ -675,22 +639,6 @@ function _find_db_crossings(mag_db::Vector{Float64}, target_db::Float64, thresho
     return crossings
 end
 
-_default_filter_output_dir(input_dir::String, pattern::String, filter_type::Symbol, freq::Real) =
-    joinpath(input_dir, "filtered_$(_clean_pattern(pattern))_$(filter_type)_$(freq)hz")
-
-function _process_filter_file(filepath::String, output_path::String, filter_type::Symbol, cutoff_freq::Real, condition_selection)
-    filename = basename(filepath)
-    data = read_data(filepath)
-    isnothing(data) && return BatchResult(false, filename, "No data variables found")
-    data isa AbstractVector{<:Union{ErpData,EpochData}} ||
-        return BatchResult(false, filename, "Invalid data type: expected Vector{ErpData} or Vector{EpochData}")
-
-    data = _condition_select(data, condition_selection)
-    filter_type == :lp ? lowpass_filter!(data, cutoff_freq) : highpass_filter!(data, cutoff_freq)
-    jldsave(output_path; data = data, format_version = EEGFUN_FORMAT_VERSION)
-    return BatchResult(true, filename, "Filtered successfully")
-end
-
 function _run_filter_batch(
     file_pattern::String,
     cutoff_freq::Real,
@@ -708,9 +656,19 @@ function _run_filter_batch(
     ) do ctx
         @info "  cutoff: $cutoff_freq Hz"
         cutoff_freq <= 0 && @minimal_error("Cutoff frequency must be positive, got: $cutoff_freq")
-        output_dir = _prepare_output_dir!(ctx, _default_filter_output_dir(input_dir, file_pattern, filter_type, cutoff_freq))
-        process_fn =
-            (input_path, output_path) -> _process_filter_file(input_path, output_path, filter_type, cutoff_freq, condition_selection)
-        return batch_process(process_fn, file_pattern, input_dir, output_dir, participant_selection, "Filtering")
+        default_dir = joinpath(input_dir, "filtered_$(_clean_pattern(file_pattern))_$(filter_type)_$(cutoff_freq)hz")
+        return _batch_jld2_files(
+            data ->
+                (filter_type == :lp ? lowpass_filter!(data, cutoff_freq) : highpass_filter!(data, cutoff_freq), "Filtered successfully"),
+            AbstractVector{<:Union{ErpData,EpochData}},
+            ctx,
+            default_dir,
+            file_pattern,
+            input_dir,
+            participant_selection,
+            "Filtering";
+            condition_selection = condition_selection,
+            expected_label = "Vector{ErpData} or Vector{EpochData}",
+        )
     end
 end

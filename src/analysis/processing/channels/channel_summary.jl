@@ -102,8 +102,7 @@ function channel_summary(
                 @view(zvar_col[rng]),
             )
         else
-            single_dat = ContinuousData(dat.file, epoch_df, dat.layout, dat.sample_rate, dat.analysis_info)
-            sel_samps = get_selected_samples(single_dat, combined_sel)
+            sel_samps = get_selected_samples(epoch_df, combined_sel)
             isempty(sel_samps) && @minimal_error("No samples selected for channel summary")
             contig = _contiguous_sample_range(sel_samps)
             _write_channel_summary_slice!(
@@ -144,7 +143,7 @@ function channel_summary(
     )
 end
 
-channel_summary(dat::Vector{<:MultiDataFrameEeg}; kwargs...) = channel_summary.(dat; kwargs...)
+channel_summary(dat::AbstractVector{<:MultiDataFrameEeg}; kwargs...) = channel_summary.(dat; kwargs...)
 
 function channel_summary(
     file_pattern::String;
@@ -160,7 +159,7 @@ function channel_summary(
 )
     _with_batch_logging("channel summary", "$(output_file).log", input_dir, output_dir) do ctx
         @log_call "channel_summary"
-        output_dir = _prepare_output_dir!(ctx, _default_channel_summary_output_dir(input_dir, file_pattern))
+        out_dir = _prepare_output_dir!(ctx, _default_channel_summary_output_dir(input_dir, file_pattern))
         files = _find_batch_files(file_pattern, input_dir, participant_selection)
         if isempty(files)
             @minimal_warning "No JLD2 files found matching pattern '$file_pattern' in $input_dir"
@@ -198,7 +197,7 @@ function channel_summary(
         end
 
         if !isempty(all_summaries)
-            output_path = joinpath(output_dir, "$(output_file).csv")
+            output_path = joinpath(out_dir, "$(output_file).csv")
             CSV.write(output_path, reduce(vcat, all_summaries))
             @info "Combined results saved to: $output_path"
         else
@@ -206,7 +205,7 @@ function channel_summary(
         end
 
         @info "Batch operation complete! Processed $n_success files successfully, $n_error errors"
-        @info "Output saved to: $output_dir"
+        @info "Output saved to: $out_dir"
     end
 end
 
@@ -214,93 +213,24 @@ end
 ######### Internal Functions #########
 ######################################
 
-function _col_summary_stats_contig(col::Vector{Float64}, rng::UnitRange{Int})
-    n = length(rng)
-    i1 = first(rng)
-    i2 = last(rng)
-    v1 = @inbounds col[i1]
+@inline function _col_summary_stats(src::AbstractVector)
+    n = length(src)
+    v1 = Float64(@inbounds src[1])
     n == 1 && return (v1, v1, NaN, 0.0, NaN)
 
-    mn = v1
-    mx = v1
+    mn = mx = v1
     s = 0.0
-    @inbounds for i = i1:i2
-        x = col[i]
+    @inbounds for i = 1:n
+        x = Float64(src[i])
         x < mn && (mn = x)
         x > mx && (mx = x)
         s += x
     end
     μ = s / n
     ssq = 0.0
-    @inbounds @simd for i = i1:i2
-        d = col[i] - μ
-        ssq += d * d
-    end
-    v = ssq / (n - 1)
-    return (mn, mx, sqrt(v), mx - mn, v)
-end
-
-function _col_summary_stats_contig(col::AbstractVector, rng::UnitRange{Int})
-    n = length(rng)
-    i1 = first(rng)
-    i2 = last(rng)
-    v1 = Float64(@inbounds col[i1])
-    n == 1 && return (v1, v1, NaN, 0.0, NaN)
-
-    mn = v1
-    mx = v1
-    s = 0.0
-    @inbounds for i = i1:i2
-        x = Float64(col[i])
-        x < mn && (mn = x)
-        x > mx && (mx = x)
-        s += x
-    end
-    μ = s / n
-    ssq = 0.0
-    @inbounds for i = i1:i2
-        d = Float64(col[i]) - μ
-        ssq += d * d
-    end
-    v = ssq / (n - 1)
-    return (mn, mx, sqrt(v), mx - mn, v)
-end
-
-function _col_summary_stats_indexed(col::AbstractVector, idx::Vector{Int})
-    n = length(idx)
-    v1 = Float64(@inbounds col[idx[1]])
-    n == 1 && return (v1, v1, NaN, 0.0, NaN)
-
-    mn = v1
-    mx = v1
-    s = 0.0
-    if col isa Vector{Float64}
-        col_f = col::Vector{Float64}
-        @inbounds for k = 1:n
-            x = col_f[idx[k]]
-            x < mn && (mn = x)
-            x > mx && (mx = x)
-            s += x
-        end
-        μ = s / n
-        ssq = 0.0
-        @inbounds @simd for k = 1:n
-            d = col_f[idx[k]] - μ
-            ssq += d * d
-        end
-    else
-        @inbounds for k = 1:n
-            x = Float64(col[idx[k]])
-            x < mn && (mn = x)
-            x > mx && (mx = x)
-            s += x
-        end
-        μ = s / n
-        ssq = 0.0
-        @inbounds for k = 1:n
-            d = Float64(col[idx[k]]) - μ
-            ssq += d * d
-        end
+    @inbounds @simd for i = 1:n
+        d = Float64(src[i]) - μ
+        ssq = muladd(d, d, ssq)
     end
     v = ssq / (n - 1)
     return (mn, mx, sqrt(v), mx - mn, v)
@@ -337,7 +267,7 @@ function _write_channel_summary_slice!(
 )
     @inbounds for c in eachindex(col_indices)
         col = data[!, col_indices[c]]
-        mn, mx, sd, rg, vr = !isnothing(contig) ? _col_summary_stats_contig(col, contig) : _col_summary_stats_indexed(col, sample_selection)
+        mn, mx, sd, rg, vr = _col_summary_stats(!isnothing(contig) ? @view(col[contig]) : @view(col[sample_selection]))
         min_s[c] = mn
         max_s[c] = mx
         std_s[c] = sd

@@ -214,17 +214,45 @@ function signal_example_ecg_hrv()
     ctrl_layout = fig[4, 1] = GridLayout(tellwidth = false, halign = :center)
     sl_grid = ctrl_layout[1, 1] = GridLayout(tellwidth = false, halign = :center)
 
-    Label(sl_grid[1, 1], text = "Heart Rate:", font = :bold, fontsize = label_font)
-    sl_hr = Slider(sl_grid[1, 2], range = 50.0:1.0:110.0, startvalue = 72.0, width = 120)
-    Label(sl_grid[1, 3], text = lift(v -> "$(round(Int, v)) BPM", sl_hr.value), width = 75, fontsize = label_font, halign = :left)
-
-    Label(sl_grid[1, 5], text = "Breathing Speed:", font = :bold, fontsize = label_font)
-    sl_resp = Slider(sl_grid[1, 6], range = 6.0:1.0:20.0, startvalue = 12.0, width = 120)
-    Label(sl_grid[1, 7], text = lift(v -> "$(round(Int, v)) br/min", sl_resp.value), width = 85, fontsize = label_font, halign = :left)
-
-    Label(sl_grid[1, 9], text = "Relaxation (HRV):", font = :bold, fontsize = label_font)
-    sl_vag = Slider(sl_grid[1, 10], range = 0.0:1.0:100.0, startvalue = 75.0, width = 120)
-    Label(sl_grid[1, 11], text = lift(v -> "$(round(Int, v))%", sl_vag.value), width = 60, fontsize = label_font, halign = :left)
+    sl_hr = _demo_hslider!(
+        sl_grid,
+        1,
+        1,
+        "Heart Rate:",
+        50.0:1.0:110.0,
+        72.0,
+        v -> "$(round(Int, v)) BPM";
+        obs = obs_mean_hr,
+        fontsize = label_font,
+        sl_width = 120,
+        val_width = 75,
+    )
+    sl_resp = _demo_hslider!(
+        sl_grid,
+        1,
+        5,
+        "Breathing Speed:",
+        6.0:1.0:20.0,
+        12.0,
+        v -> "$(round(Int, v)) br/min";
+        obs = obs_resp_rate,
+        fontsize = label_font,
+        sl_width = 120,
+        val_width = 85,
+    )
+    sl_vag = _demo_hslider!(
+        sl_grid,
+        1,
+        9,
+        "Relaxation (HRV):",
+        0.0:1.0:100.0,
+        75.0,
+        v -> "$(round(Int, v))%";
+        obs = obs_vagal_pct,
+        fontsize = label_font,
+        sl_width = 120,
+        val_width = 60,
+    )
 
     colgap!(sl_grid, 10)
     colsize!(sl_grid, 4, Fixed(45))
@@ -237,10 +265,6 @@ function signal_example_ecg_hrv()
     btn_stress =
         Button(btn_grid[1, 3], label = "Stressed (Low HRV)", buttoncolor = "#fee2e2", fontsize = btn_font, width = 230, height = 36)
     colgap!(btn_grid, 18)
-
-    on(val -> (obs_mean_hr[] = val), sl_hr.value)
-    on(val -> (obs_resp_rate[] = val), sl_resp.value)
-    on(val -> (obs_vagal_pct[] = val), sl_vag.value)
 
     on(btn_calm.clicks) do _
         set_close_to!(sl_hr, 68.0)

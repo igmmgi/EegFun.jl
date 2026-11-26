@@ -58,6 +58,16 @@ struct _MeasurementSpec
     peak_polarity::Symbol
 end
 
+struct _ValidRowSpec
+    idx::Int
+    t_range::UnitRange{Int}
+    bl_range::UnitRange{Int}
+    ai_start::Float64
+    ai_end::Float64
+    bl_start::Union{Float64,Missing}
+    bl_end::Union{Float64,Missing}
+end
+
 ######################################
 ########### User Functions ###########
 ######################################
@@ -412,40 +422,27 @@ function _find_robust_peak(data::AbstractVector, peak_type::Symbol; local_interv
     end
 
     found = false
+    best_sval = -Inf
     best_val = 0.0
     best_idx = 0
     inv_w = 1.0 / local_interval
+    sgn = peak_type === :max ? 1.0 : -1.0
 
     @inbounds for i = (local_interval+1):(n-local_interval)
         val = Float64(data[i])
-        if peak_type === :max
-            (val > data[i-1] && val > data[i+1]) || continue
-            (!found || val > best_val) || continue
-            left_sum = 0.0
-            right_sum = 0.0
-            for k = 1:local_interval
-                left_sum += data[i-k]
-                right_sum += data[i+k]
-            end
-            if val > left_sum * inv_w && val > right_sum * inv_w
-                best_val = val
-                best_idx = i
-                found = true
-            end
-        else
-            (val < data[i-1] && val < data[i+1]) || continue
-            (!found || val < best_val) || continue
-            left_sum = 0.0
-            right_sum = 0.0
-            for k = 1:local_interval
-                left_sum += data[i-k]
-                right_sum += data[i+k]
-            end
-            if val < left_sum * inv_w && val < right_sum * inv_w
-                best_val = val
-                best_idx = i
-                found = true
-            end
+        sval = sgn * val
+        (sval > sgn * data[i-1] && sval > sgn * data[i+1] && sval > best_sval) || continue
+        left_sum = 0.0
+        right_sum = 0.0
+        for k = 1:local_interval
+            left_sum += data[i-k]
+            right_sum += data[i+k]
+        end
+        if sval > sgn * left_sum * inv_w && sval > sgn * right_sum * inv_w
+            best_sval = sval
+            best_val = val
+            best_idx = i
+            found = true
         end
     end
 
@@ -573,37 +570,27 @@ end
 
 function _fractional_peak_latency(data::AbstractVector, time_col::AbstractVector, peak_idx::Int, fraction::Float64, direction::Symbol)
     (isempty(data) || isempty(time_col) || peak_idx < 1 || peak_idx > length(data)) && return NaN
-    fraction <= 0.0 && return (direction === :onset ? Float64(time_col[1]) : Float64(time_col[end]))
+    is_onset = direction === :onset
+    clamp_t = Float64(is_onset ? time_col[1] : time_col[end])
+    fraction <= 0.0 && return clamp_t
     fraction >= 1.0 && return Float64(time_col[peak_idx])
     peak_val = Float64(data[peak_idx])
     abs(peak_val) < 1e-12 && return Float64(time_col[peak_idx])
     target_val = peak_val * fraction
 
-    if direction === :onset
-        @inbounds for i = (peak_idx-1):-1:1
-            yi = Float64(data[i])
-            if (peak_val > 0.0 && yi <= target_val) || (peak_val < 0.0 && yi >= target_val)
-                y1 = Float64(data[i+1])
-                x0, x1 = Float64(time_col[i]), Float64(time_col[i+1])
-                abs(y1 - yi) < 1e-14 && return x0
-                return x0 + (target_val - yi) * (x1 - x0) / (y1 - yi)
-            end
+    step_rng = is_onset ? ((peak_idx-1):-1:1) : ((peak_idx+1):1:length(data))
+    @inbounds for i in step_rng
+        yi = Float64(data[i])
+        if (peak_val > 0.0 && yi <= target_val) || (peak_val < 0.0 && yi >= target_val)
+            i0, i1 = is_onset ? (i, i + 1) : (i - 1, i)
+            y0, y1 = Float64(data[i0]), Float64(data[i1])
+            x0, x1 = Float64(time_col[i0]), Float64(time_col[i1])
+            abs(y1 - y0) < 1e-14 && return (is_onset ? x0 : x1)
+            return x0 + (target_val - y0) * (x1 - x0) / (y1 - y0)
         end
-        @minimal_warning "fractional_peak_latency: onset did not reach $(fraction) of peak within analysis interval; clamping to window start"
-        return Float64(time_col[1])
-    else
-        @inbounds for i = (peak_idx+1):length(data)
-            yi = Float64(data[i])
-            if (peak_val > 0.0 && yi <= target_val) || (peak_val < 0.0 && yi >= target_val)
-                y0 = Float64(data[i-1])
-                x0, x1 = Float64(time_col[i-1]), Float64(time_col[i])
-                abs(yi - y0) < 1e-14 && return x1
-                return x0 + (target_val - y0) * (x1 - x0) / (yi - y0)
-            end
-        end
-        @minimal_warning "fractional_peak_latency: offset did not reach $(fraction) of peak within analysis interval; clamping to window end"
-        return Float64(time_col[end])
     end
+    @minimal_warning "fractional_peak_latency: $(is_onset ? "onset" : "offset") did not reach $(fraction) of peak within analysis interval; clamping to window $(is_onset ? "start" : "end")"
+    return clamp_t
 end
 
 function _eval_channel_measurement(
@@ -727,55 +714,50 @@ function _apply_baseline_correction!(dfs::AbstractVector{DataFrame}, baseline_in
     return dfs
 end
 
+@inline function _baseline_window_into!(chan_buf::Vector{Float64}, rc::Vector{Float64}, t_range::UnitRange{Int}, bl_r::UnitRange{Int})
+    n_w = length(t_range)
+    resize!(chan_buf, n_w)
+    b_sum = 0.0
+    @inbounds @simd for i in bl_r
+        b_sum += rc[i]
+    end
+    b_mean = b_sum / length(bl_r)
+    offset = first(t_range) - 1
+    @inbounds @simd for j = 1:n_w
+        chan_buf[j] = rc[offset+j] - b_mean
+    end
+    return chan_buf
+end
+
+@inline function _baseline_window_into!(chan_buf::Vector{Float64}, raw_col::AbstractVector, t_range::UnitRange{Int}, bl_r::UnitRange{Int})
+    n_w = length(t_range)
+    resize!(chan_buf, n_w)
+    b_mean = mean(@view raw_col[bl_r])
+    offset = first(t_range) - 1
+    @inbounds for j = 1:n_w
+        chan_buf[j] = Float64(raw_col[offset+j]) - b_mean
+    end
+    return chan_buf
+end
+
 function _fill_channel_measurements!(
     out_col::Vector{Float64},
     dfs,
-    valid_idxs::Vector{Int},
+    rows::Vector{_ValidRowSpec},
     time_vecs::Vector{Vector{Float64}},
-    time_ranges::Vector{UnitRange{Int}},
-    bl_ranges::Vector{UnitRange{Int}},
     ch::Symbol,
-    col_idx::Int,
     spec::_MeasurementSpec,
     apply_bl::Bool,
     chan_buf::Vector{Float64},
 )
-    for r in eachindex(valid_idxs)
-        df = dfs[valid_idxs[r]]
-        t_range = time_ranges[r]
-        raw_col = df[!, ch]
-        t_col = time_vecs[r]
-        sel_times = @view t_col[t_range]
-        bl_r = bl_ranges[r]
-
-        if apply_bl && !isempty(bl_r)
-            n_w = length(t_range)
-            resize!(chan_buf, n_w)
-            offset = first(t_range) - 1
-            if raw_col isa Vector{Float64}
-                rc = raw_col::Vector{Float64}
-                b_sum = 0.0
-                @inbounds @simd for i in bl_r
-                    b_sum += rc[i]
-                end
-                b_mean = b_sum / length(bl_r)
-                @inbounds @simd for j = 1:n_w
-                    chan_buf[j] = rc[offset+j] - b_mean
-                end
-            else
-                b_mean = mean(@view raw_col[bl_r])
-                @inbounds for j = 1:n_w
-                    chan_buf[j] = Float64(raw_col[offset+j]) - b_mean
-                end
-            end
+    for (r, rs) in enumerate(rows)
+        raw_col = dfs[rs.idx][!, ch]
+        sel_times = @view time_vecs[r][rs.t_range]
+        if apply_bl && !isempty(rs.bl_range)
+            _baseline_window_into!(chan_buf, raw_col, rs.t_range, rs.bl_range)
             out_col[r] = _eval_channel_measurement(chan_buf, sel_times, spec, ch)
         else
-            if raw_col isa Vector{Float64}
-                rc = raw_col::Vector{Float64}
-                out_col[r] = _eval_channel_measurement(@view(rc[t_range]), sel_times, spec, ch)
-            else
-                out_col[r] = _eval_channel_measurement(@view(raw_col[t_range]), sel_times, spec, ch)
-            end
+            out_col[r] = _eval_channel_measurement(@view(raw_col[rs.t_range]), sel_times, spec, ch)
         end
     end
 end
@@ -806,23 +788,8 @@ function _extract_measurements_df(
     use_explicit_bl_bounds = !isnothing(baseline_interval) && !(baseline_interval isa AllSelection) && !(baseline_interval isa Function)
     bl_norm = use_explicit_bl_bounds ? _normalize_interval(baseline_interval) : nothing
 
-    n_dfs = length(dfs)
-    valid_idxs = Int[]
-    sizehint!(valid_idxs, n_dfs)
-    time_ranges = UnitRange{Int}[]
-    sizehint!(time_ranges, n_dfs)
-    bl_ranges = UnitRange{Int}[]
-    sizehint!(bl_ranges, n_dfs)
-    ai_starts = Float64[]
-    sizehint!(ai_starts, n_dfs)
-    ai_ends = Float64[]
-    sizehint!(ai_ends, n_dfs)
-    bl_starts = Union{Float64,Missing}[]
-    sizehint!(bl_starts, n_dfs)
-    bl_ends = Union{Float64,Missing}[]
-    sizehint!(bl_ends, n_dfs)
-
-    for k = 1:n_dfs
+    rows = sizehint!(_ValidRowSpec[], length(dfs))
+    for k in eachindex(dfs)
         df = dfs[k]
         if isempty(df)
             @minimal_warning "DataFrame is empty"
@@ -838,26 +805,20 @@ function _extract_measurements_df(
         end
 
         bl_r = (apply_baseline && !isnothing(baseline_interval)) ? _resolve_df_interval_range(df, baseline_interval) : (1:0)
-
-        push!(valid_idxs, k)
-        push!(time_ranges, t_range)
-        push!(bl_ranges, bl_r)
-        push!(ai_starts, use_explicit_ai_bounds ? ai_norm[1] : Float64(t_col[first(t_range)]))
-        push!(ai_ends, use_explicit_ai_bounds ? ai_norm[2] : Float64(t_col[last(t_range)]))
-        if isnothing(baseline_interval)
-            push!(bl_starts, missing)
-            push!(bl_ends, missing)
+        ai_s = use_explicit_ai_bounds ? ai_norm[1] : Float64(t_col[first(t_range)])
+        ai_e = use_explicit_ai_bounds ? ai_norm[2] : Float64(t_col[last(t_range)])
+        bl_s, bl_e = if isnothing(baseline_interval)
+            (missing, missing)
         elseif use_explicit_bl_bounds
-            push!(bl_starts, bl_norm[1])
-            push!(bl_ends, bl_norm[2])
+            (bl_norm[1], bl_norm[2])
         else
-            bl_meta_r = _resolve_df_interval_range(df, baseline_interval)
-            push!(bl_starts, isempty(bl_meta_r) ? missing : Float64(t_col[first(bl_meta_r)]))
-            push!(bl_ends, isempty(bl_meta_r) ? missing : Float64(t_col[last(bl_meta_r)]))
+            bl_meta_r = apply_baseline ? bl_r : _resolve_df_interval_range(df, baseline_interval)
+            isempty(bl_meta_r) ? (missing, missing) : (Float64(t_col[first(bl_meta_r)]), Float64(t_col[last(bl_meta_r)]))
         end
+        push!(rows, _ValidRowSpec(k, t_range, bl_r, ai_s, ai_e, bl_s, bl_e))
     end
 
-    n_valid = length(valid_idxs)
+    n_valid = length(rows)
     n_valid == 0 && return nothing
 
     out_df = DataFrame(; copycols = false)
@@ -865,23 +826,24 @@ function _extract_measurements_df(
     out_df[!, :participant] = fill(participant, n_valid)
     out_df[!, :condition] = fill(dat.condition, n_valid)
     out_df[!, :condition_name] = fill(dat.condition_name, n_valid)
-    if hasproperty(dfs[valid_idxs[1]], :epoch)
-        out_df[!, :epoch] = [dfs[k][1, :epoch] for k in valid_idxs]
+    if hasproperty(dfs[rows[1].idx], :epoch)
+        out_df[!, :epoch] = [dfs[rs.idx][1, :epoch] for rs in rows]
     end
     out_df[!, :analysis_type] = fill(analysis_type_str, n_valid)
+    bl_starts = Union{Float64,Missing}[rs.bl_start for rs in rows]
+    bl_ends = Union{Float64,Missing}[rs.bl_end for rs in rows]
     out_df[!, :baseline_interval_start] =
         isnothing(baseline_interval) ? fill(missing, n_valid) :
         (all(!ismissing, bl_starts) ? Float64[x::Float64 for x in bl_starts] : bl_starts)
     out_df[!, :baseline_interval_end] =
         isnothing(baseline_interval) ? fill(missing, n_valid) : (all(!ismissing, bl_ends) ? Float64[x::Float64 for x in bl_ends] : bl_ends)
-    out_df[!, :analysis_interval_start] = ai_starts
-    out_df[!, :analysis_interval_end] = ai_ends
+    out_df[!, :analysis_interval_start] = Float64[rs.ai_start for rs in rows]
+    out_df[!, :analysis_interval_end] = Float64[rs.ai_end for rs in rows]
 
-    first_valid_df = dfs[valid_idxs[1]]
     time_vecs = Vector{Float64}[
-        let t = dfs[k].time
+        let t = dfs[rs.idx].time
             t isa Vector{Float64} ? t : Float64.(t)
-        end for k in valid_idxs
+        end for rs in rows
     ]
     chan_buf = Float64[]
 
@@ -889,41 +851,15 @@ function _extract_measurements_df(
         dv_col = zeros(Float64, n_valid)
         tmp_col = Vector{Float64}(undef, n_valid)
         for ch in selected_channels
-            col_idx = columnindex(first_valid_df, ch)
-            _fill_channel_measurements!(
-                tmp_col,
-                dfs,
-                valid_idxs,
-                time_vecs,
-                time_ranges,
-                bl_ranges,
-                ch,
-                col_idx,
-                spec,
-                apply_baseline,
-                chan_buf,
-            )
+            _fill_channel_measurements!(tmp_col, dfs, rows, time_vecs, ch, spec, apply_baseline, chan_buf)
             dv_col .+= tmp_col
         end
         dv_col ./= length(selected_channels)
         out_df[!, :dv_channels] = dv_col
     else
         for ch in selected_channels
-            col_idx = columnindex(first_valid_df, ch)
             col_out = Vector{Float64}(undef, n_valid)
-            _fill_channel_measurements!(
-                col_out,
-                dfs,
-                valid_idxs,
-                time_vecs,
-                time_ranges,
-                bl_ranges,
-                ch,
-                col_idx,
-                spec,
-                apply_baseline,
-                chan_buf,
-            )
+            _fill_channel_measurements!(col_out, dfs, rows, time_vecs, ch, spec, apply_baseline, chan_buf)
             out_df[!, ch] = col_out
         end
     end

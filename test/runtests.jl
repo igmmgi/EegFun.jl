@@ -24,6 +24,7 @@ end
 
 @testset "EegFun" begin
 
+    include("tests/test_helpers.jl")
     include("tests/code_organization.jl")
 
     @testset "Types" begin

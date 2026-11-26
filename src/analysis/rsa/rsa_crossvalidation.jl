@@ -130,36 +130,24 @@ function _balanced_fold_ranges(n_trials::Int, n_folds::Int)
     return ranges
 end
 
+@inline _perm_idx(::Nothing, i::Int) = i
+@inline _perm_idx(p::Vector{Int}, i::Int) = @inbounds p[i]
+
 function _fill_complement_range!(foldA::Vector{Int}, foldB::Vector{Int}, perm::Union{Nothing,Vector{Int}}, n_trials::Int, r::UnitRange{Int})
     n_b = length(r)
     resize!(foldB, n_b)
     resize!(foldA, n_trials - n_b)
-    if isnothing(perm)
-        @inbounds for (k, idx) in enumerate(r)
-            foldB[k] = idx
-        end
-        pos = 1
-        @inbounds for i = 1:(first(r)-1)
-            foldA[pos] = i
-            pos += 1
-        end
-        @inbounds for i = (last(r)+1):n_trials
-            foldA[pos] = i
-            pos += 1
-        end
-    else
-        @inbounds for (k, idx) in enumerate(r)
-            foldB[k] = perm[idx]
-        end
-        pos = 1
-        @inbounds for i = 1:(first(r)-1)
-            foldA[pos] = perm[i]
-            pos += 1
-        end
-        @inbounds for i = (last(r)+1):n_trials
-            foldA[pos] = perm[i]
-            pos += 1
-        end
+    @inbounds for (k, idx) in enumerate(r)
+        foldB[k] = _perm_idx(perm, idx)
+    end
+    pos = 1
+    @inbounds for i = 1:(first(r)-1)
+        foldA[pos] = _perm_idx(perm, i)
+        pos += 1
+    end
+    @inbounds for i = (last(r)+1):n_trials
+        foldA[pos] = _perm_idx(perm, i)
+        pos += 1
     end
     return nothing
 end

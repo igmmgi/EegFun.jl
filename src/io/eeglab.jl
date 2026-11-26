@@ -66,6 +66,68 @@ function _extract_channel_cols!(cols::Vector{AbstractVector}, offset::Int, mat::
     return cols
 end
 
+function _matrix_to_eeg_df(
+    mat::AbstractMatrix,
+    ch_names::Vector{Symbol},
+    times::Vector{Float64};
+    trigger::Union{Nothing,Vector{Int}} = nothing,
+    trigger_info::Union{Nothing,Vector{String}} = nothing,
+)::DataFrame
+    n_ch = length(ch_names)
+    n_pts = length(times)
+    has_trig = !isnothing(trigger)
+    n_meta = has_trig ? 4 : 2
+    cols = Vector{AbstractVector}(undef, n_meta + n_ch)
+    cols[1] = times
+    cols[2] = collect(1:n_pts)
+    if has_trig
+        cols[3] = trigger
+        cols[4] = something(trigger_info, fill("", n_pts))
+    end
+    _extract_channel_cols!(cols, n_meta, mat, n_ch, n_pts)
+    meta_names = has_trig ? [:time, :sample, :trigger, :trigger_info] : [:time, :sample]
+    return DataFrame(cols, vcat(meta_names, ch_names); copycols = false)
+end
+
+function _trials_to_epoch_dfs(
+    get_trial_mat::Function,
+    n_trials::Int,
+    ch_names::Vector{Symbol},
+    times::Vector{Float64},
+    trigger_codes::Vector{Int},
+    trigger_info::Vector{String},
+    zero_idx::Int,
+)::Vector{DataFrame}
+    n_ch = length(ch_names)
+    n_pts = length(times)
+    col_names = vcat([:time, :sample, :epoch, :trigger, :trigger_info], ch_names)
+    sample_template = collect(1:n_pts)
+    epoch_dfs = Vector{DataFrame}(undef, n_trials)
+
+    @inbounds for trial_idx = 1:n_trials
+        cols = Vector{AbstractVector}(undef, 5 + n_ch)
+        cols[1] = copy(times)
+        cols[2] = copy(sample_template)
+        cols[3] = fill(trial_idx, n_pts)
+        trig_vec = zeros(Int, n_pts)
+        trig_vec[zero_idx] = trigger_codes[trial_idx]
+        cols[4] = trig_vec
+        info_vec = fill("", n_pts)
+        info_vec[zero_idx] = trigger_info[trial_idx]
+        cols[5] = info_vec
+        _extract_channel_cols!(cols, 5, get_trial_mat(trial_idx), n_ch, n_pts)
+        epoch_dfs[trial_idx] = DataFrame(cols, copy(col_names); copycols = false)
+    end
+    return epoch_dfs
+end
+
+function _map_non_numeric_markers(strings, codes)::Dict{String,Int}
+    max_num = max(0, maximum(codes; init = 0))
+    non_numeric =
+        sort!(unique!(String[s for (s, c) in zip(strings, codes) if c == 0 && !isempty(strip(s)) && lowercase(strip(s)) != "boundary"]))
+    return Dict{String,Int}(lbl => (max_num + idx) for (idx, lbl) in enumerate(non_numeric))
+end
+
 function _load_common_eeglab_components(eeg::AbstractDict, filepath::String, preserve_radial_distance::Bool)
     n_channels = Int(eeg["nbchan"])
     n_timepoints = Int(eeg["pnts"])
@@ -98,36 +160,6 @@ function _load_common_eeglab_components(eeg::AbstractDict, filepath::String, pre
     return n_timepoints, sample_rate, ch_names, data, times, layout
 end
 
-function _build_eeglab_epochs(
-    data_array::AbstractArray{T,3},
-    ch_names::Vector{Symbol},
-    times::Vector{Float64},
-    trigger_codes::Vector{Int},
-    trigger_info::Vector{String},
-    zero_idx::Int,
-) where {T}
-    n_ch, n_pts, n_trials = size(data_array)
-    col_names = vcat([:time, :sample, :epoch, :trigger, :trigger_info], ch_names)
-    sample_template = collect(1:n_pts)
-    epoch_dfs = Vector{DataFrame}(undef, n_trials)
-
-    @inbounds for trial_idx = 1:n_trials
-        cols = Vector{AbstractVector}(undef, 5 + n_ch)
-        cols[1] = copy(times)
-        cols[2] = copy(sample_template)
-        cols[3] = fill(trial_idx, n_pts)
-        trig_vec = zeros(Int, n_pts)
-        trig_vec[zero_idx] = trigger_codes[trial_idx]
-        cols[4] = trig_vec
-        info_vec = fill("", n_pts)
-        info_vec[zero_idx] = trigger_info[trial_idx]
-        cols[5] = info_vec
-        _extract_channel_cols!(cols, 5, view(data_array, :, :, trial_idx), n_ch, n_pts)
-        epoch_dfs[trial_idx] = DataFrame(cols, copy(col_names); copycols = false)
-    end
-    return epoch_dfs
-end
-
 function _eeglab_to_epochdata(eeg::AbstractDict, filepath::String, preserve_radial_distance::Bool)
     _, sample_rate, ch_names, data_array, times, layout = _load_common_eeglab_components(eeg, filepath, preserve_radial_distance)
     n_trials = Int(eeg["trials"])
@@ -137,7 +169,8 @@ function _eeglab_to_epochdata(eeg::AbstractDict, filepath::String, preserve_radi
         (zeros(Int, n_trials), fill("", n_trials))
 
     zero_idx = _find_closest_time_index(times, 0.0)
-    epoch_dataframes = _build_eeglab_epochs(data_array, ch_names, times, trigger_codes, trigger_info, zero_idx)
+    epoch_dataframes =
+        _trials_to_epoch_dfs(i -> view(data_array, :, :, i), n_trials, ch_names, times, trigger_codes, trigger_info, zero_idx)
 
     condition_name = get(eeg, "setname", basename(filepath))
     analysis_info = AnalysisInfo(sample_rate = Float64(sample_rate))
@@ -200,19 +233,12 @@ function _eeglab_extract_continuous_events!(trigger_vec::Vector{Int}, trigger_in
     end
 
     isempty(parsed_events) && return
-    max_num = max(0, maximum((c for (_, c, _) in parsed_events); init = 0))
-    non_numeric =
-        sort!(unique!(String[s for (_, c, s) in parsed_events if c == 0 && !isempty(strip(s)) && lowercase(strip(s)) != "boundary"]))
-    label_to_int = Dict{String,Int}(lbl => (max_num + idx) for (idx, lbl) in enumerate(non_numeric))
+    label_to_int = _map_non_numeric_markers((s for (_, _, s) in parsed_events), (c for (_, c, _) in parsed_events))
 
     for (latency, raw_code, info_str) in parsed_events
         code = raw_code != 0 ? raw_code : get(label_to_int, info_str, 0)
-        if code != 0 || trigger_vec[latency] == 0
-            trigger_vec[latency] = code
-        end
-        if code != 0 || isempty(trigger_info_vec[latency])
-            trigger_info_vec[latency] = info_str
-        end
+        (code != 0 || trigger_vec[latency] == 0) && (trigger_vec[latency] = code)
+        (code != 0 || isempty(trigger_info_vec[latency])) && (trigger_info_vec[latency] = info_str)
     end
 end
 
@@ -227,30 +253,15 @@ function _eeglab_to_continuousdata(eeg::AbstractDict, filepath::String, preserve
         _eeglab_extract_continuous_events!(trigger_vec, trigger_info_vec, eeg["event"], n_timepoints)
     end
 
-    n_ch = length(ch_names)
-    cols = Vector{AbstractVector}(undef, 4 + n_ch)
-    cols[1] = times
-    cols[2] = collect(1:n_timepoints)
-    cols[3] = trigger_vec
-    cols[4] = trigger_info_vec
-    _extract_channel_cols!(cols, 4, data_array, n_ch, n_timepoints)
-    df = DataFrame(cols, vcat([:time, :sample, :trigger, :trigger_info], ch_names); copycols = false)
-
+    df = _matrix_to_eeg_df(data_array, ch_names, times; trigger = trigger_vec, trigger_info = trigger_info_vec)
     continuous_data = ContinuousData(filepath, df, layout, sample_rate, AnalysisInfo(sample_rate = Float64(sample_rate)))
     @info "Successfully converted to ContinuousData"
     return continuous_data
 end
 
 function _eeglab_to_erpdata(eeg::AbstractDict, filepath::String, preserve_radial_distance::Bool)
-    n_timepoints, sample_rate, ch_names, data_array, times, layout = _load_common_eeglab_components(eeg, filepath, preserve_radial_distance)
-
-    n_ch = length(ch_names)
-    cols = Vector{AbstractVector}(undef, 2 + n_ch)
-    cols[1] = times
-    cols[2] = collect(1:n_timepoints)
-    _extract_channel_cols!(cols, 2, data_array, n_ch, n_timepoints)
-    df = DataFrame(cols, vcat([:time, :sample], ch_names); copycols = false)
-
+    _, sample_rate, ch_names, data_array, times, layout = _load_common_eeglab_components(eeg, filepath, preserve_radial_distance)
+    df = _matrix_to_eeg_df(data_array, ch_names, times)
     condition_name = get(eeg, "setname", basename(filepath))
     erp_data = ErpData(filepath, 1, condition_name, df, layout, sample_rate, AnalysisInfo(sample_rate = Float64(sample_rate)), 1)
     @info "Successfully converted to ErpData"
@@ -333,18 +344,12 @@ function _extract_triggers(epochs, n_trials::Int)
     end
 
     parsed_codes = [lowercase(strip(s)) == "boundary" ? 0 : _parse_marker_code(s) for s in trigger_strings]
-    max_num = isempty(parsed_codes) ? 0 : max(0, maximum(parsed_codes))
-    non_numeric = sort!(
-        unique!([s for (s, c) in zip(trigger_strings, parsed_codes) if !isempty(strip(s)) && lowercase(strip(s)) != "boundary" && c == 0]),
-    )
-    label_to_int = Dict{String,Int}(lbl => (max_num + idx) for (idx, lbl) in enumerate(non_numeric))
+    label_to_int = _map_non_numeric_markers(trigger_strings, parsed_codes)
 
-    trigger_codes = Vector{Int}(undef, n_trials)
-    for i = 1:n_trials
-        s = trigger_strings[i]
-        is_empty_or_boundary = isempty(strip(s)) || lowercase(strip(s)) == "boundary"
-        trigger_codes[i] = is_empty_or_boundary ? 0 : (parsed_codes[i] != 0 ? parsed_codes[i] : label_to_int[s])
-    end
+    trigger_codes = [
+        (isempty(strip(s)) || lowercase(strip(s)) == "boundary") ? 0 : (c != 0 ? c : label_to_int[s]) for
+        (s, c) in zip(trigger_strings, parsed_codes)
+    ]
 
     unique_vals = sort!(unique(trigger_strings))
     @info "Extracted $(length(unique_vals)) unique trigger types: $(unique_vals)"

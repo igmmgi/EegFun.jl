@@ -19,51 +19,32 @@
 end
 
 function _compute_cluster_pvalues(
-    clusters::Vector{Cluster},
+    clusters::Vector{C},
     cluster_stats::Vector{Float64},
     permutation_max::Vector{Float64},
     n_permutations::Int,
     alpha::Real = 0.05,
     tail::Symbol = :both,
-)
-    isempty(clusters) && return Cluster[]
-    updated = Vector{Cluster}(undef, length(clusters))
+) where {C<:Union{Cluster,TFCluster}}
+    isempty(clusters) && return C[]
+    updated = Vector{C}(undef, length(clusters))
     for (i, c) in enumerate(clusters)
         stat = cluster_stats[i]
         p_val, is_sig = _cluster_pval_and_sig(c.polarity, stat, permutation_max, n_permutations, alpha, tail)
-        updated[i] = Cluster(c.id, c.electrodes, c.time_indices, c.time_range, stat, p_val, is_sig, c.polarity, c.members)
+        updated[i] = _rebuild_cluster(c, stat, p_val, is_sig)
     end
     return updated
 end
 
-function _compute_cluster_pvalues(
-    clusters::Vector{TFCluster},
-    cluster_stats::Vector{Float64},
-    permutation_max::Vector{Float64},
-    n_permutations::Int,
-    alpha::Real = 0.05,
-    tail::Symbol = :both,
-)
-    isempty(clusters) && return TFCluster[]
-    updated = Vector{TFCluster}(undef, length(clusters))
-    for (i, c) in enumerate(clusters)
-        stat = cluster_stats[i]
-        p_val, is_sig = _cluster_pval_and_sig(c.polarity, stat, permutation_max, n_permutations, alpha, tail)
-        updated[i] = TFCluster(
-            c.id,
-            c.electrodes,
-            c.freq_indices,
-            c.time_indices,
-            c.freq_range,
-            c.time_range,
-            stat,
-            p_val,
-            is_sig,
-            c.polarity,
-            c.pixels,
-        )
+function _significant_cluster_mask(clusters::Vector{<:Union{Cluster,TFCluster}}, dims::NTuple{N,Int}) where {N}
+    mask = falses(dims)
+    for c in clusters
+        c.is_significant || continue
+        @inbounds for pt in _cluster_points(c)
+            mask[_to_ci(pt)] = true
+        end
     end
-    return updated
+    return mask
 end
 
 function _create_significance_mask(p_matrix::AbstractArray{Float64,N}, alpha::Float64, method::Symbol) where {N}

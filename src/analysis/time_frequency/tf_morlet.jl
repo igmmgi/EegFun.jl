@@ -100,15 +100,9 @@ function tf_morlet(
             t = (i - 1 - hw) * inv_sr
             wavelet_padded[i] = cis(two_pi_freq * t) * exp(-(t * t) * inv_2sigma2)
         end
-        @inbounds @simd for i = (wl+1):n_conv_pow2
-            wavelet_padded[i] = zero(ComplexF64)
-        end
         w_view = @view wavelet_padded[1:wl]
         w_view .*= sqrt(2.0) / norm(w_view, 2)
-
-        wavelet_fft_freq = Vector{ComplexF64}(undef, n_conv_pow2)
-        mul!(wavelet_fft_freq, p_fft_wavelet, wavelet_padded)
-        wavelet_ffts[fi] = wavelet_fft_freq
+        wavelet_ffts[fi] = _tf_padded_fft(w_view, p_fft_wavelet, wavelet_padded)
     end
 
     fft_plan, ifft_plan = _tf_batch_fft_plans(n_conv_pow2, n_trials, gpu_active)
@@ -159,9 +153,18 @@ function tf_morlet(
     kwargs...,
 )
     _with_batch_logging("tf_morlet", "tf_morlet.log", input_dir, output_dir) do ctx
+        _ = output_dir
         @log_call "tf_morlet"
-        output_dir = _prepare_output_dir!(ctx, joinpath(input_dir, "tf_morlet_$(_clean_pattern(file_pattern))"))
-        process_fn = _tf_batch_worker(tf_morlet, "morlet", condition_selection, kwargs)
-        batch_process(process_fn, file_pattern, input_dir, output_dir, participant_selection, "TF morlet")
+        return _tf_run_batch(
+            ctx,
+            tf_morlet,
+            "morlet",
+            "tf_morlet",
+            file_pattern,
+            input_dir,
+            participant_selection,
+            condition_selection,
+            kwargs,
+        )
     end
 end

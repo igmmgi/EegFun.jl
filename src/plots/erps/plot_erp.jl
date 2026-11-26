@@ -117,58 +117,14 @@ plot_erp!(fig::Figure, ax::Axis, dat::ErpData; kwargs...) = plot_erp!(fig, ax, [
 plot_erp!(fig::Figure, ax::Axis, datasets::AbstractVector{<:ErpData}; kwargs...) =
     _plot_erp_on_existing_axis!(ax, datasets; dynamic_grand_avg = false, kwargs...)
 
-function plot_erp(
-    filepath::String;
-    input_dir::String = pwd(),
-    participant_selection = participants(),
-    layout::Union{Symbol,PlotLayout} = :single,
-    condition_selection = conditions(),
-    channel_selection = channels(),
-    channel_plot_order::Union{Nothing,AbstractVector} = nothing,
-    sample_selection = samples(),
-    interval_selection::Interval = times(),
-    baseline_interval::Interval = nothing,
-    kwargs...,
-)
-    if endswith(filepath, ".jld2")
-        resolved = _resolve_input_filepath(filepath, input_dir)
-        data = read_data(resolved)
-        isnothing(data) && @minimal_error "No data found in file: $resolved"
-        return plot_erp(
-            data;
-            layout = layout,
-            condition_selection = condition_selection,
-            channel_selection = channel_selection,
-            channel_plot_order = channel_plot_order,
-            sample_selection = sample_selection,
-            interval_selection = interval_selection,
-            baseline_interval = baseline_interval,
-            kwargs...,
-        )
-    end
-
-    files = _require_batch_files(filepath, input_dir, participant_selection; kind = "ERP")
-    results = NamedTuple[]
-    for file in files
-        @info "Plotting: $file"
-        data = read_data(joinpath(input_dir, file))
-        isnothing(data) && continue
-        push!(
-            results,
-            plot_erp(
-                data;
-                layout = layout,
-                condition_selection = condition_selection,
-                channel_selection = channel_selection,
-                channel_plot_order = channel_plot_order,
-                sample_selection = sample_selection,
-                interval_selection = interval_selection,
-                baseline_interval = baseline_interval,
-                kwargs...,
-            ),
-        )
-    end
-    return results
+function plot_erp(filepath::String; input_dir::String = pwd(), participant_selection = participants(), kwargs...)
+    return _dispatch_plot_filepath(
+        data -> plot_erp(data; kwargs...),
+        filepath;
+        input_dir = input_dir,
+        participant_selection = participant_selection,
+        kind = "ERP",
+    )
 end
 
 """
@@ -251,35 +207,10 @@ plot_erp_errorbar!(fig::Figure, ax::Axis, dat::ErpData; kwargs...) = plot_erp_er
 plot_erp_errorbar!(fig::Figure, ax::Axis, datasets::AbstractVector{<:ErpData}; kwargs...) =
     _plot_erp_on_existing_axis!(ax, datasets; dynamic_grand_avg = true, kwargs...)
 
-function plot_erp_errorbar(
-    filepath::String;
-    input_dir::String = pwd(),
-    participant_selection = participants(),
-    layout::Union{Symbol,PlotLayout} = :single,
-    condition_selection = conditions(),
-    channel_selection = channels(),
-    channel_plot_order::Union{Nothing,AbstractVector} = nothing,
-    sample_selection = samples(),
-    interval_selection::Interval = times(),
-    baseline_interval::Interval = nothing,
-    kwargs...,
-)
+function plot_erp_errorbar(filepath::String; input_dir::String = pwd(), participant_selection = participants(), kwargs...)
     if endswith(filepath, ".jld2")
-        resolved = _resolve_input_filepath(filepath, input_dir)
-        data = read_data(resolved)
-        isnothing(data) && @minimal_error "No data found in file: $resolved"
-        datasets = data isa ErpData ? [data] : data
-        return plot_erp_errorbar(
-            datasets;
-            layout = layout,
-            condition_selection = condition_selection,
-            channel_selection = channel_selection,
-            channel_plot_order = channel_plot_order,
-            sample_selection = sample_selection,
-            interval_selection = interval_selection,
-            baseline_interval = baseline_interval,
-            kwargs...,
-        )
+        data = _read_plot_file(_resolve_input_filepath(filepath, input_dir))
+        return plot_erp_errorbar(data isa ErpData ? [data] : data; kwargs...)
     end
 
     files = _require_batch_files(filepath, input_dir, participant_selection; kind = "ERP")
@@ -291,18 +222,7 @@ function plot_erp_errorbar(
         data isa Vector{ErpData} ? append!(datasets, data) : push!(datasets, data)
     end
     isempty(datasets) && @minimal_error "No data loaded from pattern: $filepath"
-
-    return plot_erp_errorbar(
-        datasets;
-        layout = layout,
-        condition_selection = condition_selection,
-        channel_selection = channel_selection,
-        channel_plot_order = channel_plot_order,
-        sample_selection = sample_selection,
-        interval_selection = interval_selection,
-        baseline_interval = baseline_interval,
-        kwargs...,
-    )
+    return plot_erp_errorbar(datasets; kwargs...)
 end
 
 ######################################
@@ -406,7 +326,9 @@ function _plot_erp_core(
             condition_checked_ref = Ref{Union{Vector{Observable{Bool}},Nothing}}(nothing)
             _setup_erp_control_panel!(fig, dat_subset, axes, baseline_interval, line_refs, condition_checked_ref, legend_refs)
 
-            right_click_handler = (sel, mouse_x, data) -> _handle_erp_right_click!(sel, mouse_x, data, condition_checked_ref)
+            right_click_handler =
+                (sel, mouse_x, data) ->
+                    _handle_waveform_right_click!(sel, mouse_x, data, condition_checked_ref; window_title = "ERP Context Menu")
             _setup_unified_selection!(fig, axes, selection_state, dat_subset, right_click_handler)
 
             if plot_layout.type in (:topo, :grid, :custom)
@@ -627,12 +549,6 @@ function _prepare_erp_data(
     return dat_subset, all_channels, channel_selection, original_channels
 end
 
-@inline function _accum_col!(buf::Vector{Float64}, col::AbstractVector)
-    @inbounds @simd for i in eachindex(buf)
-        buf[i] += col[i]
-    end
-end
-
 @inline function _accum_sqdiff!(var_buf::Vector{Float64}, col::AbstractVector, avg_buf::Vector{Float64})
     @inbounds @simd for i in eachindex(var_buf)
         diff = col[i] - avg_buf[i]
@@ -789,48 +705,6 @@ function _compute_dynamic_grand_averages(datasets::Vector{ErpData}, error_bars::
     return grand_averages, variances_dict
 end
 
-function _handle_erp_right_click!(selection_state, mouse_x, data, condition_checked_ref)
-    if selection_state.visible[] && _is_within_selection(selection_state, mouse_x)
-        _show_erp_context_menu!(selection_state, data, condition_checked_ref)
-    end
-end
-
-function _show_erp_context_menu!(selection_state, data, condition_checked_ref)
-    _set_window_title("ERP Context Menu")
-    menu_fig = _eegfun_figure(size = (300, 300))
-
-    data_to_plot = _filter_visible_conditions(data, condition_checked_ref)
-    plot_types =
-        data_to_plot isa Vector{ErpData} && length(data_to_plot) > 1 ?
-        ["Topoplot", "Topoplot (average)", "Topoplot 3D", "Topoplot 3D (average)"] : ["Topoplot", "Topoplot 3D"]
-
-    for (idx, plot_type) in enumerate(plot_types)
-        btn = Button(menu_fig[idx, 1], label = plot_type)
-        on(btn.clicks) do _
-            original_data, x_min, x_max = _get_erp_selection_bounds(selection_state, data)
-            time_sel = x -> (x.time .>= x_min) .& (x.time .<= x_max)
-            vis_data = _filter_visible_conditions(original_data, condition_checked_ref)
-
-            if btn.label[] == "Topoplot"
-                plot_topography(vis_data, sample_selection = time_sel)
-            elseif btn.label[] == "Topoplot (average)"
-                plot_topography(_average_conditions(vis_data), sample_selection = time_sel)
-            elseif btn.label[] == "Topoplot 3D"
-                plot_topography_3d(vis_data, sample_selection = time_sel)
-            elseif btn.label[] == "Topoplot 3D (average)"
-                plot_topography_3d(_average_conditions(vis_data), sample_selection = time_sel)
-            end
-        end
-    end
-
-    _display_in_screen(menu_fig; size = (300, 300))
-end
-
-function _get_erp_selection_bounds(selection_state, data)
-    x_min, x_max = minmax(selection_state.bounds[]...)
-    return (data, x_min, x_max)
-end
-
 function _average_conditions(erps::Vector{ErpData})
     isempty(erps) && @minimal_error("Cannot average empty ERP list")
     length(erps) == 1 && return erps[1]
@@ -931,84 +805,28 @@ function _setup_erp_control_panel!(
     condition_checked_ref::Ref{Union{Vector{Observable{Bool}},Nothing}} = Ref{Union{Vector{Observable{Bool}},Nothing}}(nothing),
     legend_refs = nothing,
 )
-    control_fig = Ref{Union{Figure,Nothing}}(nothing)
     !isnothing(line_refs) && _setup_linked_legend_interactions!(line_refs)
-
-    start_val, stop_val = _extract_baseline_values(baseline_interval)
-    baseline_start_obs = Observable(isnothing(start_val) ? "" : string(start_val))
-    baseline_stop_obs = Observable(isnothing(stop_val) ? "" : string(stop_val))
-    condition_checked = [Observable(true) for _ in dat_subset]
-    condition_checked_ref[] = condition_checked
-    previous_baseline = Ref{Union{Tuple{Float64,Float64},Nothing}}(nothing)
-
-    function update_plot!()
-        s_val, e_val = _parse_baseline_values(baseline_start_obs[], baseline_stop_obs[])
-        baseline_interval_new = (!isnothing(s_val) && !isnothing(e_val)) ? (s_val, e_val) : nothing
-        baseline_changed = baseline_interval_new != previous_baseline[]
-
-        if baseline_changed && !isnothing(baseline_interval_new)
-            baseline!.(dat_subset, Ref(baseline_interval_new))
-            previous_baseline[] = baseline_interval_new
-        end
-
-        condition_mask = [checked[] for checked in condition_checked]
+    _setup_waveform_control_panel!(
+        fig,
+        dat_subset,
+        baseline_interval,
+        condition_checked_ref,
+        legend_refs;
+        panel_title = "ERP Control Panel",
+    ) do baseline_changed, baseline_interval_new, condition_mask
+        baseline_changed && baseline!.(dat_subset, Ref(baseline_interval_new))
         isnothing(line_refs) && return
-
         for (ax_idx, ax_line_refs) in enumerate(line_refs)
             ax_idx > length(axes) && continue
             for (dataset_idx, channel_lines) in ax_line_refs
                 dataset_idx > length(dat_subset) && continue
                 dat = dat_subset[dataset_idx]
                 new_vis = dataset_idx <= length(condition_mask) ? condition_mask[dataset_idx] : true
-
                 for (channel, (line, y_obs)) in channel_lines
                     baseline_changed && (y_obs[] = dat.data[!, channel])
                     line.visible[] != new_vis && (line.visible = new_vis)
                 end
             end
-        end
-    end
-
-    for checked in condition_checked
-        on(_ -> update_plot!(), checked)
-    end
-
-    control_open = Ref(false)
-
-    on(events(fig).keyboardbutton) do event
-        event.action == Keyboard.press || return
-        if event.key == Keyboard.c
-            if control_open[] && !isnothing(control_fig[])
-                _display_in_screen(control_fig[])
-                return
-            end
-
-            control_fig[] = _eegfun_figure(title = "ERP Control Panel", size = (320, 420))
-            control_open[] = true
-            layout = GridLayout(control_fig[][1, 1], tellwidth = false, rowgap = 10)
-
-            Label(layout[1, 1], "Baseline Interval", fontsize = 14, font = :bold)
-            baseline_layout = GridLayout(layout[2, 1], tellwidth = false, colgap = 10)
-            _create_baseline_textbox(baseline_layout, 1, "Start (s):", baseline_start_obs, " ", 100)
-            _create_baseline_textbox(baseline_layout, 2, "End (s):", baseline_stop_obs, " ", 100)
-
-            apply_btn = Button(layout[3, 1], label = "Apply Baseline", width = 200)
-            on(_ -> update_plot!(), apply_btn.clicks)
-
-            Label(layout[4, 1], "Conditions", fontsize = 14, font = :bold)
-            conditions_layout = GridLayout(layout[5, 1], tellwidth = false, rowgap = 5)
-            for (idx, dat) in enumerate(dat_subset)
-                cb = Checkbox(conditions_layout[idx, 1], checked = condition_checked[idx][])
-                Label(conditions_layout[idx, 2], dat.condition_name)
-                on(val -> (condition_checked[idx][] = val), cb.checked)
-            end
-
-            leg_btn = Button(layout[6, 1], label = "Toggle Legend (L)", width = 200)
-            on(_ -> _toggle_legends!(legend_refs), leg_btn.clicks)
-
-            _display_in_screen(control_fig[])
-        elseif event.key == Keyboard.l
-            _toggle_legends!(legend_refs)
         end
     end
 end

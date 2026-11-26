@@ -4,7 +4,6 @@
 ######### Types & Constants ##########
 ######################################
 
-const _BASE64_CHARS = UInt8.(collect("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"))
 const _FRONTAL_ROI_CANDIDATES = (:Fp1, :Fp2, :Fpz, :AF7, :AF8, :AF3, :AF4, :F1, :F2, :Fz)
 const _POSTERIOR_ROI_CANDIDATES = (:O1, :O2, :Oz, :Iz, :PO7, :PO8, :PO3, :PO4, :POz, :P1, :P2, :Pz)
 
@@ -32,7 +31,6 @@ struct _ParticipantReportData
     total_original::Int
     total_kept::Int
     overall_kept_pct::Float64
-    is_flagged::Bool
     flag_reasons::Vector{String}
 end
 
@@ -347,37 +345,22 @@ end
 ######### Internal Functions #########
 ######################################
 
-function _base64_encode(bytes::AbstractVector{UInt8})::String
-    n = length(bytes)
-    n == 0 && return ""
-    out_len = 4 * cld(n, 3)
-    out = Vector{UInt8}(undef, out_len)
-    i = 1
-    o = 1
-    @inbounds while i + 2 <= n
-        b1, b2, b3 = bytes[i], bytes[i+1], bytes[i+2]
-        out[o] = _BASE64_CHARS[(b1>>2)+1]
-        out[o+1] = _BASE64_CHARS[(((b1&0x03)<<4)|(b2>>4))+1]
-        out[o+2] = _BASE64_CHARS[(((b2&0x0f)<<2)|(b3>>6))+1]
-        out[o+3] = _BASE64_CHARS[(b3&0x3f)+1]
-        i += 3
-        o += 4
+@inline _is_flagged(r::_ParticipantReportData) = !isempty(r.flag_reasons)
+
+@inline function _try_report(
+    f::Function,
+    fallback = nothing;
+    warn_msg::Union{String,Nothing} = nothing,
+    debug_msg::Union{String,Nothing} = nothing,
+)
+    try
+        return f()
+    catch e
+        e isa InterruptException && rethrow()
+        !isnothing(warn_msg) && @minimal_warning "$warn_msg: $(sprint(showerror, e))"
+        !isnothing(debug_msg) && @debug debug_msg exception = e
+        return fallback
     end
-    rem_bytes = n - i + 1
-    @inbounds if rem_bytes == 1
-        b1 = bytes[i]
-        out[o] = _BASE64_CHARS[(b1>>2)+1]
-        out[o+1] = _BASE64_CHARS[((b1&0x03)<<4)+1]
-        out[o+2] = UInt8('=')
-        out[o+3] = UInt8('=')
-    elseif rem_bytes == 2
-        b1, b2 = bytes[i], bytes[i+1]
-        out[o] = _BASE64_CHARS[(b1>>2)+1]
-        out[o+1] = _BASE64_CHARS[(((b1&0x03)<<4)|(b2>>4))+1]
-        out[o+2] = _BASE64_CHARS[((b2&0x0f)<<2)+1]
-        out[o+3] = UInt8('=')
-    end
-    return String(out)
 end
 
 function _html_escape(s::AbstractString)::String
@@ -400,13 +383,6 @@ function _html_escape(s::AbstractString)::String
     return String(take!(io))
 end
 
-function _csv_escape(s::AbstractString)::String
-    if occursin(r"[\",\r\n]", s)
-        return "\"" * replace(s, "\"" => "\"\"") * "\""
-    end
-    return String(s)
-end
-
 _slug_id(s::AbstractString) = "subj-" * replace(s, r"[^A-Za-z0-9_-]" => "_")
 
 function _unique_slugs(records::Vector{_ParticipantReportData})::Vector{String}
@@ -422,38 +398,26 @@ function _unique_slugs(records::Vector{_ParticipantReportData})::Vector{String}
 end
 
 function _has_renderable_makie_backend()::Bool
-    backend = try
-        Makie.current_backend()
-    catch e
-        e isa InterruptException && rethrow()
-        missing
-    end
+    backend = _try_report(Makie.current_backend, missing)
     return !ismissing(backend) && !isnothing(backend)
 end
 
 function _fig_to_data_uri(fig::Figure; px_per_unit::Float64 = 1.0)::Union{String,Nothing}
-    try
-        if showable(MIME"image/png"(), fig)
-            buf = IOBuffer()
-            show(IOContext(buf, :px_per_unit => px_per_unit), MIME"image/png"(), fig)
-            bytes = take!(buf)
-            !isempty(bytes) && return "data:image/png;base64," * _base64_encode(bytes)
-        end
-    catch e
-        e isa InterruptException && rethrow()
+    uri = _try_report() do
+        showable(MIME"image/png"(), fig) || return nothing
+        buf = IOBuffer()
+        show(IOContext(buf, :px_per_unit => px_per_unit), MIME"image/png"(), fig)
+        bytes = take!(buf)
+        isempty(bytes) ? nothing : "data:image/png;base64," * Base64.base64encode(bytes)
     end
-    try
+    !isnothing(uri) && return uri
+    return _try_report(; debug_msg = "Failed to encode figure for pipeline report") do
         saved_bytes = mktempdir() do tmp
             png_path = joinpath(tmp, "fig.png")
             Makie.save(png_path, fig; px_per_unit = px_per_unit)
             read(png_path)
         end
-        !isempty(saved_bytes) && return "data:image/png;base64," * _base64_encode(saved_bytes)
-        return nothing
-    catch e
-        e isa InterruptException && rethrow()
-        @debug "Failed to encode figure for pipeline report" exception = e
-        return nothing
+        isempty(saved_bytes) ? nothing : "data:image/png;base64," * Base64.base64encode(saved_bytes)
     end
 end
 
@@ -487,53 +451,29 @@ function _discover_pipeline_stems(output_dir::String)::Vector{String}
     return sort!(collect(stems); by = _natural_sort_key)
 end
 
-function _safe_load_pipeline_cfg(cfg_path::String)::Union{PipelineConfig,Nothing}
-    try
-        return PipelineConfig(TOML.parsefile(cfg_path))
-    catch e
-        e isa InterruptException && rethrow()
-        @minimal_warning "Could not parse $cfg_path for report: $(sprint(showerror, e))"
-        return nothing
-    end
-end
+_safe_load_pipeline_cfg(cfg_path::String)::Union{PipelineConfig,Nothing} =
+    _try_report(() -> PipelineConfig(TOML.parsefile(cfg_path)); warn_msg = "Could not parse $cfg_path for report")
 
 function _safe_load_jld2_df(path::String)::Union{DataFrame,Nothing}
     isfile(path) || return nothing
-    try
+    return _try_report() do
         val = JLD2.load(path, "data")
-        return val isa DataFrame ? val : nothing
-    catch e
-        e isa InterruptException && rethrow()
-        return nothing
+        val isa DataFrame ? val : nothing
     end
 end
 
 function _safe_read_jld2_typed(path::String, ::Type{T}) where {T}
     isfile(path) || return nothing
-    try
+    return _try_report() do
         val = read_data(path)
-        return val isa T ? val : nothing
-    catch e
-        e isa InterruptException && rethrow()
-        return nothing
+        val isa T ? val : nothing
     end
 end
 
-function _coerce_erp_vec(val)::Union{Vector{ErpData},Nothing}
-    if val isa ErpData
-        return ErpData[val]
-    elseif val isa AbstractVector && !isempty(val) && all(x -> x isa ErpData, val)
-        return ErpData[x for x in val]
-    end
-    return nothing
-end
-
-function _coerce_epoch_vec(val)::Union{Vector{EpochData},Nothing}
-    if val isa EpochData
-        return EpochData[val]
-    elseif val isa AbstractVector && !isempty(val) && all(x -> x isa EpochData, val)
-        return EpochData[x for x in val]
-    end
+function _safe_read_eeg_vec(path::String, ::Type{T})::Union{Vector{T},Nothing} where {T<:EegData}
+    val = _safe_read_jld2_typed(path, Any)
+    val isa T && return T[val]
+    (val isa AbstractVector && !isempty(val) && all(x -> x isa T, val)) && return T[x for x in val]
     return nothing
 end
 
@@ -618,21 +558,12 @@ function _compute_psd_from_dfs(dfs::Vector{DataFrame}, fs::Float64, chs::Vector{
     return _PsdSummary(freqs_full[f_idx], mean_db, post_db, front_db, is_epoch_level)
 end
 
-function _compute_psd_summary(epochs::Vector{EpochData})::Union{_PsdSummary,Nothing}
-    isempty(epochs) && return nothing
-    chs = get_selected_channels(epochs[1], channels(); include_meta = false, include_extra = false)
-    all_dfs = DataFrame[]
-    for ep in epochs
-        append!(all_dfs, ep.data)
-    end
-    return _compute_psd_from_dfs(all_dfs, Float64(epochs[1].sample_rate), chs, true)
-end
-
-function _compute_psd_summary(erps::Vector{ErpData})::Union{_PsdSummary,Nothing}
-    isempty(erps) && return nothing
-    chs = get_selected_channels(erps[1], channels(); include_meta = false, include_extra = false)
-    dfs = [e.data for e in erps]
-    return _compute_psd_from_dfs(dfs, Float64(erps[1].sample_rate), chs, false)
+function _compute_psd_summary(data_vec::Union{Vector{EpochData},Vector{ErpData}})::Union{_PsdSummary,Nothing}
+    isempty(data_vec) && return nothing
+    chs = get_selected_channels(data_vec[1], channels(); include_meta = false, include_extra = false)
+    is_ep = data_vec isa Vector{EpochData}
+    dfs = is_ep ? DataFrame[df for ep in data_vec for df in ep.data] : DataFrame[e.data for e in data_vec]
+    return _compute_psd_from_dfs(dfs, Float64(data_vec[1].sample_rate), chs, is_ep)
 end
 
 function _extract_ic_counts(ca::Union{ArtifactComponents,Nothing})
@@ -646,6 +577,16 @@ function _extract_ic_counts(ca::Union{ArtifactComponents,Nothing})
     tot = length(unique(get_all_ica_components(ca)))
     return (total = tot, vEOG = veog, hEOG = heog, ECG = ecg, line_noise = ln, channel_noise = cn, manual = man)
 end
+
+_unrejected_cond_df(conds::Vector{Int}, names::Vector{String}, counts::Vector{Int}) = DataFrame(
+    condition = conds,
+    condition_name = names,
+    n_original = counts,
+    n_repaired = zeros(Int, length(counts)),
+    n_rejected = zeros(Int, length(counts)),
+    n_kept = copy(counts),
+    pct_kept = fill(100.0, length(counts)),
+)
 
 function _build_condition_rejection_df(
     stem::String,
@@ -739,37 +680,16 @@ function _build_condition_rejection_df(
     end
 
     if !isnothing(erps) && !isempty(erps)
-        return DataFrame(
-            condition = [e.condition for e in erps],
-            condition_name = [e.condition_name for e in erps],
-            n_original = [e.n_epochs for e in erps],
-            n_repaired = zeros(Int, length(erps)),
-            n_rejected = zeros(Int, length(erps)),
-            n_kept = [e.n_epochs for e in erps],
-            pct_kept = fill(100.0, length(erps)),
-        )
+        return _unrejected_cond_df([e.condition for e in erps], [e.condition_name for e in erps], [e.n_epochs for e in erps])
     elseif !isnothing(epochs) && !isempty(epochs)
-        cnts = [length(ep.data) for ep in epochs]
-        return DataFrame(
-            condition = [ep.condition for ep in epochs],
-            condition_name = [ep.condition_name for ep in epochs],
-            n_original = cnts,
-            n_repaired = zeros(Int, length(epochs)),
-            n_rejected = zeros(Int, length(epochs)),
-            n_kept = cnts,
-            pct_kept = fill(100.0, length(epochs)),
+        return _unrejected_cond_df(
+            [ep.condition for ep in epochs],
+            [ep.condition_name for ep in epochs],
+            [length(ep.data) for ep in epochs],
         )
     end
 
-    return DataFrame(
-        condition = Int[],
-        condition_name = String[],
-        n_original = Int[],
-        n_repaired = Int[],
-        n_rejected = Int[],
-        n_kept = Int[],
-        pct_kept = Float64[],
-    )
+    return _unrejected_cond_df(Int[], String[], Int[])
 end
 
 function _extract_epoch_channel_repairs(art::Union{ArtifactInfo,Nothing})::Dict{Symbol,Int}
@@ -808,11 +728,11 @@ function _load_participant_records(
     for (idx, stem) in enumerate(stems)
         art = _safe_read_jld2_typed(joinpath(output_dir, "$(stem)_artifact_info.jld2"), ArtifactInfo)
         ica = _safe_read_jld2_typed(joinpath(output_dir, "$(stem)_ica.jld2"), InfoIca)
-        erps = _coerce_erp_vec(_safe_read_jld2_typed(joinpath(output_dir, "$(stem)_erps.jld2"), Any))
+        erps = _safe_read_eeg_vec(joinpath(output_dir, "$(stem)_erps.jld2"), ErpData)
 
         # Stream epochs one participant at a time for PSD (and ERP fallback) without retaining epoch arrays in RAM
         ep_path = joinpath(output_dir, "$(stem)_epochs.jld2")
-        epochs_tmp = (isnothing(erps) || can_plot) ? _coerce_epoch_vec(_safe_read_jld2_typed(ep_path, Any)) : nothing
+        epochs_tmp = (isnothing(erps) || can_plot) ? _safe_read_eeg_vec(ep_path, EpochData) : nothing
         isnothing(erps) && !isnothing(epochs_tmp) && (erps = average_epochs(epochs_tmp))
         psd = if !can_plot
             nothing
@@ -825,9 +745,9 @@ function _load_participant_records(
         end
 
         erps_raw = if can_plot
-            raw_e = _coerce_erp_vec(_safe_read_jld2_typed(joinpath(output_dir, "$(stem)_erps_raw.jld2"), Any))
+            raw_e = _safe_read_eeg_vec(joinpath(output_dir, "$(stem)_erps_raw.jld2"), ErpData)
             if isnothing(raw_e)
-                raw_ep = _coerce_epoch_vec(_safe_read_jld2_typed(joinpath(output_dir, "$(stem)_epochs_raw.jld2"), Any))
+                raw_ep = _safe_read_eeg_vec(joinpath(output_dir, "$(stem)_epochs_raw.jld2"), EpochData)
                 !isnothing(raw_ep) ? average_epochs(raw_ep) : nothing
             else
                 raw_e
@@ -892,7 +812,6 @@ function _load_participant_records(
             tot_orig,
             tot_kept,
             overall_pct,
-            !isempty(reasons),
             reasons,
         )
     end
@@ -901,31 +820,11 @@ function _load_participant_records(
     pos_totals = [r.total_original for r in records if r.total_original > 0]
     if length(pos_totals) >= 3
         med_orig = median(pos_totals)
-        for i in eachindex(records)
-            r = records[i]
+        for r in records
             if 0 < r.total_original < 0.8 * med_orig
-                new_reasons = vcat(
+                push!(
                     r.flag_reasons,
-                    ["low trial count: $(r.total_original) original epochs (< 80% of cohort median $(round(Int, med_orig)))"],
-                )
-                records[i] = _ParticipantReportData(
-                    r.stem,
-                    r.artifact_info,
-                    r.ica,
-                    r.erps,
-                    r.erps_raw,
-                    r.psd,
-                    r.repaired_channels,
-                    r.skipped_channels,
-                    r.repair_method,
-                    r.epoch_channel_repairs,
-                    r.ic_counts,
-                    r.condition_df,
-                    r.total_original,
-                    r.total_kept,
-                    r.overall_kept_pct,
-                    true,
-                    new_reasons,
+                    "low trial count: $(r.total_original) original epochs (< 80% of cohort median $(round(Int, med_orig)))",
                 )
             end
         end
@@ -981,40 +880,16 @@ function _baseline_for_display(erps::Vector{ErpData})::Vector{ErpData}
     return out
 end
 
-function _accum_gfp_sum!(acc::Vector{Float64}, col::AbstractVector{<:Real})
-    @inbounds @simd for i in eachindex(acc, col)
-        acc[i] += Float64(col[i])
-    end
-    return nothing
-end
-
-function _accum_gfp_sqdiff!(ss::Vector{Float64}, mean_vec::Vector{Float64}, col::AbstractVector{<:Real})
-    @inbounds @simd for i in eachindex(ss, mean_vec, col)
-        d = Float64(col[i]) - mean_vec[i]
-        ss[i] += d * d
-    end
-    return nothing
-end
-
 function _quiet_gfp_vector(erp::ErpData)::Vector{Float64}
     chs = get_selected_channels(erp, channels(); include_meta = false, include_extra = false)
     n_t = nrow(erp.data)
-    n_c = length(chs)
-    (n_c == 0 || n_t == 0) && return zeros(Float64, n_t)
-    mean_vec = zeros(Float64, n_t)
-    for ch in chs
-        _accum_gfp_sum!(mean_vec, erp.data[!, ch])
-    end
-    inv_c = 1.0 / n_c
-    mean_vec .*= inv_c
-    out = zeros(Float64, n_t)
-    for ch in chs
-        _accum_gfp_sqdiff!(out, mean_vec, erp.data[!, ch])
-    end
-    @inbounds @simd for i = 1:n_t
-        out[i] = sqrt(out[i] * inv_c)
-    end
-    return out
+    (isempty(chs) || n_t == 0) && return zeros(Float64, n_t)
+    cols = Vector{Float64}[
+        let c = erp.data[!, ch]
+            c isa Vector{Float64} ? c : Float64.(c)
+        end for ch in chs
+    ]
+    return first(_gfp_and_gd_cols(cols, n_t, false))
 end
 
 function _frontal_roi_waveform(erps::Vector{ErpData})::Tuple{Vector{Float64},Vector{Float64},String}
@@ -1075,10 +950,70 @@ function _sensor_status_caption(rec::_ParticipantReportData)::String
     end
 end
 
+function _plot_sensor_hotspot_panel!(
+    fig::Figure,
+    col_idx::Int,
+    lay_copy::Layout,
+    counts::Vector{Int};
+    title::String,
+    cb_label::String,
+    min_cb_max::Int = 1,
+    discrete_ticks::Bool = false,
+    size_base::Float64 = 9.0,
+    size_span::Float64 = 7.0,
+    stroke_color = :black,
+    stroke_width::Real = 1.2,
+    text_color = :darkred,
+)
+    ax = Axis(
+        fig[1, col_idx],
+        aspect = DataAspect(),
+        title = title,
+        titlesize = 13,
+        xautolimitmargin = (0.14, 0.16),
+        yautolimitmargin = (0.14, 0.16),
+    )
+    plot_layout_2d!(fig, ax, lay_copy; point_markersize = 6, point_color = :lightgray, label_plot = false)
+    hidedecorations!(ax)
+    hidespines!(ax)
+    nz = findall(>(0), counts)
+    isempty(nz) && return
+    cb_max = max(min_cb_max, maximum(counts))
+    sc = scatter!(
+        ax,
+        lay_copy.data.x2[nz],
+        lay_copy.data.y2[nz];
+        color = Float64.(counts[nz]),
+        colormap = :YlOrRd,
+        colorrange = (0.0, Float64(cb_max)),
+        markersize = [size_base + size_span * (counts[i] / cb_max) for i in nz],
+        strokecolor = stroke_color,
+        strokewidth = stroke_width,
+    )
+    if discrete_ticks
+        Colorbar(fig[1, col_idx+1], sc; width = 12, label = cb_label, ticks = collect(0:max(1, cld(cb_max, 5)):cb_max))
+    else
+        Colorbar(fig[1, col_idx+1], sc; width = 12, label = cb_label)
+    end
+    top = sort(nz; by = i -> -counts[i])[1:min(5, length(nz))]
+    labels = lay_copy.data.label
+    text!(
+        ax,
+        lay_copy.data.x2[top],
+        lay_copy.data.y2[top];
+        text = ["$(labels[i]) ($(counts[i]))" for i in top],
+        fontsize = 9,
+        font = :bold,
+        color = text_color,
+        align = (:center, :bottom),
+        offset = (0, 8),
+    )
+end
+
 function _render_cohort_sensor_heatmap_uri(records::Vector{_ParticipantReportData})::Union{String,Nothing}
     lay = _cohort_layout(records)
     _has_spatial_layout(lay) || return nothing
-    return try
+    return _try_report(; debug_msg = "Skipping cohort sensor heatmap in pipeline report") do
         lay_copy = copy(lay)
         _ensure_coordinates_2d!(lay_copy)
         labels = lay_copy.data.label
@@ -1102,107 +1037,79 @@ function _render_cohort_sensor_heatmap_uri(records::Vector{_ParticipantReportDat
         (all(==(0), cont_counts) && all(==(0), ep_counts)) && return nothing
 
         fig = _eegfun_figure(size = (900, 360))
-        ax_c = Axis(
-            fig[1, 1],
-            aspect = DataAspect(),
+        _plot_sensor_hotspot_panel!(
+            fig,
+            1,
+            lay_copy,
+            cont_counts;
             title = "Continuous Repairs / Skips (Participants / $n_subj)",
-            titlesize = 13,
-            xautolimitmargin = (0.14, 0.16),
-            yautolimitmargin = (0.14, 0.16),
+            cb_label = "Subjects",
+            min_cb_max = 2,
+            discrete_ticks = true,
+            size_base = 12.0,
+            size_span = 5.0,
+            stroke_color = :black,
+            stroke_width = 1.2,
+            text_color = :darkred,
         )
-        plot_layout_2d!(fig, ax_c, lay_copy; point_markersize = 6, point_color = :lightgray, label_plot = false)
-        hidedecorations!(ax_c)
-        hidespines!(ax_c)
-
-        nz_c = findall(>(0), cont_counts)
-        max_c = isempty(nz_c) ? 1 : max(1, maximum(cont_counts))
-        cb_max_c = max(2, max_c)
-        if !isempty(nz_c)
-            sc_c = scatter!(
-                ax_c,
-                lay_copy.data.x2[nz_c],
-                lay_copy.data.y2[nz_c];
-                color = Float64.(cont_counts[nz_c]),
-                colormap = :YlOrRd,
-                colorrange = (0.0, Float64(cb_max_c)),
-                markersize = [12.0 + 5.0 * (cont_counts[i] / cb_max_c) for i in nz_c],
-                strokecolor = :black,
-                strokewidth = 1.2,
-            )
-            Colorbar(fig[1, 2], sc_c; width = 12, label = "Subjects", ticks = collect(0:max(1, cld(cb_max_c, 5)):cb_max_c))
-            top_c = sort(nz_c; by = i -> -cont_counts[i])[1:min(5, length(nz_c))]
-            text!(
-                ax_c,
-                lay_copy.data.x2[top_c],
-                lay_copy.data.y2[top_c];
-                text = ["$(labels[i]) ($(cont_counts[i]))" for i in top_c],
-                fontsize = 9,
-                font = :bold,
-                color = :darkred,
-                align = (:center, :bottom),
-                offset = (0, 8),
-            )
-        end
-
-        ax_e = Axis(
-            fig[1, 3],
-            aspect = DataAspect(),
+        _plot_sensor_hotspot_panel!(
+            fig,
+            3,
+            lay_copy,
+            ep_counts;
             title = "Epoch-Level Interpolations (Total Epochs)",
-            titlesize = 13,
-            xautolimitmargin = (0.14, 0.16),
-            yautolimitmargin = (0.14, 0.16),
+            cb_label = "Epochs",
+            min_cb_max = 1,
+            discrete_ticks = false,
+            size_base = 9.0,
+            size_span = 7.0,
+            stroke_color = :saddlebrown,
+            stroke_width = 1.1,
+            text_color = :saddlebrown,
         )
-        plot_layout_2d!(fig, ax_e, lay_copy; point_markersize = 6, point_color = :lightgray, label_plot = false)
-        hidedecorations!(ax_e)
-        hidespines!(ax_e)
-
-        nz_e = findall(>(0), ep_counts)
-        max_e = isempty(nz_e) ? 1 : max(1, maximum(ep_counts))
-        if !isempty(nz_e)
-            sc_e = scatter!(
-                ax_e,
-                lay_copy.data.x2[nz_e],
-                lay_copy.data.y2[nz_e];
-                color = Float64.(ep_counts[nz_e]),
-                colormap = :YlOrRd,
-                colorrange = (0.0, Float64(max_e)),
-                markersize = [9.0 + 7.0 * (ep_counts[i] / max_e) for i in nz_e],
-                strokecolor = :saddlebrown,
-                strokewidth = 1.1,
-            )
-            Colorbar(fig[1, 4], sc_e; width = 12, label = "Epochs")
-            top_e = sort(nz_e; by = i -> -ep_counts[i])[1:min(5, length(nz_e))]
-            text!(
-                ax_e,
-                lay_copy.data.x2[top_e],
-                lay_copy.data.y2[top_e];
-                text = ["$(labels[i]) ($(ep_counts[i]))" for i in top_e],
-                fontsize = 9,
-                font = :bold,
-                color = :saddlebrown,
-                align = (:center, :bottom),
-                offset = (0, 8),
-            )
-        end
-
         _fig_to_data_uri(fig)
-    catch e
-        e isa InterruptException && rethrow()
-        @debug "Skipping cohort sensor heatmap in pipeline report" exception = e
-        nothing
     end
+end
+
+function _scatter_status_channels!(
+    ax::Axis,
+    lay_copy::Layout,
+    idx::Vector{Int};
+    text_idx::Vector{Int} = Int[],
+    texts::Vector{String} = String[],
+    text_color = :black,
+    text_size::Int = 10,
+    text_offset::Tuple{Int,Int} = (0, 8),
+    scatter_kwargs...,
+)::Bool
+    isempty(idx) && return false
+    scatter!(ax, lay_copy.data.x2[idx], lay_copy.data.y2[idx]; scatter_kwargs...)
+    if !isempty(text_idx)
+        text!(
+            ax,
+            lay_copy.data.x2[text_idx],
+            lay_copy.data.y2[text_idx];
+            text = texts,
+            color = text_color,
+            fontsize = text_size,
+            font = :bold,
+            align = (:center, :bottom),
+            offset = text_offset,
+        )
+    end
+    return true
 end
 
 function _render_sensor_status_uri(rec::_ParticipantReportData)::Union{String,Nothing}
     lay = _participant_layout(rec)
     _has_spatial_layout(lay) || return nothing
-    return try
+    return _try_report(; debug_msg = "Skipping sensor status figure in pipeline report") do
         lay_copy = copy(lay)
         _ensure_coordinates_2d!(lay_copy)
+        labels = lay_copy.data.label
         show_all_labels = nrow(lay_copy.data) <= 64
         cont_set = union(Set(rec.repaired_channels), Set(rec.skipped_channels))
-        ep_only = [ch => cnt for (ch, cnt) in rec.epoch_channel_repairs if ch ∉ cont_set && cnt > 0]
-        sort!(ep_only; by = x -> (-x[2], string(x[1])))
+        ep_only = sort!([ch => cnt for (ch, cnt) in rec.epoch_channel_repairs if ch ∉ cont_set && cnt > 0]; by = x -> (-x[2], string(x[1])))
 
         title_str = if isempty(rec.repaired_channels) && isempty(rec.skipped_channels) && !isempty(ep_only)
             "Channel Status (0 cont., $(length(ep_only)) epoch interp.)"
@@ -1234,114 +1141,69 @@ function _render_sensor_status_uri(rec::_ParticipantReportData)::Union{String,No
         has_legend = false
         if !isempty(ep_only)
             ep_dict = Dict(ep_only)
-            idx_ep = [i for (i, lbl) in enumerate(lay_copy.data.label) if haskey(ep_dict, lbl)]
+            idx_ep = [i for (i, lbl) in enumerate(labels) if haskey(ep_dict, lbl)]
             if !isempty(idx_ep)
-                max_cnt = maximum(last, ep_only)
-                sizes = [10.0 + 5.0 * (ep_dict[lay_copy.data.label[i]] / max(1, max_cnt)) for i in idx_ep]
-                scatter!(
+                max_cnt = max(1, maximum(last, ep_only))
+                top_syms = Set(first.(first(ep_only, min(3, length(ep_only)))))
+                idx_top = show_all_labels ? Int[] : [i for i in idx_ep if labels[i] in top_syms]
+                has_legend |= _scatter_status_channels!(
                     ax,
-                    lay_copy.data.x2[idx_ep],
-                    lay_copy.data.y2[idx_ep];
+                    lay_copy,
+                    idx_ep;
+                    text_idx = idx_top,
+                    texts = ["$(labels[i]) ($(ep_dict[labels[i]]))" for i in idx_top],
+                    text_color = :saddlebrown,
+                    text_size = 9,
+                    text_offset = (0, 7),
                     color = (:darkorange, 0.85),
-                    markersize = sizes,
+                    markersize = [10.0 + 5.0 * (ep_dict[labels[i]] / max_cnt) for i in idx_ep],
                     strokecolor = :saddlebrown,
                     strokewidth = 1.2,
                     label = "Epoch interp.",
                 )
-                has_legend = true
-                if !show_all_labels
-                    top_syms = Set(first.(first(ep_only, min(3, length(ep_only)))))
-                    idx_top = [i for i in idx_ep if lay_copy.data.label[i] in top_syms]
-                    if !isempty(idx_top)
-                        text!(
-                            ax,
-                            lay_copy.data.x2[idx_top],
-                            lay_copy.data.y2[idx_top];
-                            text = ["$(lay_copy.data.label[i]) ($(ep_dict[lay_copy.data.label[i]]))" for i in idx_top],
-                            color = :saddlebrown,
-                            fontsize = 9,
-                            font = :bold,
-                            align = (:center, :bottom),
-                            offset = (0, 7),
-                        )
-                    end
-                end
             end
         end
 
-        if !isempty(rec.repaired_channels)
-            idx_rep = findall(in(Set(rec.repaired_channels)), lay_copy.data.label)
-            if !isempty(idx_rep)
-                scatter!(
-                    ax,
-                    lay_copy.data.x2[idx_rep],
-                    lay_copy.data.y2[idx_rep];
-                    color = :dodgerblue,
-                    markersize = 15,
-                    strokecolor = :navy,
-                    strokewidth = 1.5,
-                    label = "Cont. repaired",
-                )
-                has_legend = true
-                if !show_all_labels
-                    text!(
-                        ax,
-                        lay_copy.data.x2[idx_rep],
-                        lay_copy.data.y2[idx_rep];
-                        text = string.(lay_copy.data.label[idx_rep]),
-                        color = :navy,
-                        fontsize = 10,
-                        font = :bold,
-                        align = (:center, :bottom),
-                        offset = (0, 8),
-                    )
-                end
-            end
-        end
+        idx_rep = isempty(rec.repaired_channels) ? Int[] : findall(in(Set(rec.repaired_channels)), labels)
+        has_legend |= _scatter_status_channels!(
+            ax,
+            lay_copy,
+            idx_rep;
+            text_idx = show_all_labels ? Int[] : idx_rep,
+            texts = show_all_labels ? String[] : string.(labels[idx_rep]),
+            text_color = :navy,
+            color = :dodgerblue,
+            markersize = 15,
+            strokecolor = :navy,
+            strokewidth = 1.5,
+            label = "Cont. repaired",
+        )
 
-        if !isempty(rec.skipped_channels)
-            idx_skip = findall(in(Set(rec.skipped_channels)), lay_copy.data.label)
-            if !isempty(idx_skip)
-                scatter!(
-                    ax,
-                    lay_copy.data.x2[idx_skip],
-                    lay_copy.data.y2[idx_skip];
-                    color = :crimson,
-                    marker = :xcross,
-                    markersize = 17,
-                    strokewidth = 2,
-                    label = "Skipped",
-                )
-                has_legend = true
-                if !show_all_labels
-                    text!(
-                        ax,
-                        lay_copy.data.x2[idx_skip],
-                        lay_copy.data.y2[idx_skip];
-                        text = string.(lay_copy.data.label[idx_skip]),
-                        color = :crimson,
-                        fontsize = 10,
-                        font = :bold,
-                        align = (:center, :bottom),
-                        offset = (0, 9),
-                    )
-                end
-            end
-        end
+        idx_skip = isempty(rec.skipped_channels) ? Int[] : findall(in(Set(rec.skipped_channels)), labels)
+        has_legend |= _scatter_status_channels!(
+            ax,
+            lay_copy,
+            idx_skip;
+            text_idx = show_all_labels ? Int[] : idx_skip,
+            texts = show_all_labels ? String[] : string.(labels[idx_skip]),
+            text_color = :crimson,
+            text_offset = (0, 9),
+            color = :crimson,
+            marker = :xcross,
+            markersize = 17,
+            strokewidth = 2,
+            label = "Skipped",
+        )
 
         has_legend && axislegend(ax; position = :rb, labelsize = 10)
         _fig_to_data_uri(fig)
-    catch e
-        e isa InterruptException && rethrow()
-        @debug "Skipping sensor status figure in pipeline report" exception = e
-        nothing
     end
 end
 
 function _render_ica_artifacts_uri(rec::_ParticipantReportData)::Union{String,Nothing}
     (isnothing(rec.ica) || isnothing(rec.artifact_info) || isnothing(rec.artifact_info.ica_components)) && return nothing
     (rec.ic_counts.total == 0 || !_has_spatial_layout(rec.ica.layout)) && return nothing
-    return try
+    return _try_report(; debug_msg = "Skipping ICA artifacts figure in pipeline report") do
         res = plot_artifact_components(
             rec.ica,
             rec.artifact_info.ica_components;
@@ -1351,10 +1213,6 @@ function _render_ica_artifacts_uri(rec::_ParticipantReportData)::Union{String,No
             interactive = false,
         )
         isempty(res.axes) ? nothing : _fig_to_data_uri(res.fig)
-    catch e
-        e isa InterruptException && rethrow()
-        @debug "Skipping ICA artifacts figure in pipeline report" exception = e
-        nothing
     end
 end
 
@@ -1364,15 +1222,11 @@ function _render_erp_gfp_uri(
     fig_size::Tuple{Int,Int} = (880, 410),
 )::Union{String,Nothing}
     isempty(erps) && return nothing
-    return try
+    return _try_report(; debug_msg = "Skipping ERP/GFP figure in pipeline report") do
         disp_erps = _baseline_for_display(erps)
         res = plot_gfp(disp_erps; show_erp_traces = true, normalize = false, display_plot = false, plot_title = plot_title)
         resize!(res.fig, fig_size...)
         _fig_to_data_uri(res.fig)
-    catch e
-        e isa InterruptException && rethrow()
-        @debug "Skipping ERP/GFP figure in pipeline report" exception = e
-        nothing
     end
 end
 
@@ -1407,37 +1261,27 @@ function _render_grand_topo_uri(grand_erps::Vector{ErpData})::Union{String,Nothi
         end
     end
     lim = max_abs > 0.0 ? ceil(max_abs * 1.05; digits = 2) : 1.0
-    cr = (-lim, lim)
 
-    return try
-        res = if n_bins > 1
-            plot_topography(
-                disp_erps;
-                interval_selection = (t_start, t_end),
+    return _try_report(; debug_msg = "Skipping grand-average topography figure in pipeline report") do
+        topo_kwargs =
+            n_bins > 1 ?
+            (;
                 n_topo = n_bins,
                 time_unit = :ms,
-                label_plot = false,
                 point_markersize = 4,
-                head_linewidth = 1.5,
                 plot_title_fontsize = 13,
-                colorrange = cr,
                 colorbar_plot_numbers = collect(1:length(disp_erps)),
-                interactive = false,
-                display_plot = false,
-            )
-        else
-            plot_topography(
-                disp_erps;
-                interval_selection = (t_start, t_end),
-                label_plot = false,
-                point_markersize = 5,
-                head_linewidth = 1.5,
-                plot_title_fontsize = 14,
-                colorrange = cr,
-                interactive = false,
-                display_plot = false,
-            )
-        end
+            ) : (; point_markersize = 5, plot_title_fontsize = 14)
+        res = plot_topography(
+            disp_erps;
+            interval_selection = (t_start, t_end),
+            label_plot = false,
+            head_linewidth = 1.5,
+            colorrange = (-lim, lim),
+            interactive = false,
+            display_plot = false,
+            topo_kwargs...,
+        )
         isnothing(res) && return nothing
         if n_bins > 1 && length(res.axes) == length(disp_erps) * n_bins
             for b = 1:(n_bins-1)
@@ -1458,10 +1302,6 @@ function _render_grand_topo_uri(grand_erps::Vector{ErpData})::Union{String,Nothi
         h = n_bins > 1 ? max(260, 235 * length(disp_erps)) : 320
         resize!(res.fig, w, h)
         _fig_to_data_uri(res.fig)
-    catch e
-        e isa InterruptException && rethrow()
-        @debug "Skipping grand-average topography figure in pipeline report" exception = e
-        nothing
     end
 end
 
@@ -1474,10 +1314,30 @@ function _cohort_mean_psd(records::Vector{_ParticipantReportData})::Union{Tuple{
     return f_ref, vec(mean(reduce(hcat, matching); dims = 2))
 end
 
+function _plot_mean_sem_trace!(
+    ax::Axis,
+    x::Vector{Float64},
+    vecs::Vector{Vector{Float64}};
+    color,
+    band_alpha::Float64 = 0.2,
+    linewidth::Real = 2.2,
+    linestyle = :solid,
+    label::String,
+)
+    isempty(vecs) && return
+    mat = reduce(hcat, vecs)
+    m = vec(mean(mat; dims = 2))
+    if length(vecs) >= 2
+        s = vec(std(mat; dims = 2)) ./ sqrt(length(vecs))
+        band!(ax, x, m .- s, m .+ s; color = (color, band_alpha))
+    end
+    lines!(ax, x, m; color = color, linestyle = linestyle, linewidth = linewidth, label = label)
+end
+
 function _render_cohort_psd_uri(records::Vector{_ParticipantReportData})::Union{String,Nothing}
     psd_recs = [r for r in records if !isnothing(r.psd)]
     isempty(psd_recs) && return nothing
-    return try
+    return _try_report(; debug_msg = "Skipping cohort PSD figure in pipeline report") do
         f_ref = psd_recs[1].psd.freqs
         same_grid = [r for r in psd_recs if r.psd.freqs == f_ref]
         isempty(same_grid) && return nothing
@@ -1487,24 +1347,24 @@ function _render_cohort_psd_uri(records::Vector{_ParticipantReportData})::Union{
         ax1 =
             Axis(fig[1, 1], title = "$kind_lbl — Cohort Spaghetti", titlesize = 13, xlabel = "Frequency (Hz)", ylabel = "Power (dB μV²/Hz)")
         for r in same_grid
+            flagged = _is_flagged(r)
             lines!(
                 ax1,
                 f_ref,
                 r.psd.mean_db;
-                color = r.is_flagged ? (:crimson, 0.45) : (:steelblue, 0.25),
-                linewidth = r.is_flagged ? 1.2 : 0.9,
-                linestyle = r.is_flagged ? :dash : :solid,
+                color = flagged ? (:crimson, 0.45) : (:steelblue, 0.25),
+                linewidth = flagged ? 1.2 : 0.9,
+                linestyle = flagged ? :dash : :solid,
             )
         end
-        mean_mat = reduce(hcat, [r.psd.mean_db for r in same_grid])
-        cohort_m = vec(mean(mean_mat; dims = 2))
+        cohort_m = vec(mean(reduce(hcat, [r.psd.mean_db for r in same_grid]); dims = 2))
         lines!(ax1, f_ref, cohort_m; color = :navy, linewidth = 2.4, label = "Cohort Mean")
         10.0 <= last(f_ref) && vlines!(ax1, [10.0]; color = (:seagreen, 0.6), linestyle = :dot, linewidth = 1.3, label = "10 Hz (Alpha)")
         50.0 <= last(f_ref) && vlines!(ax1, [50.0]; color = (:darkorange, 0.6), linestyle = :dot, linewidth = 1.3, label = "50 Hz (Line)")
         axislegend(ax1; position = :rt, labelsize = 10)
 
-        post_vecs = [r.psd.posterior_db for r in same_grid if !isnothing(r.psd.posterior_db)]
-        front_vecs = [r.psd.frontal_db for r in same_grid if !isnothing(r.psd.frontal_db)]
+        post_vecs = Vector{Float64}[r.psd.posterior_db for r in same_grid if !isnothing(r.psd.posterior_db)]
+        front_vecs = Vector{Float64}[r.psd.frontal_db for r in same_grid if !isnothing(r.psd.frontal_db)]
         if !isempty(post_vecs) || !isempty(front_vecs)
             ax2 = Axis(
                 fig[1, 2],
@@ -1514,34 +1374,14 @@ function _render_cohort_psd_uri(records::Vector{_ParticipantReportData})::Union{
                 ylabel = "Power (dB μV²/Hz)",
             )
             lines!(ax2, f_ref, cohort_m; color = (:slategray, 0.7), linewidth = 1.6, linestyle = :dash, label = "Whole Scalp")
-            if !isempty(post_vecs)
-                pmat = reduce(hcat, post_vecs)
-                pm = vec(mean(pmat; dims = 2))
-                if length(post_vecs) >= 2
-                    psem = vec(std(pmat; dims = 2)) ./ sqrt(length(post_vecs))
-                    band!(ax2, f_ref, pm .- psem, pm .+ psem; color = (:seagreen, 0.2))
-                end
-                lines!(ax2, f_ref, pm; color = :seagreen, linewidth = 2.2, label = "Posterior (O/PO/P)")
-            end
-            if !isempty(front_vecs)
-                fmat = reduce(hcat, front_vecs)
-                fm = vec(mean(fmat; dims = 2))
-                if length(front_vecs) >= 2
-                    fsem = vec(std(fmat; dims = 2)) ./ sqrt(length(front_vecs))
-                    band!(ax2, f_ref, fm .- fsem, fm .+ fsem; color = (:royalblue, 0.2))
-                end
-                lines!(ax2, f_ref, fm; color = :royalblue, linewidth = 2.2, label = "Frontal (Fp/AF/F)")
-            end
+            _plot_mean_sem_trace!(ax2, f_ref, post_vecs; color = :seagreen, label = "Posterior (O/PO/P)")
+            _plot_mean_sem_trace!(ax2, f_ref, front_vecs; color = :royalblue, label = "Frontal (Fp/AF/F)")
             10.0 <= last(f_ref) && vlines!(ax2, [10.0]; color = (:gray, 0.5), linestyle = :dot, linewidth = 1.2)
             50.0 <= last(f_ref) && vlines!(ax2, [50.0]; color = (:gray, 0.5), linestyle = :dot, linewidth = 1.2)
             axislegend(ax2; position = :rt, labelsize = 10)
         end
 
         _fig_to_data_uri(fig)
-    catch e
-        e isa InterruptException && rethrow()
-        @debug "Skipping cohort PSD figure in pipeline report" exception = e
-        nothing
     end
 end
 
@@ -1550,7 +1390,7 @@ function _render_participant_psd_uri(
     cohort_psd::Union{Tuple{Vector{Float64},Vector{Float64}},Nothing},
 )::Union{String,Nothing}
     isnothing(rec.psd) && return nothing
-    return try
+    return _try_report(; debug_msg = "Skipping participant PSD figure in pipeline report") do
         p = rec.psd
         fig = _eegfun_figure(size = (420, 320))
         ax = Axis(
@@ -1570,10 +1410,6 @@ function _render_participant_psd_uri(
         50.0 <= last(p.freqs) && vlines!(ax, [50.0]; color = (:gray, 0.45), linestyle = :dot, linewidth = 1.1)
         axislegend(ax; position = :rt, labelsize = 9)
         _fig_to_data_uri(fig)
-    catch e
-        e isa InterruptException && rethrow()
-        @debug "Skipping participant PSD figure in pipeline report" exception = e
-        nothing
     end
 end
 
@@ -1584,21 +1420,24 @@ function _matched_raw_clean_erps(rec::_ParticipantReportData)::Tuple{Vector{ErpD
     return [e for e in rec.erps_raw if e.condition in common], [e for e in rec.erps if e.condition in common]
 end
 
-function _render_cohort_raw_vs_clean_uri(records::Vector{_ParticipantReportData})::Union{String,Nothing}
-    paired = [r for r in records if !isnothing(r.erps_raw) && !isnothing(r.erps) && !isempty(r.erps_raw) && !isempty(r.erps)]
+function _render_raw_vs_clean_figure_uri(
+    recs::AbstractVector{_ParticipantReportData};
+    is_cohort::Bool,
+    debug_msg::String,
+)::Union{String,Nothing}
+    paired = [r for r in recs if !isnothing(r.erps_raw) && !isnothing(r.erps) && !isempty(r.erps_raw) && !isempty(r.erps)]
     isempty(paired) && return nothing
-    return try
+    return _try_report(; debug_msg = debug_msg) do
         r1_raw, r1_cln = _matched_raw_clean_erps(paired[1])
         t_ref, raw1_f, roi_lbl = _frontal_roi_waveform(r1_raw)
         _, cln1_f, _ = _frontal_roi_waveform(r1_cln)
         (isempty(t_ref) || length(raw1_f) != length(cln1_f)) && return nothing
         n_t = length(t_ref)
 
-        raw_front_list = Vector{Float64}[]
-        cln_front_list = Vector{Float64}[]
-        raw_gfp_list = Vector{Float64}[]
-        cln_gfp_list = Vector{Float64}[]
-
+        raw_front = Vector{Float64}[]
+        cln_front = Vector{Float64}[]
+        raw_gfp = Vector{Float64}[]
+        cln_gfp = Vector{Float64}[]
         for r in paired
             r_raw, r_cln = _matched_raw_clean_erps(r)
             tr, rf, _ = _frontal_roi_waveform(r_raw)
@@ -1606,97 +1445,51 @@ function _render_cohort_raw_vs_clean_uri(records::Vector{_ParticipantReportData}
             _, rg = _mean_gfp_across_conditions(r_raw)
             _, cg = _mean_gfp_across_conditions(r_cln)
             if length(tr) == n_t && length(tc) == n_t && length(rg) == n_t && length(cg) == n_t
-                push!(raw_front_list, rf)
-                push!(cln_front_list, cf)
-                push!(raw_gfp_list, rg)
-                push!(cln_gfp_list, cg)
+                push!(raw_front, rf)
+                push!(cln_front, cf)
+                push!(raw_gfp, rg)
+                push!(cln_gfp, cg)
             end
         end
-        isempty(raw_front_list) && return nothing
+        isempty(raw_front) && return nothing
 
-        fig = _eegfun_figure(size = (1040, 330))
-        ax1 = Axis(
-            fig[1, 1],
-            title = "Frontal Ocular ROI ($roi_lbl) — Raw vs. Cleaned",
-            titlesize = 13,
-            xlabel = "Time (s)",
-            ylabel = "Amplitude (μV)",
-        )
-        rf_mat = reduce(hcat, raw_front_list)
-        cf_mat = reduce(hcat, cln_front_list)
-        rf_m = vec(mean(rf_mat; dims = 2))
-        cf_m = vec(mean(cf_mat; dims = 2))
-        if length(raw_front_list) >= 2
-            rf_s = vec(std(rf_mat; dims = 2)) ./ sqrt(length(raw_front_list))
-            cf_s = vec(std(cf_mat; dims = 2)) ./ sqrt(length(cln_front_list))
-            band!(ax1, t_ref, rf_m .- rf_s, rf_m .+ rf_s; color = (:crimson, 0.16))
-            band!(ax1, t_ref, cf_m .- cf_s, cf_m .+ cf_s; color = (:dodgerblue, 0.2))
+        fig = _eegfun_figure(size = is_cohort ? (1040, 330) : (880, 320))
+        front_title = is_cohort ? "Frontal Ocular ROI ($roi_lbl) — Raw vs. Cleaned" : "Frontal ROI ($roi_lbl): Raw vs. Cleaned"
+        gfp_title = is_cohort ? "Global Field Power — Raw vs. Cleaned" : "Mean GFP: Raw vs. Cleaned"
+        clean_lbl = is_cohort ? "Cleaned (Post-ICA)" : "Cleaned"
+        raw_lw = is_cohort ? 1.9 : 1.7
+        cln_lw = is_cohort ? 2.2 : 2.0
+        leg_sz = is_cohort ? 10 : 9
+
+        for (col_idx, ttl, ylab, r_vecs, c_vecs) in
+            ((1, front_title, "Amplitude (μV)", raw_front, cln_front), (2, gfp_title, "GFP (μV)", raw_gfp, cln_gfp))
+            ax = Axis(fig[1, col_idx], title = ttl, titlesize = 13, xlabel = "Time (s)", ylabel = ylab)
+            vlines!(ax, [0.0]; color = :black, linestyle = :dash, linewidth = 1)
+            _plot_mean_sem_trace!(
+                ax,
+                t_ref,
+                r_vecs;
+                color = :crimson,
+                band_alpha = 0.16,
+                linewidth = raw_lw,
+                linestyle = :dash,
+                label = "Raw (Pre-ICA)",
+            )
+            _plot_mean_sem_trace!(ax, t_ref, c_vecs; color = :dodgerblue, band_alpha = 0.2, linewidth = cln_lw, label = clean_lbl)
+            axislegend(ax; position = :rt, labelsize = leg_sz)
         end
-        vlines!(ax1, [0.0]; color = :black, linestyle = :dash, linewidth = 1)
-        lines!(ax1, t_ref, rf_m; color = :crimson, linestyle = :dash, linewidth = 1.9, label = "Raw (Pre-ICA)")
-        lines!(ax1, t_ref, cf_m; color = :dodgerblue, linewidth = 2.2, label = "Cleaned (Post-ICA)")
-        axislegend(ax1; position = :rt, labelsize = 10)
-
-        ax2 = Axis(fig[1, 2], title = "Global Field Power — Raw vs. Cleaned", titlesize = 13, xlabel = "Time (s)", ylabel = "GFP (μV)")
-        rg_mat = reduce(hcat, raw_gfp_list)
-        cg_mat = reduce(hcat, cln_gfp_list)
-        rg_m = vec(mean(rg_mat; dims = 2))
-        cg_m = vec(mean(cg_mat; dims = 2))
-        if length(raw_gfp_list) >= 2
-            rg_s = vec(std(rg_mat; dims = 2)) ./ sqrt(length(raw_gfp_list))
-            cg_s = vec(std(cg_mat; dims = 2)) ./ sqrt(length(cln_gfp_list))
-            band!(ax2, t_ref, rg_m .- rg_s, rg_m .+ rg_s; color = (:crimson, 0.16))
-            band!(ax2, t_ref, cg_m .- cg_s, cg_m .+ cg_s; color = (:dodgerblue, 0.2))
-        end
-        vlines!(ax2, [0.0]; color = :black, linestyle = :dash, linewidth = 1)
-        lines!(ax2, t_ref, rg_m; color = :crimson, linestyle = :dash, linewidth = 1.9, label = "Raw (Pre-ICA)")
-        lines!(ax2, t_ref, cg_m; color = :dodgerblue, linewidth = 2.2, label = "Cleaned (Post-ICA)")
-        axislegend(ax2; position = :rt, labelsize = 10)
-
         _fig_to_data_uri(fig)
-    catch e
-        e isa InterruptException && rethrow()
-        @debug "Skipping cohort raw-vs-clean figure in pipeline report" exception = e
-        nothing
     end
 end
 
-function _render_participant_raw_vs_clean_uri(rec::_ParticipantReportData)::Union{String,Nothing}
-    (isnothing(rec.erps_raw) || isnothing(rec.erps) || isempty(rec.erps_raw) || isempty(rec.erps)) && return nothing
-    return try
-        r_raw, r_cln = _matched_raw_clean_erps(rec)
-        tr, rf, roi_lbl = _frontal_roi_waveform(r_raw)
-        tc, cf, _ = _frontal_roi_waveform(r_cln)
-        _, rg = _mean_gfp_across_conditions(r_raw)
-        _, cg = _mean_gfp_across_conditions(r_cln)
-        (isempty(tr) || length(tr) != length(tc) || length(rg) != length(tr) || length(cg) != length(tr)) && return nothing
+_render_cohort_raw_vs_clean_uri(records::Vector{_ParticipantReportData})::Union{String,Nothing} =
+    _render_raw_vs_clean_figure_uri(records; is_cohort = true, debug_msg = "Skipping cohort raw-vs-clean figure in pipeline report")
 
-        fig = _eegfun_figure(size = (880, 320))
-        ax1 = Axis(
-            fig[1, 1],
-            title = "Frontal ROI ($roi_lbl): Raw vs. Cleaned",
-            titlesize = 13,
-            xlabel = "Time (s)",
-            ylabel = "Amplitude (μV)",
-        )
-        vlines!(ax1, [0.0]; color = :black, linestyle = :dash, linewidth = 1)
-        lines!(ax1, tr, rf; color = :crimson, linestyle = :dash, linewidth = 1.7, label = "Raw (Pre-ICA)")
-        lines!(ax1, tc, cf; color = :dodgerblue, linewidth = 2.0, label = "Cleaned")
-        axislegend(ax1; position = :rt, labelsize = 9)
-
-        ax2 = Axis(fig[1, 2], title = "Mean GFP: Raw vs. Cleaned", titlesize = 13, xlabel = "Time (s)", ylabel = "GFP (μV)")
-        vlines!(ax2, [0.0]; color = :black, linestyle = :dash, linewidth = 1)
-        lines!(ax2, tr, rg; color = :crimson, linestyle = :dash, linewidth = 1.7, label = "Raw (Pre-ICA)")
-        lines!(ax2, tc, cg; color = :dodgerblue, linewidth = 2.0, label = "Cleaned")
-        axislegend(ax2; position = :rt, labelsize = 9)
-
-        _fig_to_data_uri(fig)
-    catch e
-        e isa InterruptException && rethrow()
-        @debug "Skipping participant raw-vs-clean figure in pipeline report" exception = e
-        nothing
-    end
-end
+_render_participant_raw_vs_clean_uri(rec::_ParticipantReportData)::Union{String,Nothing} = _render_raw_vs_clean_figure_uri(
+    _ParticipantReportData[rec];
+    is_cohort = false,
+    debug_msg = "Skipping participant raw-vs-clean figure in pipeline report",
+)
 
 function _format_ic_breakdown(ic)::String
     ic.total == 0 && return "0"
@@ -1719,33 +1512,29 @@ function _resolve_avg_neighbors(
 )::Union{Float64,Nothing}
     nb_path = joinpath(output_dir, "neighbors.toml")
     if isfile(nb_path)
-        try
+        nb_val = _try_report() do
             nb_toml = TOML.parsefile(nb_path)
             meta = get(nb_toml, "metadata", nothing)
             if meta isa AbstractDict && haskey(meta, "average_neighbors_per_electrode")
                 val = Float64(meta["average_neighbors_per_electrode"])
-                isfinite(val) && return round(val; digits = 2)
+                return isfinite(val) ? round(val; digits = 2) : nothing
             end
-        catch e
-            e isa InterruptException && rethrow()
+            return nothing
         end
+        !isnothing(nb_val) && return nb_val
     end
 
     lay = _cohort_layout(records)
-    if !isnothing(lay)
-        if has_neighbors(lay) && !isempty(lay.neighbors)
-            return round(mean(length(nb.channels) for nb in values(lay.neighbors)); digits = 2)
-        elseif !isnothing(cfg) && _has_spatial_layout(lay)
-            try
-                lay_tmp = copy(lay)
-                _ensure_coordinates_2d!(lay_tmp)
-                get_neighbors_xy!(lay_tmp, cfg.preprocess.neighbor_criterion)
-                if has_neighbors(lay_tmp) && !isempty(lay_tmp.neighbors)
-                    return round(mean(length(nb.channels) for nb in values(lay_tmp.neighbors)); digits = 2)
-                end
-            catch e
-                e isa InterruptException && rethrow()
-            end
+    isnothing(lay) && return nothing
+    if has_neighbors(lay) && !isempty(lay.neighbors)
+        return round(mean(length(nb.channels) for nb in values(lay.neighbors)); digits = 2)
+    elseif !isnothing(cfg) && _has_spatial_layout(lay)
+        return _try_report() do
+            lay_tmp = copy(lay)
+            _ensure_coordinates_2d!(lay_tmp)
+            get_neighbors_xy!(lay_tmp, cfg.preprocess.neighbor_criterion)
+            (has_neighbors(lay_tmp) && !isempty(lay_tmp.neighbors)) ?
+            round(mean(length(nb.channels) for nb in values(lay_tmp.neighbors)); digits = 2) : nothing
         end
     end
     return nothing
@@ -1849,7 +1638,7 @@ function _build_methods_boilerplate(
         )
     end
 
-    n_flagged = count(r -> r.is_flagged, records)
+    n_flagged = count(_is_flagged, records)
     push!(
         parts,
         "Automated quality-control screening (epoch retention < $(round(low_epoch_threshold; digits = 1))% or ICA removal > $(round(max_ica_pct; digits = 1))%) flagged $n_flagged / $n_subj participant(s) for manual inspection.",
@@ -1897,104 +1686,62 @@ function _cohort_condition_columns(records::Vector{_ParticipantReportData})::Vec
     return Tuple{Int,String}[(cid, slug_counts[raw_slugs[cid]] > 1 ? "$(raw_slugs[cid])_$cid" : raw_slugs[cid]) for cid in cids]
 end
 
+function _top_epoch_interp_str(repairs::Dict{Symbol,Int})::String
+    isempty(repairs) && return ""
+    ep_sorted = sort!(collect(repairs); by = x -> (-x[2], string(x[1])))
+    top_n = min(5, length(ep_sorted))
+    s = join(["$(ep_sorted[i][1]):$(ep_sorted[i][2])" for i = 1:top_n], "; ")
+    return length(ep_sorted) > 5 ? "$s (+$(length(ep_sorted) - 5) more)" : s
+end
+
 function _build_qc_summary_csv(records::Vector{_ParticipantReportData})::String
     cond_cols = _cohort_condition_columns(records)
-    headers = String["participant", "status", "epochs_original", "epochs_repaired", "epochs_rejected", "epochs_kept", "epochs_kept_pct"]
-    for (_, slug) in cond_cols
-        push!(headers, "$(slug)_original", "$(slug)_kept", "$(slug)_kept_pct")
+    has_ep = [!isempty(r.condition_df) || r.total_original > 0 for r in records]
+    cond_lookups = [Dict{Int,Int}(cid => i for (i, cid) in Iterators.reverse(enumerate(r.condition_df.condition))) for r in records]
+    ic_avails = [_participant_ic_available(r) for r in records]
+
+    cols = Pair{String,AbstractVector}[
+        "participant"     => [r.stem for r in records],
+        "status"          => [_is_flagged(r) ? "Review" : "OK" for r in records],
+        "epochs_original" => [has_ep[i] ? records[i].total_original : missing for i in eachindex(records)],
+        "epochs_repaired" => [has_ep[i] ? (isempty(records[i].condition_df) ? 0 : sum(records[i].condition_df.n_repaired)) : missing for i in eachindex(records)],
+        "epochs_rejected" => [has_ep[i] ? (records[i].total_original-records[i].total_kept) : missing for i in eachindex(records)],
+        "epochs_kept"     => [has_ep[i] ? records[i].total_kept : missing for i in eachindex(records)],
+        "epochs_kept_pct" => [r.total_original>0 ? round(100.0*r.total_kept/r.total_original; digits = 1) : missing for r in records],
+    ]
+    for (cid, slug) in cond_cols
+        rows = [get(cond_lookups[i], cid, 0) for i in eachindex(records)]
+        push!(cols, "$(slug)_original" => [rows[i] > 0 ? records[i].condition_df.n_original[rows[i]] : missing for i in eachindex(records)])
+        push!(cols, "$(slug)_kept" => [rows[i] > 0 ? records[i].condition_df.n_kept[rows[i]] : missing for i in eachindex(records)])
+        push!(cols, "$(slug)_kept_pct" => [rows[i] > 0 ? records[i].condition_df.pct_kept[rows[i]] : missing for i in eachindex(records)])
     end
     append!(
-        headers,
-        (
-            "n_channels",
-            "n_repaired_channels",
-            "n_skipped_channels",
-            "n_epoch_interp_channels",
-            "n_epoch_channel_interps",
-            "ic_available",
-            "ic_removed",
-            "ic_removed_pct",
-            "ic_vEOG",
-            "ic_hEOG",
-            "ic_ECG",
-            "ic_line_noise",
-            "ic_channel_noise",
-            "ic_manual",
-            "repaired_channels",
-            "skipped_channels",
-            "top_epoch_interp_channels",
-            "flag_reasons",
-        ),
+        cols,
+        Pair{String,AbstractVector}[
+            "n_channels"=>[something(_participant_n_channels(r), missing) for r in records],
+            "n_repaired_channels"=>[length(r.repaired_channels) for r in records],
+            "n_skipped_channels"=>[length(r.skipped_channels) for r in records],
+            "n_epoch_interp_channels"=>[length(r.epoch_channel_repairs) for r in records],
+            "n_epoch_channel_interps"=>[isempty(r.epoch_channel_repairs) ? 0 : sum(values(r.epoch_channel_repairs)) for r in records],
+            "ic_available"=>[something(ic_avails[i], missing) for i in eachindex(records)],
+            "ic_removed"=>[r.ic_counts.total for r in records],
+            "ic_removed_pct"=>[
+                (!isnothing(ic_avails[i])&&ic_avails[i]>0) ? round(100.0*records[i].ic_counts.total/ic_avails[i]; digits = 1) : missing for
+                i in eachindex(records)
+            ],
+            "ic_vEOG"=>[r.ic_counts.vEOG for r in records],
+            "ic_hEOG"=>[r.ic_counts.hEOG for r in records],
+            "ic_ECG"=>[r.ic_counts.ECG for r in records],
+            "ic_line_noise"=>[r.ic_counts.line_noise for r in records],
+            "ic_channel_noise"=>[r.ic_counts.channel_noise for r in records],
+            "ic_manual"=>[r.ic_counts.manual for r in records],
+            "repaired_channels"=>[join(r.repaired_channels, "; ") for r in records],
+            "skipped_channels"=>[join(r.skipped_channels, "; ") for r in records],
+            "top_epoch_interp_channels"=>[_top_epoch_interp_str(r.epoch_channel_repairs) for r in records],
+            "flag_reasons"=>[join(r.flag_reasons, "; ") for r in records],
+        ],
     )
-
-    io = IOBuffer()
-    println(io, join(headers, ","))
-    fields = Vector{String}(undef, length(headers))
-
-    for r in records
-        k = 0
-        fields[k+=1] = _csv_escape(r.stem)
-        fields[k+=1] = r.is_flagged ? "Review" : "OK"
-
-        has_epochs = !isempty(r.condition_df) || r.total_original > 0
-        n_rep_ep = isempty(r.condition_df) ? 0 : sum(r.condition_df.n_repaired)
-        fields[k+=1] = has_epochs ? string(r.total_original) : ""
-        fields[k+=1] = has_epochs ? string(n_rep_ep) : ""
-        fields[k+=1] = has_epochs ? string(r.total_original - r.total_kept) : ""
-        fields[k+=1] = has_epochs ? string(r.total_kept) : ""
-        fields[k+=1] = r.total_original > 0 ? string(round(100.0 * r.total_kept / r.total_original; digits = 1)) : ""
-
-        cond_lookup = Dict{Int,Int}()
-        for (row_i, cid) in enumerate(r.condition_df.condition)
-            haskey(cond_lookup, cid) || (cond_lookup[cid] = row_i)
-        end
-        for (cid, _) in cond_cols
-            row_i = get(cond_lookup, cid, 0)
-            if row_i > 0
-                fields[k+=1] = string(r.condition_df.n_original[row_i])
-                fields[k+=1] = string(r.condition_df.n_kept[row_i])
-                fields[k+=1] = string(r.condition_df.pct_kept[row_i])
-            else
-                fields[k+=1] = ""
-                fields[k+=1] = ""
-                fields[k+=1] = ""
-            end
-        end
-
-        n_ch = _participant_n_channels(r)
-        n_ep_ch = length(r.epoch_channel_repairs)
-        n_ep_interps = isempty(r.epoch_channel_repairs) ? 0 : sum(values(r.epoch_channel_repairs))
-        fields[k+=1] = isnothing(n_ch) ? "" : string(n_ch)
-        fields[k+=1] = string(length(r.repaired_channels))
-        fields[k+=1] = string(length(r.skipped_channels))
-        fields[k+=1] = string(n_ep_ch)
-        fields[k+=1] = string(n_ep_interps)
-
-        ic_avail = _participant_ic_available(r)
-        has_ica = !isnothing(ic_avail)
-        fields[k+=1] = has_ica ? string(ic_avail) : ""
-        fields[k+=1] = has_ica ? string(r.ic_counts.total) : (r.ic_counts.total > 0 ? string(r.ic_counts.total) : "0")
-        fields[k+=1] = (has_ica && ic_avail > 0) ? string(round(100.0 * r.ic_counts.total / ic_avail; digits = 1)) : ""
-        fields[k+=1] = string(r.ic_counts.vEOG)
-        fields[k+=1] = string(r.ic_counts.hEOG)
-        fields[k+=1] = string(r.ic_counts.ECG)
-        fields[k+=1] = string(r.ic_counts.line_noise)
-        fields[k+=1] = string(r.ic_counts.channel_noise)
-        fields[k+=1] = string(r.ic_counts.manual)
-
-        ep_sorted = sort!(collect(r.epoch_channel_repairs); by = x -> (-x[2], string(x[1])))
-        top_n = min(5, length(ep_sorted))
-        top_ep_str = join(["$(ep_sorted[i][1]):$(ep_sorted[i][2])" for i = 1:top_n], "; ")
-        length(ep_sorted) > 5 && (top_ep_str *= " (+$(length(ep_sorted) - 5) more)")
-
-        fields[k+=1] = _csv_escape(join(r.repaired_channels, "; "))
-        fields[k+=1] = _csv_escape(join(r.skipped_channels, "; "))
-        fields[k+=1] = _csv_escape(top_ep_str)
-        fields[k+=1] = _csv_escape(join(r.flag_reasons, "; "))
-
-        println(io, join(fields, ","))
-    end
-    return String(take!(io))
+    return sprint(io -> CSV.write(io, DataFrame(cols; copycols = false)))
 end
 
 function _write_config_and_methods_section!(
@@ -2068,6 +1815,22 @@ function _write_config_and_methods_section!(
     )
 end
 
+_fig_box_html(
+    uri::String,
+    alt::String,
+    cap_html::String,
+) = "<div class=\"fig-box\"><img src=\"$uri\" alt=\"$(_html_escape(alt))\"><div class=\"cap\">$cap_html</div></div>"
+
+function _write_fig_pair_row!(io::IOBuffer, left, right)
+    (isnothing(left[1]) && isnothing(right[1])) && return
+    cls = (!isnothing(left[1]) && !isnothing(right[1])) ? "fig-row-top" : "fig-row-single"
+    write(io, "      <div class=\"$cls\">\n")
+    for (uri, alt, cap_html) in (left, right)
+        !isnothing(uri) && write(io, "        ", _fig_box_html(uri, alt, cap_html), "\n")
+    end
+    write(io, "      </div>\n")
+end
+
 function _build_pipeline_report_html(
     output_dir::String,
     title::String,
@@ -2082,12 +1845,12 @@ function _build_pipeline_report_html(
     n_subj = length(records)
     valid_pcts = [r.overall_kept_pct for r in records if !isnan(r.overall_kept_pct)]
     mean_kept = isempty(valid_pcts) ? NaN : round(mean(valid_pcts); digits = 1)
-    n_flagged = count(r -> r.is_flagged, records)
+    n_flagged = count(_is_flagged, records)
     mean_rep = round(mean(r -> length(r.repaired_channels), records); digits = 2)
     mean_ics = round(mean(r -> r.ic_counts.total, records); digits = 2)
     ver_str = string(pkgversion(@__MODULE__))
     ts_str = Dates.format(now(), "yyyy-mm-dd HH:MM:SS")
-    csv_uri = "data:text/csv;charset=utf-8;base64," * _base64_encode(codeunits(csv_text))
+    csv_uri = "data:text/csv;charset=utf-8;base64," * Base64.base64encode(csv_text)
     slugs = _unique_slugs(records)
 
     io = IOBuffer(; sizehint = 65536)
@@ -2164,8 +1927,9 @@ $_REPORT_CSS
 
     for (r_idx, rec) in enumerate(records)
         slug = slugs[r_idx]
-        row_cls = rec.is_flagged ? " class=\"flagged-row\"" : " class=\"ok-row\""
-        badge_html = if rec.is_flagged
+        flagged = _is_flagged(rec)
+        row_cls = flagged ? " class=\"flagged-row\"" : " class=\"ok-row\""
+        badge_html = if flagged
             has_zero = !isempty(rec.condition_df) && any(==(0), rec.condition_df.n_kept)
             bcls = (!isempty(rec.skipped_channels) || has_zero) ? "badge-bad" : "badge-warn"
             "<span class=\"badge $bcls\" title=\"$(_html_escape(join(rec.flag_reasons, "; ")))\">Review</span>"
@@ -2203,10 +1967,13 @@ $_REPORT_CSS
     if !isnothing(cohort_heatmap_uri)
         write(
             io,
-            """  <div class="fig-stack">
-    <div class="fig-box"><img src="$cohort_heatmap_uri" alt="Cohort sensor repair and interpolation heatmap"><div class="cap">Cohort-wide electrode repair &amp; epoch-interpolation hotspot maps (check recurring sensors for cap/pin wear or gel bridges).</div></div>
-  </div>
-""",
+            "  <div class=\"fig-stack\">\n    ",
+            _fig_box_html(
+                cohort_heatmap_uri,
+                "Cohort sensor repair and interpolation heatmap",
+                "Cohort-wide electrode repair &amp; epoch-interpolation hotspot maps (check recurring sensors for cap/pin wear or gel bridges).",
+            ),
+            "\n  </div>\n",
         )
     end
 
@@ -2230,48 +1997,34 @@ $_REPORT_CSS
         for rec in records
             !isnothing(rec.erps) && append!(all_erps, rec.erps)
         end
-        ga_erps = if !isempty(all_erps)
-            try
-                length(records) > 1 ? grand_average(all_erps) : all_erps
-            catch e
-                e isa InterruptException && rethrow()
-                ErpData[]
-            end
-        else
-            ErpData[]
-        end
+        ga_erps = isempty(all_erps) ? ErpData[] : _try_report(() -> (length(records) > 1 ? grand_average(all_erps) : all_erps), ErpData[])
 
-        ga_erp_uri =
-            !isempty(ga_erps) ? _render_erp_gfp_uri(ga_erps; plot_title = "Grand-Average ERPs & GFP", fig_size = (1040, 420)) : nothing
-        ga_topo_uri = !isempty(ga_erps) ? _render_grand_topo_uri(ga_erps) : nothing
-        ga_raw_vs_clean_uri = _render_cohort_raw_vs_clean_uri(records)
-        ga_psd_uri = _render_cohort_psd_uri(records)
-
-        if !isnothing(ga_erp_uri) || !isnothing(ga_topo_uri) || !isnothing(ga_raw_vs_clean_uri) || !isnothing(ga_psd_uri)
+        cohort_figs = (
+            (
+                !isempty(ga_erps) ? _render_erp_gfp_uri(ga_erps; plot_title = "Grand-Average ERPs & GFP", fig_size = (1040, 420)) : nothing,
+                "Grand-average ERPs and GFP",
+                "Baseline-corrected grand-average butterfly ERPs and Global Field Power across conditions.",
+            ),
+            (
+                !isempty(ga_erps) ? _render_grand_topo_uri(ga_erps) : nothing,
+                "Grand-average scalp topographies",
+                "Time-resolved grand-average post-stimulus scalp topographies (shared symmetric μV scale).",
+            ),
+            (
+                _render_cohort_raw_vs_clean_uri(records),
+                "Cohort pre- vs post-cleaning ERPs and GFP",
+                "Pre- vs. post-preprocessing cohort comparison (±1 SEM) showing frontal ocular artifact suppression and cleaned GFP.",
+            ),
+            (
+                _render_cohort_psd_uri(records),
+                "Cohort cleaned power spectral density",
+                "Frequency-domain QC: 1/f spectral slope, posterior ~10 Hz alpha peak, and 50 Hz line-noise check across participants.",
+            ),
+        )
+        if any(f -> !isnothing(f[1]), cohort_figs)
             write(io, "<section class=\"panel\"><h2>Cohort Grand-Average &amp; Spectral Preview</h2><div class=\"fig-stack\">")
-            if !isnothing(ga_erp_uri)
-                write(
-                    io,
-                    "<div class=\"fig-box\"><img src=\"$ga_erp_uri\" alt=\"Grand-average ERPs and GFP\"><div class=\"cap\">Baseline-corrected grand-average butterfly ERPs and Global Field Power across conditions.</div></div>",
-                )
-            end
-            if !isnothing(ga_topo_uri)
-                write(
-                    io,
-                    "<div class=\"fig-box\"><img src=\"$ga_topo_uri\" alt=\"Grand-average scalp topographies\"><div class=\"cap\">Time-resolved grand-average post-stimulus scalp topographies (shared symmetric μV scale).</div></div>",
-                )
-            end
-            if !isnothing(ga_raw_vs_clean_uri)
-                write(
-                    io,
-                    "<div class=\"fig-box\"><img src=\"$ga_raw_vs_clean_uri\" alt=\"Cohort pre- vs post-cleaning ERPs and GFP\"><div class=\"cap\">Pre- vs. post-preprocessing cohort comparison (±1 SEM) showing frontal ocular artifact suppression and cleaned GFP.</div></div>",
-                )
-            end
-            if !isnothing(ga_psd_uri)
-                write(
-                    io,
-                    "<div class=\"fig-box\"><img src=\"$ga_psd_uri\" alt=\"Cohort cleaned power spectral density\"><div class=\"cap\">Frequency-domain QC: 1/f spectral slope, posterior ~10 Hz alpha peak, and 50 Hz line-noise check across participants.</div></div>",
-                )
+            for (uri, alt, cap_html) in cohort_figs
+                !isnothing(uri) && write(io, _fig_box_html(uri, alt, cap_html))
             end
             write(io, "</div></section>\n")
         end
@@ -2293,9 +2046,10 @@ $_REPORT_CSS
     )
     for (r_idx, rec) in enumerate(records)
         slug = slugs[r_idx]
-        open_attr = rec.is_flagged ? " open" : ""
-        card_cls = rec.is_flagged ? "subj-card flagged" : "subj-card"
-        badge_html = rec.is_flagged ? "<span class=\"badge badge-warn\">Review</span>" : "<span class=\"badge badge-ok\">OK</span>"
+        flagged = _is_flagged(rec)
+        open_attr = flagged ? " open" : ""
+        card_cls = flagged ? "subj-card flagged" : "subj-card"
+        badge_html = flagged ? "<span class=\"badge badge-warn\">Review</span>" : "<span class=\"badge badge-ok\">OK</span>"
         trials_pill = rec.total_original > 0 ? "<span>Epochs: <strong>$(rec.total_kept)/$(rec.total_original)</strong></span>" : ""
         pct_pill = isnan(rec.overall_kept_pct) ? "" : "<span>Kept: <strong>$(rec.overall_kept_pct)%</strong></span>"
 
@@ -2316,7 +2070,7 @@ $_REPORT_CSS
 """,
         )
 
-        if rec.is_flagged
+        if flagged
             write(io, "    <p><strong>Review notes:</strong> $(_html_escape(join(rec.flag_reasons, "; ")))</p>\n")
         end
 
@@ -2365,44 +2119,30 @@ $_REPORT_CSS
 
             if !isnothing(sensor_uri) || !isnothing(erp_uri) || !isnothing(psd_uri) || !isnothing(raw_clean_uri) || !isnothing(ica_uri)
                 write(io, "    <div class=\"fig-stack\">\n")
-                if !isnothing(sensor_uri) || !isnothing(erp_uri)
-                    top_cls = (!isnothing(sensor_uri) && !isnothing(erp_uri)) ? "fig-row-top" : "fig-row-single"
-                    write(io, "      <div class=\"$top_cls\">\n")
-                    if !isnothing(sensor_uri)
-                        write(
-                            io,
-                            "        <div class=\"fig-box\"><img src=\"$sensor_uri\" alt=\"Sensor status map for $(_html_escape(rec.stem))\"><div class=\"cap\">$(_html_escape(_sensor_status_caption(rec)))</div></div>\n",
-                        )
-                    end
-                    if !isnothing(erp_uri)
-                        write(
-                            io,
-                            "        <div class=\"fig-box\"><img src=\"$erp_uri\" alt=\"Condition ERPs and GFP for $(_html_escape(rec.stem))\"><div class=\"cap\">Baseline-corrected condition ERP traces and Global Field Power.</div></div>\n",
-                        )
-                    end
-                    write(io, "      </div>\n")
-                end
-                if !isnothing(psd_uri) || !isnothing(raw_clean_uri)
-                    mid_cls = (!isnothing(psd_uri) && !isnothing(raw_clean_uri)) ? "fig-row-top" : "fig-row-single"
-                    write(io, "      <div class=\"$mid_cls\">\n")
-                    if !isnothing(psd_uri)
-                        write(
-                            io,
-                            "        <div class=\"fig-box\"><img src=\"$psd_uri\" alt=\"Power spectral density for $(_html_escape(rec.stem))\"><div class=\"cap\">Spectral density vs. cohort mean (dotted guides at 10 Hz alpha &amp; 50 Hz line).</div></div>\n",
-                        )
-                    end
-                    if !isnothing(raw_clean_uri)
-                        write(
-                            io,
-                            "        <div class=\"fig-box\"><img src=\"$raw_clean_uri\" alt=\"Pre- vs post-cleaning overlay for $(_html_escape(rec.stem))\"><div class=\"cap\">Pre-ICA raw vs. cleaned frontal ROI and mean GFP.</div></div>\n",
-                        )
-                    end
-                    write(io, "      </div>\n")
-                end
+                _write_fig_pair_row!(
+                    io,
+                    (sensor_uri, "Sensor status map for $(rec.stem)", _html_escape(_sensor_status_caption(rec))),
+                    (erp_uri, "Condition ERPs and GFP for $(rec.stem)", "Baseline-corrected condition ERP traces and Global Field Power."),
+                )
+                _write_fig_pair_row!(
+                    io,
+                    (
+                        psd_uri,
+                        "Power spectral density for $(rec.stem)",
+                        "Spectral density vs. cohort mean (dotted guides at 10 Hz alpha &amp; 50 Hz line).",
+                    ),
+                    (raw_clean_uri, "Pre- vs post-cleaning overlay for $(rec.stem)", "Pre-ICA raw vs. cleaned frontal ROI and mean GFP."),
+                )
                 if !isnothing(ica_uri)
                     write(
                         io,
-                        "      <div class=\"fig-box\"><img src=\"$ica_uri\" alt=\"Removed ICA topographies for $(_html_escape(rec.stem))\"><div class=\"cap\">Subtracted ICA artifact components ($(_html_escape(_format_ic_breakdown(rec.ic_counts)))).</div></div>\n",
+                        "      ",
+                        _fig_box_html(
+                            ica_uri,
+                            "Removed ICA topographies for $(rec.stem)",
+                            "Subtracted ICA artifact components ($(_html_escape(_format_ic_breakdown(rec.ic_counts)))).",
+                        ),
+                        "\n",
                     )
                 end
                 write(io, "    </div>\n")

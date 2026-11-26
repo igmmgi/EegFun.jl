@@ -8,10 +8,6 @@ const _VALID_TF_BASELINE_METHODS = (:absolute, :relative, :relchange, :normchang
 
 const _TFDataObject = Union{TimeFreqData,TimeFreqEpochData}
 
-const _TFDataOrVec = Union{TimeFreqData,TimeFreqEpochData,AbstractVector{<:TimeFreqData},AbstractVector{<:TimeFreqEpochData}}
-
-const _TFAltInterval = Union{AbstractVector{<:Real},TimeSelection}
-
 ######################################
 ########### User Functions ###########
 ######################################
@@ -36,30 +32,11 @@ tf_corr = tf_baseline(tf_data, (-0.3, 0.0); method = :db)
 tf_baseline("tf_epochs_wavelet", (-0.3, 0.0); method = :db)
 ```
 """
-tf_baseline(tf_data::_TFDataObject, baseline_interval::Tuple{Real,Real}; method::Union{Symbol,Nothing} = nothing) =
+tf_baseline(tf_data::_TFDataObject, baseline_interval::Interval = times(); method::Union{Symbol,Nothing} = nothing) =
     tf_baseline!(copy(tf_data), baseline_interval; method = method)
 
-tf_baseline(tf_data::AbstractVector{<:_TFDataObject}, baseline_interval::Tuple{Real,Real}; method::Union{Symbol,Nothing} = nothing) =
+tf_baseline(tf_data::AbstractVector{<:_TFDataObject}, baseline_interval::Interval = times(); method::Union{Symbol,Nothing} = nothing) =
     [tf_baseline(tf, baseline_interval; method = method) for tf in tf_data]
-
-tf_baseline(tf_data::_TFDataObject, ::Nothing; method::Union{Symbol,Nothing} = nothing) = copy(tf_data)
-
-tf_baseline(tf_data::AbstractVector{<:_TFDataObject}, ::Nothing; method::Union{Symbol,Nothing} = nothing) = [copy(tf) for tf in tf_data]
-
-tf_baseline(tf_data::_TFDataOrVec, baseline_interval::_TFAltInterval; method::Union{Symbol,Nothing} = nothing) =
-    tf_baseline(tf_data, _to_tf_interval(baseline_interval); method = method)
-
-tf_baseline(tf_data::_TFDataObject, sel::Function; method::Union{Symbol,Nothing} = nothing) =
-    tf_baseline(tf_data, _func_tf_interval(tf_data, sel); method = method)
-
-tf_baseline(tf_data::AbstractVector{<:_TFDataObject}, sel::Function; method::Union{Symbol,Nothing} = nothing) =
-    [tf_baseline(tf, _func_tf_interval(tf, sel); method = method) for tf in tf_data]
-
-tf_baseline(tf_data::_TFDataObject, ::AllSelection = times(); method::Union{Symbol,Nothing} = nothing) =
-    tf_baseline(tf_data, _full_tf_interval(tf_data); method = method)
-
-tf_baseline(tf_data::AbstractVector{<:_TFDataObject}, ::AllSelection = times(); method::Union{Symbol,Nothing} = nothing) =
-    [tf_baseline(tf, _full_tf_interval(tf); method = method) for tf in tf_data]
 
 """
     tf_baseline!(tf_data::TimeFreqData, baseline_interval = times(); method = nothing)
@@ -67,7 +44,9 @@ tf_baseline(tf_data::AbstractVector{<:_TFDataObject}, ::AllSelection = times(); 
 
 In-place mutating version of [`tf_baseline`](@ref).
 """
-function tf_baseline!(tf_data::TimeFreqData, baseline_interval::Tuple{Real,Real}; method::Union{Symbol,Nothing} = nothing)
+function tf_baseline!(tf_data::TimeFreqData, baseline_interval::Interval = times(); method::Union{Symbol,Nothing} = nothing)
+    win = _resolve_tf_baseline_window(tf_data, baseline_interval)
+    isnothing(win) && return tf_data
     _check_tf_not_baselined(tf_data.baseline)
     eff_method = isnothing(method) ? (_is_itc(tf_data) ? :absolute : :db) : method
     _validate_tf_baseline_method(eff_method)
@@ -75,29 +54,31 @@ function tf_baseline!(tf_data::TimeFreqData, baseline_interval::Tuple{Real,Real}
         @minimal_warning "Baseline method :$eff_method is a power ratio and is unusual for ITC values; consider method = :absolute (subtraction)."
     end
     ch_labels = channel_labels(tf_data)
-    @info "Applying $(eff_method) baseline correction ($(baseline_interval[1])s to $(baseline_interval[2])s)"
-    _tf_baseline_df!(tf_data.data_power, ch_labels, baseline_interval, eff_method; parallel_channels = true)
-    tf_data.baseline = BaselineInfo(method = eff_method, window = (Float64(baseline_interval[1]), Float64(baseline_interval[2])))
+    @info "Applying $(eff_method) baseline correction ($(win[1])s to $(win[2])s)"
+    _tf_baseline_df!(tf_data.data_power, ch_labels, win, eff_method; parallel_channels = true)
+    tf_data.baseline = BaselineInfo(method = eff_method, window = win)
     return tf_data
 end
 
-function tf_baseline!(tf_data::TimeFreqEpochData, baseline_interval::Tuple{Real,Real}; method::Union{Symbol,Nothing} = nothing)
+function tf_baseline!(tf_data::TimeFreqEpochData, baseline_interval::Interval = times(); method::Union{Symbol,Nothing} = nothing)
+    win = _resolve_tf_baseline_window(tf_data, baseline_interval)
+    isnothing(win) && return tf_data
     _check_tf_not_baselined(tf_data.baseline)
     eff_method = isnothing(method) ? (_is_itc(tf_data) ? :absolute : :db) : method
     _validate_tf_baseline_method(eff_method)
     isempty(tf_data.data_power) && @minimal_error("Cannot baseline-correct empty TimeFreqEpochData")
 
     df1 = tf_data.data_power[1]
-    times = unique(df1.time)
+    times_vec = unique(df1.time)
     freqs_unique = unique(df1.freq)
-    n_freqs, n_times = length(freqs_unique), length(times)
-    b1, b2 = _validate_and_resolve_tf_baseline_times(times, baseline_interval)
+    n_freqs, n_times = length(freqs_unique), length(times_vec)
+    b1, b2 = _validate_and_resolve_tf_baseline_times(times_vec, win)
     base_range = b1:b2
     n_grid = n_freqs * n_times
     regular_ref = (nrow(df1) == n_grid) && (n_grid > 0) && (df1.time[1] == df1.time[min(n_freqs, end)])
 
     ch_labels = channel_labels(tf_data)
-    @info "Applying $(eff_method) baseline correction to $(length(tf_data.data_power)) TF epochs ($(baseline_interval[1])s to $(baseline_interval[2])s)"
+    @info "Applying $(eff_method) baseline correction to $(length(tf_data.data_power)) TF epochs ($(win[1])s to $(win[2])s)"
 
     _foreach_chunk(length(tf_data.data_power)) do ep_range
         bm_buf = Vector{Float64}(undef, n_freqs)
@@ -105,55 +86,21 @@ function tf_baseline!(tf_data::TimeFreqEpochData, baseline_interval::Tuple{Real,
         work_buf = Vector{Float64}(undef, n_freqs)
         for ep_idx in ep_range
             df = tf_data.data_power[ep_idx]
-            if regular_ref && nrow(df) == n_grid && df.time[1] == times[1] && df.time[end] == times[end]
-                cols = _ensure_f64_channel_cols!(df, ch_labels)
-                for col in cols
+            if regular_ref && nrow(df) == n_grid && df.time[1] == times_vec[1] && df.time[end] == times_vec[end]
+                for col in _ensure_f64_channel_cols!(df, ch_labels)
                     _tf_baseline_grid!(reshape(col, n_freqs, n_times), base_range, eff_method, bm_buf, cnt_buf, work_buf)
                 end
             else
-                _tf_baseline_df!(df, ch_labels, baseline_interval, eff_method; parallel_channels = false)
+                _tf_baseline_df!(df, ch_labels, win, eff_method; parallel_channels = false)
             end
         end
     end
-    tf_data.baseline = BaselineInfo(method = eff_method, window = (Float64(baseline_interval[1]), Float64(baseline_interval[2])))
+    tf_data.baseline = BaselineInfo(method = eff_method, window = win)
     return tf_data
 end
 
-function tf_baseline!(
-    tf_data::AbstractVector{<:_TFDataObject},
-    baseline_interval::Tuple{Real,Real};
-    method::Union{Symbol,Nothing} = nothing,
-)
-    for tf in tf_data
-        tf_baseline!(tf, baseline_interval; method = method)
-    end
-    return tf_data
-end
-
-tf_baseline!(tf_data::_TFDataOrVec, ::Nothing; method::Union{Symbol,Nothing} = nothing) = tf_data
-
-tf_baseline!(tf_data::_TFDataOrVec, baseline_interval::_TFAltInterval; method::Union{Symbol,Nothing} = nothing) =
-    tf_baseline!(tf_data, _to_tf_interval(baseline_interval); method = method)
-
-tf_baseline!(tf_data::_TFDataObject, sel::Function; method::Union{Symbol,Nothing} = nothing) =
-    tf_baseline!(tf_data, _func_tf_interval(tf_data, sel); method = method)
-
-function tf_baseline!(tf_data::AbstractVector{<:_TFDataObject}, sel::Function; method::Union{Symbol,Nothing} = nothing)
-    for tf in tf_data
-        tf_baseline!(tf, _func_tf_interval(tf, sel); method = method)
-    end
-    return tf_data
-end
-
-tf_baseline!(tf_data::_TFDataObject, ::AllSelection = times(); method::Union{Symbol,Nothing} = nothing) =
-    tf_baseline!(tf_data, _full_tf_interval(tf_data); method = method)
-
-function tf_baseline!(tf_data::AbstractVector{<:_TFDataObject}, ::AllSelection = times(); method::Union{Symbol,Nothing} = nothing)
-    for tf in tf_data
-        tf_baseline!(tf, _full_tf_interval(tf); method = method)
-    end
-    return tf_data
-end
+tf_baseline!(tf_data::AbstractVector{<:_TFDataObject}, baseline_interval::Interval = times(); method::Union{Symbol,Nothing} = nothing) =
+    (foreach(tf -> tf_baseline!(tf, baseline_interval; method = method), tf_data); tf_data)
 
 function tf_baseline(
     file_pattern::String,
@@ -165,23 +112,21 @@ function tf_baseline(
     condition_selection = conditions(),
 )
     _with_batch_logging("TF baseline", "tf_baseline.log", input_dir, output_dir) do ctx
+        _ = output_dir
         @log_call "tf_baseline"
-        out_dir = _prepare_output_dir!(ctx, joinpath(input_dir, "tf_baseline_$(_clean_pattern(file_pattern))"))
         @info "baseline: $baseline_interval, method: $(something(method, :auto))"
-
-        process_fn = (input_path, output_path) -> begin
-            filename = basename(input_path)
-            data = read_data(input_path)
-            if isnothing(data) || !(data isa Vector{<:Union{TimeFreqData,TimeFreqEpochData}})
-                return BatchResult(false, filename, "Invalid data type")
-            end
-            data = _condition_select(data, condition_selection)
-            tf_baseline!(data, baseline_interval; method = method)
-            jldsave(output_path; data = data, format_version = EEGFUN_FORMAT_VERSION)
-            return BatchResult(true, filename, "Baseline corrected")
-        end
-
-        batch_process(process_fn, file_pattern, input_dir, out_dir, participant_selection, "TF baseline")
+        default_dir = joinpath(input_dir, "tf_baseline_$(_clean_pattern(file_pattern))")
+        return _batch_jld2_files(
+            data -> (tf_baseline!(data, baseline_interval; method = method), "Baseline corrected"),
+            Vector{<:_TFDataObject},
+            ctx,
+            default_dir,
+            file_pattern,
+            input_dir,
+            participant_selection,
+            "TF baseline";
+            condition_selection = condition_selection,
+        )
     end
 end
 
@@ -207,9 +152,8 @@ baseline!(tf_data::AbstractVector{<:_TFDataObject}, baseline_interval::Interval 
 ######################################
 
 function _validate_tf_baseline_method(method::Symbol)
-    if method ∉ _VALID_TF_BASELINE_METHODS
+    method ∈ _VALID_TF_BASELINE_METHODS ||
         @minimal_error("Unknown baseline method: $method. Use :absolute, :relative, :relchange, :normchange, :db, :zscore, or :percent")
-    end
     return nothing
 end
 
@@ -221,6 +165,31 @@ function _check_tf_not_baselined(baseline_info::Union{BaselineInfo,Nothing})
         )
     end
     return nothing
+end
+
+function _resolve_tf_baseline_window(tf_data::_TFDataObject, interval::Interval)::Union{Nothing,Tuple{Float64,Float64}}
+    isnothing(interval) && return nothing
+    interval isa Tuple{Real,Real} && return (Float64(interval[1]), Float64(interval[2]))
+    interval isa TimeSelection && return (interval.start, interval.stop)
+    if interval isa AbstractVector{<:Real}
+        length(interval) == 2 || @minimal_error("Baseline interval vector must have 2 elements [start, stop], got: $interval")
+        return (Float64(interval[1]), Float64(interval[2]))
+    end
+    if tf_data isa TimeFreqEpochData && isempty(tf_data.data_power)
+        @minimal_error(
+            interval isa AllSelection ? "TimeFreqEpochData contains no time points" : "Cannot baseline-correct empty TimeFreqEpochData"
+        )
+    end
+    df = tf_data isa TimeFreqData ? tf_data.data_power : tf_data.data_power[1]
+    if interval isa AllSelection
+        isempty(df.time) && @minimal_error(
+            tf_data isa TimeFreqData ? "Time-frequency data contains no time points" : "TimeFreqEpochData contains no time points"
+        )
+        return Float64.(extrema(df.time))
+    end
+    idxs = findall(interval(df))
+    isempty(idxs) && @minimal_error("Baseline window selection returned no samples!")
+    return Float64.(extrema(@view df.time[idxs]))
 end
 
 function _validate_and_resolve_tf_baseline_times(times::Vector{Float64}, baseline_interval::Tuple{Real,Real})
@@ -332,42 +301,13 @@ function _tf_baseline_grid!(
     work_buf::Vector{Float64} = Vector{Float64}(undef, size(mat, 1)),
 )
     n_freqs, n_times = size(mat)
-    if method === :db
-        @inbounds for fi = 1:n_freqs
-            s = 0.0
-            cnt = 0
-            for ti in base_range
-                v = mat[fi, ti]
-                if !isnan(v)
-                    s += v
-                    cnt += 1
-                end
-            end
-            bm = cnt > 0 ? s / cnt : NaN
-            if isnan(bm) || bm <= 0.0
-                for ti = 1:n_times
-                    mat[fi, ti] = NaN
-                end
-            else
-                inv_bm = 1.0 / bm
-                for ti = 1:n_times
-                    p = mat[fi, ti]
-                    mat[fi, ti] = (isnan(p) || p <= 0.0) ? NaN : 10.0 * log10(p * inv_bm)
-                end
-            end
-        end
-        return mat
-    end
-
     fill!(bm_buf, 0.0)
     fill!(cnt_buf, 0)
-    @inbounds for ti in base_range
-        for fi = 1:n_freqs
-            v = mat[fi, ti]
-            if !isnan(v)
-                bm_buf[fi] += v
-                cnt_buf[fi] += 1
-            end
+    @inbounds for ti in base_range, fi = 1:n_freqs
+        v = mat[fi, ti]
+        if !isnan(v)
+            bm_buf[fi] += v
+            cnt_buf[fi] += 1
         end
     end
     @inbounds for fi = 1:n_freqs
@@ -375,7 +315,17 @@ function _tf_baseline_grid!(
         bm_buf[fi] = c > 0 ? (bm_buf[fi] / c) : NaN
     end
 
-    if method === :absolute
+    if method === :db
+        @inbounds for fi = 1:n_freqs
+            bm = bm_buf[fi]
+            work_buf[fi] = (isnan(bm) || bm <= 0.0) ? NaN : (1.0 / bm)
+        end
+        @inbounds for ti = 1:n_times, fi = 1:n_freqs
+            inv_bm = work_buf[fi]
+            p = mat[fi, ti]
+            mat[fi, ti] = (isnan(inv_bm) || isnan(p) || p <= 0.0) ? NaN : 10.0 * log10(p * inv_bm)
+        end
+    elseif method === :absolute
         @inbounds for ti = 1:n_times
             @simd for fi = 1:n_freqs
                 mat[fi, ti] -= bm_buf[fi]
@@ -403,23 +353,19 @@ function _tf_baseline_grid!(
             end
         end
     elseif method === :normchange
-        @inbounds for ti = 1:n_times
-            for fi = 1:n_freqs
-                bm = bm_buf[fi]
-                p = mat[fi, ti]
-                denom = p + bm
-                mat[fi, ti] = denom == 0.0 ? NaN : (p - bm) / denom
-            end
+        @inbounds for ti = 1:n_times, fi = 1:n_freqs
+            bm = bm_buf[fi]
+            p = mat[fi, ti]
+            denom = p + bm
+            mat[fi, ti] = denom == 0.0 ? NaN : (p - bm) / denom
         end
     elseif method === :zscore
         fill!(work_buf, 0.0)
-        @inbounds for ti in base_range
-            for fi = 1:n_freqs
-                v = mat[fi, ti]
-                if !isnan(v)
-                    d = v - bm_buf[fi]
-                    work_buf[fi] += d * d
-                end
+        @inbounds for ti in base_range, fi = 1:n_freqs
+            v = mat[fi, ti]
+            if !isnan(v)
+                d = v - bm_buf[fi]
+                work_buf[fi] += d * d
             end
         end
         @inbounds for fi = 1:n_freqs
@@ -434,37 +380,4 @@ function _tf_baseline_grid!(
         end
     end
     return mat
-end
-
-_to_tf_interval(interval::Tuple{Real,Real}) = (Float64(interval[1]), Float64(interval[2]))
-
-_to_tf_interval(interval::TimeSelection) = (interval.start, interval.stop)
-
-function _to_tf_interval(interval::AbstractVector{<:Real})
-    length(interval) == 2 || @minimal_error("Baseline interval vector must have 2 elements [start, stop], got: $interval")
-    return (Float64(interval[1]), Float64(interval[2]))
-end
-
-function _full_tf_interval(tf_data::TimeFreqData)
-    isempty(tf_data.data_power.time) && @minimal_error("Time-frequency data contains no time points")
-    return extrema(tf_data.data_power.time)
-end
-
-function _full_tf_interval(tf_data::TimeFreqEpochData)
-    (isempty(tf_data.data_power) || isempty(tf_data.data_power[1].time)) && @minimal_error("TimeFreqEpochData contains no time points")
-    return extrema(tf_data.data_power[1].time)
-end
-
-function _func_tf_interval(tf_data::TimeFreqData, sel::Function)
-    idxs = findall(sel(tf_data.data_power))
-    isempty(idxs) && @minimal_error("Baseline window selection returned no samples!")
-    return Float64.(extrema(@view tf_data.data_power.time[idxs]))
-end
-
-function _func_tf_interval(tf_data::TimeFreqEpochData, sel::Function)
-    isempty(tf_data.data_power) && @minimal_error("Cannot baseline-correct empty TimeFreqEpochData")
-    df1 = tf_data.data_power[1]
-    idxs = findall(sel(df1))
-    isempty(idxs) && @minimal_error("Baseline window selection returned no samples!")
-    return Float64.(extrema(@view df1.time[idxs]))
 end

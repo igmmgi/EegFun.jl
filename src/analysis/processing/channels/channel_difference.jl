@@ -114,47 +114,10 @@ end
 ######################################
 
 function _channel_diff_col(df::DataFrame, idx1::Vector{Int}, idx2::Vector{Int})::Vector{Float64}
-    n = nrow(df)
-    out = Vector{Float64}(undef, n)
-    inv1 = 1.0 / length(idx1)
-    c1 = df[!, idx1[1]]
-    if c1 isa Vector{Float64}
-        v1 = c1::Vector{Float64}
-        @inbounds @simd for i = 1:n
-            out[i] = v1[i] * inv1
-        end
-    else
-        @inbounds @simd for i = 1:n
-            out[i] = Float64(c1[i]) * inv1
-        end
-    end
-    for k = 2:length(idx1)
-        ck = df[!, idx1[k]]
-        if ck isa Vector{Float64}
-            vk = ck::Vector{Float64}
-            @inbounds @simd for i = 1:n
-                out[i] = muladd(vk[i], inv1, out[i])
-            end
-        else
-            @inbounds @simd for i = 1:n
-                out[i] = muladd(Float64(ck[i]), inv1, out[i])
-            end
-        end
-    end
-
-    inv2 = 1.0 / length(idx2)
-    for k in eachindex(idx2)
-        ck = df[!, idx2[k]]
-        if ck isa Vector{Float64}
-            vk = ck::Vector{Float64}
-            @inbounds @simd for i = 1:n
-                out[i] = muladd(-vk[i], inv2, out[i])
-            end
-        else
-            @inbounds @simd for i = 1:n
-                out[i] = muladd(-Float64(ck[i]), inv2, out[i])
-            end
-        end
+    out = _fill_colmeans_idx!(Vector{Float64}(undef, nrow(df)), df, idx1)
+    neg_inv2 = -1.0 / length(idx2)
+    for idx in idx2
+        _add_scaled_col!(out, df[!, idx], neg_inv2)
     end
     return out
 end

@@ -41,22 +41,8 @@ function subset(
 )::T where {T<:SingleDataFrameEeg}
     combined_sel = _combine_interval_sample(interval_selection, sample_selection)
     selected_channels, selected_samples, layout_subset = _subset_common(dat, channel_selection, combined_sel, include_extra)
-    dat_subset = _subset_dataframe(dat.data, selected_channels, selected_samples)
-    return _create_subset(dat, dat_subset, layout_subset)
-end
-
-function subset(
-    dat::TimeFreqData;
-    channel_selection = channels(),
-    sample_selection = samples(),
-    interval_selection::Interval = times(),
-    include_extra::Bool = false,
-)::TimeFreqData
-    combined_sel = _combine_interval_sample(interval_selection, sample_selection)
-    selected_channels, selected_samples, layout_subset = _subset_common(dat, channel_selection, combined_sel, include_extra)
-    power_subset = _subset_dataframe(dat.data_power, selected_channels, selected_samples)
-    phase_subset = _subset_dataframe(dat.data_phase, selected_channels, selected_samples)
-    return _create_subset(dat, power_subset, phase_subset, layout_subset)
+    frames_sub = map(df -> _subset_dataframe(df, selected_channels, selected_samples), _data_frames(dat))
+    return _create_subset(dat, frames_sub..., layout_subset)
 end
 
 function subset(
@@ -70,24 +56,8 @@ function subset(
     combined_sel = _combine_interval_sample(interval_selection, sample_selection)
     selected_epochs, selected_channels, selected_samples, layout_subset =
         _subset_common(dat, epoch_selection, channel_selection, combined_sel, include_extra)
-    dat_subset = _subset_dataframes(dat.data, selected_epochs, selected_channels, selected_samples)
-    return _create_subset(dat, dat_subset, layout_subset)
-end
-
-function subset(
-    dat::TimeFreqEpochData;
-    channel_selection = channels(),
-    sample_selection = samples(),
-    interval_selection::Interval = times(),
-    epoch_selection = epochs(),
-    include_extra::Bool = false,
-)::TimeFreqEpochData
-    combined_sel = _combine_interval_sample(interval_selection, sample_selection)
-    selected_epochs, selected_channels, selected_samples, layout_subset =
-        _subset_common(dat, epoch_selection, channel_selection, combined_sel, include_extra)
-    power_subset = _subset_dataframes(dat.data_power, selected_epochs, selected_channels, selected_samples)
-    phase_subset = _subset_dataframes(dat.data_phase, selected_epochs, selected_channels, selected_samples)
-    return _create_subset(dat, power_subset, phase_subset, layout_subset)
+    frames_sub = map(dfs -> _subset_dataframes(dfs, selected_epochs, selected_channels, selected_samples), _data_frames(dat))
+    return _create_subset(dat, frames_sub..., layout_subset)
 end
 
 function subset(
@@ -155,8 +125,6 @@ channels(channel_number::Integer) = channels([Int(channel_number)])
 
 channels(channel_numbers::AbstractVector{<:Integer}) = _ChannelNumbersSelector(collect(Int, channel_numbers))
 
-channels(channel_numbers::AbstractRange{<:Integer}) = _ChannelNumbersSelector(collect(Int, channel_numbers))
-
 channels(channel_ranges::AbstractVector{<:AbstractRange{<:Integer}}) = _ChannelNumbersSelector(collect(Int, union(channel_ranges...)))
 
 channels(rx::Regex) = x -> Bool[occursin(rx, string(ch)) for ch in x]
@@ -187,8 +155,6 @@ components(component_numbers::AbstractVector{<:Integer}) =
     let nums = collect(Int, component_numbers)
         x -> Bool[i in nums for i = 1:length(x)]
     end
-
-components(component_numbers::AbstractRange{<:Integer}) = components(collect(Int, component_numbers))
 
 components(component_number::Integer) = components([Int(component_number)])
 
@@ -284,8 +250,6 @@ epochs() = x -> fill(true, length(x))
 
 epochs(epoch_numbers::AbstractVector{<:Integer}) = _EpochNumbersSelector(collect(Int, epoch_numbers))
 
-epochs(epoch_numbers::AbstractRange{<:Integer}) = epochs(collect(Int, epoch_numbers))
-
 epochs(epoch_number::Integer) = epochs([Int(epoch_number)])
 
 epochs(epoch_ranges::AbstractVector{<:AbstractRange{<:Integer}}) = epochs(collect(Int, union(epoch_ranges...)))
@@ -315,8 +279,6 @@ participants(participant_ids::AbstractVector{<:Integer}) =
         x -> Bool[id in ids for id in x]
     end
 
-participants(participant_ids::AbstractRange{<:Integer}) = participants(collect(Int, participant_ids))
-
 participants(participant_id::Integer) = participants([Int(participant_id)])
 
 participants(participant_ranges::AbstractVector{<:AbstractRange{<:Integer}}) = participants(collect(Int, union(participant_ranges...)))
@@ -345,8 +307,6 @@ conditions(condition_indices::AbstractVector{<:Integer}) =
     let idxs = collect(Int, condition_indices)
         x -> _match_condition_indices(x, idxs)
     end
-
-conditions(condition_indices::AbstractRange{<:Integer}) = conditions(collect(Int, condition_indices))
 
 conditions(condition_index::Integer) = conditions([Int(condition_index)])
 
@@ -421,27 +381,9 @@ get_selected_components(ica_result::InfoIca, ::Union{Nothing,Colon}) = collect(1
 
 Resolve `sample_selection` into 1-based row indices.
 """
-get_selected_samples(dat::SingleDataFrameEeg, ::Union{Nothing,AllSelection,Colon,_AllSamples}) = collect(1:nrow(dat.data))
-
-get_selected_samples(dat::SingleDataFrameEeg, s::_SampleIndicesSelector) = _resolve_sample_indices(nrow(dat.data), s.indices)
-
-function get_selected_samples(dat::SingleDataFrameEeg, sample_selection::Function)
-    sample_selection === Colon() && return collect(1:nrow(dat.data))
-    res = sample_selection(dat.data)
-    return res isa AbstractVector{Bool} ? findall(res) : res
-end
-
-get_selected_samples(dat::MultiDataFrameEeg, ::Union{Nothing,AllSelection,Colon,_AllSamples}) =
-    isempty(dat.data) ? Int[] : collect(1:nrow(dat.data[1]))
-
-get_selected_samples(dat::MultiDataFrameEeg, s::_SampleIndicesSelector) =
-    isempty(dat.data) ? Int[] : _resolve_sample_indices(nrow(dat.data[1]), s.indices)
-
-function get_selected_samples(dat::MultiDataFrameEeg, sample_selection::Function)
-    isempty(dat.data) && return Int[]
-    sample_selection === Colon() && return collect(1:nrow(dat.data[1]))
-    res = sample_selection(dat.data[1])
-    return res isa AbstractVector{Bool} ? findall(res) : res
+function get_selected_samples(dat::EegData, sample_selection)
+    df = _first_df(dat)
+    return isnothing(df) ? Int[] : get_selected_samples(df, sample_selection)
 end
 
 get_selected_samples(dat::DataFrame, ::Union{Nothing,AllSelection,Colon,_AllSamples}) = collect(1:nrow(dat))
@@ -454,11 +396,9 @@ function get_selected_samples(dat::DataFrame, sample_selection::Function)
     return res isa AbstractVector{Bool} ? findall(res) : res
 end
 
-get_selected_samples(dat::Union{SingleDataFrameEeg,MultiDataFrameEeg,DataFrame}, sel::Union{TimeSelection,Tuple{Real,Real}}) =
-    get_selected_samples(dat, _interval_to_samples(sel))
+get_selected_samples(dat::DataFrame, sel::Union{TimeSelection,Tuple{Real,Real}}) = get_selected_samples(dat, _interval_to_samples(sel))
 
-get_selected_samples(dat::Union{SingleDataFrameEeg,MultiDataFrameEeg,DataFrame}, sample_selection) =
-    get_selected_samples(dat, _to_sample_func(sample_selection))
+get_selected_samples(dat::DataFrame, sample_selection) = get_selected_samples(dat, _to_sample_func(sample_selection))
 
 """
     get_selected_epochs(dat::MultiDataFrameEeg, epoch_selection) -> Vector{Int}
@@ -735,42 +675,32 @@ function _combine_sample_cols(df::DataFrame, columns::Vector{Symbol}, is_or::Boo
     return out
 end
 
+function _match_ordered_keys(vals::Vector{K}, requested::AbstractVector{K})::Vector{Int} where {K}
+    req = unique(requested)
+    present_req = K[k for k in req if k in vals]
+    isempty(present_req) && return Int[]
+    first_pos = Int[findfirst(==(k), vals)::Int for k in present_req]
+    if issorted(first_pos)
+        keep = Set{K}(present_req)
+        return Int[i for (i, v) in enumerate(vals) if v in keep]
+    end
+    return Int[i for k in present_req for (i, v) in enumerate(vals) if v == k]
+end
+
 function _match_condition_indices(x, condition_indices::AbstractVector{Int})::Vector{Int}
     isempty(x) && return Int[]
     if all(d -> hasfield(typeof(d), :condition) && d.condition isa Integer && d.condition > 0, x)
-        cond_nums = Int[Int(d.condition) for d in x]
-        req = unique(condition_indices)
-        present_req = Int[c for c in req if c in cond_nums]
-        isempty(present_req) && return Int[]
-        first_pos = Int[findfirst(==(c), cond_nums)::Int for c in present_req]
-        if issorted(first_pos)
-            keep = Set{Int}(present_req)
-            return Int[i for (i, cn) in enumerate(cond_nums) if cn in keep]
-        end
-        return Int[i for c in present_req for (i, cn) in enumerate(cond_nums) if cn == c]
+        return _match_ordered_keys(Int[Int(d.condition) for d in x], condition_indices)
     end
     return intersect(condition_indices, 1:length(x))
 end
 
-function _match_condition_names(x, condition_names::Vector{String})::Vector{Int}
-    isempty(x) && return Int[]
-    names_in_x = String[condition_name(dat) for dat in x]
-    req = unique(condition_names)
-    present_req = String[n for n in req if n in names_in_x]
-    isempty(present_req) && return Int[]
-    first_pos = Int[findfirst(==(n), names_in_x)::Int for n in present_req]
-    if issorted(first_pos)
-        keep = Set{String}(present_req)
-        return Int[i for (i, nm) in enumerate(names_in_x) if nm in keep]
-    end
-    return Int[i for n in present_req for (i, nm) in enumerate(names_in_x) if nm == n]
-end
+_match_condition_names(x, condition_names::Vector{String})::Vector{Int} =
+    isempty(x) ? Int[] : _match_ordered_keys(String[condition_name(dat) for dat in x], condition_names)
 
-_to_sample_func(::Nothing) = samples()
+_to_sample_func(::Union{Nothing,Colon}) = samples()
 
-_to_sample_func(::Colon) = samples()
-
-_to_sample_func(f::Function) = f === Colon() ? samples() : f
+_to_sample_func(f::Function) = f
 
 _to_sample_func(col::Symbol) = samples(col)
 
@@ -783,98 +713,42 @@ _to_sample_func(idx::Integer) = _SampleIndicesSelector(Int[Int(idx)])
 
 _to_sample_func(idx::AbstractVector{<:Integer}) = _SampleIndicesSelector(collect(Int, idx))
 
-_to_sample_func(idx::AbstractRange{<:Integer}) = _SampleIndicesSelector(collect(Int, idx))
-
 function _to_sample_func(idx)
     set = Set(idx)
     return x -> Bool[i in set for i = 1:nrow(x)]
 end
 
-_to_channel_func(::Nothing) = channels()
-
-_to_channel_func(::Colon) = channels()
-
-_to_channel_func(f::Function) = f === Colon() ? channels() : f
-
-_to_channel_func(ch::Symbol) = channels(ch)
-
-_to_channel_func(chans::AbstractVector{Symbol}) = channels(collect(chans))
-
-_to_channel_func(idx::AbstractString) = channels(Symbol(idx))
-
-_to_channel_func(idx::AbstractVector{<:AbstractString}) = channels(Symbol.(idx))
+_to_channel_func(::Union{Nothing,Colon}) = channels()
 
 _to_channel_func(mask::AbstractVector{Bool}) = channels(findall(mask))
 
-_to_channel_func(idx::Integer) = channels(Int(idx))
+_to_channel_func(x) = channels(x)
 
-_to_channel_func(idx::AbstractVector{<:Integer}) = channels(collect(Int, idx))
+_to_epoch_func(::Union{Nothing,Colon}) = epochs()
 
-_to_channel_func(idx::AbstractRange) = channels(collect(Int, idx))
-
-_to_channel_func(rx::Regex) = channels(rx)
-
-_to_channel_func(idx) = channels(idx)
-
-_to_epoch_func(::Nothing) = epochs()
-
-_to_epoch_func(::Colon) = epochs()
-
-_to_epoch_func(f::Function) = f === Colon() ? epochs() : f
+_to_epoch_func(f::Function) = f
 
 _to_epoch_func(mask::AbstractVector{Bool}) = epochs(findall(mask))
 
-_to_epoch_func(idx::Integer) = epochs(Int(idx))
+_to_epoch_func(x) = epochs(x)
 
-_to_epoch_func(idx::AbstractVector{<:Integer}) = epochs(collect(Int, idx))
-
-_to_epoch_func(idx::AbstractRange) = epochs(collect(Int, idx))
-
-_to_epoch_func(idx) = epochs(idx)
-
-_to_condition_func(::Nothing) = conditions()
-
-_to_condition_func(::Colon) = conditions()
-
-_to_condition_func(f::Function) = f === Colon() ? conditions() : f
+_to_condition_func(::Union{Nothing,Colon}) = conditions()
 
 _to_condition_func(mask::AbstractVector{Bool}) =
     x ->
         length(mask) == length(x) ? collect(Bool, mask) :
         @minimal_error("Boolean condition mask length ($(length(mask))) must match number of datasets ($(length(x)))")
 
-_to_condition_func(idx::Integer) = conditions(Int(idx))
+_to_condition_func(x) = conditions(x)
 
-_to_condition_func(idx::AbstractVector{<:Integer}) = conditions(collect(Int, idx))
-
-_to_condition_func(idx::AbstractRange) = conditions(collect(Int, idx))
-
-_to_condition_func(name::AbstractString) = conditions(String(name))
-
-_to_condition_func(names::AbstractVector{<:AbstractString}) = conditions(collect(String, names))
-
-_to_condition_func(rx::Regex) = conditions(rx)
-
-_to_condition_func(idx) = conditions(idx)
-
-_to_participant_func(::Nothing) = participants()
-
-_to_participant_func(::Colon) = participants()
-
-_to_participant_func(f::Function) = f === Colon() ? participants() : f
+_to_participant_func(::Union{Nothing,Colon}) = participants()
 
 _to_participant_func(mask::AbstractVector{Bool}) =
     x ->
         length(mask) == length(x) ? collect(Bool, mask) :
         @minimal_error("Boolean participant mask length ($(length(mask))) must match number of files ($(length(x)))")
 
-_to_participant_func(idx::Integer) = participants(Int(idx))
-
-_to_participant_func(idx::AbstractVector{<:Integer}) = participants(collect(Int, idx))
-
-_to_participant_func(idx::AbstractRange) = participants(collect(Int, idx))
-
-_to_participant_func(idx) = participants(idx)
+_to_participant_func(x) = participants(x)
 
 function _handle_channel_names_order(user_order::AbstractVector{Symbol}, selectable_cols::Vector{Symbol}, selected::Vector{Symbol})
     ordered = sizehint!(Symbol[], length(user_order))

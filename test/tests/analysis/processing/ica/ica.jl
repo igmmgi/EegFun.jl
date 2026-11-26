@@ -326,166 +326,89 @@ using EegFun
         @test occursin("vEOG: [1, 2]", s_mime)
     end
 
-    @testset "infomax and extended infomax correctness" begin
-        # 1. Non-mutation of inputs
-        rng = MersenneTwister(42)
-        X = randn(rng, 4, 1000)
+    @testset "ICA solver contracts (Infomax, Extended Infomax, Picard, AMICA)" begin
+        X = randn(MersenneTwister(42), 4, 1000)
         X_orig = copy(X)
-        prms = EegFun.IcaPrms(l_rate = 0.002)
-        prms_orig = deepcopy(prms)
-        layout = EegFun.Layout(DataFrame(label = [:C1, :C2, :C3, :C4], inc = zeros(4), azi = zeros(4)), nothing, nothing, nothing)
-
-        res = EegFun.infomax_ica(X, layout, "test"; n_components = 3, params = prms, rng = MersenneTwister(1))
-        @test X == X_orig
-        @test prms.l_rate == prms_orig.l_rate
-
-        # 2. Reproducibility test with rng
-        res1 = EegFun.infomax_ica(X, layout, "test"; n_components = 3, rng = MersenneTwister(123))
-        res2 = EegFun.infomax_ica(X, layout, "test"; n_components = 3, rng = MersenneTwister(123))
-        @test isapprox(res1.unmixing, res2.unmixing; atol = 1e-12)
-
-        # 3. Rank deficiency test (average referenced data has rank n_channels - 1)
         X_avg = X .- mean(X, dims = 1)
-        @test_throws EegFun.EegFunError EegFun.infomax_ica(X_avg, layout, "test"; n_components = 4)
+        layout4 = EegFun.Layout(DataFrame(label = [:C1, :C2, :C3, :C4], inc = zeros(4), azi = zeros(4)), nothing, nothing, nothing)
 
-        # 4. Dimension guards
-        @test_throws EegFun.EegFunError EegFun.infomax_ica(X, layout, "test"; n_components = 0)
-        @test_throws EegFun.EegFunError EegFun.infomax_ica(X, layout, "test"; n_components = 5)
-
-        # 5. Extended Infomax on sub-Gaussian sources (Lee et al. 1999 rule)
         N = 5000
+        u = rand(MersenneTwister(3), N) .- 0.5
+        s_laplace = -sign.(u) .* log.(1.0 .- 2.0 .* abs.(u))
+        s_uniform = rand(MersenneTwister(4), N) .- 0.5
+        A = [0.8 0.6; 0.3 0.9]
+        X_mix = A * Matrix(transpose(hcat(s_laplace, s_uniform)))
+        layout2 = EegFun.Layout(DataFrame(label = [:C1, :C2], inc = zeros(2), azi = zeros(2)), nothing, nothing, nothing)
+
+        for (name, base_fn, ext_fn, prms, check_rng, min_cor) in (
+            (
+                "infomax",
+                (M, lay; kw...) -> EegFun.infomax_ica(M, lay, "test"; kw...),
+                (M, lay; kw...) -> EegFun.infomax_extended_ica(M, lay, "test"; rng = MersenneTwister(99), kw...),
+                EegFun.IcaPrms(l_rate = 0.002),
+                true,
+                0.95,
+            ),
+            (
+                "picard",
+                (M, lay; rng = nothing, kw...) -> EegFun.picard_ica(M, lay, "test"; kw...),
+                (M, lay; kw...) -> EegFun.picard_ica(M, lay, "test"; extended = true, kw...),
+                EegFun.IcaPrms(),
+                false,
+                0.95,
+            ),
+            (
+                "amica",
+                (M, lay; kw...) -> EegFun.amica_ica(M, lay, "test"; kw...),
+                (M, lay; kw...) -> EegFun.amica_ica(M, lay, "test"; rng = MersenneTwister(42), kw...),
+                EegFun.IcaPrms(amica_lrate = 0.05),
+                true,
+                0.90,
+            ),
+        )
+            prms_orig = deepcopy(prms)
+            base_fn(X, layout4; n_components = 3, params = prms, rng = MersenneTwister(1))
+            @test X == X_orig
+            @test prms.l_rate == prms_orig.l_rate && prms.amica_lrate == prms_orig.amica_lrate
+
+            if check_rng
+                r1 = base_fn(X, layout4; n_components = 3, rng = MersenneTwister(123))
+                r2 = base_fn(X, layout4; n_components = 3, rng = MersenneTwister(123))
+                @test isapprox(r1.unmixing, r2.unmixing; atol = 1e-12)
+            end
+
+            @test_throws EegFun.EegFunError base_fn(X_avg, layout4; n_components = 4, rng = MersenneTwister(1))
+            @test_throws EegFun.EegFunError base_fn(X, layout4; n_components = 0, rng = MersenneTwister(1))
+            @test_throws EegFun.EegFunError base_fn(X, layout4; n_components = 5, rng = MersenneTwister(1))
+
+            res_mix = ext_fn(X_mix, layout2; n_components = 2)
+            S_rec = res_mix.unmixing * ((X_mix .- res_mix.mean) ./ res_mix.scale)
+            @test max(abs(cor(S_rec[1, :], s_laplace)), abs(cor(S_rec[2, :], s_laplace))) > min_cor
+            @test max(abs(cor(S_rec[1, :], s_uniform)), abs(cor(S_rec[2, :], s_uniform))) > min_cor
+            @test count(res_mix.is_sub_gaussian) == 1
+        end
+
+        # Extended Infomax on 2 pure sub-Gaussian sources
         s1 = rand(MersenneTwister(1), N) .- 0.5
         s2 = rand(MersenneTwister(2), N) .- 0.5
-        S = Matrix(transpose(hcat(s1, s2)))
-        A = [0.8 0.6; 0.3 0.9]
-        X_sub = A * S
-        layout2 = EegFun.Layout(DataFrame(label = [:C1, :C2], inc = zeros(2), azi = zeros(2)), nothing, nothing, nothing)
+        X_sub = A * Matrix(transpose(hcat(s1, s2)))
         res_ext = EegFun.infomax_extended_ica(X_sub, layout2, "test"; n_components = 2, rng = MersenneTwister(42))
-        S_rec = res_ext.unmixing * ((X_sub .- res_ext.mean) ./ res_ext.scale)
-        c11 = abs(cor(S_rec[1, :], s1))
-        c12 = abs(cor(S_rec[1, :], s2))
-        c21 = abs(cor(S_rec[2, :], s1))
-        c22 = abs(cor(S_rec[2, :], s2))
-        @test max(c11, c12) > 0.95
-        @test max(c21, c22) > 0.95
+        S_rec_sub = res_ext.unmixing * ((X_sub .- res_ext.mean) ./ res_ext.scale)
+        @test max(abs(cor(S_rec_sub[1, :], s1)), abs(cor(S_rec_sub[1, :], s2))) > 0.95
+        @test max(abs(cor(S_rec_sub[2, :], s1)), abs(cor(S_rec_sub[2, :], s2))) > 0.95
         @test count(res_ext.is_sub_gaussian) == 2
 
-        # 6. Mixed super-Gaussian (Laplace) and sub-Gaussian (Uniform) sources
-        u = rand(MersenneTwister(3), N) .- 0.5
-        s_laplace = -sign.(u) .* log.(1.0 .- 2.0 .* abs.(u))
-        s_uniform = rand(MersenneTwister(4), N) .- 0.5
-        S_mix = Matrix(transpose(hcat(s_laplace, s_uniform)))
-        X_mix = A * S_mix
-        res_mix = EegFun.infomax_extended_ica(X_mix, layout2, "test"; n_components = 2, rng = MersenneTwister(99))
-        S_rec_mix = res_mix.unmixing * ((X_mix .- res_mix.mean) ./ res_mix.scale)
-        cm11 = abs(cor(S_rec_mix[1, :], s_laplace))
-        cm12 = abs(cor(S_rec_mix[1, :], s_uniform))
-        cm21 = abs(cor(S_rec_mix[2, :], s_laplace))
-        cm22 = abs(cor(S_rec_mix[2, :], s_uniform))
-        @test max(cm11, cm21) > 0.95
-        @test max(cm12, cm22) > 0.95
-        @test count(res_mix.is_sub_gaussian) == 1
-    end
-
-    @testset "picard and extended picard correctness" begin
-        # 1. Non-mutation of inputs
-        rng = MersenneTwister(42)
-        X = randn(rng, 4, 1000)
-        X_orig = copy(X)
-        prms = EegFun.IcaPrms()
-        prms_orig = deepcopy(prms)
-        layout = EegFun.Layout(DataFrame(label = [:C1, :C2, :C3, :C4], inc = zeros(4), azi = zeros(4)), nothing, nothing, nothing)
-
-        res_pic = EegFun.picard_ica(X, layout, "test"; n_components = 3, params = prms)
-        @test X == X_orig
-        @test prms.default_stop == prms_orig.default_stop
-
-        # 2. Rank deficiency test (average referenced data has rank n_channels - 1)
-        X_avg = X .- mean(X, dims = 1)
-        @test_throws EegFun.EegFunError EegFun.picard_ica(X_avg, layout, "test"; n_components = 4)
-
-        # 3. Dimension guards
-        @test_throws EegFun.EegFunError EegFun.picard_ica(X, layout, "test"; n_components = 0)
-        @test_throws EegFun.EegFunError EegFun.picard_ica(X, layout, "test"; n_components = 5)
-
-        # 4. Extended Picard on mixed super-Gaussian (Laplace) and sub-Gaussian (Uniform) sources
-        N = 5000
-        u = rand(MersenneTwister(3), N) .- 0.5
-        s_laplace = -sign.(u) .* log.(1.0 .- 2.0 .* abs.(u))
-        s_uniform = rand(MersenneTwister(4), N) .- 0.5
-        S_mix = Matrix(transpose(hcat(s_laplace, s_uniform)))
-        A = [0.8 0.6; 0.3 0.9]
-        X_mix = A * S_mix
-        layout2 = EegFun.Layout(DataFrame(label = [:C1, :C2], inc = zeros(2), azi = zeros(2)), nothing, nothing, nothing)
-
-        res_ext_pic = EegFun.picard_ica(X_mix, layout2, "test"; n_components = 2, extended = true)
-        S_rec_mix = res_ext_pic.unmixing * ((X_mix .- res_ext_pic.mean) ./ res_ext_pic.scale)
-        c11 = abs(cor(S_rec_mix[1, :], s_laplace))
-        c12 = abs(cor(S_rec_mix[1, :], s_uniform))
-        c21 = abs(cor(S_rec_mix[2, :], s_laplace))
-        c22 = abs(cor(S_rec_mix[2, :], s_uniform))
-        @test max(c11, c21) > 0.95
-        @test max(c12, c22) > 0.95
-        # Verify sub-Gaussian flags are correctly preserved
-        @test count(res_ext_pic.is_sub_gaussian) == 1
-
-        # 5. Standard Picard (extended=false) marks all sources as super-Gaussian
-        res_std_pic = EegFun.picard_ica(X_mix, layout2, "test"; n_components = 2, extended = false)
-        @test all(.!res_std_pic.is_sub_gaussian)
-    end
-
-    @testset "amica correctness" begin
-        # 1. Non-mutation of inputs
-        rng = MersenneTwister(42)
-        X = randn(rng, 4, 1000)
-        X_orig = copy(X)
-        prms = EegFun.IcaPrms(amica_lrate = 0.05)
-        prms_orig = deepcopy(prms)
-        layout = EegFun.Layout(DataFrame(label = [:C1, :C2, :C3, :C4], inc = zeros(4), azi = zeros(4)), nothing, nothing, nothing)
-
-        res_amica = EegFun.amica_ica(X, layout, "test"; n_components = 3, params = prms, rng = MersenneTwister(1))
-        @test X == X_orig
-        @test prms.amica_lrate == prms_orig.amica_lrate
-
-        # 2. Reproducibility test with rng
-        res1 = EegFun.amica_ica(X, layout, "test"; n_components = 3, rng = MersenneTwister(123))
-        res2 = EegFun.amica_ica(X, layout, "test"; n_components = 3, rng = MersenneTwister(123))
-        @test isapprox(res1.unmixing, res2.unmixing; atol = 1e-12)
-
-        # 3. Rank deficiency test (average referenced data has rank n_channels - 1)
-        X_avg = X .- mean(X, dims = 1)
-        @test_throws EegFun.EegFunError EegFun.amica_ica(X_avg, layout, "test"; n_components = 4)
-
-        # 4. Dimension guards
-        @test_throws EegFun.EegFunError EegFun.amica_ica(X, layout, "test"; n_components = 0)
-        @test_throws EegFun.EegFunError EegFun.amica_ica(X, layout, "test"; n_components = 5)
-
-        # 5. Separation of mixed super-Gaussian (Laplace) and sub-Gaussian (Uniform) sources
-        N = 5000
-        u = rand(MersenneTwister(3), N) .- 0.5
-        s_laplace = -sign.(u) .* log.(1.0 .- 2.0 .* abs.(u))
-        s_uniform = rand(MersenneTwister(4), N) .- 0.5
-        S_mix = Matrix(transpose(hcat(s_laplace, s_uniform)))
-        A = [0.8 0.6; 0.3 0.9]
-        X_mix = A * S_mix
-        layout2 = EegFun.Layout(DataFrame(label = [:C1, :C2], inc = zeros(2), azi = zeros(2)), nothing, nothing, nothing)
-
-        res_mix = EegFun.amica_ica(X_mix, layout2, "test"; n_components = 2, rng = MersenneTwister(42))
-        S_rec_mix = res_mix.unmixing * ((X_mix .- res_mix.mean) ./ res_mix.scale)
-        cm11 = abs(cor(S_rec_mix[1, :], s_laplace))
-        cm12 = abs(cor(S_rec_mix[1, :], s_uniform))
-        cm21 = abs(cor(S_rec_mix[2, :], s_laplace))
-        cm22 = abs(cor(S_rec_mix[2, :], s_uniform))
-        @test max(cm11, cm21) > 0.90
-        @test max(cm12, cm22) > 0.90
-        # Verify sub-Gaussian flag derived from kurtosis
-        @test count(res_mix.is_sub_gaussian) == 1
-
-        # 6. Rollback safeguard on extreme learning rate
-        prms_wild = EegFun.IcaPrms(amica_lrate = 1e8, amica_max_iter = 5)
-        res_wild = EegFun.amica_ica(X_mix, layout2, "test"; n_components = 2, params = prms_wild, rng = MersenneTwister(1))
-        @test all(isfinite, res_wild.unmixing)
-        @test all(isfinite, res_wild.mixing)
+        # Standard Picard marks all components super-Gaussian; AMICA safeguards wild learning rate
+        @test all(.!EegFun.picard_ica(X_mix, layout2, "test"; n_components = 2, extended = false).is_sub_gaussian)
+        res_wild = EegFun.amica_ica(
+            X_mix,
+            layout2,
+            "test";
+            n_components = 2,
+            params = EegFun.IcaPrms(amica_lrate = 1e8, amica_max_iter = 5),
+            rng = MersenneTwister(1),
+        )
+        @test all(isfinite, res_wild.unmixing) && all(isfinite, res_wild.mixing)
     end
 
     @testset "artifact identification advanced and robustness" begin

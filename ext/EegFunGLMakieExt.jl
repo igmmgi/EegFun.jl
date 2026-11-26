@@ -1,9 +1,7 @@
 # GLMakie.jl backend extension for interactive EEG figure windows.
-
 module EegFunGLMakieExt
 
 using EegFun
-
 using GLMakie
 
 ######################################

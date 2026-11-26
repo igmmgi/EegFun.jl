@@ -1,9 +1,7 @@
 # Metal.jl backend extension for Apple Silicon GPU acceleration.
-
 module EegFunMetalExt
 
 using EegFun
-
 using Metal
 
 ######################################
@@ -11,9 +9,7 @@ using Metal
 ######################################
 
 _to_metal(x::AbstractArray{Float64}) = Metal.MtlArray(Float32.(x))
-
 _to_metal(x::AbstractArray{ComplexF64}) = Metal.MtlArray(ComplexF32.(x))
-
 _to_metal(x::AbstractArray) = Metal.MtlArray(x)
 
 function __init__()

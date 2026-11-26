@@ -347,21 +347,12 @@ function plot_databrowser(
     kwargs...,
 )
     ica_obj = ica isa AbstractString ? read_data(_resolve_input_filepath(ica, input_dir)) : ica
-    if endswith(filename, ".jld2")
-        resolved = _resolve_input_filepath(filename, input_dir)
-        dat_eeg = read_data(resolved)
-        isnothing(dat_eeg) && @minimal_error "No data found in file: $resolved"
-        return plot_databrowser(dat_eeg, ica_obj; screen = screen, kwargs...)
-    end
-    files = _require_batch_files(filename, input_dir, participant_selection)
-    results = NamedTuple[]
-    for file in files
-        @info "Browsing: $file"
-        dat_eeg = read_data(joinpath(input_dir, file))
-        isnothing(dat_eeg) && continue
-        push!(results, plot_databrowser(dat_eeg, ica_obj; screen = screen, kwargs...))
-    end
-    return results
+    return _dispatch_plot_filepath(
+        dat_eeg -> plot_databrowser(dat_eeg, ica_obj; screen = screen, kwargs...),
+        filename;
+        input_dir = input_dir,
+        participant_selection = participant_selection,
+    )
 end
 
 ######################################
@@ -540,25 +531,22 @@ function _show_trigger_menu(state, ax, marker_symbol)
         Set(unique_triggers)
     end
 
-    menu_fig = _eegfun_figure(size = (600, 600))
-    Label(menu_fig[1, 1], "Select Triggers to Display", fontsize = 18, halign = :center)
-
-    scroll_area = menu_fig[2, 1] = GridLayout()
     trig_strs = string.(unique_triggers)
-    cbs = _build_checkbox_grid!(scroll_area, trig_strs, 5, (trig, _) -> (parse(Float64, trig) in active_set))
-    _add_group_buttons!(menu_fig, 3, cbs, trig_strs, [("All", _ -> true), ("None", _ -> false)])
-
-    action_area = menu_fig[4, 1] = GridLayout()
-    btn_apply = Button(action_area[1, 1], label = "Apply", width = 200)
-    on(btn_apply.clicks) do _
-        empty!(active_set)
-        for (i, cb) in enumerate(cbs)
-            cb.checked[] && push!(active_set, unique_triggers[i])
-        end
-        _update_markers!(ax, state)
-    end
-
-    _display_in_screen(menu_fig)
+    _show_checkbox_dialog(
+        "Select Triggers to Display",
+        trig_strs,
+        5,
+        (trig, _) -> (parse(Float64, trig) in active_set),
+        [("All", _ -> true), ("None", _ -> false)],
+        function (cbs)
+            empty!(active_set)
+            for (i, cb) in enumerate(cbs)
+                cb.checked[] && push!(active_set, unique_triggers[i])
+            end
+            _update_markers!(ax, state)
+        end;
+        fig_size = (600, 600),
+    )
 end
 
 function _show_single_filter_menu(state, dat, filter_type::Symbol)
@@ -617,36 +605,29 @@ end
 
 function _show_labels_menu(state, ax)
     all_channels = state.channels.labels
-    menu_fig = _eegfun_figure(size = (900, 700))
-    Label(menu_fig[1, 1], "Select Channels to Display", fontsize = 18, halign = :center)
-    scroll_area = menu_fig[2, 1] = GridLayout()
-    cbs = _build_checkbox_grid!(scroll_area, all_channels, 9, (_, i) -> state.channels.visible[i])
-
     groups = vcat(Tuple{String,Function}[("All", _ -> true), ("None", _ -> false)], _CHANNEL_HEMISPHERE_GROUPS)
-    _add_group_buttons!(menu_fig, 3, cbs, all_channels, groups)
-
-    action_area = menu_fig[4, 1] = GridLayout()
-    btn_apply = Button(action_area[1, 1], label = "Apply", width = 200)
-    on(btn_apply.clicks) do _
-        for (i, cb) in enumerate(cbs)
-            state.channels.visible[i] = cb.checked[]
-        end
-        _clear_and_save_limits!(ax, state)
-        _update_channel_offsets!(state)
-        _draw(ax, state)
-        !isempty(state.extra_channel.channels) && _draw_extra_channel!(ax, state)
-    end
-
-    _display_in_screen(menu_fig)
+    _show_checkbox_dialog(
+        "Select Channels to Display",
+        all_channels,
+        9,
+        (_, i) -> state.channels.visible[i],
+        groups,
+        function (cbs)
+            for (i, cb) in enumerate(cbs)
+                state.channels.visible[i] = cb.checked[]
+            end
+            _clear_and_save_limits!(ax, state)
+            _update_channel_offsets!(state)
+            _draw(ax, state)
+            !isempty(state.extra_channel.channels) && _draw_extra_channel!(ax, state)
+        end,
+    )
 end
 
 _create_labels_menu(fig, ax, state) = _popup_button(fig, "Labels", () -> _show_labels_menu(state, ax))
 
 function _show_reference_menu(state, dat)
     all_channels = state.channels.labels
-    menu_fig = _eegfun_figure(size = (900, 700))
-    Label(menu_fig[1, 1], "Select Reference Channels", fontsize = 18, halign = :center)
-
     current_syms = if state.reference_state == :avg
         all_channels
     elseif state.reference_state == :mastoid
@@ -661,40 +642,38 @@ function _show_reference_menu(state, dat)
         Symbol[]
     end
 
-    scroll_area = menu_fig[2, 1] = GridLayout()
-    cbs = _build_checkbox_grid!(scroll_area, all_channels, 9, (ch, _) -> ch in current_syms)
-
     groups = vcat(
         Tuple{String,Function}[("All (Avg)", _ -> true), ("None", _ -> false)],
         _CHANNEL_HEMISPHERE_GROUPS,
         Tuple{String,Function}[("Mastoids", ch -> ch == :M1 || ch == :M2)],
     )
-    _add_group_buttons!(menu_fig, 3, cbs, all_channels, groups)
-
-    action_area = menu_fig[4, 1] = GridLayout()
-    btn_apply = Button(action_area[1, 1], label = "Apply", width = 200)
-    on(btn_apply.clicks) do _
-        selected = [all_channels[i] for (i, cb) in enumerate(cbs) if cb.checked[]]
-        if isempty(selected)
-            state.reference_state = :none
-            empty!(state.custom_reference_channels)
-        elseif length(selected) == length(all_channels)
-            state.reference_state = :avg
-            empty!(state.custom_reference_channels)
-        elseif length(selected) == 2 && :M1 in selected && :M2 in selected
-            state.reference_state = :mastoid
-            empty!(state.custom_reference_channels)
-        elseif length(selected) == 1
-            state.reference_state = selected[1]
-            state.custom_reference_channels = copy(selected)
-        else
-            state.reference_state = :custom
-            state.custom_reference_channels = copy(selected)
-        end
-        _rebuild_current!(state)
-    end
-
-    _display_in_screen(menu_fig)
+    _show_checkbox_dialog(
+        "Select Reference Channels",
+        all_channels,
+        9,
+        (ch, _) -> ch in current_syms,
+        groups,
+        function (cbs)
+            selected = [all_channels[i] for (i, cb) in enumerate(cbs) if cb.checked[]]
+            if isempty(selected)
+                state.reference_state = :none
+                empty!(state.custom_reference_channels)
+            elseif length(selected) == length(all_channels)
+                state.reference_state = :avg
+                empty!(state.custom_reference_channels)
+            elseif length(selected) == 2 && :M1 in selected && :M2 in selected
+                state.reference_state = :mastoid
+                empty!(state.custom_reference_channels)
+            elseif length(selected) == 1
+                state.reference_state = selected[1]
+                state.custom_reference_channels = copy(selected)
+            else
+                state.reference_state = :custom
+                state.custom_reference_channels = copy(selected)
+            end
+            _rebuild_current!(state)
+        end,
+    )
 end
 
 _create_reference_menu(fig, state, dat) = _popup_button(fig, "Reference", () -> _show_reference_menu(state, dat))
@@ -2507,6 +2486,50 @@ function _color_mask_observable(state, epoch_obs, get_data, col::Symbol, ch_row:
     return obs
 end
 
+function _ica_overlay_points_observable(
+    state,
+    epoch_obs,
+    get_time,
+    get_data,
+    col::Symbol,
+    ch_row::Int,
+    idx::Int,
+    toggle_obs::Observable{Bool};
+    subtracted_only::Bool,
+)
+    is_nan = Ref(false)
+    deps =
+        subtracted_only ? (state.view.xrange, state.data.current, epoch_obs, state.view.amplitude_scale, toggle_obs) :
+        (state.view.xrange, state.data.current, epoch_obs, state.view.amplitude_scale, state.view.remove_dc, toggle_obs)
+    return _points_observable(state.channels.draw_observers, deps...) do buf, resized
+        win = state.view.xrange[]
+        ep = epoch_obs[]
+        cur = state.data.current[]
+        if toggle_obs[]
+            _fill_ica_points!(
+                buf,
+                get_time(cur, ep, win),
+                get_data(cur, ep, win, col),
+                state,
+                ep,
+                win,
+                ch_row,
+                state.view.amplitude_scale[],
+                state.view.offset[idx],
+                subtracted_only,
+                subtracted_only ? false : state.view.remove_dc[],
+            )
+            is_nan[] = false
+            return true
+        elseif resized || !is_nan[]
+            _nan_points!(buf, get_time(cur, ep, win))
+            is_nan[] = true
+            return true
+        end
+        return false
+    end
+end
+
 function _draw(ax, state::DataBrowserState{<:AbstractDataState})
     get_data, get_time, get_label_y = _get_data_accessors(state.data)
     epoch_obs = state.data isa EpochedDataState ? state.data.current_epoch : Observable(1)
@@ -2563,77 +2586,28 @@ function _draw(ax, state::DataBrowserState{<:AbstractDataState})
             end
 
             if state.ica.is_active && ch_row > 0
-                original_nan = Ref(false)
-                original_points_obs = _points_observable(
-                    state.channels.draw_observers,
-                    state.view.xrange,
-                    state.data.current,
+                original_points_obs = _ica_overlay_points_observable(
+                    state,
                     epoch_obs,
-                    state.view.amplitude_scale,
-                    state.view.remove_dc,
-                    state.view.show_original_ica,
-                ) do buf, resized
-                    win = state.view.xrange[]
-                    ep = epoch_obs[]
-                    cur = state.data.current[]
-                    if state.view.show_original_ica[]
-                        _fill_ica_points!(
-                            buf,
-                            get_time(cur, ep, win),
-                            get_data(cur, ep, win, col),
-                            state,
-                            ep,
-                            win,
-                            ch_row,
-                            state.view.amplitude_scale[],
-                            state.view.offset[idx],
-                            false,
-                            state.view.remove_dc[],
-                        )
-                        original_nan[] = false
-                        return true
-                    elseif resized || !original_nan[]
-                        _nan_points!(buf, get_time(cur, ep, win))
-                        original_nan[] = true
-                        return true
-                    end
-                    return false
-                end
-
-                subtracted_nan = Ref(false)
-                subtracted_points_obs = _points_observable(
-                    state.channels.draw_observers,
-                    state.view.xrange,
-                    state.data.current,
+                    get_time,
+                    get_data,
+                    col,
+                    ch_row,
+                    idx,
+                    state.view.show_original_ica;
+                    subtracted_only = false,
+                )
+                subtracted_points_obs = _ica_overlay_points_observable(
+                    state,
                     epoch_obs,
-                    state.view.amplitude_scale,
-                    state.view.show_subtracted_ica,
-                ) do buf, resized
-                    win = state.view.xrange[]
-                    ep = epoch_obs[]
-                    cur = state.data.current[]
-                    if state.view.show_subtracted_ica[]
-                        _fill_ica_points!(
-                            buf,
-                            get_time(cur, ep, win),
-                            get_data(cur, ep, win, col),
-                            state,
-                            ep,
-                            win,
-                            ch_row,
-                            state.view.amplitude_scale[],
-                            state.view.offset[idx],
-                            true,
-                        )
-                        subtracted_nan[] = false
-                        return true
-                    elseif resized || !subtracted_nan[]
-                        _nan_points!(buf, get_time(cur, ep, win))
-                        subtracted_nan[] = true
-                        return true
-                    end
-                    return false
-                end
+                    get_time,
+                    get_data,
+                    col,
+                    ch_row,
+                    idx,
+                    state.view.show_subtracted_ica;
+                    subtracted_only = true,
+                )
 
                 _create_line!(
                     state.channels.original_lines,

@@ -41,13 +41,8 @@ function baseline!(dat::_TimeDomainEegData, baseline_interval::Interval = times(
     return dat
 end
 
-function baseline!(dat::AbstractVector{<:_TimeDomainEegData}, baseline_interval::Interval = times(); channel_selection = channels())
-    isnothing(baseline_interval) && return dat
-    for d in dat
-        baseline!(d, baseline_interval; channel_selection = channel_selection)
-    end
-    return dat
-end
+baseline!(dat::AbstractVector{<:_TimeDomainEegData}, baseline_interval::Interval = times(); channel_selection = channels()) =
+    isnothing(baseline_interval) ? dat : (foreach(d -> baseline!(d, baseline_interval; channel_selection = channel_selection), dat); dat)
 
 function baseline(
     file_pattern::String,
@@ -58,11 +53,21 @@ function baseline(
     output_dir::Union{String,Nothing} = nothing,
 )
     _with_batch_logging("baseline correction", "baseline.log", input_dir, output_dir) do ctx
+        _ = output_dir
         @log_call "baseline"
         bl_tuple = _validate_baseline_interval(baseline_interval)
-        output_dir = _prepare_output_dir!(ctx, _default_baseline_output_dir(input_dir, file_pattern, bl_tuple))
-        process_fn = (input_path, output_path) -> _process_baseline_file(input_path, output_path, bl_tuple, condition_selection)
-        batch_process(process_fn, file_pattern, input_dir, output_dir, participant_selection, "Baseline correction")
+        default_dir = joinpath(input_dir, "baseline_$(_clean_pattern(file_pattern))_$(bl_tuple[1])_to_$(bl_tuple[2])")
+        return _batch_jld2_files(
+            data -> (baseline!(data, bl_tuple), "Baseline corrected successfully"),
+            AbstractVector{<:Union{ErpData,EpochData}},
+            ctx,
+            default_dir,
+            file_pattern,
+            input_dir,
+            participant_selection,
+            "Baseline correction";
+            condition_selection = condition_selection,
+        )
     end
 end
 
@@ -110,9 +115,6 @@ function _apply_baseline!(dat::AbstractVector{DataFrame}, channels::AbstractVect
     end
     return nothing
 end
-
-_default_baseline_output_dir(input_dir::String, pattern::String, baseline_interval::Tuple{Real,Real}) =
-    joinpath(input_dir, "baseline_$(_clean_pattern(pattern))_$(baseline_interval[1])_to_$(baseline_interval[2])")
 
 function _to_interval(interval::Tuple{Real,Real})
     start, stop = Float64(interval[1]), Float64(interval[2])
@@ -176,17 +178,4 @@ function _validate_baseline_interval(dat::SingleDataFrameEeg, baseline_interval:
         return (first(indices), last(indices))
     end
     return _validate_baseline_interval(dat.data.time, baseline_interval)
-end
-
-function _process_baseline_file(filepath::String, output_path::String, baseline_interval::Interval, condition_selection::Function)
-    filename = basename(filepath)
-    data = read_data(filepath)
-    isnothing(data) && return BatchResult(false, filename, "No data variables found")
-    data isa AbstractVector{<:Union{ErpData,EpochData}} ||
-        return BatchResult(false, filename, "Invalid data type: expected Vector{ErpData} or Vector{EpochData}")
-
-    data = _condition_select(data, condition_selection)
-    baseline!(data, baseline_interval)
-    jldsave(output_path; data = data, format_version = EEGFUN_FORMAT_VERSION)
-    return BatchResult(true, filename, "Baseline corrected successfully")
 end

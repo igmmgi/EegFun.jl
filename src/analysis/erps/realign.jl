@@ -95,12 +95,21 @@ function calculate_trigger_interval(
 )
     col_sym = Symbol(column_name)
     _with_batch_logging("calculate_trigger_interval", "calculate_trigger_interval.log", input_dir, output_dir) do ctx
+        _ = output_dir
         @log_call "calculate_trigger_interval"
-        output_dir = _prepare_output_dir!(ctx, _default_calculate_trigger_interval_output_dir(input_dir))
-        process_fn =
-            (input_path, output_path) ->
-                _process_calculate_trigger_interval_file(input_path, output_path, start_triggers, end_triggers, col_sym)
-        batch_process(process_fn, file_pattern, input_dir, output_dir, participant_selection, "Calculating trigger intervals")
+        return _batch_jld2_files(
+            Union{EpochData,AbstractVector{<:EpochData}},
+            ctx,
+            joinpath(input_dir, "epochs_calculate_trigger_interval"),
+            file_pattern,
+            input_dir,
+            participant_selection,
+            "Calculating trigger intervals",
+        ) do epochs_data
+            calculate_trigger_interval!(epochs_data, start_triggers, end_triggers; column_name = col_sym)
+            n_eps = epochs_data isa AbstractVector ? sum(n_epochs(cond) for cond in epochs_data) : n_epochs(epochs_data)
+            return (epochs_data, "Appended interval column (:$col_sym) to $n_eps total epochs")
+        end
     end
 end
 
@@ -184,35 +193,19 @@ function realign(
 
         triggers = _as_triggers(realignment_triggers)
         @info "Pass 1/2: Global timeline scanning across $(length(files)) files..."
-        grand_starts = Float64[]
-        grand_ends = Float64[]
         all_shifted_sets = Vector{Vector{Float64}}[]
-
         for file in files
             epochs_data = read_data(joinpath(input_dir, file))
             isnothing(epochs_data) && continue
-            vec_data = epochs_data isa Vector ? epochs_data : [epochs_data]
-            for dat in vec_data
+            for dat in (epochs_data isa Vector ? epochs_data : (epochs_data,))
                 isempty(dat.data) && continue
                 _, shifted_times = _scan_realigned_epochs(dat, triggers; warn_dropped = false)
-                isempty(shifted_times) && continue
-                s, e = _common_window_from_times(shifted_times)
-                push!(grand_starts, s)
-                push!(grand_ends, e)
-                push!(all_shifted_sets, shifted_times)
+                !isempty(shifted_times) && push!(all_shifted_sets, shifted_times)
             end
         end
-
-        isempty(grand_starts) && @minimal_error("No valid realigned data found across any file! (All trials likely missing the trigger)")
-
-        global_interval = (maximum(grand_starts), minimum(grand_ends))
-        if global_interval[1] >= global_interval[2]
-            @minimal_error(
-                "No common time interval found across files after realignment. " *
-                "Common start: $(global_interval[1]) s, Common end: $(global_interval[2]) s."
-            )
-        end
-        global_n_samples = minimum(last(_crop_start_indices(st, global_interval)) for st in all_shifted_sets)
+        isempty(all_shifted_sets) &&
+            @minimal_error("No valid realigned data found across any file! (All trials likely missing the trigger)")
+        global_interval, global_n_samples = _resolve_global_realign_window(all_shifted_sets, nothing, nothing, "files")
         @info "Grand Global Interval: $(global_interval[1]) to $(global_interval[2]) (Strict: $global_n_samples samples)"
 
         @info "Pass 2/2: Realigning to disk..."
@@ -361,6 +354,28 @@ function _realign_single_cropped(dat::EpochData, realignment_triggers::TriggerSp
     return cropped
 end
 
+function _resolve_global_realign_window(
+    shifted_sets::Vector{Vector{Vector{Float64}}},
+    norm_interval::Union{Tuple{Float64,Float64},Nothing},
+    global_n_samples::Union{Int,Nothing},
+    scope::String,
+)
+    if isnothing(norm_interval)
+        windows = [_common_window_from_times(st) for st in shifted_sets]
+        norm_interval = (maximum(first, windows), minimum(last, windows))
+    end
+    if norm_interval[1] >= norm_interval[2]
+        @minimal_error(
+            "No common time interval found across $scope after realignment. " *
+            "Common start: $(norm_interval[1]) s, Common end: $(norm_interval[2]) s."
+        )
+    end
+    if isnothing(global_n_samples)
+        global_n_samples = minimum(last(_crop_start_indices(st, norm_interval)) for st in shifted_sets)
+    end
+    return norm_interval, global_n_samples
+end
+
 function _realign_multi_cropped(
     dat_vec::AbstractVector{<:EpochData},
     realignment_triggers::TriggerSpec;
@@ -372,38 +387,18 @@ function _realign_multi_cropped(
 
     norm_interval = isnothing(global_interval) ? nothing : _normalize_interval(global_interval)
     scans = [_scan_realigned_epochs(dat, triggers) for dat in dat_vec]
-
-    if isnothing(norm_interval)
-        common_starts = Float64[]
-        common_ends = Float64[]
-        for (_, shifted_times) in scans
-            isempty(shifted_times) && continue
-            s, e = _common_window_from_times(shifted_times)
-            push!(common_starts, s)
-            push!(common_ends, e)
+    non_empty_sets = Vector{Vector{Float64}}[st for (_, st) in scans if !isempty(st)]
+    if isempty(non_empty_sets)
+        if !isnothing(norm_interval) && norm_interval[1] >= norm_interval[2]
+            @minimal_error(
+                "No common time interval found across conditions after realignment. " *
+                "Common start: $(norm_interval[1]) s, Common end: $(norm_interval[2]) s."
+            )
         end
-        isempty(common_starts) && return [DataFrame[] for _ in dat_vec]
-        norm_interval = (maximum(common_starts), minimum(common_ends))
+        return [DataFrame[] for _ in dat_vec]
     end
 
-    if norm_interval[1] >= norm_interval[2]
-        @minimal_error(
-            "No common time interval found across conditions after realignment. " *
-            "Common start: $(norm_interval[1]) s, Common end: $(norm_interval[2]) s."
-        )
-    end
-
-    if isnothing(global_n_samples)
-        min_len = typemax(Int)
-        for (_, shifted_times) in scans
-            isempty(shifted_times) && continue
-            _, cond_min = _crop_start_indices(shifted_times, norm_interval)
-            min_len = min(min_len, cond_min)
-        end
-        min_len == typemax(Int) && return [DataFrame[] for _ in dat_vec]
-        global_n_samples = min_len
-    end
-
+    norm_interval, global_n_samples = _resolve_global_realign_window(non_empty_sets, norm_interval, global_n_samples, "conditions")
     @info "Global common time interval: $(norm_interval[1]) s to $(norm_interval[2]) s (strict: $global_n_samples samples)"
     return Vector{DataFrame}[
         _build_cropped_epochs(dat_vec[i].data, scans[i][1], scans[i][2], norm_interval, dat_vec[i].sample_rate, global_n_samples) for
@@ -412,8 +407,6 @@ function _realign_multi_cropped(
 end
 
 _default_realign_output_dir(input_dir::String, pattern::String) = joinpath(input_dir, "realigned_$(_clean_pattern(pattern))")
-
-_default_calculate_trigger_interval_output_dir(input_dir::String) = joinpath(input_dir, "epochs_calculate_trigger_interval")
 
 function _process_realign_file(
     filepath::String,
@@ -448,24 +441,4 @@ function _process_realign_file(
         n_s = isempty(realigned_epochs.data) ? 0 : nrow(realigned_epochs.data[1])
     end
     return BatchResult(true, filename, "Realigned $n_eps total epochs to $n_s samples each")
-end
-
-function _process_calculate_trigger_interval_file(
-    filepath::String,
-    output_path::String,
-    start_triggers::TriggerSpec,
-    end_triggers::TriggerSpec,
-    column_name::Symbol,
-)
-    filename = basename(filepath)
-    epochs_data = read_data(filepath)
-    isnothing(epochs_data) && return BatchResult(false, filename, "No data found in file")
-    (epochs_data isa EpochData || epochs_data isa AbstractVector{<:EpochData}) ||
-        return BatchResult(false, filename, "Data is not EpochData type")
-
-    calculate_trigger_interval!(epochs_data, start_triggers, end_triggers; column_name = column_name)
-    jldsave(output_path; data = epochs_data, format_version = EEGFUN_FORMAT_VERSION)
-
-    n_eps = epochs_data isa Vector ? sum(n_epochs(cond) for cond in epochs_data) : n_epochs(epochs_data)
-    return BatchResult(true, filename, "Appended interval column (:$column_name) to $n_eps total epochs")
 end

@@ -336,55 +336,7 @@ function plot_topography(dat::AbstractVector{<:EpochData}, epoch::Int; kwargs...
     return [plot_topography(d, epoch; kwargs...) for d in dat]
 end
 
-function plot_topography(
-    dat::MultiDataFrameEeg,
-    epoch::Int;
-    channel_selection = channels(),
-    sample_selection = samples(),
-    interval_selection::Interval = times(),
-    scrubber::Bool = false,
-    display_plot = true,
-    kwargs...,
-)
-    cont_dat = epoch_to_continuous(dat, epoch)
-    if scrubber
-        return plot_topography(
-            cont_dat;
-            channel_selection = channel_selection,
-            sample_selection = sample_selection,
-            interval_selection = interval_selection,
-            scrubber = true,
-            display_plot = display_plot,
-            kwargs...,
-        )
-    end
-
-    _set_window_title(_generate_window_title(dat) * " - Epoch $epoch")
-    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs)
-    fontsize_kw = isnothing(plot_kwargs[:theme_fontsize]) ? (;) : (; fontsize = plot_kwargs[:theme_fontsize])
-    fig = _eegfun_figure(; figure_padding = plot_kwargs[:figure_padding], fontsize_kw...)
-    ax = Axis(fig[1, 1], aspect = DataAspect())
-
-    plot_topography!(
-        fig,
-        ax,
-        cont_dat;
-        channel_selection = channel_selection,
-        sample_selection = sample_selection,
-        interval_selection = interval_selection,
-        kwargs...,
-    )
-
-    if plot_kwargs[:interactive]
-        deregister_interaction!(ax, :rectanglezoom)
-        deregister_interaction!(ax, :dragpan)
-        _setup_topo_keyboard_handlers!(fig, ax; zoom_step = plot_kwargs[:zoom_step])
-    end
-
-    display_plot && _display_figure(fig)
-    _set_window_title("Makie")
-    return (fig = fig, axes = [ax])
-end
+plot_topography(dat::MultiDataFrameEeg, epoch::Int; kwargs...) = plot_topography(epoch_to_continuous(dat, epoch); kwargs...)
 
 """
     plot_topography!(fig, ax, dat::SingleDataFrameEeg; kwargs...)
@@ -441,21 +393,12 @@ function plot_topography!(
 end
 
 function plot_topography(filepath::String; input_dir::String = pwd(), participant_selection = participants(), kwargs...)
-    if endswith(filepath, ".jld2")
-        resolved = _resolve_input_filepath(filepath, input_dir)
-        data = read_data(resolved)
-        isnothing(data) && @minimal_error "No data found in file: $resolved"
-        return plot_topography(data; kwargs...)
-    end
-    files = _require_batch_files(filepath, input_dir, participant_selection)
-    results = NamedTuple[]
-    for file in files
-        @info "Plotting: $file"
-        data = read_data(joinpath(input_dir, file))
-        isnothing(data) && continue
-        push!(results, plot_topography(data; kwargs...))
-    end
-    return results
+    return _dispatch_plot_filepath(
+        data -> plot_topography(data; kwargs...),
+        filepath;
+        input_dir = input_dir,
+        participant_selection = participant_selection,
+    )
 end
 
 ######################################
@@ -489,22 +432,31 @@ function _render_topo_surface!(
     gridscale::Int = 75,
     colormap = nothing,
     colorrange = nothing,
+    levels = nothing,
     num_levels::Int = 20,
     kwargs...,
 )
+    gridscale <= 0 && @minimal_error("gridscale must be positive, got $gridscale")
     if isnothing(data_interp)
         ch_f64 = channel_data isa AbstractVector{Float64} ? channel_data : Float64.(channel_data)
         data_interp, x_bounds, y_bounds = _topo_interpolate(ch_f64, layout, gridscale; method = method)
     end
 
-    cr = !isnothing(colorrange) ? colorrange : _symmetric_colorrange(data_interp)
+    lvls = if !isnothing(levels)
+        levels
+    else
+        cr0 = !isnothing(colorrange) ? (Float64(colorrange[1]), Float64(colorrange[2])) : _symmetric_colorrange(data_interp)
+        cr0[1] == cr0[2] && (cr0 = (cr0[1] - 0.1, cr0[2] + 0.1))
+        range(cr0[1], cr0[2], length = num_levels)
+    end
+    cr = (first(lvls), last(lvls))
 
     co = contourf!(
         ax,
-        range(x_bounds[1], x_bounds[2], length = gridscale),
-        range(y_bounds[1], y_bounds[2], length = gridscale),
-        data_interp,
-        levels = range(cr[1], cr[2], length = num_levels);
+        range(x_bounds[1], x_bounds[2], length = size(data_interp, 1)),
+        range(y_bounds[1], y_bounds[2], length = size(data_interp, 2)),
+        data_interp;
+        levels = lvls,
         colormap = _resolve_theme_colormap(ax, colormap),
         extendlow = :auto,
         extendhigh = :auto,
@@ -904,95 +856,9 @@ function _data_interpolation_topo(
     plot_radius = _topo_plot_radius(layout)
     valid_cells, grid_points = _get_rbf_grid(grid_scale, plot_radius)
 
-    if method === :thin_plate
-        return _run_rbf_topo(
-            ScatteredInterpolation.ThinPlate(),
-            dat,
-            pts,
-            finite,
-            all_fin,
-            valid_cells,
-            grid_points,
-            grid_scale,
-            plot_radius,
-        )
-    elseif method === :multiquadratic
-        return _run_rbf_topo(
-            ScatteredInterpolation.Multiquadratic(),
-            dat,
-            pts,
-            finite,
-            all_fin,
-            valid_cells,
-            grid_points,
-            grid_scale,
-            plot_radius,
-        )
-    elseif method === :inverse_multiquadratic
-        return _run_rbf_topo(
-            ScatteredInterpolation.InverseMultiquadratic(),
-            dat,
-            pts,
-            finite,
-            all_fin,
-            valid_cells,
-            grid_points,
-            grid_scale,
-            plot_radius,
-        )
-    elseif method === :gaussian
-        return _run_rbf_topo(
-            ScatteredInterpolation.Gaussian(),
-            dat,
-            pts,
-            finite,
-            all_fin,
-            valid_cells,
-            grid_points,
-            grid_scale,
-            plot_radius,
-        )
-    elseif method === :inverse_quadratic
-        return _run_rbf_topo(
-            ScatteredInterpolation.InverseQuadratic(),
-            dat,
-            pts,
-            finite,
-            all_fin,
-            valid_cells,
-            grid_points,
-            grid_scale,
-            plot_radius,
-        )
-    elseif method === :polyharmonic
-        return _run_rbf_topo(
-            ScatteredInterpolation.Polyharmonic(3),
-            dat,
-            pts,
-            finite,
-            all_fin,
-            valid_cells,
-            grid_points,
-            grid_scale,
-            plot_radius,
-        )
-    elseif method === :shepard
-        return _run_rbf_topo(ScatteredInterpolation.Shepard(), dat, pts, finite, all_fin, valid_cells, grid_points, grid_scale, plot_radius)
-    elseif method === :nearest
-        return _run_rbf_topo(
-            ScatteredInterpolation.NearestNeighbor(),
-            dat,
-            pts,
-            finite,
-            all_fin,
-            valid_cells,
-            grid_points,
-            grid_scale,
-            plot_radius,
-        )
-    else
-        @minimal_error "Unknown method: $method. Supported: $(keys(_TOPO_RBF_METHODS))"
-    end
+    ctor = get(_TOPO_RBF_METHODS, method, nothing)
+    isnothing(ctor) && @minimal_error "Unknown method: $method. Supported: $(keys(_TOPO_RBF_METHODS))"
+    return _run_rbf_topo(ctor(), dat, pts, finite, all_fin, valid_cells, grid_points, grid_scale, plot_radius)
 end
 
 _topo_method_supported(m::Symbol) = m === :spherical_spline || haskey(_TOPO_RBF_METHODS, m)

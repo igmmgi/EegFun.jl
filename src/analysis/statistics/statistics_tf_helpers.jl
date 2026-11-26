@@ -60,9 +60,7 @@ function prepare_stats(
         if is_itc_data && eff_method ∉ (:absolute, :zscore)
             @minimal_warning "Baseline method :$eff_method is a power ratio and is unusual for ITC values; consider baseline_method = :absolute."
         end
-        bl_tuple =
-            baseline_interval isa AllSelection ? _full_tf_interval(ref_tf) :
-            baseline_interval isa Function ? _func_tf_interval(ref_tf, baseline_interval) : _to_tf_interval(baseline_interval)
+        bl_tuple = _resolve_tf_baseline_window(ref_tf, baseline_interval)::Tuple{Float64,Float64}
         b_start, b_end = _validate_and_resolve_tf_baseline_times(all_times, bl_tuple)
         base_range = b_start:b_end
 
@@ -280,22 +278,22 @@ function _compute_t_matrix_tf(
     compute_p_values::Bool = true,
     t_matrix_buffer::Union{Nothing,Array{Float64,3}} = nothing,
 )
-    _, n_electrodes, n_freqs, n_time = size(data1)
-    n_voxels = n_electrodes * n_freqs * n_time
-
-    t_matrix = isnothing(t_matrix_buffer) ? Array{Float64,3}(undef, n_electrodes, n_freqs, n_time) : t_matrix_buffer
-    df = _t_stat_kernel!(vec(t_matrix), nothing, reshape(data1, size(data1, 1), n_voxels), reshape(data2, size(data2, 1), n_voxels), design)
-
-    p_matrix = compute_p_values ? _compute_p_matrix(t_matrix, df, tail) : Array{Float64,3}(undef, 0, 0, 0)
-    return t_matrix, df, p_matrix
-end
-
-function _compute_t_matrix_tf(prepared::TFStatisticalData; tail::Symbol = :both, compute_p_values::Bool = true)
-    return _compute_t_matrix_tf(
-        prepared.analysis.data[1],
-        prepared.analysis.data[2],
-        prepared.analysis.design;
+    t_mat, df, p_mat, _ = _compute_t_matrix(
+        data1,
+        data2,
+        design;
         tail = tail,
+        t_matrix_buffer = t_matrix_buffer,
         compute_p_values = compute_p_values,
+        compute_se = false,
     )
+    return t_mat, df, p_mat
 end
+
+_compute_t_matrix_tf(prepared::TFStatisticalData; tail::Symbol = :both, compute_p_values::Bool = true) = _compute_t_matrix_tf(
+    prepared.analysis.data[1],
+    prepared.analysis.data[2],
+    prepared.analysis.design;
+    tail = tail,
+    compute_p_values = compute_p_values,
+)

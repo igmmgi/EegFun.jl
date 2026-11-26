@@ -114,7 +114,7 @@ PrecompileTools.@compile_workload begin
             EegFun._start_shared_selection!(first(res_epochs.axes), selection_state_epochs, 0.1)
             EegFun._update_shared_selection!(first(res_epochs.axes), selection_state_epochs, 0.1, 0.5)
             EegFun._finish_shared_selection!(first(res_epochs.axes), selection_state_epochs, 0.5)
-            EegFun._get_epochs_selection_bounds(selection_state_epochs, [epochs[1]])
+            EegFun._get_selection_bounds(selection_state_epochs, [epochs[1]])
             EegFun._clear_shared_selection!(selection_state_epochs)
 
             res_erp = EegFun.plot_erp(erp; display_plot = false)
@@ -125,7 +125,7 @@ PrecompileTools.@compile_workload begin
             EegFun._start_shared_selection!(first(res_erp.axes), selection_state_erp, 0.1)
             EegFun._update_shared_selection!(first(res_erp.axes), selection_state_erp, 0.1, 0.5)
             EegFun._finish_shared_selection!(first(res_erp.axes), selection_state_erp, 0.5)
-            EegFun._get_erp_selection_bounds(selection_state_erp, erp)
+            EegFun._get_selection_bounds(selection_state_erp, erp)
             EegFun._filter_visible_conditions(erp, Ref(nothing))
             EegFun._average_conditions(erp)
             EegFun._clear_shared_selection!(selection_state_erp)

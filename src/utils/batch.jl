@@ -423,3 +423,40 @@ function _prepare_output_dir!(ctx::BatchContext, default_dir::AbstractString)
     mkpath(ctx.output_dir)
     return ctx.output_dir
 end
+
+function _batch_jld2_files(
+    transform_fn::F,
+    ::Type{ExpectedT},
+    ctx::BatchContext,
+    default_dir::AbstractString,
+    file_pattern::String,
+    input_dir::String,
+    @nospecialize(participant_selection),
+    operation_name::String;
+    condition_selection = nothing,
+    filename_modifier::Function = identity,
+    expected_label::String = string(ExpectedT),
+) where {F,ExpectedT}
+    out_dir = _prepare_output_dir!(ctx, default_dir)
+    process_fn = function (filepath::String, output_path::String)
+        fname = basename(filepath)
+        data = read_data(filepath)
+        isnothing(data) && return BatchResult(false, fname, "No data variables found")
+        data isa ExpectedT || return BatchResult(false, fname, "Invalid data type: expected $expected_label, got $(typeof(data))")
+        !isnothing(condition_selection) && (data = _condition_select(data, condition_selection))
+        res = transform_fn(data)
+        res isa BatchResult && return BatchResult(res.success, fname, res.message)
+        out_data, msg = res
+        jldsave(output_path; data = out_data, format_version = EEGFUN_FORMAT_VERSION)
+        return BatchResult(true, fname, msg)
+    end
+    return batch_process(
+        process_fn,
+        file_pattern,
+        input_dir,
+        out_dir,
+        participant_selection,
+        operation_name;
+        filename_modifier = filename_modifier,
+    )
+end

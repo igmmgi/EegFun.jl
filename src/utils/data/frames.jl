@@ -11,7 +11,6 @@ const ConditionAverageData = Union{ErpData,TimeFreqData}
 ######################################
 
 _data_frames(dat::EegData) = (dat.data,)
-
 _data_frames(dat::Union{TimeFreqData,TimeFreqEpochData}) = (dat.data_power, dat.data_phase)
 
 function _set_data_frames!(dat::EegData, frames::Tuple{Any})
@@ -25,27 +24,60 @@ function _set_data_frames!(dat::Union{TimeFreqData,TimeFreqEpochData}, frames::T
 end
 
 _foreach_df(f, df::DataFrame) = (f(df); nothing)
-
 _foreach_df(f, dfs::AbstractVector{<:DataFrame}) = (foreach(f, dfs); nothing)
-
 _map_df(f, df::DataFrame) = f(df)
-
 _map_df(f, dfs::AbstractVector{<:DataFrame}) = DataFrame[f(df) for df in dfs]
-
 _kind_tag(::Type{<:Union{TimeFreqData,TimeFreqEpochData}}) = "TF "
-
 _kind_tag(::Type) = ""
 
-@inline function _accum_col!(dst::Vector{Float64}, src::Vector{Float64})
+@inline function _copy_f64!(dst::AbstractVector{Float64}, src::AbstractVector)
     @inbounds @simd for i in eachindex(dst, src)
-        dst[i] += src[i]
+        dst[i] = Float64(src[i])
     end
+    return dst
+end
+
+@inline function _accum_col!(dst::AbstractVector{Float64}, src::AbstractVector)
+    @inbounds @simd for i in eachindex(dst, src)
+        dst[i] += Float64(src[i])
+    end
+    return dst
 end
 
 @inline function _accum_col!(dst::AbstractVector, src::AbstractVector)
     @inbounds @simd for i in eachindex(dst, src)
         dst[i] += src[i]
     end
+    return dst
+end
+
+@inline function _add_scaled_col!(dst::Vector{Float64}, src::AbstractVector, scale::Float64)
+    @inbounds @simd for i in eachindex(dst, src)
+        dst[i] = muladd(Float64(src[i]), scale, dst[i])
+    end
+    return dst
+end
+
+@inline function _sub_col!(dst::Vector{Float64}, src1::AbstractVector, src2::AbstractVector)
+    @inbounds @simd for i in eachindex(dst, src1, src2)
+        dst[i] = Float64(src1[i]) - Float64(src2[i])
+    end
+    return dst
+end
+
+function _fill_colmeans_idx!(out::Vector{Float64}, df::DataFrame, idxs::AbstractVector{<:Integer})::Vector{Float64}
+    isempty(idxs) && return fill!(out, 0.0)
+    _copy_f64!(out, df[!, idxs[1]])
+    for m = 2:length(idxs)
+        _accum_col!(out, df[!, idxs[m]])
+    end
+    if length(idxs) > 1
+        k_f64 = Float64(length(idxs))
+        @inbounds @simd for i in eachindex(out)
+            out[i] /= k_f64
+        end
+    end
+    return out
 end
 
 @inline function _rem2pi_col!(col::AbstractVector)

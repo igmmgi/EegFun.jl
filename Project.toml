@@ -5,6 +5,7 @@ authors = ["Ian G. MacKenzie <ian.mackenzie@uni-tuebingen.de>", "Carolin Dudschi
 
 [deps]
 AnovaFun = "786f6bac-1c88-4ef5-b24a-5b341b5d6c78"
+Base64 = "2a0f44e3-6c83-55bd-87e4-b1978d98bd5f"
 BiosemiDataFormat = "d1c37e40-cd17-11e8-241b-47481c954d91"
 BrainVisionDataFormat = "a1c37e40-cd17-11e8-241b-47481c954d92"
 CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
@@ -65,6 +66,7 @@ EegFunMixedModelsExt = ["MixedModels", "StatsModels"]
 [compat]
 AMDGPU = "2"
 AnovaFun = "0.5"
+Base64 = "1"
 BiosemiDataFormat = "0.2, 0.3"
 BrainVisionDataFormat = "0.1"
 CSV = "0.10, 1"

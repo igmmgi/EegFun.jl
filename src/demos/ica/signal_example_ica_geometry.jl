@@ -277,47 +277,32 @@ function signal_example_ica_geometry()
 
     ctrl = GridLayout(fig[4, 1:4]; colgap = 12)
     deg_fmt = v -> "$(round(Int, v))°"
-    sl_mix_α, lbl_mix_α = _demo_labelled_slider(ctrl, 1, "Mix α\n(S1-S2)", 0.0:1.0:90.0, 25.0, deg_fmt, ctrl_sz)
-    sl_mix_β, lbl_mix_β = _demo_labelled_slider(ctrl, 2, "Mix β\n(S1-S3)", 0.0:1.0:90.0, 15.0, deg_fmt, ctrl_sz)
-    sl_mix_γ, lbl_mix_γ = _demo_labelled_slider(ctrl, 3, "Mix γ\n(S2-S3)", 0.0:1.0:90.0, 20.0, deg_fmt, ctrl_sz)
-    sl_unmix_α, lbl_unmix_α = _demo_labelled_slider(ctrl, 4, "Unmix φ\n(S1-S2)", 0.0:1.0:90.0, 25.0, deg_fmt, ctrl_sz)
-    sl_unmix_β, lbl_unmix_β = _demo_labelled_slider(ctrl, 5, "Unmix ψ\n(S1-S3)", 0.0:1.0:90.0, 15.0, deg_fmt, ctrl_sz)
-    sl_unmix_γ, lbl_unmix_γ = _demo_labelled_slider(ctrl, 6, "Unmix χ\n(S2-S3)", 0.0:1.0:90.0, 20.0, deg_fmt, ctrl_sz)
-    sl_freq, lbl_freq = _demo_labelled_slider(ctrl, 7, "Burst Freq", 1.0:1.0:20.0, 8.0, v -> "$(round(Int, v)) Hz", ctrl_sz)
-    sl_noise, lbl_noise = _demo_labelled_slider(ctrl, 8, "Noise", 0.0:0.05:1.0, 0.1, v -> "$(round(v; digits = 2))", ctrl_sz)
+    clear_infomax = _ -> (in_ica_update[] || (use_infomax[] = false))
+    _demo_labelled_slider(ctrl, 1, "Mix α\n(S1-S2)", 0.0:1.0:90.0, 25.0, deg_fmt, ctrl_sz; obs = mix_α)
+    _demo_labelled_slider(ctrl, 2, "Mix β\n(S1-S3)", 0.0:1.0:90.0, 15.0, deg_fmt, ctrl_sz; obs = mix_β)
+    _demo_labelled_slider(ctrl, 3, "Mix γ\n(S2-S3)", 0.0:1.0:90.0, 20.0, deg_fmt, ctrl_sz; obs = mix_γ)
+    sl_unmix_α, _ =
+        _demo_labelled_slider(ctrl, 4, "Unmix φ\n(S1-S2)", 0.0:1.0:90.0, 25.0, deg_fmt, ctrl_sz; obs = unmix_α, on_change = clear_infomax)
+    sl_unmix_β, _ =
+        _demo_labelled_slider(ctrl, 5, "Unmix ψ\n(S1-S3)", 0.0:1.0:90.0, 15.0, deg_fmt, ctrl_sz; obs = unmix_β, on_change = clear_infomax)
+    sl_unmix_γ, _ =
+        _demo_labelled_slider(ctrl, 6, "Unmix χ\n(S2-S3)", 0.0:1.0:90.0, 20.0, deg_fmt, ctrl_sz; obs = unmix_γ, on_change = clear_infomax)
+    _demo_labelled_slider(ctrl, 7, "Burst Freq", 1.0:1.0:20.0, 8.0, v -> "$(round(Int, v)) Hz", ctrl_sz; obs = sig_freq)
+    _demo_labelled_slider(
+        ctrl,
+        8,
+        "Noise",
+        0.0:0.05:1.0,
+        0.1,
+        v -> "$(round(v; digits = 2))",
+        ctrl_sz;
+        obs = noise_lvl,
+        on_change = _ -> (randn!(noise1_buf); randn!(noise2_buf); randn!(noise3_buf)),
+    )
 
     Label(ctrl[1, 9], "Auto-ICA"; fontsize = ctrl_sz, halign = :center)
     btn_ica = Button(ctrl[2, 9]; label = "Infomax", fontsize = ctrl_sz)
     btn_ica_ext = Button(ctrl[3, 9]; label = "Extended", fontsize = ctrl_sz)
-
-    for (sl, obs, lbl) in ((sl_mix_α, mix_α, lbl_mix_α), (sl_mix_β, mix_β, lbl_mix_β), (sl_mix_γ, mix_γ, lbl_mix_γ))
-        let o = obs, l = lbl
-            on(sl.value) do v
-                o[] = v
-                l.text = deg_fmt(v)
-            end
-        end
-    end
-    for (sl, obs, lbl) in ((sl_unmix_α, unmix_α, lbl_unmix_α), (sl_unmix_β, unmix_β, lbl_unmix_β), (sl_unmix_γ, unmix_γ, lbl_unmix_γ))
-        let o = obs, l = lbl
-            on(sl.value) do v
-                in_ica_update[] || (use_infomax[] = false)
-                o[] = v
-                l.text = deg_fmt(v)
-            end
-        end
-    end
-    on(sl_freq.value) do v
-        sig_freq[] = v
-        lbl_freq.text = "$(round(Int, v)) Hz"
-    end
-    on(sl_noise.value) do v
-        noise_lvl[] = v
-        lbl_noise.text = "$(round(v; digits = 2))"
-        randn!(noise1_buf)
-        randn!(noise2_buf)
-        randn!(noise3_buf)
-    end
 
     dummy_layout = Layout(DataFrame(label = [:M1, :M2, :M3], inc = [0.0, 0.0, 0.0], azi = [0.0, 0.0, 0.0]), nothing, nothing, nothing)
 

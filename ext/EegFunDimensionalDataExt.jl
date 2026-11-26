@@ -1,9 +1,7 @@
 # DimensionalData.jl extension converting EegFun data containers to DimArrays.
-
 module EegFunDimensionalDataExt
 
 using EegFun
-
 using DimensionalData
 
 ######################################
@@ -36,10 +34,9 @@ function DimensionalData.DimArray(dat::EegFun.TimeFreqData)
     freqs = EegFun.frequency_vector(dat)
     c = EegFun.channel_labels(dat)
     std_times = _try_extract_standard_times(df.freq, df.time, freqs)
-    is_std = std_times !== nothing
-    times = is_std ? std_times : sort!(Float64.(unique(df.time)))
+    times = std_times !== nothing ? std_times : sort!(Float64.(unique(df.time)))
     A = Array{Float64,3}(undef, length(freqs), length(times), length(c))
-    _populate_tf_3d!(A, df, freqs, times, c, is_std)
+    _populate_tf_slice!(A, df, freqs, times, c, std_times !== nothing)
     return DimArray(A, (Dim{:Freq}(freqs), Ti(times), Dim{:Channel}(c)))
 end
 
@@ -68,21 +65,11 @@ function DimensionalData.DimArray(dat::EegFun.TimeFreqEpochData)
     for ep = 1:n_ep
         df = dat.data_power[ep]
         is_std = (ep == 1 && std_times1 !== nothing) || _is_standard_tf_grid(df.freq, df.time, freqs, times)
-        if is_std
-            for (ci, ch) in enumerate(c)
-                _fill_tf_channel_4d!(A, ep, ci, df[!, ch])
-            end
-        else
-            @views fill!(A[ep, :, :, :], NaN)
-            if f_idx === nothing
-                f_idx = Dict{Float64,Int}(f => i for (i, f) in enumerate(freqs))
-                t_idx = Dict{Float64,Int}(t => i for (i, t) in enumerate(times))
-            end
-            fi_map, ti_map = _map_tf_rows(df.freq, df.time, f_idx, t_idx)
-            for (ci, ch) in enumerate(c)
-                _fill_tf_channel_4d_mapped!(A, ep, ci, df[!, ch], fi_map, ti_map)
-            end
+        if !is_std && f_idx === nothing
+            f_idx = Dict{Float64,Int}(f => i for (i, f) in enumerate(freqs))
+            t_idx = Dict{Float64,Int}(t => i for (i, t) in enumerate(times))
         end
+        _populate_tf_slice!(view(A, ep, :, :, :), df, freqs, times, c, is_std, f_idx, t_idx)
     end
 
     return DimArray(A, (Dim{:Epoch}(1:n_ep), Dim{:Freq}(freqs), Ti(times), Dim{:Channel}(c)))
@@ -145,64 +132,52 @@ function _fill_spec_col!(A::Matrix{Float64}, ci::Int, col::AbstractVector)
     return nothing
 end
 
-function _fill_tf_channel_3d!(A::Array{Float64,3}, ci::Int, col::AbstractVector)
-    n_f, n_t, _ = size(A)
+function _fill_tf_channel!(S::AbstractArray{Float64,3}, ci::Int, col::AbstractVector)
+    n_f, n_t, _ = size(S)
     idx = 0
     @inbounds for ti = 1:n_t, fi = 1:n_f
         idx += 1
-        A[fi, ti, ci] = Float64(col[idx])
+        S[fi, ti, ci] = Float64(col[idx])
     end
     return nothing
 end
 
-function _fill_tf_channel_3d_mapped!(A::Array{Float64,3}, ci::Int, col::AbstractVector, fi_map::Vector{Int}, ti_map::Vector{Int})
+function _fill_tf_channel_mapped!(S::AbstractArray{Float64,3}, ci::Int, col::AbstractVector, fi_map::Vector{Int}, ti_map::Vector{Int})
     @inbounds for r in eachindex(fi_map)
         fi = fi_map[r]
         ti = ti_map[r]
         if fi > 0 && ti > 0
-            A[fi, ti, ci] = Float64(col[r])
+            S[fi, ti, ci] = Float64(col[r])
         end
     end
     return nothing
 end
 
-function _fill_tf_channel_4d!(A::Array{Float64,4}, ep::Int, ci::Int, col::AbstractVector)
-    _, n_f, n_t, _ = size(A)
-    idx = 0
-    @inbounds for ti = 1:n_t, fi = 1:n_f
-        idx += 1
-        A[ep, fi, ti, ci] = Float64(col[idx])
-    end
-    return nothing
-end
-
-function _fill_tf_channel_4d_mapped!(A::Array{Float64,4}, ep::Int, ci::Int, col::AbstractVector, fi_map::Vector{Int}, ti_map::Vector{Int})
-    @inbounds for r in eachindex(fi_map)
-        fi = fi_map[r]
-        ti = ti_map[r]
-        if fi > 0 && ti > 0
-            A[ep, fi, ti, ci] = Float64(col[r])
-        end
-    end
-    return nothing
-end
-
-function _populate_tf_3d!(A::Array{Float64,3}, df, freqs::Vector{Float64}, times::Vector{Float64}, channels::Vector{Symbol}, is_std::Bool)
-    (isempty(freqs) || isempty(times) || isempty(channels)) && return fill!(A, NaN)
+function _populate_tf_slice!(
+    S::AbstractArray{Float64,3},
+    df,
+    freqs::Vector{Float64},
+    times::Vector{Float64},
+    channels::Vector{Symbol},
+    is_std::Bool,
+    f_idx::Union{Nothing,Dict{Float64,Int}} = nothing,
+    t_idx::Union{Nothing,Dict{Float64,Int}} = nothing,
+)
+    (isempty(freqs) || isempty(times) || isempty(channels)) && return fill!(S, NaN)
     if is_std
         for (ci, ch) in enumerate(channels)
-            _fill_tf_channel_3d!(A, ci, df[!, ch])
+            _fill_tf_channel!(S, ci, df[!, ch])
         end
     else
-        fill!(A, NaN)
-        f_idx = Dict{Float64,Int}(f => i for (i, f) in enumerate(freqs))
-        t_idx = Dict{Float64,Int}(t => i for (i, t) in enumerate(times))
-        fi_map, ti_map = _map_tf_rows(df.freq, df.time, f_idx, t_idx)
+        fill!(S, NaN)
+        f_map = f_idx === nothing ? Dict{Float64,Int}(f => i for (i, f) in enumerate(freqs)) : f_idx
+        t_map = t_idx === nothing ? Dict{Float64,Int}(t => i for (i, t) in enumerate(times)) : t_idx
+        fi_map, ti_map = _map_tf_rows(df.freq, df.time, f_map, t_map)
         for (ci, ch) in enumerate(channels)
-            _fill_tf_channel_3d_mapped!(A, ci, df[!, ch], fi_map, ti_map)
+            _fill_tf_channel_mapped!(S, ci, df[!, ch], fi_map, ti_map)
         end
     end
-    return A
+    return S
 end
 
 end # module

@@ -12,41 +12,17 @@ function _find_closest_time_index(times::AbstractVector{<:Real}, target::Real)
     return abs(times[idx] - target) < abs(times[idx-1] - target) ? idx : idx - 1
 end
 
-function _add_col!(out::Vector{Float64}, col::Vector{Float64}, N::Int)
-    @inbounds @simd for i = 1:N
-        out[i] += col[i]
-    end
-end
-
-function _add_col!(out::Vector{Float64}, col::AbstractVector, N::Int)
-    @inbounds @simd for i = 1:N
-        out[i] += Float64(col[i])
-    end
-end
-
 function _colmeans(df::DataFrame, cols)::Vector{Float64}
     isempty(cols) && return Float64[]
-    N = nrow(df)
-    out = zeros(Float64, N)
+    out = zeros(Float64, nrow(df))
     for c in cols
-        _add_col!(out, df[!, c], N)
+        _accum_col!(out, df[!, c])
     end
     out .*= (1.0 / length(cols))
     return out
 end
 
-function _colmeans(mat::Matrix)::Vector{Float64}
-    N, C = size(mat)
-    C == 0 && return Float64[]
-    out = zeros(Float64, N)
-    for c = 1:C
-        @inbounds @simd for i = 1:N
-            out[i] += mat[i, c]
-        end
-    end
-    out .*= (1.0 / C)
-    return out
-end
+_colmeans(mat::Matrix)::Vector{Float64} = _colmeans(mat, 1:size(mat, 2))
 
 function _colmeans(mat::Matrix, cols)::Vector{Float64}
     isempty(cols) && return Float64[]
@@ -101,55 +77,27 @@ function _selected_ylimit_cols(dat::EegData, df0::DataFrame, channel_selection, 
 end
 
 function _ylimits(
-    dat::Union{ErpData,ContinuousData};
+    dat::Union{ErpData,ContinuousData,EpochData};
     channel_selection = channels(),
     sample_selection = samples(),
     interval_selection::Interval = times(),
     include_extra::Bool = false,
 )::Tuple{Float64,Float64}
-    df = dat.data
-    isempty(df) && return (0.0, 1.0)
-    cols = _selected_ylimit_cols(dat, df, channel_selection, include_extra)
-    sel_samples = get_selected_samples(df, _combine_interval_sample(interval_selection, sample_selection))
+    df0 = _first_df(dat)
+    (isnothing(df0) || isempty(df0)) && return (0.0, 1.0)
+    cols = _selected_ylimit_cols(dat, df0, channel_selection, include_extra)
+    sel_samples = get_selected_samples(df0, _combine_interval_sample(interval_selection, sample_selection))
     (isempty(cols) || isempty(sel_samples)) && return (0.0, 1.0)
 
     mn, mx = Inf, -Inf
     found = false
-    for c in cols
+    dfs = dat isa EpochData ? dat.data : (dat.data,)
+    for df in dfs, c in cols
         ext = _nan_safe_extrema_rows(df[!, c], sel_samples)
         if !isnothing(ext)
             mn = min(mn, ext[1])
             mx = max(mx, ext[2])
             found = true
-        end
-    end
-    return found ? (mn, mx) : (0.0, 1.0)
-end
-
-function _ylimits(
-    dat::EpochData;
-    channel_selection = channels(),
-    sample_selection = samples(),
-    interval_selection::Interval = times(),
-    include_extra::Bool = false,
-)::Tuple{Float64,Float64}
-    isempty(dat.data) && return (0.0, 1.0)
-    df1 = dat.data[1]
-    isempty(df1) && return (0.0, 1.0)
-    cols = _selected_ylimit_cols(dat, df1, channel_selection, include_extra)
-    sel_samples = get_selected_samples(df1, _combine_interval_sample(interval_selection, sample_selection))
-    (isempty(cols) || isempty(sel_samples)) && return (0.0, 1.0)
-
-    mn, mx = Inf, -Inf
-    found = false
-    for df in dat.data
-        for c in cols
-            ext = _nan_safe_extrema_rows(df[!, c], sel_samples)
-            if !isnothing(ext)
-                mn = min(mn, ext[1])
-                mx = max(mx, ext[2])
-                found = true
-            end
         end
     end
     return found ? (mn, mx) : (0.0, 1.0)

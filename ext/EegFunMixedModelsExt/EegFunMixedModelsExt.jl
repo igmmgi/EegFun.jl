@@ -1,25 +1,15 @@
 # Mass-univariate linear mixed-effects modeling (MixedModels.jl extension).
-
 module EegFunMixedModelsExt
 
 using EegFun
-
 using MixedModels
-
 using StatsModels
-
 using DataFrames
-
 using Random
-
 using ProgressMeter
-
 using Distributions
-
 using LinearAlgebra
-
 using Logging
-
 using SparseArrays
 
 import EegFun: fit_mass_lmm, @minimal_error, @minimal_warning
@@ -40,20 +30,14 @@ const MAX_EVALS = 1000
 
 # Fit outcome codes: zero-based indices into `EegFun.LMM_FIT_STATUS`
 const STATUS_CONVERGED = 0x00
-
 const STATUS_ROUNDOFF = 0x01
-
 const STATUS_MAXEVAL = 0x02
-
 const STATUS_OPTFAIL = 0x03
-
 const STATUS_FLAT = 0x04    # constant / non-finite data: not fitted
-
 const STATUS_ERROR = 0x05   # fit threw, or produced non-finite estimates
 
 # Stored null maps (:cluster / :tfce) are warned about / refused above these fractions of free memory
 const ZPERM_WARN_FRACTION = 0.5
-
 const ZPERM_ERROR_FRACTION = 0.9
 
 # Below this many random sign flips the permutation p-values are very coarse
@@ -134,47 +118,24 @@ function fit_mass_lmm(
     spatial_connectivity = nothing,
     kwargs...,
 )
-    eff_corr = isnothing(correction) ? correction_method : correction
     isempty(epochs) && @minimal_error "EpochData is empty."
-
-    dfs = epochs.data
-    n_epochs = length(dfs)
-
-    all_channels = EegFun.channel_labels(epochs)
-    n_channels = length(all_channels)
-    n_timepoints = EegFun.n_samples(epochs)
-    all(nrow(df) == n_timepoints for df in dfs) || @minimal_error "All epochs must have exactly $n_timepoints time points."
     :channel_names in keys(kwargs) && @minimal_error "Cannot pass `channel_names` when calling fit_mass_lmm with EpochData."
     :time_points in keys(kwargs) && @minimal_error "Cannot pass `time_points` when calling fit_mass_lmm with EpochData."
-    meta_cols = setdiff(EegFun.all_labels(epochs), all_channels)
 
+    dfs = epochs.data
+    n_timepoints = EegFun.n_samples(epochs)
+    all(nrow(df) == n_timepoints for df in dfs) || @minimal_error "All epochs must have exactly $n_timepoints time points."
+    meta_cols = setdiff(EegFun.all_labels(epochs), EegFun.channel_labels(epochs))
     meta_df = DataFrame([col => [df[1, col] for df in dfs] for col in meta_cols])
 
-    eeg_data = Array{Float64,3}(undef, n_channels, n_timepoints, n_epochs)
-    for (i, df) in enumerate(dfs)
-        for (c_idx, c_name) in enumerate(all_channels)
-            _fill_lmm_epoch_slice!(eeg_data, c_idx, i, df[!, c_name], n_timepoints)
-        end
-    end
-
-    if isnothing(spatial_connectivity) &&
-       eff_corr in (:cluster, :tfce) &&
-       !isnothing(epochs.layout) &&
-       (!isnothing(epochs.layout.neighbors) || EegFun.has_valid_coordinates(epochs.layout))
-        spatial_connectivity = EegFun._build_connectivity_matrix(all_channels, epochs.layout, :spatiotemporal)
-    end
-
-    tvec = EegFun.time_vector(epochs)
-    time_pts = isempty(tvec) ? Vector(1:n_timepoints) : tvec
-
-    return _fit_mass_lmm(
-        eeg_data,
+    return _fit_mass_lmm_from_dfs(
+        dfs,
         meta_df,
-        f,
-        epochs;
-        channel_names = all_channels,
-        time_points = time_pts,
-        correction_method = eff_corr,
+        epochs,
+        epochs,
+        f;
+        correction_method = correction_method,
+        correction = correction,
         spatial_connectivity = spatial_connectivity,
         kwargs...,
     )
@@ -189,7 +150,6 @@ function fit_mass_lmm(
     spatial_connectivity = nothing,
     kwargs...,
 )
-    eff_corr = isnothing(correction) ? correction_method : correction
     isempty(epochs_vec) && @minimal_error "EpochData vector is empty."
     :channel_names in keys(kwargs) && @minimal_error "Cannot pass `channel_names` when calling fit_mass_lmm with EpochData."
     :time_points in keys(kwargs) && @minimal_error "Cannot pass `time_points` when calling fit_mass_lmm with EpochData."
@@ -199,14 +159,11 @@ function fit_mass_lmm(
     sel_idx = EegFun.get_selected_conditions(reps, condition_selection)
     isempty(sel_idx) && @minimal_error "No EpochData conditions matched `condition_selection`."
     keep_conds = Set{Int}(reps[i].condition for i in sel_idx)
-    selected_sets = EegFun.EpochData[ep for ep in epochs_vec if ep.condition in keep_conds]
-
-    nonempty_sets = EegFun.EpochData[ep for ep in selected_sets if !isempty(ep.data)]
+    nonempty_sets = EegFun.EpochData[ep for ep in epochs_vec if ep.condition in keep_conds && !isempty(ep.data)]
     isempty(nonempty_sets) && @minimal_error "All selected EpochData objects are empty (0 trials)."
 
     ref_ep = first(nonempty_sets)
     all_channels = EegFun.channel_labels(ref_ep)
-    n_channels = length(all_channels)
     n_timepoints = EegFun.n_samples(ref_ep)
 
     for (idx, ep) in enumerate(nonempty_sets)
@@ -217,8 +174,6 @@ function fit_mass_lmm(
     end
 
     all_dfs = DataFrame[df for ep in nonempty_sets for df in ep.data]
-    total_epochs = length(all_dfs)
-
     common_meta = foldl(intersect, [setdiff(EegFun.all_labels(ep), all_channels) for ep in nonempty_sets])
     meta_df = DataFrame([col => [df[1, col] for df in all_dfs] for col in common_meta])
 
@@ -226,41 +181,19 @@ function fit_mass_lmm(
     raw_names = [isempty(ep.condition_name) ? string(ep.condition) : ep.condition_name for ep in nonempty_sets]
     use_names = length(unique(raw_names)) >= length(distinct_conds)
 
-    if !hasproperty(meta_df, :participant)
-        meta_df[!, :participant] = String[_resolve_epoch_participant_label(ep) for ep in nonempty_sets for _ in ep.data]
-    end
+    hasproperty(meta_df, :participant) ||
+        (meta_df[!, :participant] = String[_resolve_epoch_participant_label(ep) for ep in nonempty_sets for _ in ep.data])
     if !hasproperty(meta_df, :condition)
         meta_df[!, :condition] = String[
             (use_names ? (isempty(ep.condition_name) ? string(ep.condition) : ep.condition_name) : string(ep.condition)) for
             ep in nonempty_sets for _ in ep.data
         ]
     end
-    if !hasproperty(meta_df, :condition_num)
-        meta_df[!, :condition_num] = Int[ep.condition for ep in nonempty_sets for _ in ep.data]
-    end
-    if !hasproperty(meta_df, :condition_name)
-        meta_df[!, :condition_name] = String[ep.condition_name for ep in nonempty_sets for _ in ep.data]
-    end
-    if !hasproperty(meta_df, :file)
-        meta_df[!, :file] = String[ep.file for ep in nonempty_sets for _ in ep.data]
-    end
+    hasproperty(meta_df, :condition_num) || (meta_df[!, :condition_num] = Int[ep.condition for ep in nonempty_sets for _ in ep.data])
+    hasproperty(meta_df, :condition_name) ||
+        (meta_df[!, :condition_name] = String[ep.condition_name for ep in nonempty_sets for _ in ep.data])
+    hasproperty(meta_df, :file) || (meta_df[!, :file] = String[ep.file for ep in nonempty_sets for _ in ep.data])
 
-    eeg_data = Array{Float64,3}(undef, n_channels, n_timepoints, total_epochs)
-    for (i, df) in enumerate(all_dfs)
-        for (c_idx, c_name) in enumerate(all_channels)
-            _fill_lmm_epoch_slice!(eeg_data, c_idx, i, df[!, c_name], n_timepoints)
-        end
-    end
-
-    if isnothing(spatial_connectivity) &&
-       eff_corr in (:cluster, :tfce) &&
-       !isnothing(ref_ep.layout) &&
-       (!isnothing(ref_ep.layout.neighbors) || EegFun.has_valid_coordinates(ref_ep.layout))
-        spatial_connectivity = EegFun._build_connectivity_matrix(all_channels, ref_ep.layout, :spatiotemporal)
-    end
-
-    tvec = EegFun.time_vector(ref_ep)
-    time_pts = isempty(tvec) ? Vector(1:n_timepoints) : tvec
     combined_ep = EegFun.EpochData(
         ref_ep.file,
         ref_ep.condition,
@@ -271,14 +204,14 @@ function fit_mass_lmm(
         copy(ref_ep.analysis_info),
     )
 
-    return _fit_mass_lmm(
-        eeg_data,
+    return _fit_mass_lmm_from_dfs(
+        all_dfs,
         meta_df,
-        f,
-        combined_ep;
-        channel_names = all_channels,
-        time_points = time_pts,
-        correction_method = eff_corr,
+        ref_ep,
+        combined_ep,
+        f;
+        correction_method = correction_method,
+        correction = correction,
         spatial_connectivity = spatial_connectivity,
         kwargs...,
     )
@@ -490,6 +423,50 @@ end
     end
 end
 
+function _fit_mass_lmm_from_dfs(
+    dfs::Vector{DataFrame},
+    meta_df::DataFrame,
+    ref_ep::EegFun.EpochData,
+    result_ep::EegFun.EpochData,
+    f::FormulaTerm;
+    correction_method::Symbol = :maxt,
+    correction::Union{Nothing,Symbol} = nothing,
+    spatial_connectivity = nothing,
+    kwargs...,
+)
+    eff_corr = isnothing(correction) ? correction_method : correction
+    all_channels = EegFun.channel_labels(ref_ep)
+    n_channels = length(all_channels)
+    n_timepoints = EegFun.n_samples(ref_ep)
+
+    eeg_data = Array{Float64,3}(undef, n_channels, n_timepoints, length(dfs))
+    for (i, df) in enumerate(dfs), (c_idx, c_name) in enumerate(all_channels)
+        _fill_lmm_epoch_slice!(eeg_data, c_idx, i, df[!, c_name], n_timepoints)
+    end
+
+    if isnothing(spatial_connectivity) &&
+       eff_corr in (:cluster, :tfce) &&
+       !isnothing(ref_ep.layout) &&
+       (!isnothing(ref_ep.layout.neighbors) || EegFun.has_valid_coordinates(ref_ep.layout))
+        spatial_connectivity = EegFun._build_connectivity_matrix(all_channels, ref_ep.layout, :spatiotemporal)
+    end
+
+    tvec = EegFun.time_vector(ref_ep)
+    time_pts = isempty(tvec) ? Vector(1:n_timepoints) : tvec
+
+    return _fit_mass_lmm(
+        eeg_data,
+        meta_df,
+        f,
+        result_ep;
+        channel_names = all_channels,
+        time_points = time_pts,
+        correction_method = eff_corr,
+        spatial_connectivity = spatial_connectivity,
+        kwargs...,
+    )
+end
+
 function _resolve_epoch_participant_label(ep::EegFun.EpochData)::String
     if !isempty(ep.data) && !isempty(ep.data[1]) && hasproperty(ep.data[1], :participant)
         return string(ep.data[1][1, :participant])
@@ -652,9 +629,12 @@ end
     return copysign(invlogccdf(Normal(), lp), t)
 end
 
-function _make_cr2_workspace(m::LinearMixedModel, design::BlockDesign, p::Int, n_flips::Int)
+_make_cr2_workspace(m::LinearMixedModel, design::BlockDesign, p::Int, n_flips::Int) =
+    _make_cr2_workspace([size(A.λ) for A in m.reterms], design, p, n_flips)
+
+function _make_cr2_workspace(lam_sizes::Vector{Tuple{Int,Int}}, design::BlockDesign, p::Int, n_flips::Int)
     S = length(design.rows)
-    lams = Matrix{Float64}[Matrix{Float64}(undef, size(A.λ)) for A in m.reterms]
+    lams = Matrix{Float64}[Matrix{Float64}(undef, sz) for sz in lam_sizes]
     XtVX_s = [Matrix{Float64}(undef, p, p) for _ = 1:S]
     XtVy_s = [Vector{Float64}(undef, p) for _ = 1:S]
     Λ_s = [zeros(Float64, size(design.Z[s], 2), size(design.Z[s], 2)) for s = 1:S]
@@ -740,27 +720,70 @@ function _block_gls_stats!(ws::Cr2Workspace, design::BlockDesign, lams::Vector{M
 end
 
 function _block_gls_stats(design::BlockDesign, lams::Vector{Matrix{Float64}}, y::AbstractVector{Float64})
-    n_blocks = length(design.rows)
-    XtVX = Vector{Matrix{Float64}}(undef, n_blocks)
-    XtVy = Vector{Vector{Float64}}(undef, n_blocks)
-    for s = 1:n_blocks
-        ys = view(y, design.rows[s])
-        q = size(design.Z[s], 2)
-        Λ = zeros(q, q)
-        for (k, off) in design.lambda_blocks[s]
-            λ = lams[k]
-            qk = size(λ, 1)
-            Λ[(off+1):(off+qk), (off+1):(off+qk)] .= λ
-        end
-        Xty = design.X[s]' * ys
-        Gty = Λ' * (design.Z[s]' * ys)
-        GtX = Λ' * design.ZtX[s]
-        C = cholesky!(Symmetric(Λ' * design.ZtZ[s] * Λ + I))
-        FGX = C \ GtX
-        XtVX[s] = design.XtX[s] - GtX' * FGX
-        XtVy[s] = Xty - FGX' * Gty
+    ws = _make_cr2_workspace([size(λ) for λ in lams], design, size(first(design.X), 2), 0)
+    return _block_gls_stats!(ws, design, lams, y)
+end
+
+# Moore–Penrose pseudoinverse (I_p - H_s)^(+1/2): zero out unit-leverage directions (ev ≈ 1)
+# rather than amplifying floating-point roundoff on single-block predictors.
+function _compute_cr2_leverage!(
+    Hs::Matrix{Float64},
+    As::Matrix{Float64},
+    XtVX_s::Matrix{Float64},
+    R::Matrix{Float64},
+    tmp1::Matrix{Float64},
+    tmp2::Matrix{Float64},
+)
+    p = size(R, 1)
+    mul!(tmp1, XtVX_s, R)
+    mul!(Hs, R', tmp1)
+    @inbounds for j = 1:p, i = 1:(j-1)
+        avg_ij = 0.5 * (Hs[i, j] + Hs[j, i])
+        Hs[i, j] = avg_ij
+        Hs[j, i] = avg_ij
     end
-    return XtVX, XtVy
+    copyto!(tmp1, Hs)
+    eig = eigen!(Symmetric(tmp1))
+    V = eig.vectors
+    ev = eig.values
+    @inbounds for k = 1:p
+        w_k = ev[k] < 1.0 - 1e-8 ? (1.0 / sqrt(1.0 - ev[k])) : 0.0
+        for i = 1:p
+            tmp2[i, k] = V[i, k] * w_k
+        end
+    end
+    mul!(As, tmp2, V')
+    return Hs, As
+end
+
+function _compute_cr2_leverage(XtVX_s::Matrix{Float64}, R::Matrix{Float64})
+    p = size(R, 1)
+    return _compute_cr2_leverage!(
+        Matrix{Float64}(undef, p, p),
+        Matrix{Float64}(undef, p, p),
+        XtVX_s,
+        R,
+        Matrix{Float64}(undef, p, p),
+        Matrix{Float64}(undef, p, p),
+    )
+end
+
+function _cr2_satterthwaite_traces!(FtF::Matrix{Float64}, d::Vector{Float64}, F::Matrix{Float64})
+    S, p = size(F)
+    tr1 = 0.0
+    cross_sum = 0.0
+    @inbounds for s = 1:S
+        f_ss = 0.0
+        for j = 1:p
+            v = F[s, j]
+            f_ss += v * v
+        end
+        tr1 += max(0.0, d[s] - f_ss)
+        cross_sum += d[s] * f_ss
+    end
+    mul!(FtF, F', F)
+    tr2 = sum(abs2, d) - 2.0 * cross_sum + sum(abs2, FtF)
+    return tr1, tr2
 end
 
 # Closed-form Bell–McCaffrey / Pustejovsky–Tipton CR2 cluster-robust pivotal z-statistics
@@ -833,17 +856,7 @@ function _cr2_pivotal_z!(
     vs = has_ws ? cr2_ws.vs : Vector{Float64}(undef, p)
 
     for s = 1:S
-        if isnothing(Hs_pre) || isnothing(As_pre)
-            Hs = Matrix(Symmetric(R' * XtVX_s[s] * R))
-            eig = eigen(Symmetric(Hs))
-            # Moore–Penrose pseudoinverse (I_p - H_s)^(+1/2): zero out unit-leverage directions (ev ≈ 1)
-            # rather than amplifying floating-point roundoff on single-block predictors.
-            inv_sqrt = [ev < 1.0 - 1e-8 ? 1.0 / sqrt(1.0 - ev) : 0.0 for ev in eig.values]
-            As = eig.vectors * Diagonal(inv_sqrt) * eig.vectors'
-        else
-            Hs = Hs_pre[s]
-            As = As_pre[s]
-        end
+        Hs, As = (isnothing(Hs_pre) || isnothing(As_pre)) ? _compute_cr2_leverage(XtVX_s[s], R) : (Hs_pre[s], As_pre[s])
         mul!(cs, As, a)
         mul!(fs, Hs, cs)
         d[s] = dot(cs, fs)
@@ -858,26 +871,7 @@ function _cr2_pivotal_z!(
         end
     end
 
-    tr1 = 0.0
-    @inbounds for s = 1:S
-        f_ss = 0.0
-        for j = 1:p
-            v = F[s, j]
-            f_ss += v * v
-        end
-        tr1 += max(0.0, d[s] - f_ss)
-    end
-    mul!(FtF, F', F)
-    cross_sum = 0.0
-    @inbounds for s = 1:S
-        f_ss = 0.0
-        for j = 1:p
-            v = F[s, j]
-            f_ss += v * v
-        end
-        cross_sum += d[s] * f_ss
-    end
-    tr2 = sum(abs2, d) - 2.0 * cross_sum + sum(abs2, FtF)
+    tr1, tr2 = _cr2_satterthwaite_traces!(FtF, d, F)
     (tr1 >= (1.0 - 1e-5) * M[pc, pc] && tr2 > 0 && isfinite(tr1) && isfinite(tr2)) || (fill!(out_null, NaN); return NaN)
     raw_df = tr1^2 / tr2
     raw_df >= 1.0 - 1e-6 || (fill!(out_null, NaN); return NaN)
@@ -1046,28 +1040,8 @@ function _compute_pixel!(scr::LmmScratch, ctx)
 
     Hs_pre = ws.Hs_pre
     As_pre = ws.As_pre
-    tmp_pp = ws.tmp_pp
-    tmp_pp2 = ws.tmp_pp2
     for s = 1:S
-        Hs = Hs_pre[s]
-        mul!(tmp_pp, XtVX_s[s], R)
-        mul!(Hs, R', tmp_pp)
-        @inbounds for j = 1:p, i = 1:(j-1)
-            avg_ij = 0.5 * (Hs[i, j] + Hs[j, i])
-            Hs[i, j] = avg_ij
-            Hs[j, i] = avg_ij
-        end
-        copyto!(tmp_pp, Hs)
-        eig = eigen!(Symmetric(tmp_pp))
-        V = eig.vectors
-        ev = eig.values
-        @inbounds for k = 1:p
-            w_k = ev[k] < 1.0 - 1e-8 ? (1.0 / sqrt(1.0 - ev[k])) : 0.0
-            for i = 1:p
-                tmp_pp2[i, k] = V[i, k] * w_k
-            end
-        end
-        mul!(As_pre[s], tmp_pp2, V')
+        _compute_cr2_leverage!(Hs_pre[s], As_pre[s], XtVX_s[s], R, ws.tmp_pp, ws.tmp_pp2)
     end
 
     fill!(scr.z_perm_obs, NaN)
@@ -1355,27 +1329,22 @@ function _fit_mass_lmm(
             if issuccess(chol_0)
                 M0 = inv(chol_0)
                 R0 = Matrix(chol_0.U) \ Matrix{Float64}(I, p_est, p_est)
-                Hs0 = [Matrix(Symmetric(R0' * XtX_s[s] * R0)) for s = 1:n_blocks]
-                As0 = map(Hs0) do Hs
-                    eig = eigen(Symmetric(Hs))
-                    w = [ev < 1.0 - 1e-8 ? 1.0 / sqrt(1.0 - ev) : 0.0 for ev in eig.values]
-                    eig.vectors * Diagonal(w) * eig.vectors'
-                end
+                lev0 = [_compute_cr2_leverage(XtX_s[s], R0) for s = 1:n_blocks]
+                FtF0 = zeros(p_est, p_est)
+                d0 = zeros(n_blocks)
+                F0 = zeros(n_blocks, p_est)
                 untestable = Int[]
                 for c in tested
                     pc = findfirst(==(c), est_cols)::Int
-                    a = R0[pc, :]
-                    d0 = zeros(n_blocks)
-                    F0 = zeros(n_blocks, p_est)
+                    a = view(R0, pc, :)
                     for s = 1:n_blocks
-                        cs = As0[s] * a
-                        fs = Hs0[s] * cs
+                        Hs, As = lev0[s]
+                        cs = As * a
+                        fs = Hs * cs
                         d0[s] = dot(cs, fs)
                         F0[s, :] .= fs
                     end
-                    tr1 = sum(max(0.0, d0[s] - sum(abs2, view(F0, s, :))) for s = 1:n_blocks)
-                    FtF = F0' * F0
-                    tr2 = sum(abs2, d0) - 2.0 * sum(d0[s] * sum(abs2, view(F0, s, :)) for s = 1:n_blocks) + sum(abs2, FtF)
+                    tr1, tr2 = _cr2_satterthwaite_traces!(FtF0, d0, F0)
                     if !(tr1 >= (1.0 - 1e-5) * M0[pc, pc] && tr2 > 0 && tr1^2 / tr2 >= 2.0 - 1e-6)
                         push!(untestable, c)
                     end

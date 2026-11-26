@@ -166,22 +166,12 @@ function plot_erp_measurements(
     participant_selection = participants(),
     kwargs...,
 )
-    if endswith(filepath, ".jld2")
-        resolved = _resolve_input_filepath(filepath, input_dir)
-        data = read_data(resolved)
-        isnothing(data) && @minimal_error "No data found in file: $resolved"
-        return plot_erp_measurements(data, analysis_type; kwargs...)
-    end
-
-    files = _require_batch_files(filepath, input_dir, participant_selection)
-    results = NamedTuple[]
-    for file in files
-        @info "Plotting: $file"
-        data = read_data(joinpath(input_dir, file))
-        isnothing(data) && continue
-        push!(results, plot_erp_measurements(data, analysis_type; kwargs...))
-    end
-    return results
+    return _dispatch_plot_filepath(
+        data -> plot_erp_measurements(data, analysis_type; kwargs...),
+        filepath;
+        input_dir = input_dir,
+        participant_selection = participant_selection,
+    )
 end
 
 ######################################

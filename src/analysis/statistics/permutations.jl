@@ -251,44 +251,24 @@ function _build_perm_source(data1::AbstractArray{Float64,M}, data2::AbstractArra
     n_A = size(data1, 1)
     n_B = size(data2, 1)
     n_voxels = div(length(data1), n_A)
-    vox_cis = CartesianIndices(Base.tail(axes(data1)))
+    d1 = reshape(data1, n_A, n_voxels)
+    d2 = reshape(data2, n_B, n_voxels)
     if design == :paired
         D = Matrix{Float64}(undef, n_A, n_voxels)
-        if data1 isa Array{Float64,M} && data2 isa Array{Float64,M}
-            d1 = reshape(data1, n_A, n_voxels)
-            d2 = reshape(data2, n_A, n_voxels)
-            @inbounds @simd for i in eachindex(D)
-                D[i] = d1[i] - d2[i]
-            end
-        else
-            @inbounds for (v, ci) in enumerate(vox_cis)
-                @simd for p = 1:n_A
-                    D[p, v] = data1[p, ci] - data2[p, ci]
-                end
+        @inbounds for v = 1:n_voxels
+            @simd for p = 1:n_A
+                D[p, v] = d1[p, v] - d2[p, v]
             end
         end
         return D
     else
         X = Matrix{Float64}(undef, n_A + n_B, n_voxels)
-        if data1 isa Array{Float64,M} && data2 isa Array{Float64,M}
-            d1 = reshape(data1, n_A, n_voxels)
-            d2 = reshape(data2, n_B, n_voxels)
-            @inbounds for v = 1:n_voxels
-                @simd for p = 1:n_A
-                    X[p, v] = d1[p, v]
-                end
-                @simd for p = 1:n_B
-                    X[n_A+p, v] = d2[p, v]
-                end
+        @inbounds for v = 1:n_voxels
+            @simd for p = 1:n_A
+                X[p, v] = d1[p, v]
             end
-        else
-            @inbounds for (v, ci) in enumerate(vox_cis)
-                @simd for p = 1:n_A
-                    X[p, v] = data1[p, ci]
-                end
-                @simd for p = 1:n_B
-                    X[n_A+p, v] = data2[p, ci]
-                end
+            @simd for p = 1:n_B
+                X[n_A+p, v] = d2[p, v]
             end
         end
         return X
@@ -462,50 +442,53 @@ end
     tail::Symbol,
 ) where {N} = _threshold_t_matrix_nonparametric!(mask_pos, mask_neg, t_mat, crit[1], crit[2], tail)
 
-function _run_permutations(
-    prepared::StatisticalData,
+@inline _perm_slice(A::Array{Float64,3}, i::Int) = view(A, :, :, i)
+@inline _perm_slice(A::Array{Float64,4}, i::Int) = view(A, :, :, :, i)
+
+function _run_permutations_nd(
+    data1::Array{Float64,M},
+    data2::Array{Float64,M},
+    design::Symbol,
     plan::AbstractMatrix,
     critical_t_values::C,
     spatial_connectivity::SparseMatrixCSC{Bool},
     cluster_type::Symbol,
     tail::Symbol,
     min_num_neighbors::Int,
-    show_progress::Bool = true;
-    permutation_t_matrices::Union{Nothing,Array{Float64,3}} = nothing,
-) where {C}
+    show_progress::Bool,
+    progress_desc::String,
+    permutation_t_matrices::Union{Nothing,Array{Float64,M}},
+) where {M,C}
     n_permutations = size(plan, 2)
     permutation_max_positive = zeros(Float64, n_permutations)
     permutation_max_negative = zeros(Float64, n_permutations)
 
-    data1, data2 = prepared.analysis.data[1], prepared.analysis.data[2]
-    design = prepared.analysis.design
     paired = design == :paired
-    n_A, n_electrodes, n_time = size(data1)
+    n_A = size(data1, 1)
     n_B = size(data2, 1)
+    grid_dims = Base.tail(size(data1))
+    N = M - 1
+    empty_dims = ntuple(_ -> 0, Val(N))
 
     src = isnothing(permutation_t_matrices) ? _build_perm_source(data1, data2, design) : Matrix{Float64}(undef, 0, 0)
     spatial_conn_sym = _symmetrize_connectivity(spatial_connectivity)
-    completed = _start_permutation_progress(show_progress, n_permutations, "Permutations: ")
+    completed = _start_permutation_progress(show_progress, n_permutations, progress_desc)
 
     _foreach_chunk(n_permutations) do perm_range
-        mask_pos = BitMatrix(undef, n_electrodes, n_time)
-        mask_neg = BitMatrix(undef, n_electrodes, n_time)
-        t_buf = isnothing(permutation_t_matrices) ? Matrix{Float64}(undef, n_electrodes, n_time) : Matrix{Float64}(undef, 0, 0)
+        mask_pos = BitArray{N}(undef, grid_dims)
+        mask_neg = BitArray{N}(undef, grid_dims)
+        t_buf = isnothing(permutation_t_matrices) ? Array{Float64,N}(undef, grid_dims) : Array{Float64,N}(undef, empty_dims)
         signs = (isnothing(permutation_t_matrices) && paired) ? Vector{Float64}(undef, n_A) : Float64[]
-        cluster_labels = zeros(Int, n_electrodes, n_time)
-        cluster_queue = Vector{Tuple{Int,Int}}(undef, n_electrodes * n_time)
+        cluster_labels = zeros(Int, grid_dims)
+        cluster_queue = Vector{CartesianIndex{N}}(undef, prod(grid_dims))
 
         for perm_idx in perm_range
-            if !isnothing(permutation_t_matrices)
-                t_perm = view(permutation_t_matrices, :, :, perm_idx)
+            t_perm = if !isnothing(permutation_t_matrices)
+                _perm_slice(permutation_t_matrices, perm_idx)
             else
                 col_plan = view(plan, :, perm_idx)
-                if paired
-                    _perm_ttest_paired!(vec(t_buf), src, signs, col_plan)
-                else
-                    _perm_ttest_indep!(vec(t_buf), src, n_A, n_B, col_plan)
-                end
-                t_perm = t_buf
+                paired ? _perm_ttest_paired!(vec(t_buf), src, signs, col_plan) : _perm_ttest_indep!(vec(t_buf), src, n_A, n_B, col_plan)
+                t_buf
             end
 
             _apply_perm_threshold!(mask_pos, mask_neg, t_perm, critical_t_values, tail)
@@ -542,6 +525,31 @@ function _run_permutations(
     return permutation_max_positive, permutation_max_negative
 end
 
+_run_permutations(
+    prepared::StatisticalData,
+    plan::AbstractMatrix,
+    critical_t_values,
+    spatial_connectivity::SparseMatrixCSC{Bool},
+    cluster_type::Symbol,
+    tail::Symbol,
+    min_num_neighbors::Int,
+    show_progress::Bool = true;
+    permutation_t_matrices::Union{Nothing,Array{Float64,3}} = nothing,
+) = _run_permutations_nd(
+    prepared.analysis.data[1],
+    prepared.analysis.data[2],
+    prepared.analysis.design,
+    plan,
+    critical_t_values,
+    spatial_connectivity,
+    cluster_type,
+    tail,
+    min_num_neighbors,
+    show_progress,
+    "Permutations: ",
+    permutation_t_matrices,
+)
+
 function _stream_nonparametric_threshold_common_tf(
     prepared::TFStatisticalData,
     plan::AbstractMatrix,
@@ -568,11 +576,7 @@ function _stream_nonparametric_threshold_common_tf(
         signs = paired ? Vector{Float64}(undef, n_A) : Float64[]
         for perm_idx in perm_range
             col_plan = view(plan, :, perm_idx)
-            if paired
-                _perm_ttest_paired!(t_buf, src, signs, col_plan)
-            else
-                _perm_ttest_indep!(t_buf, src, n_A, n_B, col_plan)
-            end
+            paired ? _perm_ttest_paired!(t_buf, src, signs, col_plan) : _perm_ttest_indep!(t_buf, src, n_A, n_B, col_plan)
             offset = mod(perm_idx - 1, stride) + 1
             out_idx = 0
             @inbounds for v = offset:stride:n_voxels
@@ -616,107 +620,40 @@ function _stream_nonparametric_threshold_individual_tf(
     return thresholds_pos, thresholds_neg
 end
 
-function _run_permutations_tf(
+_run_permutations_tf(
     prepared::TFStatisticalData,
     plan::AbstractMatrix,
-    critical_t_values::C,
+    critical_t_values,
     spatial_connectivity::SparseMatrixCSC{Bool},
     cluster_type::Symbol,
     tail::Symbol,
     min_num_neighbors::Int,
-    electrodes::Vector{Symbol},
-    frequencies::Vector{Float64},
-    time_points::Vector{Float64},
+    ::Vector{Symbol},
+    ::Vector{Float64},
+    ::Vector{Float64},
     show_progress::Bool = true;
     permutation_t_matrices::Union{Nothing,Array{Float64,4}} = nothing,
-) where {C}
-    n_permutations = size(plan, 2)
-    n_electrodes = length(electrodes)
-    n_freqs = length(frequencies)
-    n_time = length(time_points)
-
-    permutation_max_positive = zeros(Float64, n_permutations)
-    permutation_max_negative = zeros(Float64, n_permutations)
-
-    data1, data2 = prepared.analysis.data[1], prepared.analysis.data[2]
-    design = prepared.analysis.design
-    paired = design == :paired
-    n_A = size(data1, 1)
-    n_B = size(data2, 1)
-
-    src = isnothing(permutation_t_matrices) ? _build_perm_source(data1, data2, design) : Matrix{Float64}(undef, 0, 0)
-    spatial_conn_sym = _symmetrize_connectivity(spatial_connectivity)
-    completed = _start_permutation_progress(show_progress, n_permutations, "TF Permutations: ")
-
-    _foreach_chunk(n_permutations) do perm_range
-        mask_pos = BitArray{3}(undef, n_electrodes, n_freqs, n_time)
-        mask_neg = BitArray{3}(undef, n_electrodes, n_freqs, n_time)
-        t_buf =
-            isnothing(permutation_t_matrices) ? Array{Float64,3}(undef, n_electrodes, n_freqs, n_time) : Array{Float64,3}(undef, 0, 0, 0)
-        signs = (isnothing(permutation_t_matrices) && paired) ? Vector{Float64}(undef, n_A) : Float64[]
-        cluster_labels = zeros(Int, n_electrodes, n_freqs, n_time)
-        cluster_queue = Vector{Tuple{Int,Int,Int}}(undef, n_electrodes * n_freqs * n_time)
-
-        for perm_idx in perm_range
-            if !isnothing(permutation_t_matrices)
-                t_perm = view(permutation_t_matrices, :, :, :, perm_idx)
-            else
-                col_plan = view(plan, :, perm_idx)
-                if paired
-                    _perm_ttest_paired!(vec(t_buf), src, signs, col_plan)
-                else
-                    _perm_ttest_indep!(vec(t_buf), src, n_A, n_B, col_plan)
-                end
-                t_perm = t_buf
-            end
-
-            _apply_perm_threshold!(mask_pos, mask_neg, t_perm, critical_t_values, tail)
-
-            if min_num_neighbors > 0 && cluster_type ∈ (:spatial, :spatiotemporal, :full)
-                _prefilter_mask_by_neighbors_tf!(mask_pos, spatial_conn_sym, min_num_neighbors)
-                _prefilter_mask_by_neighbors_tf!(mask_neg, spatial_conn_sym, min_num_neighbors)
-            end
-
-            permutation_max_positive[perm_idx] = _max_cluster_stat_tf(
-                mask_pos,
-                t_perm,
-                spatial_conn_sym,
-                cluster_type,
-                cluster_labels,
-                cluster_queue;
-                is_negative = false,
-                labels_clean = true,
-            )
-            permutation_max_negative[perm_idx] = _max_cluster_stat_tf(
-                mask_neg,
-                t_perm,
-                spatial_conn_sym,
-                cluster_type,
-                cluster_labels,
-                cluster_queue;
-                is_negative = true,
-                labels_clean = true,
-            )
-            _tick!(completed)
-        end
-    end
-
-    return permutation_max_positive, permutation_max_negative
-end
+) = _run_permutations_nd(
+    prepared.analysis.data[1],
+    prepared.analysis.data[2],
+    prepared.analysis.design,
+    plan,
+    critical_t_values,
+    spatial_connectivity,
+    cluster_type,
+    tail,
+    min_num_neighbors,
+    show_progress,
+    "TF Permutations: ",
+    permutation_t_matrices,
+)
 
 function _permute_within!(perm_matrix::Matrix{Int}, block_idxs::Vector{Vector{Int}}, n_perms::Int, rng::AbstractRNG)
     scratch_bufs = [copy(b) for b in block_idxs]
-    for p = 1:n_perms
-        for (k, b_idx) in enumerate(block_idxs)
-            buf = scratch_bufs[k]
-            m = length(buf)
-            for i = m:-1:2
-                j = rand(rng, 1:i)
-                buf[i], buf[j] = buf[j], buf[i]
-            end
-            @inbounds for i = 1:m
-                perm_matrix[b_idx[i], p] = buf[i]
-            end
+    for p = 1:n_perms, (k, b_idx) in enumerate(block_idxs)
+        buf = Random.shuffle!(rng, scratch_bufs[k])
+        @inbounds for i in eachindex(buf)
+            perm_matrix[b_idx[i], p] = buf[i]
         end
     end
 end
@@ -725,10 +662,7 @@ function _permute_synchronized!(perm_matrix::Matrix{Int}, grid::Matrix{Vector{In
     n_syncs, n_blocks = size(grid)
     shuffled_idx = collect(1:n_blocks)
     for p = 1:n_perms
-        for i = n_blocks:-1:2
-            j = rand(rng, 1:i)
-            shuffled_idx[i], shuffled_idx[j] = shuffled_idx[j], shuffled_idx[i]
-        end
+        Random.shuffle!(rng, shuffled_idx)
         for s = 1:n_syncs, b = 1:n_blocks
             orig_rows = grid[s, b]
             target_rows = grid[s, shuffled_idx[b]]
@@ -740,15 +674,7 @@ function _permute_synchronized!(perm_matrix::Matrix{Int}, grid::Matrix{Vector{In
 end
 
 function _permute_global!(perm_matrix::Matrix{Int}, n_perms::Int, rng::AbstractRNG)
-    N = size(perm_matrix, 1)
     for p = 1:n_perms
-        col = @view perm_matrix[:, p]
-        @inbounds for i = 1:N
-            col[i] = i
-        end
-        for i = N:-1:2
-            j = rand(rng, 1:i)
-            col[i], col[j] = col[j], col[i]
-        end
+        randperm!(rng, @view(perm_matrix[:, p]))
     end
 end

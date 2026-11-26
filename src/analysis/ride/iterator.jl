@@ -79,16 +79,8 @@ function _ride_iteration!(
                         aligned_buffer = ws.aligned_buffers[chunk_id]
                         for c in ch_range
                             @inbounds for t = 1:n_trials
-                                copyto!(trial_residue, view(data, :, c, t))
-                                for j = 1:n_components
-                                    j == k && continue
-                                    _subtract_shifted!(trial_residue, view(templates, :, c, j), latencies[t, j])
-                                end
+                                _compute_trial_residue!(trial_residue, data, templates, latencies, c, t, k, n_components)
                                 shift_signal!(view(aligned_buffer, :, t), trial_residue, -latencies[t, k])
-                            end
-
-                            @inbounds for s = 1:(w_start-1)
-                                templates[s, c, k] = zero(T)
                             end
                             @inbounds for s = w_start:w_end
                                 @simd for t = 1:n_trials
@@ -96,10 +88,6 @@ function _ride_iteration!(
                                 end
                                 templates[s, c, k] = median!(sort_buffer)
                             end
-                            @inbounds for s = (w_end+1):n_samples
-                                templates[s, c, k] = zero(T)
-                            end
-
                             _apply_ride_boundary_taper!(
                                 view(templates, :, c, k),
                                 win_k,
@@ -113,11 +101,7 @@ function _ride_iteration!(
                             tmpl_ck = view(templates, :, c, k)
                             fill!(tmpl_ck, zero(T))
                             @inbounds for t = 1:n_trials
-                                copyto!(trial_residue, view(data, :, c, t))
-                                for j = 1:n_components
-                                    j == k && continue
-                                    _subtract_shifted!(trial_residue, view(templates, :, c, j), latencies[t, j])
-                                end
+                                _compute_trial_residue!(trial_residue, data, templates, latencies, c, t, k, n_components)
                                 _add_shifted!(tmpl_ck, trial_residue, -latencies[t, k])
                             end
                             @inbounds @simd for s = w_start:w_end
@@ -231,22 +215,22 @@ function _apply_ride_boundary_taper!(
     return vec
 end
 
-@inline function _add_shifted!(dest::AbstractVector{T}, src::AbstractVector{T}, shift::Int) where {T}
-    n = length(dest)
-    abs(shift) >= n && return dest
-    if shift > 0
-        @inbounds @simd for s = 1:(n-shift)
-            dest[s+shift] += src[s]
-        end
-    elseif shift < 0
-        s_val = -shift
-        @inbounds @simd for s = 1:(n-s_val)
-            dest[s] += src[s+s_val]
-        end
-    else
-        @inbounds @simd for s = 1:n
-            dest[s] += src[s]
+@inline function _compute_trial_residue!(
+    trial_residue::Vector{T},
+    data::AbstractArray{T,3},
+    templates::AbstractArray{T,3},
+    latencies::AbstractMatrix{Int},
+    c::Int,
+    t::Int,
+    skip_k::Int,
+    n_components::Int,
+) where {T<:Real}
+    @inbounds begin
+        copyto!(trial_residue, view(data, :, c, t))
+        for j = 1:n_components
+            j == skip_k && continue
+            _subtract_shifted!(trial_residue, view(templates, :, c, j), latencies[t, j])
         end
     end
-    return dest
+    return trial_residue
 end

@@ -88,52 +88,7 @@ function _create_grand_average(erps::AbstractVector{<:ErpData}, cond_num::Int)
         intersect!(common_chs, propertynames(erps[m].data))
     end
 
-    df1 = first_erp.data
-    col_names = propertynames(df1)
-    n_points = nrow(df1)
-    n_erps = length(erps)
-    inv_n = 1.0 / n_erps
-    out_cols = Vector{Any}(undef, length(col_names))
-
-    for (j, col) in enumerate(col_names)
-        if col in common_chs
-            out = Vector{Float64}(undef, n_points)
-            c1 = df1[!, j]
-            if c1 isa Vector{Float64}
-                v1 = c1::Vector{Float64}
-                @inbounds @simd for i = 1:n_points
-                    out[i] = v1[i]
-                end
-            else
-                @inbounds @simd for i = 1:n_points
-                    out[i] = Float64(c1[i])
-                end
-            end
-            for m = 2:n_erps
-                cm = erps[m].data[!, col]
-                if cm isa Vector{Float64}
-                    vm = cm::Vector{Float64}
-                    @inbounds @simd for i = 1:n_points
-                        out[i] += vm[i]
-                    end
-                else
-                    @inbounds @simd for i = 1:n_points
-                        out[i] += Float64(cm[i])
-                    end
-                end
-            end
-            if n_erps > 1
-                @inbounds @simd for i = 1:n_points
-                    out[i] *= inv_n
-                end
-            end
-            out_cols[j] = out
-        else
-            out_cols[j] = copy(df1[!, j])
-        end
-    end
-
-    grand_avg_data = DataFrame(out_cols, col_names; copycols = false)
+    grand_avg_data = _linear_average_df(DataFrame[erp.data for erp in erps], common_chs)
     total_epochs = sum(erp.n_epochs for erp in erps)
     return ErpData(
         "grand_avg",

@@ -116,12 +116,7 @@ function tf_stft(
         @inbounds @simd for i = 1:n_win
             wavelet_padded[i] = (hann[i] * sqrt2) * cis(((i - 1) - center) * step_angle)
         end
-        @inbounds @simd for i = (n_win+1):n_samples_padded
-            wavelet_padded[i] = zero(ComplexF64)
-        end
-        out_fft = Vector{ComplexF64}(undef, n_samples_padded)
-        mul!(out_fft, p_fft_wavelet, wavelet_padded)
-        wavelet_ffts[fi] = out_fft
+        wavelet_ffts[fi] = _tf_padded_fft(@view(wavelet_padded[1:n_win]), p_fft_wavelet, wavelet_padded)
     end
 
     fft_plan, ifft_plan = _tf_batch_fft_plans(n_samples_padded, n_trials, gpu_active)
@@ -161,9 +156,8 @@ function tf_stft(
     kwargs...,
 )
     _with_batch_logging("tf_stft", "tf_stft.log", input_dir, output_dir) do ctx
+        _ = output_dir
         @log_call "tf_stft"
-        output_dir = _prepare_output_dir!(ctx, joinpath(input_dir, "tf_stft_$(_clean_pattern(file_pattern))"))
-        process_fn = _tf_batch_worker(tf_stft, "STFT", condition_selection, kwargs)
-        batch_process(process_fn, file_pattern, input_dir, output_dir, participant_selection, "TF STFT")
+        return _tf_run_batch(ctx, tf_stft, "STFT", "tf_stft", file_pattern, input_dir, participant_selection, condition_selection, kwargs)
     end
 end

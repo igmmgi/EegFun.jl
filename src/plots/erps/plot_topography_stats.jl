@@ -51,231 +51,49 @@ function plot_topography_stats(
 )
     topo_data in (:tvalues, :difference) || @minimal_error("topo_data must be :tvalues or :difference, got :$topo_data")
 
-    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs)
-
-    method = pop!(plot_kwargs, :method)
-    gridscale = pop!(plot_kwargs, :gridscale)
-    colormap = pop!(plot_kwargs, :colormap)
-    colorrange = pop!(plot_kwargs, :colorrange)
-    display_plot = pop!(plot_kwargs, :display_plot)
-    figure_title = pop!(plot_kwargs, :figure_title)
-    num_levels = pop!(plot_kwargs, :num_levels)
-    show_title = pop!(plot_kwargs, :show_title, true)
-
-    pop!(plot_kwargs, :interactive, nothing)
-    pop!(plot_kwargs, :use_global_scale, nothing)
-    pop!(plot_kwargs, :component_selection, nothing)
-
-    plot_kwargs[:label_plot] = get(kwargs, :label_plot, false)
-    plot_kwargs[:point_plot] = get(kwargs, :point_plot, false)
-
     all_time_points = result.time_points
-    t_start, t_end = if isnothing(interval_selection) || interval_selection isa AllSelection
-        first(all_time_points), last(all_time_points)
-    elseif interval_selection isa TimeSelection
-        interval_selection.start, interval_selection.stop
+    bins, bin_time_labels = _select_topo_time_bins(all_time_points, interval_selection, n_topos)
+    layout, layout_labels, layout_to_elec_idx = _prepare_stats_topo_layout(result.data[1].layout, result.electrodes)
+
+    sig_2d = result.masks.positive .| result.masks.negative
+    topo_values, sig_masks = if topo_data == :tvalues
+        _bin_2d_topo_stats(result.stat_matrix.t, sig_2d, layout_to_elec_idx, bins, highlight_threshold)
     else
-        interval_selection[1], interval_selection[2]
-    end
-
-    time_indices = findall(t -> t_start <= t <= t_end, all_time_points)
-    isempty(time_indices) && @minimal_error(
-        "No time points found in range ($t_start, $t_end). Data range: $(first(all_time_points)) to $(last(all_time_points))"
-    )
-
-    n_topos = min(n_topos, length(time_indices))
-    bins = _partition_indices(time_indices, n_topos)
-
-    orig_layout = result.data[1].layout
-    electrodes = result.electrodes
-    n_elec = length(electrodes)
-    common_channels = intersect(orig_layout.data.label, electrodes)
-    isempty(common_channels) && @minimal_error("None of the analyzed electrodes $(electrodes) were found in the layout.")
-    layout =
-        orig_layout.data.label == common_channels ? copy(orig_layout) :
-        subset_layout(orig_layout; channel_selection = channels(common_channels))
-
-    has_valid_coordinates(layout) || @minimal_error("Cannot create topographic plot: layout has no spatial coordinates.")
-    _ensure_coordinates_2d!(layout)
-    _ensure_coordinates_3d!(layout)
-
-    layout_labels = layout.data.label
-    layout_to_elec_idx = Int[findfirst(==(lbl), electrodes)::Int for lbl in layout_labels]
-    elec_to_layout_idx = Int[something(findfirst(==(ch), layout_labels), 0) for ch in electrodes]
-
-    t_mat = result.stat_matrix.t
-    pos_mask = result.masks.positive
-    neg_mask = result.masks.negative
-
-    cond_A_df = topo_data == :difference ? result.data[1].data : nothing
-    cond_B_df = topo_data == :difference ? result.data[2].data : nothing
-    df_row_map = if topo_data == :difference
+        cond_A_df = result.data[1].data
+        cond_B_df = result.data[2].data
         df_times = cond_A_df[!, :time]
-        Int[argmin(abs.(df_times .- t)) for t in all_time_points]
-    else
-        Int[]
-    end
-    has_diff_cols = if topo_data == :difference
-        Bool[hasproperty(cond_A_df, ch) && hasproperty(cond_B_df, ch) for ch in electrodes]
-    else
-        Bool[]
-    end
-
-    topo_values = Vector{Vector{Float64}}(undef, n_topos)
-    sig_masks = Vector{BitVector}(undef, n_topos)
-    bin_time_labels = Vector{String}(undef, n_topos)
-    max_abs = 0.0
-
-    for (i, bin_indices) in enumerate(bins)
-        bin_time_labels[i] =
-            @sprintf("%.0f – %.0f ms", all_time_points[first(bin_indices)] * 1000, all_time_points[last(bin_indices)] * 1000)
-        n_bin_points = length(bin_indices)
-        vals = Vector{Float64}(undef, n_elec)
-        if topo_data == :tvalues
-            inv_n = 1.0 / n_bin_points
-            @inbounds for j = 1:n_elec
-                s = 0.0
-                for k in bin_indices
-                    s += Float64(t_mat[j, k])
-                end
-                v = s * inv_n
-                vals[j] = v
-                isfinite(v) && abs(v) > max_abs && (max_abs = abs(v))
-            end
-        else
+        df_row_map = Int[argmin(abs.(df_times .- t)) for t in all_time_points]
+        has_cols = Bool[hasproperty(cond_A_df, ch) && hasproperty(cond_B_df, ch) for ch in layout_labels]
+        n_bins = length(bins)
+        n_ch = length(layout_labels)
+        vals_vec = Vector{Vector{Float64}}(undef, n_bins)
+        for (i, bin_indices) in enumerate(bins)
             df_rows = view(df_row_map, bin_indices)
-            for (j, ch_sym) in enumerate(electrodes)
-                v = has_diff_cols[j] ? _mean_col_diff(cond_A_df[!, ch_sym], cond_B_df[!, ch_sym], df_rows) : NaN
-                vals[j] = v
-                isfinite(v) && abs(v) > max_abs && (max_abs = abs(v))
+            vals = Vector{Float64}(undef, n_ch)
+            for (k, ch_sym) in enumerate(layout_labels)
+                vals[k] = has_cols[k] ? _mean_col_diff(cond_A_df[!, ch_sym], cond_B_df[!, ch_sym], df_rows) : NaN
             end
+            vals_vec[i] = vals
         end
-        topo_values[i] = vals
-
-        sm = BitVector(undef, n_elec)
-        @inbounds for j = 1:n_elec
-            cnt = 0
-            for k in bin_indices
-                (pos_mask[j, k] || neg_mask[j, k]) && (cnt += 1)
-            end
-            sm[j] = (cnt / n_bin_points) >= highlight_threshold
-        end
-        sig_masks[i] = sm
-    end
-
-    max_abs ≈ 0.0 && (max_abs = 1.0)
-    isnothing(colorrange) && (colorrange = (-max_abs, max_abs))
-
-    dims = pop!(plot_kwargs, :dims, nothing)
-    n_rows, n_cols = if isnothing(dims)
-        _best_rect(n_topos)
-    else
-        r, c = dims
-        r * c < n_topos && @minimal_error("Grid dimensions ($r × $c) provide $(r * c) cells but need $n_topos")
-        r, c
+        _, masks_vec = _bin_2d_topo_stats(result.stat_matrix.t, sig_2d, layout_to_elec_idx, bins, highlight_threshold)
+        vals_vec, masks_vec
     end
 
     test_type = result isa AnalyticResult ? "Analytic" : "Permutation"
     data_label = topo_data == :tvalues ? "t-statistic" : "Difference (μV)"
-    fig_title = isempty(figure_title) ? "$test_type Test — $data_label" : figure_title
-
-    fig = _eegfun_figure(size = (max(220 * n_cols + 140, 600), 220 * n_rows + 70))
-    gl_topos = fig[1, 1] = GridLayout()
-    show_title && !isempty(fig_title) && Label(gl_topos[0, 1:n_cols], fig_title, fontsize = 16, font = :bold)
-    for c = 1:n_cols
-        colsize!(gl_topos, c, Aspect(1, 1.0))
-    end
-
-    colorbar_kwargs = Dict{Symbol,Any}(pairs(pop!(plot_kwargs, :colorbar_kwargs, (;))))
-    pop!(colorbar_kwargs, :colorrange, nothing)
-    pop!(colorbar_kwargs, :label, nothing)
-    colorbar_plot = pop!(plot_kwargs, :colorbar_plot, true)
-    pop!(plot_kwargs, :colorbar_position, nothing)
-    pop!(plot_kwargs, :colorbar_plot_numbers, nothing)
-
-    axes = Axis[]
-    can_batch = n_topos > 1 && _topo_method_supported(method) && length(layout_labels) >= 3
-    batched_interp = nothing
-    xb_shared = nothing
-    yb_shared = nothing
-
-    if can_batch
-        all_layout_mat = Matrix{Float64}(undef, length(layout_labels), n_topos)
-        @inbounds for i = 1:n_topos
-            channel_data = topo_values[i]
-            for (k, ch_idx) in enumerate(layout_to_elec_idx)
-                all_layout_mat[k, i] = channel_data[ch_idx]
-            end
-        end
-        batched_interp, xb_shared, yb_shared = _topo_interpolate(all_layout_mat, layout, gridscale; method = method)
-    end
-
-    x2_col = layout.data.x2
-    y2_col = layout.data.y2
-
-    for i = 1:n_topos
-        row = div(i - 1, n_cols) + 1
-        col = mod1(i, n_cols)
-        ax = Axis(
-            gl_topos[row, col],
-            aspect = DataAspect(),
-            title = show_title ? bin_time_labels[i] : "",
-            titlesize = plot_kwargs[:plot_title_fontsize],
-        )
-        push!(axes, ax)
-
-        channel_data = topo_values[i]
-        layout_values = Float64[channel_data[ch_idx] for ch_idx in layout_to_elec_idx]
-
-        _render_topo_surface!(
-            fig,
-            ax,
-            layout_values,
-            layout;
-            data_interp = can_batch ? batched_interp[i] : nothing,
-            x_bounds = can_batch ? xb_shared : nothing,
-            y_bounds = can_batch ? yb_shared : nothing,
-            method = method,
-            gridscale = gridscale,
-            colormap = colormap,
-            colorrange = colorrange,
-            num_levels = num_levels,
-            plot_kwargs...,
-        )
-
-        if highlight_significant && any(sig_masks[i])
-            sig_x = Float64[]
-            sig_y = Float64[]
-            for ch_idx in findall(sig_masks[i])
-                l_idx = elec_to_layout_idx[ch_idx]
-                if l_idx > 0
-                    push!(sig_x, x2_col[l_idx])
-                    push!(sig_y, y2_col[l_idx])
-                end
-            end
-            !isempty(sig_x) && scatter!(
-                ax,
-                sig_x,
-                sig_y,
-                color = highlight_color,
-                marker = highlight_marker,
-                markersize = highlight_size,
-                strokewidth = 1,
-                strokecolor = :black,
-            )
-        end
-
-        hidedecorations!(ax)
-    end
-
-    cb = if colorbar_plot
-        Colorbar(fig[1, 2]; colorbar_kwargs..., colormap = _resolve_theme_colormap(fig, colormap), colorrange = colorrange, label = data_label)
-    else
-        nothing
-    end
-
-    display_plot && _display_figure(fig)
-    return (fig = fig, axes = axes, colorbar = cb)
+    return _render_topo_grid!(
+        layout,
+        topo_values,
+        bin_time_labels,
+        kwargs;
+        default_title = "$test_type Test — $data_label",
+        colorbar_label = data_label,
+        sig_masks = sig_masks,
+        highlight_significant = highlight_significant,
+        highlight_color = highlight_color,
+        highlight_marker = highlight_marker,
+        highlight_size = highlight_size,
+    )
 end
 
 """
@@ -314,60 +132,11 @@ function plot_topography_stats(
 )
     topo_data in (:tvalues, :beta, :difference) || @minimal_error("topo_data must be :tvalues, :beta, or :difference, got :$topo_data")
     c_idx = _resolve_lmm_coef_idx(result, something(coef_idx, coef))
-
-    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs)
-
-    method = pop!(plot_kwargs, :method)
-    gridscale = pop!(plot_kwargs, :gridscale)
-    colormap = pop!(plot_kwargs, :colormap)
-    colorrange = pop!(plot_kwargs, :colorrange)
-    display_plot = pop!(plot_kwargs, :display_plot)
-    figure_title = pop!(plot_kwargs, :figure_title)
-    num_levels = pop!(plot_kwargs, :num_levels)
-    show_title = pop!(plot_kwargs, :show_title, true)
-
-    pop!(plot_kwargs, :interactive, nothing)
-    pop!(plot_kwargs, :use_global_scale, nothing)
-    pop!(plot_kwargs, :component_selection, nothing)
-
-    plot_kwargs[:label_plot] = get(kwargs, :label_plot, false)
-    plot_kwargs[:point_plot] = get(kwargs, :point_plot, false)
-
-    all_time_points = result.time_points
-    t_start, t_end = if isnothing(interval_selection) || interval_selection isa AllSelection
-        first(all_time_points), last(all_time_points)
-    elseif interval_selection isa TimeSelection
-        interval_selection.start, interval_selection.stop
-    else
-        interval_selection[1], interval_selection[2]
-    end
-
-    time_indices = findall(t -> t_start <= t <= t_end, all_time_points)
-    isempty(time_indices) && @minimal_error(
-        "No time points found in range ($t_start, $t_end). Data range: $(first(all_time_points)) to $(last(all_time_points))",
-    )
-
-    n_topos = min(n_topos, length(time_indices))
-    bins = _partition_indices(time_indices, n_topos)
-
     isnothing(result.epochs) &&
         @minimal_error("plot_topography_stats needs a layout: use a result from the EpochData method of fit_mass_lmm.")
-    orig_layout = result.epochs.layout
-    electrodes = result.channels
-    n_elec = length(electrodes)
-    common_channels = intersect(orig_layout.data.label, electrodes)
-    isempty(common_channels) && @minimal_error("None of the analyzed electrodes $(electrodes) were found in the layout.")
-    layout =
-        orig_layout.data.label == common_channels ? copy(orig_layout) :
-        subset_layout(orig_layout; channel_selection = channels(common_channels))
 
-    has_valid_coordinates(layout) || @minimal_error("Cannot create topographic plot: layout has no spatial coordinates.")
-    _ensure_coordinates_2d!(layout)
-    _ensure_coordinates_3d!(layout)
-
-    layout_labels = layout.data.label
-    layout_to_elec_idx = Int[findfirst(==(lbl), electrodes)::Int for lbl in layout_labels]
-    elec_to_layout_idx = Int[something(findfirst(==(ch), layout_labels), 0) for ch in electrodes]
+    bins, bin_time_labels = _select_topo_time_bins(result.time_points, interval_selection, n_topos)
+    layout, _, layout_to_elec_idx = _prepare_stats_topo_layout(result.epochs.layout, result.channels)
 
     z_matrix = _lmm_stat_slice(result, c_idx)
     val_matrix = topo_data === :tvalues ? z_matrix : @view(result.beta[:, :, c_idx])
@@ -380,156 +149,23 @@ function plot_topography_stats(
         abs.(z_matrix) .>= cluster_thresh
     end
 
-    topo_values = Vector{Vector{Float64}}(undef, n_topos)
-    sig_masks = Vector{BitVector}(undef, n_topos)
-    bin_time_labels = Vector{String}(undef, n_topos)
-    max_abs = 0.0
-
-    for (i, bin_indices) in enumerate(bins)
-        bin_time_labels[i] =
-            @sprintf("%.0f – %.0f ms", all_time_points[first(bin_indices)] * 1000, all_time_points[last(bin_indices)] * 1000)
-        n_bin_points = length(bin_indices)
-        vals = Vector{Float64}(undef, n_elec)
-        @inbounds for j = 1:n_elec
-            s = 0.0
-            cnt_f = 0
-            for k in bin_indices
-                v = Float64(val_matrix[j, k])
-                if isfinite(v)
-                    s += v
-                    cnt_f += 1
-                end
-            end
-            mv = cnt_f > 0 ? s / cnt_f : 0.0
-            vals[j] = mv
-            abs(mv) > max_abs && (max_abs = abs(mv))
-        end
-        topo_values[i] = vals
-
-        sm = BitVector(undef, n_elec)
-        @inbounds for j = 1:n_elec
-            cnt = 0
-            for k in bin_indices
-                sig_combined_full[j, k] && (cnt += 1)
-            end
-            sm[j] = (cnt / n_bin_points) >= highlight_threshold
-        end
-        sig_masks[i] = sm
-    end
-
-    max_abs ≈ 0.0 && (max_abs = 1.0)
-    isnothing(colorrange) && (colorrange = (-max_abs, max_abs))
-
-    dims = pop!(plot_kwargs, :dims, nothing)
-    n_rows, n_cols = if isnothing(dims)
-        _best_rect(n_topos)
-    else
-        r, c = dims
-        r * c < n_topos && @minimal_error("Grid dimensions ($r × $c) provide $(r * c) cells but need $n_topos")
-        r, c
-    end
+    topo_values, sig_masks = _bin_2d_topo_stats(val_matrix, sig_combined_full, layout_to_elec_idx, bins, highlight_threshold)
 
     coef_name = result.coefficients[c_idx]
     data_label = topo_data === :tvalues ? "t-statistic" : "β (μV)"
-    fig_title = isempty(figure_title) ? "LMM: $(coef_name) — $data_label" : figure_title
-
-    fig = _eegfun_figure(size = (max(220 * n_cols + 140, 600), 220 * n_rows + 70))
-    gl_topos = fig[1, 1] = GridLayout()
-    show_title && !isempty(fig_title) && Label(gl_topos[0, 1:n_cols], fig_title, fontsize = 16, font = :bold)
-    for c = 1:n_cols
-        colsize!(gl_topos, c, Aspect(1, 1.0))
-    end
-
-    colorbar_kwargs = Dict{Symbol,Any}(pairs(pop!(plot_kwargs, :colorbar_kwargs, (;))))
-    pop!(colorbar_kwargs, :colorrange, nothing)
-    pop!(colorbar_kwargs, :label, nothing)
-    colorbar_plot = pop!(plot_kwargs, :colorbar_plot, true)
-    pop!(plot_kwargs, :colorbar_position, nothing)
-    pop!(plot_kwargs, :colorbar_plot_numbers, nothing)
-
-    axes = Axis[]
-    can_batch = n_topos > 1 && _topo_method_supported(method) && length(layout_labels) >= 3
-    batched_interp = nothing
-    xb_shared = nothing
-    yb_shared = nothing
-
-    if can_batch
-        all_layout_mat = Matrix{Float64}(undef, length(layout_labels), n_topos)
-        @inbounds for i = 1:n_topos
-            channel_data = topo_values[i]
-            for (k, ch_idx) in enumerate(layout_to_elec_idx)
-                all_layout_mat[k, i] = channel_data[ch_idx]
-            end
-        end
-        batched_interp, xb_shared, yb_shared = _topo_interpolate(all_layout_mat, layout, gridscale; method = method)
-    end
-
-    x2_col = layout.data.x2
-    y2_col = layout.data.y2
-
-    for i = 1:n_topos
-        row = div(i - 1, n_cols) + 1
-        col = mod1(i, n_cols)
-        ax = Axis(
-            gl_topos[row, col],
-            aspect = DataAspect(),
-            title = show_title ? bin_time_labels[i] : "",
-            titlesize = plot_kwargs[:plot_title_fontsize],
-        )
-        push!(axes, ax)
-
-        channel_data = topo_values[i]
-        layout_values = Float64[channel_data[ch_idx] for ch_idx in layout_to_elec_idx]
-
-        _render_topo_surface!(
-            fig,
-            ax,
-            layout_values,
-            layout;
-            data_interp = can_batch ? batched_interp[i] : nothing,
-            x_bounds = can_batch ? xb_shared : nothing,
-            y_bounds = can_batch ? yb_shared : nothing,
-            method = method,
-            gridscale = gridscale,
-            colormap = colormap,
-            colorrange = colorrange,
-            num_levels = num_levels,
-            plot_kwargs...,
-        )
-
-        if highlight_significant && any(sig_masks[i])
-            sig_x = Float64[]
-            sig_y = Float64[]
-            for ch_idx in findall(sig_masks[i])
-                l_idx = elec_to_layout_idx[ch_idx]
-                if l_idx > 0
-                    push!(sig_x, x2_col[l_idx])
-                    push!(sig_y, y2_col[l_idx])
-                end
-            end
-            !isempty(sig_x) && scatter!(
-                ax,
-                sig_x,
-                sig_y,
-                color = highlight_color,
-                marker = highlight_marker,
-                markersize = highlight_size,
-                strokewidth = 1,
-                strokecolor = :black,
-            )
-        end
-
-        hidedecorations!(ax)
-    end
-
-    cb = if colorbar_plot
-        Colorbar(fig[1, 2]; colorbar_kwargs..., colormap = _resolve_theme_colormap(fig, colormap), colorrange = colorrange, label = data_label)
-    else
-        nothing
-    end
-
-    display_plot && _display_figure(fig)
-    return (fig = fig, axes = axes, colorbar = cb)
+    return _render_topo_grid!(
+        layout,
+        topo_values,
+        bin_time_labels,
+        kwargs;
+        default_title = "LMM: $(coef_name) — $data_label",
+        colorbar_label = data_label,
+        sig_masks = sig_masks,
+        highlight_significant = highlight_significant,
+        highlight_color = highlight_color,
+        highlight_marker = highlight_marker,
+        highlight_size = highlight_size,
+    )
 end
 
 ######################################
@@ -556,4 +192,248 @@ function _partition_indices(indices::Vector{Int}, n::Int)
         start = stop + 1
     end
     return bins
+end
+
+function _select_topo_time_bins(all_time_points::AbstractVector{<:Real}, interval_selection::Interval, n_topos::Int)
+    t_start, t_end = if isnothing(interval_selection) || interval_selection isa AllSelection
+        first(all_time_points), last(all_time_points)
+    elseif interval_selection isa TimeSelection
+        interval_selection.start, interval_selection.stop
+    else
+        interval_selection[1], interval_selection[2]
+    end
+
+    time_indices = findall(t -> t_start <= t <= t_end, all_time_points)
+    isempty(time_indices) && @minimal_error(
+        "No time points found in range ($t_start, $t_end). Data range: $(first(all_time_points)) to $(last(all_time_points))"
+    )
+
+    n_bins = min(n_topos, length(time_indices))
+    bins = _partition_indices(time_indices, n_bins)
+    bin_labels = String[@sprintf("%.0f – %.0f ms", all_time_points[first(b)] * 1000, all_time_points[last(b)] * 1000) for b in bins]
+    return bins, bin_labels
+end
+
+function _prepare_topo_subset_layout(orig_layout::Layout, common_channels::Vector{Symbol}; need_3d::Bool = true)::Layout
+    orig_labels = orig_layout.data[!, :label]
+    layout = if length(common_channels) < length(orig_labels) || common_channels != orig_labels
+        subset_layout(orig_layout; channel_selection = channels(common_channels))
+    elseif !has_2d_coords(orig_layout) || (need_3d && !has_3d_coords(orig_layout))
+        copy(orig_layout)
+    else
+        orig_layout
+    end
+    has_valid_coordinates(layout) || @minimal_error("Cannot create topographic plot: layout has no spatial coordinates.")
+    _ensure_coordinates_2d!(layout)
+    need_3d && _ensure_coordinates_3d!(layout)
+    return layout
+end
+
+function _prepare_stats_topo_layout(orig_layout::Layout, electrodes::AbstractVector{Symbol}; need_3d::Bool = true)
+    common_channels = intersect(orig_layout.data[!, :label], electrodes)
+    isempty(common_channels) && @minimal_error("None of the analyzed electrodes $(electrodes) were found in the layout.")
+    layout = _prepare_topo_subset_layout(orig_layout, common_channels; need_3d = need_3d)
+    layout_labels = layout.data[!, :label]
+    layout_to_elec_idx = Int[findfirst(==(lbl), electrodes)::Int for lbl in layout_labels]
+    return layout, layout_labels, layout_to_elec_idx
+end
+
+function _bin_2d_topo_stats(
+    val_matrix::AbstractMatrix{<:Real},
+    sig_matrix::AbstractMatrix{Bool},
+    elec_indices::Vector{Int},
+    bins::Vector{UnitRange{Int}},
+    highlight_threshold::Real,
+)
+    n_bins = length(bins)
+    n_ch = length(elec_indices)
+    topo_values = Vector{Vector{Float64}}(undef, n_bins)
+    sig_masks = Vector{BitVector}(undef, n_bins)
+
+    for (i, bin_indices) in enumerate(bins)
+        n_bin_points = length(bin_indices)
+        vals = Vector{Float64}(undef, n_ch)
+        sm = BitVector(undef, n_ch)
+        @inbounds for k = 1:n_ch
+            ei = elec_indices[k]
+            s = 0.0
+            cnt_f = 0
+            cnt_sig = 0
+            for t_idx in bin_indices
+                v = Float64(val_matrix[ei, t_idx])
+                if isfinite(v)
+                    s += v
+                    cnt_f += 1
+                end
+                sig_matrix[ei, t_idx] && (cnt_sig += 1)
+            end
+            vals[k] = cnt_f > 0 ? s / cnt_f : 0.0
+            sm[k] = (cnt_sig / n_bin_points) >= highlight_threshold
+        end
+        topo_values[i] = vals
+        sig_masks[i] = sm
+    end
+    return topo_values, sig_masks
+end
+
+function _render_topo_grid!(
+    layout::Layout,
+    panel_values::Vector{Vector{Float64}},
+    panel_titles::Vector{String},
+    raw_kwargs;
+    default_title::String = "",
+    colorbar_label::String = "",
+    sig_masks::Union{Nothing,Vector{BitVector}} = nothing,
+    highlight_significant::Bool = false,
+    highlight_color = :white,
+    highlight_marker::Symbol = :circle,
+    highlight_size::Real = 8,
+    use_subgrid::Bool = true,
+    panel_px::NTuple{4,Int} = (220, 140, 220, 70),
+    min_width::Int = 600,
+    header_fontsize::Int = 16,
+    auto_colorrange = nothing,
+)
+    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, raw_kwargs)
+
+    method = pop!(plot_kwargs, :method)
+    gridscale = pop!(plot_kwargs, :gridscale)
+    colormap = pop!(plot_kwargs, :colormap)
+    colorrange = pop!(plot_kwargs, :colorrange)
+    display_plot = pop!(plot_kwargs, :display_plot)
+    figure_title = pop!(plot_kwargs, :figure_title, "")
+    plot_title = pop!(plot_kwargs, :plot_title, "")
+    show_title = pop!(plot_kwargs, :show_title, true)
+    num_levels = pop!(plot_kwargs, :num_levels)
+    dims = pop!(plot_kwargs, :dims, nothing)
+    highlight_channels = pop!(plot_kwargs, :highlight_channels, nothing)
+
+    pop!(plot_kwargs, :interactive, nothing)
+    pop!(plot_kwargs, :use_global_scale, nothing)
+    pop!(plot_kwargs, :component_selection, nothing)
+
+    plot_kwargs[:label_plot] = get(raw_kwargs, :label_plot, false)
+    plot_kwargs[:point_plot] = get(raw_kwargs, :point_plot, false)
+
+    n_panels = length(panel_values)
+    n_rows, n_cols = if isnothing(dims)
+        _best_rect(n_panels)
+    else
+        r, c = dims
+        r * c < n_panels && @minimal_error("Grid dimensions ($r × $c) provide $(r * c) cells but need $n_panels")
+        r, c
+    end
+
+    user_title =
+        (!isnothing(plot_title) && !isempty(plot_title)) ? String(plot_title) : (isnothing(figure_title) ? "" : String(figure_title))
+    fig_title = isempty(user_title) ? default_title : user_title
+
+    cw, wpad, rh, hpad = panel_px
+    fig = _eegfun_figure(size = (max(cw * n_cols + wpad, min_width), rh * n_rows + hpad))
+    actual_colormap = _resolve_theme_colormap(fig, colormap)
+
+    if isnothing(colorrange)
+        if !isnothing(auto_colorrange)
+            colorrange = auto_colorrange(actual_colormap)
+        else
+            max_abs = 0.0
+            for vals in panel_values
+                @inbounds for v in vals
+                    isfinite(v) && abs(v) > max_abs && (max_abs = abs(v))
+                end
+            end
+            max_abs ≈ 0.0 && (max_abs = 1.0)
+            colorrange = (-max_abs, max_abs)
+        end
+    end
+
+    target_gl = use_subgrid ? (fig[1, 1] = GridLayout()) : fig.layout
+    (show_title && !isempty(fig_title)) && Label(target_gl[0, 1:n_cols], fig_title, fontsize = header_fontsize, font = :bold)
+
+    colorbar_kwargs = Dict{Symbol,Any}(pairs(pop!(plot_kwargs, :colorbar_kwargs, (;))))
+    pop!(colorbar_kwargs, :colorrange, nothing)
+    pop!(colorbar_kwargs, :label, nothing)
+    colorbar_plot = pop!(plot_kwargs, :colorbar_plot, true)
+    pop!(plot_kwargs, :colorbar_position, nothing)
+    pop!(plot_kwargs, :colorbar_plot_numbers, nothing)
+
+    n_ch = length(layout.data[!, :label])
+    can_batch = n_panels > 1 && _topo_method_supported(method) && n_ch >= 3
+    batched_interp = xb_shared = yb_shared = nothing
+    if can_batch
+        all_layout_mat = Matrix{Float64}(undef, n_ch, n_panels)
+        @inbounds for i = 1:n_panels
+            vals = panel_values[i]
+            for k = 1:n_ch
+                all_layout_mat[k, i] = vals[k]
+            end
+        end
+        batched_interp, xb_shared, yb_shared = _topo_interpolate(all_layout_mat, layout, gridscale; method = method)
+    end
+
+    axes = Vector{Axis}(undef, n_panels)
+    x2_col = layout.data[!, :x2]
+    y2_col = layout.data[!, :y2]
+
+    for i = 1:n_panels
+        row = div(i - 1, n_cols) + 1
+        col = mod1(i, n_cols)
+        ax = Axis(
+            target_gl[row, col],
+            aspect = DataAspect(),
+            title = show_title ? panel_titles[i] : "",
+            titlesize = plot_kwargs[:plot_title_fontsize],
+        )
+        axes[i] = ax
+
+        _render_topo_surface!(
+            fig,
+            ax,
+            panel_values[i],
+            layout;
+            data_interp = can_batch ? batched_interp[i] : nothing,
+            x_bounds = can_batch ? xb_shared : nothing,
+            y_bounds = can_batch ? yb_shared : nothing,
+            method = method,
+            gridscale = gridscale,
+            colormap = actual_colormap,
+            colorrange = colorrange,
+            num_levels = num_levels,
+            plot_kwargs...,
+        )
+
+        !isnothing(highlight_channels) && _draw_highlight_channels!(ax, highlight_channels, layout)
+
+        if highlight_significant && !isnothing(sig_masks) && any(sig_masks[i])
+            sig_idx = findall(sig_masks[i])
+            scatter!(
+                ax,
+                x2_col[sig_idx],
+                y2_col[sig_idx];
+                color = highlight_color,
+                marker = highlight_marker,
+                markersize = highlight_size,
+                strokewidth = 1,
+                strokecolor = :black,
+            )
+        end
+
+        hidedecorations!(ax)
+    end
+
+    if use_subgrid
+        for c = 1:n_cols
+            colsize!(target_gl, c, Aspect(1, 1.0))
+        end
+    end
+
+    cb = if colorbar_plot
+        cb_slot = use_subgrid ? fig[1, 2] : fig[1:n_rows, n_cols+1]
+        Colorbar(cb_slot; colorbar_kwargs..., colormap = actual_colormap, colorrange = colorrange, label = colorbar_label)
+    else
+        nothing
+    end
+
+    display_plot && _display_figure(fig)
+    return (fig = fig, axes = axes, colorbar = cb)
 end

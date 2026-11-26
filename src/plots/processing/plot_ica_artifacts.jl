@@ -213,7 +213,6 @@ function plot_artifact_components(ica::InfoIca, artifacts::ArtifactComponents; k
 
     method = plot_kwargs[:method]
     gridscale = plot_kwargs[:gridscale]
-    colormap = plot_kwargs[:colormap]
     colorrange = plot_kwargs[:colorrange]
     display_plot = plot_kwargs[:display_plot]
     num_levels = plot_kwargs[:num_levels]
@@ -265,44 +264,18 @@ function plot_artifact_components(ica::InfoIca, artifacts::ArtifactComponents; k
         axes[plot_idx] = ax
 
         topo_data = comp_to_data[comp_idx]
-        levels = if !isnothing(colorrange)
-            _calculate_topo_levels(
-                topo_data;
-                use_global_scale = true,
-                global_min = colorrange[1],
-                global_max = colorrange[2],
-                num_levels = num_levels,
-            )
-        elseif !isnothing(global_levels)
-            global_levels
-        else
-            _calculate_topo_levels(topo_data; num_levels = num_levels)
-        end
-
-        _plot_topo_on_axis!(
-            ax,
+        levels = _resolve_ica_levels(topo_data, num_levels; pre_calculated = global_levels, colorrange = colorrange)
+        _render_topo_surface!(
             fig,
-            topo_data,
-            ica.layout,
-            levels;
+            ax,
+            Float64[],
+            ica.layout;
+            plot_kwargs...,
+            data_interp = topo_data,
             x_bounds = x_bounds,
             y_bounds = y_bounds,
-            gridscale = gridscale,
-            colormap = colormap,
-            head_color = plot_kwargs[:head_color],
-            head_linewidth = plot_kwargs[:head_linewidth],
-            head_radius = plot_kwargs[:head_radius],
-            point_plot = plot_kwargs[:point_plot],
-            point_marker = plot_kwargs[:point_marker],
-            point_markersize = plot_kwargs[:point_markersize],
-            point_color = plot_kwargs[:point_color],
-            label_plot = plot_kwargs[:label_plot],
-            label_fontsize = plot_kwargs[:label_fontsize],
-            label_color = plot_kwargs[:label_color],
-            label_xoffset = plot_kwargs[:label_xoffset],
-            label_yoffset = plot_kwargs[:label_yoffset],
+            levels = levels,
         )
-        hidedecorations!(ax, grid = false)
     end
 
     if show_title

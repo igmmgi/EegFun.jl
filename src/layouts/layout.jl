@@ -189,18 +189,7 @@ end
 
 Compute and cache 2D electrode neighbors within `distance_criterion` normalized head-radius units.
 """
-function get_neighbors_xy!(layout::Layout, distance_criterion::Real)
-    if !has_neighbors(layout) || layout.criterion != distance_criterion || layout.criterion_type != :xy
-        distance_criterion <= 0 && @minimal_error "Distance criterion must be positive"
-        _ensure_coordinates_2d!(layout)
-        @info "Calculating 2D neighbors with distance criterion $distance_criterion"
-        df = layout.data
-        layout.neighbors = _find_neighbors_2d(df.label, df.x2, df.y2, distance_criterion)
-        layout.criterion = Float64(distance_criterion)
-        layout.criterion_type = :xy
-    end
-    return layout
-end
+get_neighbors_xy!(layout::Layout, distance_criterion::Real) = _get_neighbors!(layout, distance_criterion, :xy)
 
 get_neighbors_xy!(dat::EegFunData, distance_criterion::Real) = (get_neighbors_xy!(dat.layout, distance_criterion); dat)
 
@@ -209,18 +198,7 @@ get_neighbors_xy!(dat::EegFunData, distance_criterion::Real) = (get_neighbors_xy
 
 Compute and cache 3D electrode neighbors within `distance_criterion` normalized coordinate units.
 """
-function get_neighbors_xyz!(layout::Layout, distance_criterion::Real)
-    if !has_neighbors(layout) || layout.criterion != distance_criterion || layout.criterion_type != :xyz
-        distance_criterion <= 0 && @minimal_error "Distance criterion must be positive"
-        _ensure_coordinates_3d!(layout)
-        @info "Calculating 3D neighbors with distance criterion $distance_criterion"
-        df = layout.data
-        layout.neighbors = _find_neighbors_3d(df.label, df.x3, df.y3, df.z3, distance_criterion)
-        layout.criterion = Float64(distance_criterion)
-        layout.criterion_type = :xyz
-    end
-    return layout
-end
+get_neighbors_xyz!(layout::Layout, distance_criterion::Real) = _get_neighbors!(layout, distance_criterion, :xyz)
 
 get_neighbors_xyz!(dat::EegFunData, distance_criterion::Real) = (get_neighbors_xyz!(dat.layout, distance_criterion); dat)
 
@@ -518,34 +496,32 @@ function _finalize_neighbors_dict(syms::Vector{Symbol}, nb_ch::Vector{Vector{Sym
     return neighbor_dict
 end
 
-function _find_neighbors_2d(labels::AbstractVector, xs::AbstractVector, ys::AbstractVector, distance_criterion::Real)
-    n = length(labels)
-    crit_sq = Float64(distance_criterion)^2
-    syms = labels isa Vector{Symbol} ? labels : Symbol.(labels)
-    nb_ch = [Symbol[] for _ = 1:n]
-    nb_d = [Float64[] for _ = 1:n]
-
-    @inbounds for i = 1:n
-        xi = Float64(xs[i])
-        yi = Float64(ys[i])
-        si = syms[i]
-        for j = (i+1):n
-            dx = xi - Float64(xs[j])
-            dy = yi - Float64(ys[j])
-            d_sq = dx * dx + dy * dy
-            if d_sq <= crit_sq
-                d = sqrt(d_sq)
-                push!(nb_ch[i], syms[j])
-                push!(nb_d[i], d)
-                push!(nb_ch[j], si)
-                push!(nb_d[j], d)
-            end
+function _get_neighbors!(layout::Layout, distance_criterion::Real, mode::Symbol)
+    if !has_neighbors(layout) || layout.criterion != distance_criterion || layout.criterion_type != mode
+        distance_criterion <= 0 && @minimal_error "Distance criterion must be positive"
+        df = layout.data
+        if mode === :xy
+            _ensure_coordinates_2d!(layout)
+            @info "Calculating 2D neighbors with distance criterion $distance_criterion"
+            layout.neighbors = _find_neighbors(df.label, distance_criterion, df.x2, df.y2)
+        else
+            _ensure_coordinates_3d!(layout)
+            @info "Calculating 3D neighbors with distance criterion $distance_criterion"
+            layout.neighbors = _find_neighbors(df.label, distance_criterion, df.x3, df.y3, df.z3)
         end
+        layout.criterion = Float64(distance_criterion)
+        layout.criterion_type = mode
     end
-    return _finalize_neighbors_dict(syms, nb_ch, nb_d)
+    return layout
 end
 
-function _find_neighbors_3d(labels::AbstractVector, xs::AbstractVector, ys::AbstractVector, zs::AbstractVector, distance_criterion::Real)
+function _find_neighbors(
+    labels::AbstractVector,
+    distance_criterion::Real,
+    xs::AbstractVector,
+    ys::AbstractVector,
+    zs::Union{Nothing,AbstractVector} = nothing,
+)
     n = length(labels)
     crit_sq = Float64(distance_criterion)^2
     syms = labels isa Vector{Symbol} ? labels : Symbol.(labels)
@@ -555,12 +531,12 @@ function _find_neighbors_3d(labels::AbstractVector, xs::AbstractVector, ys::Abst
     @inbounds for i = 1:n
         xi = Float64(xs[i])
         yi = Float64(ys[i])
-        zi = Float64(zs[i])
+        zi = isnothing(zs) ? 0.0 : Float64(zs[i])
         si = syms[i]
         for j = (i+1):n
             dx = xi - Float64(xs[j])
             dy = yi - Float64(ys[j])
-            dz = zi - Float64(zs[j])
+            dz = isnothing(zs) ? 0.0 : (zi - Float64(zs[j]))
             d_sq = dx * dx + dy * dy + dz * dz
             if d_sq <= crit_sq
                 d = sqrt(d_sq)

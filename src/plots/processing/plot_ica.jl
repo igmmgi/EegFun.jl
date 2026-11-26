@@ -262,19 +262,13 @@ end
 ######### Internal Functions #########
 ######################################
 
-function _finite_matrix_extrema(data::AbstractMatrix{<:Real})
-    lo = Inf
-    hi = -Inf
-    has_val = false
-    @inbounds for x in data
-        if !isnan(x)
-            v = Float64(x)
-            v < lo && (lo = v)
-            v > hi && (hi = v)
-            has_val = true
-        end
+function _ica_level_range(min_val::Float64, max_val::Float64, num_levels::Int)
+    num_levels <= 0 && @minimal_error("num_levels must be positive, got $num_levels")
+    if min_val == max_val
+        min_val -= 0.1
+        max_val += 0.1
     end
-    return has_val, lo, hi
+    return range(min_val, max_val, length = num_levels)
 end
 
 function _calculate_topo_levels(
@@ -284,21 +278,10 @@ function _calculate_topo_levels(
     global_max = nothing,
     num_levels = 20,
 )
-    num_levels <= 0 && @minimal_error("num_levels must be positive, got $num_levels")
-
-    if use_global_scale && !isnothing(global_min) && !isnothing(global_max)
-        final_min, final_max = Float64(global_min), Float64(global_max)
-    else
-        has_val, lo, hi = _finite_matrix_extrema(data)
-        max_abs = has_val ? max(abs(lo), abs(hi)) : 0.0
-        final_min, final_max = max_abs > 0.0 ? (-max_abs, max_abs) : (-1.0, 1.0)
-    end
-
-    if final_min == final_max
-        final_min -= 0.1
-        final_max += 0.1
-    end
-    return range(final_min, final_max, length = num_levels)
+    lo, hi =
+        (use_global_scale && !isnothing(global_min) && !isnothing(global_max)) ? (Float64(global_min), Float64(global_max)) :
+        _symmetric_colorrange(data)
+    return _ica_level_range(lo, hi, num_levels)
 end
 
 function _calculate_ica_topo_levels(
@@ -309,31 +292,28 @@ function _calculate_ica_topo_levels(
     global_max = nothing,
 )
     if use_global_scale
-        lo_all = Inf
-        hi_all = -Inf
-        has_any = false
-        for mat in all_data
-            has_val, lo, hi = _finite_matrix_extrema(mat)
-            if has_val
-                lo < lo_all && (lo_all = lo)
-                hi > hi_all && (hi_all = hi)
-                has_any = true
-            end
-        end
-        has_any || @minimal_error "No valid (non-NaN) data. Cannot calculate topographic levels."
-        if !isnothing(global_min) && !isnothing(global_max)
-            min_val, max_val = Float64(global_min), Float64(global_max)
+        any(mat -> any(!isnan, mat), all_data) || @minimal_error "No valid (non-NaN) data. Cannot calculate topographic levels."
+        lo, hi = if !isnothing(global_min) && !isnothing(global_max)
+            Float64(global_min), Float64(global_max)
         else
-            max_abs_all = max(abs(lo_all), abs(hi_all))
-            min_val, max_val = max_abs_all > 0.0 ? (-max_abs_all, max_abs_all) : (-1.0, 1.0)
+            max_abs = maximum(mat -> _symmetric_colorrange(mat)[2], all_data)
+            (-max_abs, max_abs)
         end
-        if min_val == max_val
-            min_val -= 0.1
-            max_val += 0.1
-        end
-        return range(min_val, max_val, length = num_levels)
+        return _ica_level_range(lo, hi, num_levels)
     end
     return [_calculate_topo_levels(mat; num_levels = num_levels) for mat in all_data]
+end
+
+function _resolve_ica_levels(data::AbstractMatrix{<:Real}, num_levels::Int; pre_calculated = nothing, colorrange = nothing)
+    !isnothing(pre_calculated) && return pre_calculated
+    !isnothing(colorrange) && return _calculate_topo_levels(
+        data;
+        use_global_scale = true,
+        global_min = colorrange[1],
+        global_max = colorrange[2],
+        num_levels = num_levels,
+    )
+    return _calculate_topo_levels(data; num_levels = num_levels)
 end
 
 function _prepare_ica_topo_data(ica::InfoIca, comp_idx::Int, method::Symbol, gridscale::Int)
@@ -349,69 +329,6 @@ function _prepare_ica_topo_data(ica::InfoIca, comp_indices::AbstractVector{Int},
     return _topo_interpolate(ica.mixing[:, comp_indices], ica.layout, gridscale; method = method)
 end
 
-function _plot_topo_on_axis!(
-    ax::Axis,
-    fig::Figure,
-    data::AbstractMatrix{<:Real},
-    layout::Layout,
-    levels;
-    gridscale = 75,
-    colormap = nothing,
-    head_color = nothing,
-    head_linewidth = 2,
-    head_radius = 1.0,
-    point_plot = false,
-    point_marker = :circle,
-    point_markersize = 12,
-    point_color = nothing,
-    label_plot = false,
-    label_fontsize = 20,
-    label_color = nothing,
-    label_xoffset = 0,
-    label_yoffset = 0,
-    kwargs...,
-)
-    gridscale <= 0 && @minimal_error("gridscale must be positive, got $gridscale")
-    x_bounds = kwargs[:x_bounds]
-    y_bounds = kwargs[:y_bounds]
-    x_range = range(x_bounds[1], x_bounds[2], length = size(data, 1))
-    y_range = range(y_bounds[1], y_bounds[2], length = size(data, 2))
-    actual_cmap = _resolve_theme_colormap(ax, colormap)
-    co = contourf!(
-        ax,
-        x_range,
-        y_range,
-        data;
-        levels = levels,
-        colormap = actual_cmap,
-        extendlow = :auto,
-        extendhigh = :auto,
-        nan_color = :transparent,
-    )
-    co.colorrange = (first(levels), last(levels))
-
-    _draw_smooth_circle_mask!(ax, x_bounds, y_bounds)
-    plot_layout_2d!(
-        fig,
-        ax,
-        layout;
-        head_color = head_color,
-        head_linewidth = head_linewidth,
-        head_radius = head_radius,
-        point_plot = point_plot,
-        point_marker = point_marker,
-        point_markersize = point_markersize,
-        point_color = point_color,
-        label_plot = label_plot,
-        label_fontsize = label_fontsize,
-        label_color = label_color,
-        label_xoffset = label_xoffset,
-        label_yoffset = label_yoffset,
-    )
-    hidedecorations!(ax, grid = false, label = false)
-    return co
-end
-
 function _plot_ica_topography_impl!(
     fig::Figure,
     ax::Axis,
@@ -422,34 +339,23 @@ function _plot_ica_topography_impl!(
     precomputed_topo = nothing,
     pre_calculated_levels = nothing,
 )
-    method = plot_kwargs[:method]
-    gridscale = plot_kwargs[:gridscale]
-    colorrange = plot_kwargs[:colorrange]
-    num_levels = plot_kwargs[:num_levels]
+    data, x_bounds, y_bounds =
+        isnothing(precomputed_topo) ? _prepare_ica_topo_data(ica, component, plot_kwargs[:method], plot_kwargs[:gridscale]) :
+        precomputed_topo
+    levels =
+        _resolve_ica_levels(data, plot_kwargs[:num_levels]; pre_calculated = pre_calculated_levels, colorrange = plot_kwargs[:colorrange])
 
-    data, x_bounds, y_bounds = isnothing(precomputed_topo) ? _prepare_ica_topo_data(ica, component, method, gridscale) : precomputed_topo
-
-    levels = if !isnothing(pre_calculated_levels)
-        pre_calculated_levels
-    elseif !isnothing(colorrange)
-        _calculate_topo_levels(data; use_global_scale = true, global_min = colorrange[1], global_max = colorrange[2], num_levels = num_levels)
-    else
-        _calculate_topo_levels(data; num_levels = num_levels)
-    end
-
-    actual_cmap = _resolve_theme_colormap(ax, plot_kwargs[:colormap])
-    co = contourf!(
+    co, _, _ = _render_topo_surface!(
+        fig,
         ax,
-        range(x_bounds[1], x_bounds[2], length = size(data, 1)),
-        range(y_bounds[1], y_bounds[2], length = size(data, 2)),
-        data;
+        Float64[],
+        ica.layout;
+        plot_kwargs...,
+        data_interp = data,
+        x_bounds = x_bounds,
+        y_bounds = y_bounds,
         levels = levels,
-        colormap = actual_cmap,
-        extendlow = :auto,
-        extendhigh = :auto,
-        nan_color = :transparent,
     )
-    co.colorrange = (first(levels), last(levels))
 
     colorbar_plot_numbers = plot_kwargs[:colorbar_plot_numbers]
     if colorbar_plot && (isempty(colorbar_plot_numbers) || component in colorbar_plot_numbers)
@@ -457,25 +363,6 @@ function _plot_ica_topography_impl!(
         sg = ax.layoutobservables.gridcontent[].parent
         Colorbar(sg[cb_pos...], co; plot_kwargs[:colorbar_kwargs]..., tellwidth = true, tellheight = false)
     end
-
-    _draw_smooth_circle_mask!(ax, x_bounds, y_bounds)
-    plot_layout_2d!(
-        fig,
-        ax,
-        ica.layout;
-        head_color = plot_kwargs[:head_color],
-        head_linewidth = plot_kwargs[:head_linewidth],
-        head_radius = plot_kwargs[:head_radius],
-        point_plot = plot_kwargs[:point_plot],
-        point_marker = plot_kwargs[:point_marker],
-        point_markersize = plot_kwargs[:point_markersize],
-        point_color = plot_kwargs[:point_color],
-        label_plot = plot_kwargs[:label_plot],
-        label_fontsize = plot_kwargs[:label_fontsize],
-        label_color = plot_kwargs[:label_color],
-        label_xoffset = plot_kwargs[:label_xoffset],
-        label_yoffset = plot_kwargs[:label_yoffset],
-    )
     return co
 end
 
@@ -513,17 +400,12 @@ function _prepare_ica_plot_matrix(dat::ContinuousData, ica::InfoIca)::Matrix{Flo
 end
 
 function _plot_ica_topo_in_viewer!(
-    fig,
-    topo_ax,
-    ica,
-    comp_idx;
-    use_global_scale = false,
+    fig::Figure,
+    topo_ax::Axis,
+    ica::InfoIca,
+    comp_idx::Int;
     gridscale = 100,
-    colormap = nothing,
     num_levels = 20,
-    head_kwargs = Dict(),
-    point_kwargs = Dict(),
-    label_kwargs = Dict(),
     method = :spherical_spline,
     pre_calculated_levels = nothing,
     precomputed_topo = nothing,
@@ -531,39 +413,21 @@ function _plot_ica_topo_in_viewer!(
 )
     topo_data, x_bounds, y_bounds =
         isnothing(precomputed_topo) ? _prepare_ica_topo_data(ica, comp_idx, method, gridscale) : precomputed_topo
-    cr = get(kwargs, :colorrange, nothing)
-    levels = if !isnothing(pre_calculated_levels)
-        pre_calculated_levels
-    elseif !isnothing(cr)
-        _calculate_topo_levels(topo_data; use_global_scale = true, global_min = cr[1], global_max = cr[2], num_levels = num_levels)
-    else
-        _calculate_topo_levels(topo_data; use_global_scale = use_global_scale, num_levels = num_levels)
-    end
-
-    return _plot_topo_on_axis!(
-        topo_ax,
+    levels =
+        _resolve_ica_levels(topo_data, num_levels; pre_calculated = pre_calculated_levels, colorrange = get(kwargs, :colorrange, nothing))
+    co, _, _ = _render_topo_surface!(
         fig,
-        topo_data,
-        ica.layout,
-        levels;
+        topo_ax,
+        Float64[],
+        ica.layout;
+        kwargs...,
+        gridscale = gridscale,
+        data_interp = topo_data,
         x_bounds = x_bounds,
         y_bounds = y_bounds,
-        gridscale = gridscale,
-        colormap = colormap,
-        head_color = get(head_kwargs, :head_color, :black),
-        head_linewidth = get(head_kwargs, :head_linewidth, 2),
-        head_radius = get(head_kwargs, :head_radius, 1.0),
-        point_plot = get(point_kwargs, :point_plot, false),
-        point_marker = get(point_kwargs, :point_marker, :circle),
-        point_markersize = get(point_kwargs, :point_markersize, 12),
-        point_color = get(point_kwargs, :point_color, :black),
-        label_plot = get(label_kwargs, :label_plot, false),
-        label_fontsize = get(label_kwargs, :label_fontsize, 20),
-        label_color = get(label_kwargs, :label_color, :black),
-        label_xoffset = get(label_kwargs, :label_xoffset, 0),
-        label_yoffset = get(label_kwargs, :label_yoffset, 0),
-        kwargs...,
+        levels = levels,
     )
+    return co
 end
 
 function _ensure_channel_overlay_axis!(state::IcaComponentState, i::Int)::Axis
@@ -782,20 +646,15 @@ end
 
 function _show_channel_popup(state)
     all_channels = Symbol.(names(state.dat.data))
-    menu_fig = _eegfun_figure(size = (900, 700))
-    Label(menu_fig[1, 1], "Select Additional Channels", fontsize = 18, halign = :center)
-
-    scroll_area = menu_fig[2, 1] = GridLayout()
-    cbs = _build_checkbox_grid!(scroll_area, all_channels, 9, (ch, _) -> ch in state.overlay.names)
-    _add_group_buttons!(menu_fig, 3, cbs, all_channels, [("None (Clear)", _ -> false)])
-
-    action_area = menu_fig[4, 1] = GridLayout()
-    btn_apply = Button(action_area[1, 1], label = "Apply", width = 150)
-    on(btn_apply.clicks) do _
-        selected = all_channels[findall(cb -> cb.checked[], cbs)]
-        _update_channel_overlays!(state, selected)
-    end
-    _display_in_screen(menu_fig)
+    _show_checkbox_dialog(
+        "Select Additional Channels",
+        all_channels,
+        9,
+        (ch, _) -> ch in state.overlay.names,
+        [("None (Clear)", _ -> false)],
+        cbs -> _update_channel_overlays!(state, all_channels[findall(cb -> cb.checked[], cbs)]);
+        apply_width = 150,
+    )
 end
 
 function _add_channel_menu!(fig, state)
@@ -978,11 +837,10 @@ function _update_components!(state)
             level_to_use = state.use_global_scale[] ? levels_result : levels_result[k]
             empty!(topo_ax)
             _plot_ica_topo_in_viewer!(
-                topo_ax.parent,
+                state.fig,
                 topo_ax,
                 state.ica,
                 comp_idx;
-                use_global_scale = state.use_global_scale[],
                 pre_calculated_levels = level_to_use,
                 precomputed_topo = (all_data[k], x_bounds, y_bounds),
                 state.plot_kwargs...,

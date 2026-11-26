@@ -198,10 +198,19 @@ function tf_multitaper(
     kwargs...,
 )
     _with_batch_logging("tf_multitaper", "tf_multitaper.log", input_dir, output_dir) do ctx
+        _ = output_dir
         @log_call "tf_multitaper"
-        output_dir = _prepare_output_dir!(ctx, joinpath(input_dir, "tf_multitaper_$(_clean_pattern(file_pattern))"))
-        process_fn = _tf_batch_worker(tf_multitaper, "multitaper", condition_selection, kwargs)
-        batch_process(process_fn, file_pattern, input_dir, output_dir, participant_selection, "TF multitaper")
+        return _tf_run_batch(
+            ctx,
+            tf_multitaper,
+            "multitaper",
+            "tf_multitaper",
+            file_pattern,
+            input_dir,
+            participant_selection,
+            condition_selection,
+            kwargs,
+        )
     end
 end
 

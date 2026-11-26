@@ -177,29 +177,17 @@ function signal_example_heog()
     poly!(ax_eyes, Rect2f(4.08, 0.2, 0.22, 0.6), color = "#334155", strokewidth = 1, strokecolor = :black)
     text!(ax_eyes, 4.19, 1.0, text = "[+] Right Temple", align = (:center, :center), font = :bold, fontsize = 12, color = "#334155")
 
-    poly!(
-        ax_eyes,
-        [Point2f(-0.7, -1.2), Point2f(-0.7, -2.2), Point2f(0.7, -1.7)],
-        color = "#f8fafc",
-        strokewidth = 2.0,
-        strokecolor = "#1e293b",
-    )
-    text!(ax_eyes, -0.45, -1.40, text = "+", align = (:center, :center), font = :bold, fontsize = 18, color = "#dc2626")
-    text!(ax_eyes, -0.45, -2.00, text = "–", align = (:center, :center), font = :bold, fontsize = 20, color = "#2563eb")
-    text!(ax_eyes, 0.0, -0.55, text = "Difference Amplifier", align = (:center, :center), font = :bold, fontsize = 16, color = "#1e293b")
-
-    lines!(ax_eyes, [Point2f(0.7, -1.7), Point2f(1.2, -1.7)], color = "#1e293b", linewidth = 2.0)
-    scatter!(ax_eyes, [Point2f(1.25, -1.7)], marker = :circle, markersize = 10, color = :white, strokecolor = "#1e293b", strokewidth = 2.0)
+    _demo_draw_diff_amp!(ax_eyes, -1.70; half_h = 0.50, out_x = 1.20, label_above = true)
 
     lines!(
         ax_eyes,
-        [Point2f(4.08, 0.5), Point2f(3.5, 0.5), Point2f(3.5, -0.85), Point2f(-1.0, -0.85), Point2f(-1.0, -1.40), Point2f(-0.70, -1.40)],
+        [Point2f(4.08, 0.5), Point2f(3.5, 0.5), Point2f(3.5, -0.85), Point2f(-1.0, -0.85), Point2f(-1.0, -1.45), Point2f(-0.70, -1.45)],
         color = "#dc2626",
         linewidth = 2.0,
     )
     lines!(
         ax_eyes,
-        [Point2f(-4.08, 0.5), Point2f(-3.5, 0.5), Point2f(-3.5, -2.00), Point2f(-0.70, -2.00)],
+        [Point2f(-4.08, 0.5), Point2f(-3.5, 0.5), Point2f(-3.5, -1.95), Point2f(-0.70, -1.95)],
         color = "#2563eb",
         linewidth = 2.0,
     )
@@ -216,17 +204,47 @@ function signal_example_heog()
     ctrl_layout = fig[2, 1] = GridLayout(tellwidth = false, halign = :center)
     slider_sub = ctrl_layout[1, 1] = GridLayout(tellwidth = false, halign = :center)
 
-    Label(slider_sub[1, 1], text = "Gaze:", font = :bold, fontsize = label_font)
-    sl_angle = Slider(slider_sub[1, 2], range = -45.0:1.0:45.0, startvalue = 30.0, width = 75)
-    Label(slider_sub[1, 3], text = lift(v -> "$(round(v, digits=1))°", sl_angle.value), width = 58, fontsize = label_font)
-
-    Label(slider_sub[1, 5], text = "Duration:", font = :bold, fontsize = label_font)
-    sl_dur = Slider(slider_sub[1, 6], range = 100.0:25.0:1200.0, startvalue = 700.0, width = 70)
-    Label(slider_sub[1, 7], text = lift(v -> "$(round(Int, v)) ms", sl_dur.value), width = 68, fontsize = label_font)
-
-    Label(slider_sub[1, 9], text = "Noise:", font = :bold, fontsize = label_font)
-    sl_noise = Slider(slider_sub[1, 10], range = 0.0:1.0:100.0, startvalue = 2.0, width = 70)
-    Label(slider_sub[1, 11], text = lift(v -> "$(round(Int, v)) µV", sl_noise.value), width = 58, fontsize = label_font)
+    sl_angle = _demo_hslider!(
+        slider_sub,
+        1,
+        1,
+        "Gaze:",
+        -45.0:1.0:45.0,
+        30.0,
+        v -> "$(round(v, digits=1))°";
+        fontsize = label_font,
+        sl_width = 75,
+        val_width = 58,
+        val_halign = :center,
+    )
+    _demo_hslider!(
+        slider_sub,
+        1,
+        5,
+        "Duration:",
+        100.0:25.0:1200.0,
+        700.0,
+        v -> "$(round(Int, v)) ms";
+        obs = duration_ms,
+        fontsize = label_font,
+        sl_width = 70,
+        val_width = 68,
+        val_halign = :center,
+    )
+    _demo_hslider!(
+        slider_sub,
+        1,
+        9,
+        "Noise:",
+        0.0:1.0:100.0,
+        2.0,
+        v -> "$(round(Int, v)) µV";
+        obs = noise_amp,
+        fontsize = label_font,
+        sl_width = 70,
+        val_width = 58,
+        val_halign = :center,
+    )
 
     colgap!(slider_sub, 6)
     colsize!(slider_sub, 4, Fixed(60))
@@ -320,8 +338,6 @@ function signal_example_heog()
         angle_deg[] = val
         is_animating[] || (current_display_angle[] = val)
     end
-    on(val -> (duration_ms[] = val), sl_dur.value)
-    on(val -> (noise_amp[] = val), sl_noise.value)
     on(val -> (show_fields[] = val), chk_fields.checked)
     on(chk_mono.checked) do val
         line_R.visible = val
@@ -330,31 +346,16 @@ function signal_example_heog()
     end
 
     on(btn_play.clicks) do _
-        is_animating[] && return
-        is_animating[] = true
-        @async begin
-            try
-                target = angle_deg[]
-                t_on = 0.40
-                t_off = t_on + duration_ms[] / 1000.0
-                n_frames = 60
-                dt = 2.0 / n_frames
-                for frame = 0:n_frames
-                    (!is_animating[] || !events(fig).window_open[]) && break
-                    t_curr = frame * dt
-                    playback_time[] = t_curr
-                    sig_on = 1.0 / (1.0 + exp(-(t_curr - t_on) / 0.015))
-                    sig_off = 1.0 / (1.0 + exp((t_curr - t_off) / 0.015))
-                    current_display_angle[] = target * sig_on * sig_off
-                    sleep(1.0 / 30.0)
-                end
-                if events(fig).window_open[]
-                    playback_time[] = -1.0
-                    current_display_angle[] = target
-                end
-            finally
-                is_animating[] = false
-            end
+        target = angle_deg[]
+        t_on = 0.40
+        t_off = t_on + duration_ms[] / 1000.0
+        dt = 2.0 / 60
+        _demo_run_async!(fig, is_animating, 0:60; on_finish! = () -> (playback_time[] = -1.0; current_display_angle[] = target)) do frame
+            t_curr = frame * dt
+            playback_time[] = t_curr
+            sig_on = 1.0 / (1.0 + exp(-(t_curr - t_on) / 0.015))
+            sig_off = 1.0 / (1.0 + exp((t_curr - t_off) / 0.015))
+            current_display_angle[] = target * sig_on * sig_off
         end
     end
 

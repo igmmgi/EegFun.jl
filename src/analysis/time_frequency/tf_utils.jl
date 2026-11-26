@@ -621,16 +621,27 @@ function _tf_single_taper_channel!(
     return nothing
 end
 
-function _tf_batch_worker(tf_fn::F, label::String, condition_selection, kwargs) where {F}
-    return (input_path, output_path) -> begin
-        filename = basename(input_path)
-        data = read_data(input_path)
-        if isnothing(data) || !(data isa Vector{<:EpochData})
-            return BatchResult(false, filename, "Invalid data type")
-        end
-        data = _condition_select(data, condition_selection)
-        tf_results = tf_fn(data; kwargs...)
-        jldsave(output_path; data = tf_results, format_version = EEGFUN_FORMAT_VERSION)
-        return BatchResult(true, filename, "TF $label analysis complete ($(length(tf_results)) conditions)")
-    end
+function _tf_run_batch(
+    ctx::BatchContext,
+    tf_fn::F,
+    label::String,
+    prefix::String,
+    file_pattern::String,
+    input_dir::String,
+    participant_selection,
+    condition_selection,
+    kwargs,
+) where {F}
+    default_dir = joinpath(input_dir, "$(prefix)_$(_clean_pattern(file_pattern))")
+    return _batch_jld2_files(
+        data -> (res = tf_fn(data; kwargs...); (res, "TF $label analysis complete ($(length(res)) conditions)")),
+        Vector{<:EpochData},
+        ctx,
+        default_dir,
+        file_pattern,
+        input_dir,
+        participant_selection,
+        "TF $label";
+        condition_selection = condition_selection,
+    )
 end

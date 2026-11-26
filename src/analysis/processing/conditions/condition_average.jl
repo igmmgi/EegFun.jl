@@ -48,14 +48,25 @@ function condition_average(
     output_dir::Union{String,Nothing} = nothing,
 )
     _with_batch_logging("condition averaging", "condition_average.log", input_dir, output_dir) do ctx
+        _ = output_dir
         @log_call "condition_average"
         cleaned_groups = Vector{Int}[collect(Int, grp) for grp in condition_groups]
         error_msg = _validate_condition_groups(cleaned_groups)
         !isnothing(error_msg) && @minimal_error(error_msg)
 
-        output_dir = _prepare_output_dir!(ctx, _condition_average_default_output_dir(input_dir, file_pattern, cleaned_groups))
-        process_fn = (input_path, output_path) -> _condition_average_process_file(input_path, output_path, cleaned_groups)
-        return batch_process(process_fn, file_pattern, input_dir, output_dir, participant_selection, "Creating averages")
+        groups_str = join([join(group, "-") for group in cleaned_groups], "_")
+        default_dir = joinpath(input_dir, "averages_$(_clean_pattern(file_pattern))_$(groups_str)")
+        return _batch_jld2_files(
+            data -> (avgs = condition_average(data, cleaned_groups); (avgs, "Created $(length(avgs)) average(s)")),
+            Union{AbstractVector{<:ErpData},AbstractVector{<:TimeFreqData}},
+            ctx,
+            default_dir,
+            file_pattern,
+            input_dir,
+            participant_selection,
+            "Creating averages";
+            expected_label = "Vector{ErpData} or Vector{TimeFreqData}",
+        )
     end
 end
 
@@ -65,11 +76,6 @@ condition_average(file_pattern::String, condition_group::AbstractVector{<:Intege
 ######################################
 ######### Internal Functions #########
 ######################################
-
-function _condition_average_default_output_dir(input_dir::String, pattern::String, groups::AbstractVector{<:AbstractVector{<:Integer}})
-    groups_str = join([join(group, "-") for group in groups], "_")
-    return joinpath(input_dir, "averages_$(_clean_pattern(pattern))_$(groups_str)")
-end
 
 function _linear_average_df(dfs::AbstractVector{DataFrame}, cond_chs::Set{Symbol})::DataFrame
     df1 = dfs[1]
@@ -82,29 +88,9 @@ function _linear_average_df(dfs::AbstractVector{DataFrame}, cond_chs::Set{Symbol
     for (j, col) in enumerate(col_names)
         c1 = df1[!, j]
         if col in cond_chs
-            out = Vector{Float64}(undef, n_rows)
-            if c1 isa Vector{Float64}
-                v1 = c1::Vector{Float64}
-                @inbounds @simd for i = 1:n_rows
-                    out[i] = v1[i]
-                end
-            else
-                @inbounds @simd for i = 1:n_rows
-                    out[i] = Float64(c1[i])
-                end
-            end
+            out = _copy_f64!(Vector{Float64}(undef, n_rows), c1)
             for m = 2:n_dfs
-                cm = dfs[m][!, col]
-                if cm isa Vector{Float64}
-                    vm = cm::Vector{Float64}
-                    @inbounds @simd for i = 1:n_rows
-                        out[i] += vm[i]
-                    end
-                else
-                    @inbounds @simd for i = 1:n_rows
-                        out[i] += Float64(cm[i])
-                    end
-                end
+                _accum_col!(out, dfs[m][!, col])
             end
             if n_dfs > 1
                 @inbounds @simd for i = 1:n_rows
@@ -173,23 +159,6 @@ function _create_average_wave(dats::AbstractVector{T}, conditions::AbstractVecto
 
     n_epochs = dats[1] isa ErpData ? sum(d.n_epochs for d in dats) : 0
     return _derive_condition(dats[1], avg_cond, "average_$(join(conditions, "_"))", avg_frames; n_epochs = n_epochs)
-end
-
-function _condition_average_process_file(
-    filepath::String,
-    output_path::String,
-    condition_groups::AbstractVector{<:AbstractVector{<:Integer}},
-)
-    filename = basename(filepath)
-    file_data = read_data(filepath)
-    isnothing(file_data) && return BatchResult(false, filename, "No data variables found")
-
-    if file_data isa AbstractVector{<:ErpData} || file_data isa AbstractVector{<:TimeFreqData}
-        average_waves = condition_average(file_data, condition_groups)
-        jldsave(output_path; data = average_waves, format_version = EEGFUN_FORMAT_VERSION)
-        return BatchResult(true, filename, "Created $(length(average_waves)) average(s)")
-    end
-    return BatchResult(false, filename, "Invalid data type: expected Vector{ErpData} or Vector{TimeFreqData}, got $(typeof(file_data))")
 end
 
 function _condition_average_single!(average_waves::Vector{T}, data::AbstractVector{T}, groups) where {T<:ConditionAverageData}

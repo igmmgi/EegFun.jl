@@ -185,11 +185,41 @@ function signal_example_convolution()
     lbl_pos = Label(ctrl[3, 1:4], "pos: 0.00 s", fontsize = ctrl_sz, halign = :center)
 
     inner = GridLayout(ctrl[4, 1:4], colgap = 16)
-    sl_kw, lbl_kw = _demo_labelled_slider(inner, 1, "Kernel Width", 0.01:0.01:2.0, 0.1, v -> "$(round(Int, v * 1000)) ms", ctrl_sz)
-    sl_cy, lbl_cy = _demo_labelled_slider(inner, 2, "Cycles", 1.0:1.0:10.0, 5.0, v -> "$(round(Int, v))", ctrl_sz)
-    sl_wf, lbl_wf = _demo_labelled_slider(inner, 3, "Wavelet Freq", 1.0:1.0:40.0, 8.0, v -> "$(round(Int, v)) Hz", ctrl_sz)
-    sl_sf, lbl_sf = _demo_labelled_slider(inner, 4, "Signal Freq", 1.0:1.0:20.0, 4.0, v -> "$(round(Int, v)) Hz", ctrl_sz)
-    sl_nl, lbl_nl = _demo_labelled_slider(inner, 5, "Noise", 0.0:0.05:1.0, 0.3, v -> "$(round(v, digits=2))", ctrl_sz)
+    sl_kw, lbl_kw = _demo_labelled_slider(
+        inner,
+        1,
+        "Kernel Width",
+        0.01:0.01:2.0,
+        0.1,
+        v -> "$(round(Int, v * 1000)) ms",
+        ctrl_sz;
+        obs = kernel_width,
+        on_change = _ -> update_kw_label(),
+    )
+    sl_cy, _ = _demo_labelled_slider(
+        inner,
+        2,
+        "Cycles",
+        1.0:1.0:10.0,
+        5.0,
+        v -> "$(round(Int, v))",
+        ctrl_sz;
+        obs = wavelet_cycles,
+        on_change = _ -> update_kw_label(),
+    )
+    sl_wf, _ = _demo_labelled_slider(
+        inner,
+        3,
+        "Wavelet Freq",
+        1.0:1.0:40.0,
+        8.0,
+        v -> "$(round(Int, v)) Hz",
+        ctrl_sz;
+        obs = wavelet_freq,
+        on_change = _ -> update_kw_label(),
+    )
+    sl_sf, _ = _demo_labelled_slider(inner, 4, "Signal Freq", 1.0:1.0:20.0, 4.0, v -> "$(round(Int, v)) Hz", ctrl_sz; obs = sig_freq)
+    sl_nl, _ = _demo_labelled_slider(inner, 5, "Noise", 0.0:0.05:1.0, 0.3, v -> "$(round(v, digits=2))", ctrl_sz; obs = noise_lvl)
 
     Label(inner[1, 6], "Kernel type", fontsize = ctrl_sz, halign = :center)
     menu_kt = Menu(inner[2, 6], options = kernel_options, default = "Gaussian", fontsize = ctrl_sz)
@@ -204,28 +234,6 @@ function signal_example_convolution()
     on(sl_pos.value) do v
         kernel_pos[] = v
         lbl_pos.text = "pos: $(round(v * EPOCH, digits=2)) s"
-    end
-    on(sl_kw.value) do v
-        kernel_width[] = v
-        update_kw_label()
-    end
-    on(sl_cy.value) do v
-        wavelet_cycles[] = v
-        lbl_cy.text = "$(round(Int, v))"
-        update_kw_label()
-    end
-    on(sl_wf.value) do v
-        wavelet_freq[] = v
-        lbl_wf.text = "$(round(Int, v)) Hz"
-        update_kw_label()
-    end
-    on(sl_sf.value) do v
-        sig_freq[] = v
-        lbl_sf.text = "$(round(Int, v)) Hz"
-    end
-    on(sl_nl.value) do v
-        noise_lvl[] = v
-        lbl_nl.text = "$(round(v, digits=2))"
     end
     on(menu_kt.selection) do sel
         kernel_type[] = sel == "Gaussian" ? :gaussian : sel == "Boxcar" ? :boxcar : :wavelet
@@ -247,50 +255,21 @@ function signal_example_convolution()
 
     is_playing = Ref(false)
     on(btn_play.clicks) do _
-        is_playing[] && return
-        is_playing[] = true
-        @async begin
-            try
-                for p = 0.0:0.01:1.0
-                    (!is_playing[] || !events(fig).window_open[]) && break
-                    set_close_to!(sl_pos, p)
-                    sleep(0.05)
-                end
-            finally
-                is_playing[] = false
+        _demo_run_async!(p -> set_close_to!(sl_pos, p), fig, is_playing, 0.0:0.01:1.0; dt = 0.05)
+    end
+
+    function apply_preset!(kt_idx::Int, presets...)
+        is_playing[] = false
+        _demo_batch_update!(is_applying_preset, update) do
+            menu_kt.i_selected[] = kt_idx
+            for (sl, val) in presets
+                set_close_to!(sl, val)
             end
-        end
-    end
-
-    on(btn_denoise.clicks) do _
-        is_playing[] = false
-        is_applying_preset[] = true
-        try
-            menu_kt.i_selected[] = 1
-            set_close_to!(sl_kw, 0.15)
-            set_close_to!(sl_sf, 4.0)
-            set_close_to!(sl_nl, 0.5)
             set_close_to!(sl_pos, 0.0)
-        finally
-            is_applying_preset[] = false
         end
-        update()
     end
-
-    on(btn_wavelet.clicks) do _
-        is_playing[] = false
-        is_applying_preset[] = true
-        try
-            menu_kt.i_selected[] = 3
-            set_close_to!(sl_wf, 8.0)
-            set_close_to!(sl_sf, 8.0)
-            set_close_to!(sl_nl, 0.0)
-            set_close_to!(sl_pos, 0.0)
-        finally
-            is_applying_preset[] = false
-        end
-        update()
-    end
+    on(_ -> apply_preset!(1, (sl_kw, 0.15), (sl_sf, 4.0), (sl_nl, 0.5)), btn_denoise.clicks)
+    on(_ -> apply_preset!(3, (sl_wf, 8.0), (sl_sf, 8.0), (sl_nl, 0.0)), btn_wavelet.clicks)
 
     rowsize!(fig.layout, 1, Relative(0.38))
     rowsize!(fig.layout, 2, Relative(0.38))

@@ -601,11 +601,7 @@ function plot_erp_measurement_gui(
     return (fig = fig, axes = [ax], screen = screen)
 end
 
-function plot_erp_measurement_gui(filepath::String; kwargs...)
-    data = read_data(filepath)
-    isnothing(data) && @minimal_error "No data found in file: $filepath"
-    return plot_erp_measurement_gui(data; kwargs...)
-end
+plot_erp_measurement_gui(filepath::String; kwargs...) = plot_erp_measurement_gui(_read_plot_file(filepath); kwargs...)
 
 ######################################
 ######### Internal Functions #########

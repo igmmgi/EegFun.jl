@@ -264,330 +264,51 @@ using EegFun
 end
 
 @testset "Batch Filter" begin
-
-    # Create a temporary directory for test files
-    test_dir = mktempdir()
-
-    try
-        # Create test data files
-        @testset "Setup test files" begin
-            for participant in [1, 2]
-                erps = EegFun.create_test_batch_erp_data(n_conditions = 2)
-                # Use filename format consistent with codebase (numeric participant ID)
-                filename = joinpath(test_dir, "$(participant)_erps.jld2")
-                jldsave(filename; data = erps)
-                @test isfile(filename)
-            end
-        end
-
-        @testset "Basic filtering" begin
-            output_dir = joinpath(test_dir, "filtered_output")
-
-            # Test low-pass filtering
-            result = EegFun.lowpass_filter("erps", 30.0, input_dir = test_dir, output_dir = output_dir)
-
-            @test !isnothing(result)
-            @test result.success == 2
-            @test result.errors == 0
-            @test isdir(output_dir)
-
-            # Check that filtered files exist
-            @test isfile(joinpath(output_dir, "1_erps.jld2"))
-            @test isfile(joinpath(output_dir, "2_erps.jld2"))
-
-            # Load and verify filtered data
-            filtered_data = load(joinpath(output_dir, "1_erps.jld2"), "data")
-            @test length(filtered_data) == 2  # 2 conditions
-            @test filtered_data[1] isa EegFun.ErpData
-            @test hasproperty(filtered_data[1].data, :Ch1)
-            @test hasproperty(filtered_data[1].data, :Ch2)
-
-            # Verify high frequencies are attenuated
-            @test std(filtered_data[1].data.Ch1) < 2.0  # Should be reduced
-        end
-
-        @testset "Filter specific participants" begin
-            output_dir = joinpath(test_dir, "filtered_participant")
-
-            result = EegFun.lowpass_filter(
-                "erps",
-                30.0,
-                input_dir = test_dir,
-                output_dir = output_dir,
-                participant_selection = EegFun.participants(1),
-            )
-
-            @test result.success == 1
-            @test result.errors == 0
-            @test isfile(joinpath(output_dir, "1_erps.jld2"))
-            @test !isfile(joinpath(output_dir, "2_erps.jld2"))
-        end
-
-        @testset "Filter specific conditions" begin
-            output_dir = joinpath(test_dir, "filtered_condition")
-
-            result = EegFun.lowpass_filter(
-                "erps",
-                30.0,
-                input_dir = test_dir,
-                output_dir = output_dir,
-                condition_selection = EegFun.conditions(1),
-            )
-
-            @test result.success == 2
-
-            # Load and verify only one condition
-            filtered_data = load(joinpath(output_dir, "1_erps.jld2"), "data")
-            @test length(filtered_data) == 1
-            @test filtered_data[1].condition == 1
-        end
-
-        @testset "High-pass filter" begin
-            output_dir = joinpath(test_dir, "filtered_hp")
-
-            result = EegFun.highpass_filter("erps", 1.0, input_dir = test_dir, output_dir = output_dir)
-
-            @test result.success == 2
-            @test result.errors == 0
-
-            # Load and verify
-            filtered_data = load(joinpath(output_dir, "1_erps.jld2"), "data")
-            @test filtered_data[1] isa EegFun.ErpData
-        end
-
-        @testset "Error handling" begin
-            # Non-existent directory
-            @test_throws Exception EegFun.lowpass_filter("erps", 30.0, input_dir = "/nonexistent/path")
-
-            # Invalid cutoff frequency
-            @test_throws Exception EegFun.lowpass_filter("erps", -10.0, input_dir = test_dir)
-        end
-
-        @testset "No matching files" begin
-            output_dir = joinpath(test_dir, "filtered_nomatch")
-
-            # Pattern that won't match any files
-            result = EegFun.lowpass_filter("nonexistent_pattern", 30.0, input_dir = test_dir, output_dir = output_dir)
-
-            @test isnothing(result)  # Function returns nothing when no files found
-        end
-
-        @testset "Logging" begin
-            output_dir = joinpath(test_dir, "filtered_with_log")
-
-            # Use lowpass_filter explicitly
-            result = EegFun.lowpass_filter("erps", 30.0, input_dir = test_dir, output_dir = output_dir)
-
-            # Check log file exists
-            # Check log file exists (it should be filter_lp.log for lowpass)
-            log_file = joinpath(output_dir, "filter_lp.log")
-            @test isfile(log_file)
-
-            # Verify log contains expected information
-            log_contents = read(log_file, String)
-            @test contains(log_contents, "filtering started")
-            # The log message now says "lowpass" or "highpass" instead of "filter_type=\"lp\""
-            @test contains(log_contents, "lowpass")
-            @test contains(log_contents, "cutoff: 30.0 Hz")
-        end
-
-        @testset "Multiple participants filter" begin
-            output_dir = joinpath(test_dir, "filtered_multi_participants")
-
-            # Filter both participants
-            result = EegFun.lowpass_filter(
-                "erps",
-                30.0,
-                input_dir = test_dir,
-                output_dir = output_dir,
-                participant_selection = EegFun.participants([1, 2]),
-            )
-
-            @test result.success == 2
-            @test result.errors == 0
-            @test isfile(joinpath(output_dir, "1_erps.jld2"))
-            @test isfile(joinpath(output_dir, "2_erps.jld2"))
-        end
-
-        @testset "Multiple conditions filter" begin
-            output_dir = joinpath(test_dir, "filtered_multi_conditions")
-
-            # Filter both conditions
-            result = EegFun.lowpass_filter(
-                "erps",
-                30.0,
-                input_dir = test_dir,
-                output_dir = output_dir,
-                condition_selection = EegFun.conditions([1, 2]),
-            )
-
-            @test result.success == 2
-
-            # Load and verify both conditions are present
-            filtered_data = load(joinpath(output_dir, "1_erps.jld2"), "data")
-            @test length(filtered_data) == 2
-            @test filtered_data[1].condition == 1
-            @test filtered_data[2].condition == 2
-        end
-
-        @testset "EpochData support" begin
-            # Create EpochData test files
-            epochs_dir = joinpath(test_dir, "epochs_test")
-            mkpath(epochs_dir)
-
-            # Save epoch data - create a vector of EpochData for batch processing
-            epochs = [EegFun.create_test_epoch_data(condition = 1), EegFun.create_test_epoch_data(condition = 1)]
-            jldsave(joinpath(epochs_dir, "1_epochs.jld2"); data = epochs)
-
-            # Filter epoch data
-            output_dir = joinpath(test_dir, "filtered_epochs")
-            result = EegFun.lowpass_filter("epochs", 30.0, input_dir = epochs_dir, output_dir = output_dir)
-
-            @test result.success == 1
-            @test result.errors == 0
-            @test isfile(joinpath(output_dir, "1_epochs.jld2"))
-
-            # Load and verify
-            filtered_epochs = load(joinpath(output_dir, "1_epochs.jld2"), "data")
-            @test filtered_epochs[1] isa EegFun.EpochData
-            @test length(filtered_epochs) == 2  # 2 conditions
-        end
-
-        @testset "Existing output directory" begin
-            output_dir = joinpath(test_dir, "existing_output")
-            mkpath(output_dir)
-
-            # Create a dummy file in the output directory
-            touch(joinpath(output_dir, "dummy.txt"))
-            @test isfile(joinpath(output_dir, "dummy.txt"))
-
-            # Run filter - should work fine with existing directory
-            result = EegFun.lowpass_filter("erps", 30.0, input_dir = test_dir, output_dir = output_dir)
-
-            @test result.success == 2
-            @test isfile(joinpath(output_dir, "dummy.txt"))  # Original file preserved
-            @test isfile(joinpath(output_dir, "1_erps.jld2"))
-        end
-
-        @testset "Partial failures" begin
-            partial_dir = joinpath(test_dir, "partial_test")
-            mkpath(partial_dir)
-
-            # Create one valid file
-            erps = EegFun.create_test_batch_erp_data(n_conditions = 2)
-            jldsave(joinpath(partial_dir, "1_erps.jld2"); data = erps)
-
-            # Create one malformed file (invalid data type - String instead of Vector{ErpData})
-            jldsave(joinpath(partial_dir, "2_erps.jld2"); data = "invalid_data")
-
-            output_dir = joinpath(test_dir, "filtered_partial")
-            result = EegFun.lowpass_filter("erps", 30.0, input_dir = partial_dir, output_dir = output_dir)
-
-            @test result.success == 1
-            @test result.errors == 1
-            @test isfile(joinpath(output_dir, "1_erps.jld2"))
-            @test !isfile(joinpath(output_dir, "2_erps.jld2"))  # Failed file not saved
-        end
-
-        @testset "Condition out of range" begin
-            output_dir = joinpath(test_dir, "filtered_invalid_condition")
-
-            # Request condition 5 when only 2 exist
-            # With predicate-based selection, this results in empty selection but successful processing
-            result = EegFun.lowpass_filter(
-                "erps",
-                30.0,
-                input_dir = test_dir,
-                output_dir = output_dir,
-                condition_selection = EegFun.conditions(5),
-            )
-
-            # Files are processed successfully but with empty condition selection
-            @test result.success == 2
-            @test result.errors == 0
-        end
-
-        @testset "Empty pattern match" begin
-            empty_dir = joinpath(test_dir, "empty_match")
-            mkpath(empty_dir)
-
-            # Directory exists but has no JLD2 files
-            result = EegFun.lowpass_filter("erps", 30.0, input_dir = empty_dir)
-
-            @test isnothing(result)  # No files to process
-        end
-
-        @testset "Return value structure" begin
-            output_dir = joinpath(test_dir, "filtered_return_check")
-
-            result = EegFun.lowpass_filter("erps", 30.0, input_dir = test_dir, output_dir = output_dir)
-
-            # Check result structure
-            @test hasfield(typeof(result), :success)
-            @test hasfield(typeof(result), :errors)
-            @test result.success isa Integer
-            @test result.errors isa Integer
-            @test result.success >= 0
-            @test result.errors >= 0
-            @test result.success + result.errors == 2  # Total files processed
-        end
-
-        @testset "Data integrity - frequency attenuation" begin
-            output_dir = joinpath(test_dir, "filtered_integrity")
-
-            # Get original data statistics
-            original_data = load(joinpath(test_dir, "1_erps.jld2"), "data")
-            original_signal = original_data[1].data.Ch1
-
-            # Apply low-pass filter
-            EegFun.lowpass_filter("erps", 30.0, input_dir = test_dir, output_dir = output_dir)
-
-            # Load filtered data
-            filtered_data = load(joinpath(output_dir, "1_erps.jld2"), "data")
-            filtered_signal = filtered_data[1].data.Ch1
-
-            # Check that high-frequency noise is reduced (lower std deviation)
-            @test std(filtered_signal) < std(original_signal)
-
-            # Check that data length is preserved
-            @test length(filtered_signal) == length(original_signal)
-
-            # Check that time vector is preserved
-            @test filtered_data[1].data.time == original_data[1].data.time
-        end
-
-        @testset "Combined filters" begin
-            output_dir = joinpath(test_dir, "filtered_combined")
-
-            # Filter specific participant AND condition
-            result = EegFun.lowpass_filter(
-                "erps",
-                30.0,
-                input_dir = test_dir,
-                output_dir = output_dir,
-                participant_selection = EegFun.participants(1),
-                condition_selection = EegFun.conditions(1),
-            )
-
-            @test result.success == 1
-
-            # Load and verify
-            filtered_data = load(joinpath(output_dir, "1_erps.jld2"), "data")
-            @test length(filtered_data) == 1  # Only one condition
-            @test filtered_data[1].condition == 1
-            @test !isfile(joinpath(output_dir, "2_erps.jld2"))  # Participant 2 not processed
-        end
-
-        @testset "Unwrapped phase_delay in get_filter_characteristics" begin
-            # High-order linear-phase FIR filter wraps phase multiple times across passband;
-            # unwrapped phase_delay in samples/rad must equal group_delay (~ (N-1)/2 samples)
-            fi_fir = EegFun.create_lowpass_filter(40.0, 1000.0; filter_method = :fir, order = 201)
-            chars = EegFun.get_filter_characteristics(fi_fir; filter_func = :filt)
-            @test isapprox(chars.phase_delay, chars.group_delay; rtol = 0.05)
-        end
-
-    finally
-        # Clean up
-        rm(test_dir, recursive = true, force = true)
+    isdefined(@__MODULE__, :run_batch_jld2_contract_tests!) ||
+        Base.include(@__MODULE__, joinpath(pkgdir(EegFun), "test", "tests", "test_helpers.jl"))
+
+    run_batch_jld2_contract_tests!(
+        (pat; kwargs...) -> EegFun.lowpass_filter(pat, 30.0; kwargs...);
+        make_data = _ -> EegFun.create_test_batch_erp_data(n_conditions = 2),
+        pattern = "erps",
+        log_file = "filter_lp.log",
+        log_snippets = ["filtering started", "lowpass", "cutoff: 30.0 Hz"],
+    )
+
+    mktempdir() do test_dir
+        orig_erps = EegFun.create_test_batch_erp_data(n_conditions = 2)
+        jldsave(joinpath(test_dir, "1_erps.jld2"); data = orig_erps)
+
+        # High-pass batch filter & invalid cutoff error
+        hp_out = joinpath(test_dir, "filtered_hp")
+        res_hp = EegFun.highpass_filter("erps", 1.0; input_dir = test_dir, output_dir = hp_out)
+        @test res_hp.success == 1 && res_hp.errors == 0
+        @test load(joinpath(hp_out, "1_erps.jld2"), "data")[1] isa EegFun.ErpData
+        @test_throws Exception EegFun.lowpass_filter("erps", -10.0; input_dir = test_dir)
+
+        # Frequency attenuation & time preservation
+        lp_out = joinpath(test_dir, "filtered_lp")
+        EegFun.lowpass_filter("erps", 30.0; input_dir = test_dir, output_dir = lp_out)
+        filtered_erps = load(joinpath(lp_out, "1_erps.jld2"), "data")
+        @test std(filtered_erps[1].data.Ch1) < std(orig_erps[1].data.Ch1)
+        @test filtered_erps[1].data.time == orig_erps[1].data.time
+
+        # EpochData batch support
+        ep_dir = mkpath(joinpath(test_dir, "epochs_in"))
+        jldsave(
+            joinpath(ep_dir, "1_epochs.jld2");
+            data = [EegFun.create_test_epoch_data(condition = 1), EegFun.create_test_epoch_data(condition = 2)],
+        )
+        ep_out = joinpath(test_dir, "epochs_out")
+        res_ep = EegFun.lowpass_filter("epochs", 30.0; input_dir = ep_dir, output_dir = ep_out)
+        @test res_ep.success == 1 && res_ep.errors == 0
+        filtered_epochs = load(joinpath(ep_out, "1_epochs.jld2"), "data")
+        @test length(filtered_epochs) == 2 && filtered_epochs[1] isa EegFun.EpochData
+    end
+
+    @testset "Unwrapped phase_delay in get_filter_characteristics" begin
+        fi_fir = EegFun.create_lowpass_filter(40.0, 1000.0; filter_method = :fir, order = 201)
+        chars = EegFun.get_filter_characteristics(fi_fir; filter_func = :filt)
+        @test isapprox(chars.phase_delay, chars.group_delay; rtol = 0.05)
     end
 end

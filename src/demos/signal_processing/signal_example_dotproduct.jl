@@ -205,36 +205,25 @@ function signal_example_dotproduct()
     end
 
     ctrl = GridLayout(fig[4, 1], colgap = 20)
-    sl_sf, lbl_sf = _demo_labelled_slider(ctrl, 1, "Signal Freq", 1.0:0.1:40.0, 10.0, v -> "$(round(v, digits=1)) Hz", ctrl_sz)
-    sl_sa, lbl_sa = _demo_labelled_slider(ctrl, 2, "Amplitude", 0.1:0.1:2.0, 1.0, v -> "$(round(v, digits=1))", ctrl_sz)
-    sl_sp, lbl_sp = _demo_labelled_slider(ctrl, 3, "Phase (°)", 0.0:5.0:355.0, 0.0, v -> "$(round(Int, v))°", ctrl_sz)
-    sl_tf, lbl_tf = _demo_labelled_slider(ctrl, 4, "Test Freq", 0.5:0.1:60.0, 10.0, v -> "$(round(v, digits=1)) Hz", ctrl_sz)
-    sl_nl, lbl_nl = _demo_labelled_slider(ctrl, 5, "Noise", 0.0:0.05:1.0, 0.0, v -> "$(round(v, digits=2))", ctrl_sz)
+    sl_sf, _ = _demo_labelled_slider(ctrl, 1, "Signal Freq", 1.0:0.1:40.0, 10.0, v -> "$(round(v, digits=1)) Hz", ctrl_sz; obs = sig_freq)
+    _demo_labelled_slider(ctrl, 2, "Amplitude", 0.1:0.1:2.0, 1.0, v -> "$(round(v, digits=1))", ctrl_sz; obs = sig_amp)
+    sl_sp, _ = _demo_labelled_slider(
+        ctrl,
+        3,
+        "Phase (°)",
+        0.0:5.0:355.0,
+        0.0,
+        v -> "$(round(Int, v))°",
+        ctrl_sz;
+        obs = sig_phase,
+        transform = deg2rad,
+    )
+    sl_tf, _ = _demo_labelled_slider(ctrl, 4, "Test Freq", 0.5:0.1:60.0, 10.0, v -> "$(round(v, digits=1)) Hz", ctrl_sz; obs = test_freq)
+    sl_nl, _ = _demo_labelled_slider(ctrl, 5, "Noise", 0.0:0.05:1.0, 0.0, v -> "$(round(v, digits=2))", ctrl_sz; obs = noise_lvl)
 
     Label(ctrl[1, 6], "Complex", fontsize = ctrl_sz, halign = :center)
     tog_complex = Toggle(ctrl[2, 6], active = false, halign = :center)
     Label(ctrl[3, 6], "", fontsize = ctrl_sz, halign = :center)
-
-    on(sl_sf.value) do v
-        sig_freq[] = v
-        lbl_sf.text = "$(round(v, digits=1)) Hz"
-    end
-    on(sl_sa.value) do v
-        sig_amp[] = v
-        lbl_sa.text = "$(round(v, digits=1))"
-    end
-    on(sl_sp.value) do v
-        sig_phase[] = deg2rad(v)
-        lbl_sp.text = "$(round(Int, v))°"
-    end
-    on(sl_tf.value) do v
-        test_freq[] = v
-        lbl_tf.text = "$(round(v, digits=1)) Hz"
-    end
-    on(sl_nl.value) do v
-        noise_lvl[] = v
-        lbl_nl.text = "$(round(v, digits=2))"
-    end
     on(v -> (use_complex[] = v), tog_complex.active)
 
     for col = 1:6
@@ -248,17 +237,13 @@ function signal_example_dotproduct()
     btn_ortho = Button(preset_grid[1, 4], label = "Phase Orthogonality (90°)", width = 220)
 
     function _apply_preset!(sf_val, tf_val, sp_val, reset_complex::Bool)
-        is_applying_preset[] = true
-        try
+        _demo_batch_update!(is_applying_preset, update) do
             set_close_to!(sl_sf, sf_val)
             set_close_to!(sl_tf, tf_val)
             set_close_to!(sl_sp, sp_val)
             set_close_to!(sl_nl, 0.0)
             reset_complex && (tog_complex.active[] = false)
-        finally
-            is_applying_preset[] = false
         end
-        update()
     end
 
     on(_ -> _apply_preset!(10.0, 10.0, 0.0, true), btn_perfect.clicks)

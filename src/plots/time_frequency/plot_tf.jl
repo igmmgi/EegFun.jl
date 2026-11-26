@@ -404,11 +404,7 @@ function plot_tf(
     return (fig = fig, axes = axes)
 end
 
-function plot_tf(filepath::String; kwargs...)
-    data = read_data(filepath)
-    isnothing(data) && @minimal_error "No data found in file: $filepath"
-    return plot_tf(data; kwargs...)
-end
+plot_tf(filepath::String; kwargs...) = plot_tf(_read_plot_file(filepath); kwargs...)
 
 ######################################
 ######### Internal Functions #########

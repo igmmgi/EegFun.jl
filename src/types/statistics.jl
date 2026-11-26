@@ -248,15 +248,8 @@ end
 function Base.show(io::IO, result::PermutationResult)
     n_sig_pos = count(c -> c.is_significant, result.clusters.positive)
     n_sig_neg = count(c -> c.is_significant, result.clusters.negative)
-    ti = result.test_info
-    ci = ti.cluster_info
-
     println(io, "PermutationResult")
-    println(io, "├─ Design: $(ti.type)")
-    println(io, "├─ Degrees of freedom: $(round(Int, ti.df))")
-    println(io, "├─ Permutations: $(ci.n_permutations)")
-    println(io, "├─ Alpha: $(ti.alpha), Cluster alpha: $(ci.cluster_alpha) ($(ci.threshold_method))")
-    println(io, "├─ Cluster type: $(ci.cluster_type)")
+    _print_perm_header(io, result.test_info)
     println(
         io,
         "├─ Data dimensions: $(length(result.electrodes)) electrodes × $(length(result.time_points)) time points ($(_range_str(result.time_points, "s")))",
@@ -264,22 +257,7 @@ function Base.show(io::IO, result::PermutationResult)
     println(io, "├─ Significant points: $(count(result.masks.positive)) positive, $(count(result.masks.negative)) negative")
     println(io, "├─ Clusters found: $(length(result.clusters.positive)) positive, $(length(result.clusters.negative)) negative")
     _print_sig_cluster_counts(io, n_sig_pos, n_sig_neg, "├─")
-
-    if n_sig_pos > 0 || n_sig_neg > 0
-        println(io, "└─ Significant cluster details:")
-        if n_sig_pos > 0
-            println(io, "   Positive clusters:")
-            for c in result.clusters.positive
-                c.is_significant && _print_cluster_line(io, c)
-            end
-        end
-        if n_sig_neg > 0
-            println(io, "   Negative clusters:")
-            for c in result.clusters.negative
-                c.is_significant && _print_cluster_line(io, c)
-            end
-        end
-    end
+    _print_cluster_details(io, result.clusters, n_sig_pos, n_sig_neg)
 end
 
 function Base.show(io::IO, result::AnalyticResult)
@@ -330,6 +308,27 @@ Base.show(io::IO, ::MIME"text/plain", result::LmmStatsResult) = show(io, result)
 ######################################
 
 _range_str(v::AbstractVector, unit::AbstractString) = isempty(v) ? "N/A" : "$(first(v)) to $(last(v)) $unit"
+
+function _print_perm_header(io::IO, ti::TestInfo)
+    ci = ti.cluster_info
+    println(io, "├─ Design: $(ti.type)")
+    println(io, "├─ Degrees of freedom: $(round(Int, ti.df))")
+    println(io, "├─ Permutations: $(ci.n_permutations)")
+    println(io, "├─ Alpha: $(ti.alpha), Cluster alpha: $(ci.cluster_alpha) ($(ci.threshold_method))")
+    println(io, "├─ Cluster type: $(ci.cluster_type)")
+end
+
+function _print_cluster_details(io::IO, clusters, n_sig_pos::Int, n_sig_neg::Int)
+    (n_sig_pos > 0 || n_sig_neg > 0) || return
+    println(io, "└─ Significant cluster details:")
+    for (n_sig, label, list) in ((n_sig_pos, "Positive", clusters.positive), (n_sig_neg, "Negative", clusters.negative))
+        n_sig > 0 || continue
+        println(io, "   $label clusters:")
+        for c in list
+            c.is_significant && _print_cluster_line(io, c)
+        end
+    end
+end
 
 function _print_cluster_line(io::IO, c::Cluster)
     p_str = c.p_value < 0.001 ? "<0.001" : Printf.@sprintf("%.3f", c.p_value)

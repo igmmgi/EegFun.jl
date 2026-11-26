@@ -221,36 +221,13 @@ function signal_example_ecg_einthoven()
     lines!(ax_torso, [pos_ra, pos_ll], color = col_lead2, linewidth = lift(s -> (s === :lead2 || s === :all3) ? 3.0 : 1.4, selected_lead))
     lines!(ax_torso, [pos_la, pos_ll], color = col_lead3, linewidth = lift(s -> (s === :lead3 || s === :all3) ? 3.0 : 1.4, selected_lead))
 
-    text!(
-        ax_torso,
-        0.0,
-        pos_la[2] + 0.16,
-        text = "Lead I (0°) ➔",
-        align = (:center, :bottom),
-        font = :bold,
-        fontsize = 10,
-        color = col_lead1,
+    for (pos, txt, al, fs, col) in (
+        ((0.0, pos_la[2] + 0.16), "Lead I (0°) ➔", (:center, :bottom), 10, col_lead1),
+        (((pos_ra[1] + pos_ll[1]) / 2 - 0.22, (pos_ra[2] + pos_ll[2]) / 2), "Lead II (+60°) ➔", (:right, :center), 10, col_lead2),
+        (((pos_la[1] + pos_ll[1]) / 2 + 0.22, (pos_la[2] + pos_ll[2]) / 2), "➔ Lead III (+120°)", (:left, :center), 10, col_lead3),
     )
-    text!(
-        ax_torso,
-        (pos_ra[1] + pos_ll[1]) / 2 - 0.22,
-        (pos_ra[2] + pos_ll[2]) / 2,
-        text = "Lead II (+60°) ➔",
-        align = (:right, :center),
-        font = :bold,
-        fontsize = 10,
-        color = col_lead2,
-    )
-    text!(
-        ax_torso,
-        (pos_la[1] + pos_ll[1]) / 2 + 0.22,
-        (pos_la[2] + pos_ll[2]) / 2,
-        text = "➔ Lead III (+120°)",
-        align = (:left, :center),
-        font = :bold,
-        fontsize = 10,
-        color = col_lead3,
-    )
+        text!(ax_torso, pos[1], pos[2], text = txt, align = al, font = :bold, fontsize = fs, color = col)
+    end
 
     cos60, sin60 = cosd(60.0), sind(60.0)
     cos120, sin120 = cosd(120.0), sind(120.0)
@@ -287,46 +264,35 @@ function signal_example_ecg_einthoven()
     scatter!(ax_torso, [pos_ra, pos_la, pos_ll], color = ["#ef4444", "#eab308", "#22c55e"], markersize = 14)
     scatter!(ax_torso, [pos_rl], color = "#1e293b", markersize = 12)
 
-    text!(
-        ax_torso,
-        pos_ra[1] - 0.28,
-        pos_ra[2],
-        text = lift(s -> s in (:lead1, :lead2, :all3) ? "RA (–)" : "RA", selected_lead),
-        align = (:right, :center),
-        font = :bold,
-        fontsize = 11,
-        color = "#991b1b",
+    for (px, py, txt, al, fs, col) in (
+        (
+            pos_ra[1] - 0.28,
+            pos_ra[2],
+            lift(s -> s in (:lead1, :lead2, :all3) ? "RA (–)" : "RA", selected_lead),
+            (:right, :center),
+            11,
+            "#991b1b",
+        ),
+        (
+            pos_la[1] + 0.28,
+            pos_la[2],
+            lift(s -> s === :lead1 ? "LA (+)" : s === :lead3 ? "LA (–)" : s === :all3 ? "LA (+/–)" : "LA", selected_lead),
+            (:left, :center),
+            11,
+            "#854d0e",
+        ),
+        (
+            pos_ll[1] + 0.28,
+            pos_ll[2],
+            lift(s -> s in (:lead2, :lead3, :all3) ? "LL (+)" : "LL", selected_lead),
+            (:left, :center),
+            11,
+            "#166534",
+        ),
+        (pos_rl[1] - 0.25, pos_rl[2], "RL (GND)", (:right, :center), 9.5, "#475569"),
     )
-    text!(
-        ax_torso,
-        pos_la[1] + 0.28,
-        pos_la[2],
-        text = lift(s -> s === :lead1 ? "LA (+)" : s === :lead3 ? "LA (–)" : s === :all3 ? "LA (+/–)" : "LA", selected_lead),
-        align = (:left, :center),
-        font = :bold,
-        fontsize = 11,
-        color = "#854d0e",
-    )
-    text!(
-        ax_torso,
-        pos_ll[1] + 0.28,
-        pos_ll[2],
-        text = lift(s -> s in (:lead2, :lead3, :all3) ? "LL (+)" : "LL", selected_lead),
-        align = (:left, :center),
-        font = :bold,
-        fontsize = 11,
-        color = "#166534",
-    )
-    text!(
-        ax_torso,
-        pos_rl[1] - 0.25,
-        pos_rl[2],
-        text = "RL (GND)",
-        align = (:right, :center),
-        font = :bold,
-        fontsize = 9.5,
-        color = "#475569",
-    )
+        text!(ax_torso, px, py, text = txt, align = al, font = :bold, fontsize = fs, color = col)
+    end
 
     t_window = 5.0
     n_ecg_samples = 1500
@@ -406,70 +372,59 @@ function signal_example_ecg_einthoven()
     wave_font = lift(f -> f * 1.20, label_font)
     wave_col = "#1e293b"
 
-    text!(
-        ax_ecg,
-        lift(w -> w[1], wave_times),
-        0.35,
-        text = "P",
-        align = (:center, :bottom),
-        font = :bold,
-        fontsize = wave_font,
-        color = wave_col,
+    for (k, y_off, w_lbl, v_align, extra_fs) in (
+        (1, 0.35, "P", :bottom, 0.0),
+        (2, -0.28, "Q", :top, 0.0),
+        (3, 1.52, "R", :bottom, 1.5),
+        (4, -0.45, "S", :top, 0.0),
+        (5, 0.55, "T", :bottom, 0.0),
     )
-    text!(
-        ax_ecg,
-        lift(w -> w[2], wave_times),
-        -0.28,
-        text = "Q",
-        align = (:center, :top),
-        font = :bold,
-        fontsize = wave_font,
-        color = wave_col,
-    )
-    text!(
-        ax_ecg,
-        lift(w -> w[3], wave_times),
-        1.52,
-        text = "R",
-        align = (:center, :bottom),
-        font = :bold,
-        fontsize = lift(f -> f + 1.5, wave_font),
-        color = wave_col,
-    )
-    text!(
-        ax_ecg,
-        lift(w -> w[4], wave_times),
-        -0.45,
-        text = "S",
-        align = (:center, :top),
-        font = :bold,
-        fontsize = wave_font,
-        color = wave_col,
-    )
-    text!(
-        ax_ecg,
-        lift(w -> w[5], wave_times),
-        0.55,
-        text = "T",
-        align = (:center, :bottom),
-        font = :bold,
-        fontsize = wave_font,
-        color = wave_col,
-    )
+        let idx = k, fs_obs = extra_fs == 0.0 ? wave_font : lift(f -> f + extra_fs, wave_font)
+            text!(
+                ax_ecg,
+                lift(w -> w[idx], wave_times),
+                y_off,
+                text = w_lbl,
+                align = (:center, v_align),
+                font = :bold,
+                fontsize = fs_obs,
+                color = wave_col,
+            )
+        end
+    end
 
     ctrl_layout = fig[2, 1:2] = GridLayout(tellwidth = false, halign = :center)
     slider_sub = ctrl_layout[1, 1] = GridLayout(tellwidth = false, halign = :center)
 
-    Label(slider_sub[1, 1], text = "Heart Axis (α):", font = :bold, fontsize = label_font)
-    sl_axis = Slider(slider_sub[1, 2], range = -45.0:1.0:120.0, startvalue = 60.0, width = 110)
-    Label(slider_sub[1, 3], text = lift(v -> "$(round(v, digits=1))°", sl_axis.value), width = 60, fontsize = label_font)
-
-    Label(slider_sub[1, 5], text = "HR (BPM):", font = :bold, fontsize = label_font)
-    sl_hr = Slider(slider_sub[1, 6], range = 10.0:1.0:220.0, startvalue = 72.0, width = 110)
-    Label(slider_sub[1, 7], text = lift(v -> "$(round(Int, v)) BPM", sl_hr.value), width = 75, fontsize = label_font)
-
+    _demo_hslider!(
+        slider_sub,
+        1,
+        1,
+        "Heart Axis (α):",
+        -45.0:1.0:120.0,
+        60.0,
+        v -> "$(round(v, digits=1))°";
+        obs = axis_alpha_deg,
+        fontsize = label_font,
+        val_width = 60,
+        val_halign = :center,
+    )
+    _demo_hslider!(
+        slider_sub,
+        1,
+        5,
+        "HR (BPM):",
+        10.0:1.0:220.0,
+        72.0,
+        v -> "$(round(Int, v)) BPM";
+        obs = heart_rate_bpm,
+        fontsize = label_font,
+        val_width = 75,
+        val_halign = :center,
+    )
     Label(slider_sub[1, 9], text = "Noise:", font = :bold, fontsize = label_font)
     sl_noise = Slider(slider_sub[1, 10], range = 0.0:1.0:200.0, startvalue = 15.0, width = 120)
+    on(val -> (noise_level[] = val), sl_noise.value)
 
     colgap!(slider_sub, 8)
     colsize!(slider_sub, 4, Fixed(50))
@@ -495,9 +450,6 @@ function signal_example_ecg_einthoven()
     colsize!(btn_sub, 8, Fixed(28))
     colsize!(btn_sub, 11, Fixed(20))
 
-    on(val -> (axis_alpha_deg[] = val), sl_axis.value)
-    on(val -> (heart_rate_bpm[] = val), sl_hr.value)
-    on(val -> (noise_level[] = val), sl_noise.value)
     on(val -> (show_vcg_loop[] = val), chk_vcg.checked)
     on(val -> (show_projection[] = val), chk_proj.checked)
 

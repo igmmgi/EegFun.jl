@@ -1,9 +1,7 @@
 # AMDGPU.jl backend extension for EegFun GPU acceleration.
-
 module EegFunAMDGPUExt
 
 using EegFun
-
 using AMDGPU
 
 ######################################

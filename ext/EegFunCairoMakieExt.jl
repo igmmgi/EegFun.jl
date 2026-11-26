@@ -1,9 +1,7 @@
 # CairoMakie.jl backend extension for high-quality vector figure export.
-
 module EegFunCairoMakieExt
 
 using EegFun
-
 using CairoMakie
 
 ######################################

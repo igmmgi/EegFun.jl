@@ -423,32 +423,18 @@ function _plot_epochs(gui_state)
     end
     epoch_sel = isempty(epoch_list) ? epochs() : epochs(epoch_list)
 
+    part_sel = participants()
     if _is_pattern(fname)
         res = _resolve_batch_files_helper(gui_state)
         isnothing(res) && return
-        _, part_sel, _ = res
-        _guarded_async("Epochs") do
-            plot_epochs(
-                fname;
-                input_dir = _gui_dir(gui_state),
-                participant_selection = part_sel,
-                condition_selection = cond_sel,
-                channel_selection = selected_channels,
-                epoch_selection = epoch_sel,
-                layout = Symbol(gui_state.layout_type[]),
-                average_channels = gui_state.average_channels[],
-                xlim = _gui_lim(gui_state.xlim[]),
-                ylim = _gui_lim(gui_state.ylim[]),
-                yreversed = gui_state.invert_y[],
-            )
-        end
-        return
+        part_sel = res[2]
     end
 
     _guarded_async("Epochs") do
         plot_epochs(
             fname;
             input_dir = _gui_dir(gui_state),
+            participant_selection = part_sel,
             channel_selection = selected_channels,
             condition_selection = cond_sel,
             epoch_selection = epoch_sel,
@@ -473,33 +459,18 @@ function _plot_erp(gui_state)
     selected_channels = _gui_selected_channels(gui_state)
     baseline = _gui_lim((gui_state.baseline_start[], gui_state.baseline_end[]))
 
+    part_sel = participants()
     if _is_pattern(fname)
         res = _resolve_batch_files_helper(gui_state)
         isnothing(res) && return
-        _, part_sel, _ = res
-        input_dir = _gui_dir(gui_state)
-        _guarded_async("ERP") do
-            plot_erp(
-                fname;
-                input_dir = input_dir,
-                participant_selection = part_sel,
-                layout = Symbol(gui_state.layout_type[]),
-                channel_selection = selected_channels,
-                condition_selection = cond_sel,
-                baseline_interval = baseline,
-                average_channels = gui_state.average_channels[],
-                xlim = _gui_lim(gui_state.xlim[]),
-                ylim = _gui_lim(gui_state.ylim[]),
-                yreversed = gui_state.invert_y[],
-            )
-        end
-        return
+        part_sel = res[2]
     end
 
     _guarded_async("ERP") do
         plot_erp(
             fname;
             input_dir = _gui_dir(gui_state),
+            participant_selection = part_sel,
             layout = Symbol(gui_state.layout_type[]),
             condition_selection = cond_sel,
             channel_selection = selected_channels,

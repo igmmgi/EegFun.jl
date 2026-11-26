@@ -238,24 +238,12 @@ function plot_decoding(decoded::DecodedData, stats::DecodingStatisticsResult; kw
 end
 
 function plot_decoding(filepath::String; input_dir::String = pwd(), participant_selection = participants(), kwargs...)
-    if endswith(filepath, ".jld2")
-        resolved = _resolve_input_filepath(filepath, input_dir)
-        data = read_data(resolved)
-        isnothing(data) && @minimal_error "No data found in file: $resolved"
-        return plot_decoding(data; kwargs...)
-    end
-
-    files = _find_batch_files(filepath, input_dir, participant_selection)
-    isempty(files) && @minimal_error "No files matching pattern '$filepath' in $input_dir"
-
-    results = NamedTuple[]
-    for file in sort(files, by = _natural_sort_key)
-        @info "Plotting: $file"
-        data = read_data(joinpath(input_dir, file))
-        isnothing(data) && continue
-        push!(results, plot_decoding(data; kwargs...))
-    end
-    return results
+    return _dispatch_plot_filepath(
+        data -> plot_decoding(data; kwargs...),
+        filepath;
+        input_dir = input_dir,
+        participant_selection = participant_selection,
+    )
 end
 
 """

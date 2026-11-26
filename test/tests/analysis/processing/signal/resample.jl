@@ -298,98 +298,29 @@ end
     end
 
     @testset "Batch processing" begin
+        isdefined(@__MODULE__, :run_batch_jld2_contract_tests!) ||
+            Base.include(@__MODULE__, joinpath(pkgdir(EegFun), "test", "tests", "test_helpers.jl"))
 
-        @testset "Batch resample continuous data" begin
-            mktempdir() do tmpdir
-                # Create test files
-                for i = 1:3
-                    data = DataFrame(time = collect(0:511) ./ 512, C3 = randn(512), C4 = randn(512))
+        run_batch_jld2_contract_tests!(
+            (pat; kwargs...) -> EegFun.resample(pat, 256; kwargs...);
+            make_data = _ -> begin
+                df = DataFrame(time = collect(0:511) ./ 512, C3 = randn(512), C4 = randn(512))
+                EegFun.ContinuousData("test_data", df, _make_test_layout(df), 512, EegFun.AnalysisInfo())
+            end,
+            pattern = "continuous",
+            n_participants = 3,
+            supports_condition_selection = false,
+        )
 
-                    continuous = EegFun.ContinuousData("test_data", data, _make_test_layout(data), 512, EegFun.AnalysisInfo())
+        mktempdir() do tmpdir
+            epochs = [DataFrame(time = collect(0:255) ./ 256, C3 = randn(256)) for _ = 1:3]
+            ep_dat = EegFun.EpochData("test_data", 1, "condition_1", epochs, _make_test_layout(epochs[1]), 256, EegFun.AnalysisInfo())
+            jldsave(joinpath(tmpdir, "1_epochs.jld2"); data = ep_dat)
 
-                    jldsave(joinpath(tmpdir, "$(i)_continuous.jld2"); data = continuous)
-                end
-
-                # Create output directory
-                output_dir = joinpath(tmpdir, "resampled")
-
-                # Batch resample
-                EegFun.resample("continuous", 256, input_dir = tmpdir, output_dir = output_dir)
-
-                # Check output files exist
-                @test isfile(joinpath(output_dir, "1_continuous.jld2"))
-                @test isfile(joinpath(output_dir, "2_continuous.jld2"))
-                @test isfile(joinpath(output_dir, "3_continuous.jld2"))
-
-                # Load and check one file
-                resampled = load(joinpath(output_dir, "1_continuous.jld2"), "data")
-                @test resampled isa EegFun.ContinuousData
-                @test resampled.sample_rate == 256
-                @test nrow(resampled.data) == 256
-            end
-        end
-
-        @testset "Batch resample epochs" begin
-            mktempdir() do tmpdir
-                # Create test files
-                for i = 1:2
-                    epochs = []
-                    for j = 1:3
-                        epoch = DataFrame(time = collect(0:255) ./ 256, C3 = randn(256))
-                        push!(epochs, epoch)
-                    end
-
-                    epoch_data =
-                        EegFun.EpochData("test_data", 1, "condition_1", epochs, _make_test_layout(epochs[1]), 256, EegFun.AnalysisInfo())
-
-                    jldsave(joinpath(tmpdir, "$(i)_epochs.jld2"); data = epoch_data)
-                end
-
-                output_dir = joinpath(tmpdir, "resampled")
-
-                # Batch resample
-                EegFun.resample("epochs", 128, input_dir = tmpdir, output_dir = output_dir)
-
-                # Check output
-                @test isfile(joinpath(output_dir, "1_epochs.jld2"))
-
-                # Load and verify
-                resampled = load(joinpath(output_dir, "1_epochs.jld2"), "data")
-                @test resampled isa EegFun.EpochData
-                @test resampled.sample_rate == 128
-                @test nrow(resampled.data[1]) == 128
-            end
-        end
-
-        @testset "Participant filtering" begin
-            mktempdir() do tmpdir
-                # Create files for participants 1-5
-                for i = 1:5
-                    data = DataFrame(time = collect(0:255) ./ 256, C3 = randn(256))
-                    continuous = EegFun.ContinuousData("test_data", data, _make_test_layout(data), 256, EegFun.AnalysisInfo())
-                    jldsave(joinpath(tmpdir, "$(i)_continuous.jld2"); data = continuous)
-                end
-
-                output_dir = joinpath(tmpdir, "resampled")
-
-                # Process only participants 2 and 4
-                EegFun.resample(
-                    "continuous",
-                    128,
-                    input_dir = tmpdir,
-                    participant_selection = EegFun.participants([2, 4]),
-                    output_dir = output_dir,
-                )
-                println("input_dir: $tmpdir")
-                println("output_dir: $output_dir")
-
-                # Check only selected participants were processed
-                @test !isfile(joinpath(output_dir, "1_continuous.jld2"))
-                @test isfile(joinpath(output_dir, "2_continuous.jld2"))
-                @test !isfile(joinpath(output_dir, "3_continuous.jld2"))
-                @test isfile(joinpath(output_dir, "4_continuous.jld2"))
-                @test !isfile(joinpath(output_dir, "5_continuous.jld2"))
-            end
+            output_dir = joinpath(tmpdir, "resampled")
+            EegFun.resample("epochs", 128; input_dir = tmpdir, output_dir = output_dir)
+            resampled = load(joinpath(output_dir, "1_epochs.jld2"), "data")
+            @test resampled isa EegFun.EpochData && resampled.sample_rate == 128 && nrow(resampled.data[1]) == 128
         end
     end
 

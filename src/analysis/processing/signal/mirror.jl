@@ -1,135 +1,73 @@
 # Temporal boundary mirroring and unmirroring to suppress filter edge artifacts.
 
 ######################################
+######### Types & Constants ##########
+######################################
+
+const _MirrorableEeg = Union{SingleDataFrameEeg,EpochData}
+
+######################################
 ########### User Functions ###########
 ######################################
 
 """
     mirror(dat::EegData, side::Symbol = :both)
-    mirror(data_vec::Vector{<:EegData}, side::Symbol = :both)
+    mirror(data_vec::AbstractVector{<:EegData}, side::Symbol = :both)
 
 Mirror data by reflecting time-reversed copies at boundaries (`:pre`, `:post`, or `:both`) on a copy of `dat`
 to suppress edge artifacts during filtering. Call [`unmirror`](@ref) with the same `side` afterward.
 """
-function mirror(dat::SingleDataFrameEeg, side::Symbol = :both)
+function mirror(dat::_MirrorableEeg, side::Symbol = :both)
     _validate_mirror_side(side)
-    @info "Mirroring data on side: $side"
-    return _create_subset(dat, _mirror_dataframe!(dat.data, side), copy(dat.layout))
+    @info "Mirroring $(_mirror_log_target(dat)) on side: $side"
+    return _create_subset(dat, _map_df_mirror(df -> _mirror_dataframe(df, side), dat.data), copy(dat.layout))
 end
 
-function mirror(dat::EpochData, side::Symbol = :both)
-    _validate_mirror_side(side)
-    @info "Mirroring epoched data on side: $side"
-    n_ep = length(dat.data)
-    out_dfs = Vector{DataFrame}(undef, n_ep)
-    if n_ep > 1
-        Threads.@threads :static for i = 1:n_ep
-            out_dfs[i] = _mirror_dataframe!(dat.data[i], side)
-        end
-    elseif n_ep == 1
-        out_dfs[1] = _mirror_dataframe!(dat.data[1], side)
-    end
-    return _create_subset(dat, out_dfs, copy(dat.layout))
-end
-
-mirror(data_vec::Vector{<:EegData}, side::Symbol = :both) = [mirror(dat, side) for dat in data_vec]
+mirror(data_vec::AbstractVector{<:EegData}, side::Symbol = :both) = [mirror(dat, side) for dat in data_vec]
 
 """
     mirror!(dat::EegData, side::Symbol = :both)
-    mirror!(data_vec::Vector{<:EegData}, side::Symbol = :both)
+    mirror!(data_vec::AbstractVector{<:EegData}, side::Symbol = :both)
 
 In-place mutating version of [`mirror`](@ref).
 """
-function mirror!(dat::SingleDataFrameEeg, side::Symbol = :both)
+function mirror!(dat::_MirrorableEeg, side::Symbol = :both)
     _validate_mirror_side(side)
-    @info "Mirroring data on side: $side"
-    dat.data = _mirror_dataframe!(dat.data, side)
+    @info "Mirroring $(_mirror_log_target(dat)) on side: $side"
+    dat.data = _map_df_mirror(df -> _mirror_dataframe(df, side), dat.data)
     return dat
 end
 
-function mirror!(dat::EpochData, side::Symbol = :both)
-    _validate_mirror_side(side)
-    @info "Mirroring epoched data on side: $side"
-    n_ep = length(dat.data)
-    if n_ep > 1
-        Threads.@threads :static for i = 1:n_ep
-            dat.data[i] = _mirror_dataframe!(dat.data[i], side)
-        end
-    elseif n_ep == 1
-        dat.data[1] = _mirror_dataframe!(dat.data[1], side)
-    end
-    return dat
-end
-
-function mirror!(data_vec::Vector{<:EegData}, side::Symbol = :both)
-    for dat in data_vec
-        mirror!(dat, side)
-    end
-    return data_vec
-end
+mirror!(data_vec::AbstractVector{<:EegData}, side::Symbol = :both) = (foreach(d -> mirror!(d, side), data_vec); data_vec)
 
 """
     unmirror(dat::EegData, side::Symbol = :both)
-    unmirror(data_vec::Vector{<:EegData}, side::Symbol = :both)
+    unmirror(data_vec::AbstractVector{<:EegData}, side::Symbol = :both)
 
 Remove mirrored boundary segments on a copy of `dat`, restoring original length. `side` must match [`mirror`](@ref).
 """
-function unmirror(dat::SingleDataFrameEeg, side::Symbol = :both)
+function unmirror(dat::_MirrorableEeg, side::Symbol = :both)
     _validate_mirror_side(side)
-    @info "Unmirroring data on side: $side"
-    return _create_subset(dat, _unmirror_dataframe!(dat.data, side), copy(dat.layout))
+    @info "Unmirroring $(_mirror_log_target(dat)) on side: $side"
+    return _create_subset(dat, _map_df_mirror(df -> _unmirror_dataframe(df, side), dat.data), copy(dat.layout))
 end
 
-function unmirror(dat::EpochData, side::Symbol = :both)
-    _validate_mirror_side(side)
-    @info "Unmirroring epoched data on side: $side"
-    n_ep = length(dat.data)
-    out_dfs = Vector{DataFrame}(undef, n_ep)
-    if n_ep > 1
-        Threads.@threads :static for i = 1:n_ep
-            out_dfs[i] = _unmirror_dataframe!(dat.data[i], side)
-        end
-    elseif n_ep == 1
-        out_dfs[1] = _unmirror_dataframe!(dat.data[1], side)
-    end
-    return _create_subset(dat, out_dfs, copy(dat.layout))
-end
-
-unmirror(data_vec::Vector{<:EegData}, side::Symbol = :both) = [unmirror(dat, side) for dat in data_vec]
+unmirror(data_vec::AbstractVector{<:EegData}, side::Symbol = :both) = [unmirror(dat, side) for dat in data_vec]
 
 """
     unmirror!(dat::EegData, side::Symbol = :both)
-    unmirror!(data_vec::Vector{<:EegData}, side::Symbol = :both)
+    unmirror!(data_vec::AbstractVector{<:EegData}, side::Symbol = :both)
 
 In-place mutating version of [`unmirror`](@ref).
 """
-function unmirror!(dat::SingleDataFrameEeg, side::Symbol = :both)
+function unmirror!(dat::_MirrorableEeg, side::Symbol = :both)
     _validate_mirror_side(side)
-    @info "Unmirroring data on side: $side"
-    dat.data = _unmirror_dataframe!(dat.data, side)
+    @info "Unmirroring $(_mirror_log_target(dat)) on side: $side"
+    dat.data = _map_df_mirror(df -> _unmirror_dataframe(df, side), dat.data)
     return dat
 end
 
-function unmirror!(dat::EpochData, side::Symbol = :both)
-    _validate_mirror_side(side)
-    @info "Unmirroring epoched data on side: $side"
-    n_ep = length(dat.data)
-    if n_ep > 1
-        Threads.@threads :static for i = 1:n_ep
-            dat.data[i] = _unmirror_dataframe!(dat.data[i], side)
-        end
-    elseif n_ep == 1
-        dat.data[1] = _unmirror_dataframe!(dat.data[1], side)
-    end
-    return dat
-end
-
-function unmirror!(data_vec::Vector{<:EegData}, side::Symbol = :both)
-    for dat in data_vec
-        unmirror!(dat, side)
-    end
-    return data_vec
-end
+unmirror!(data_vec::AbstractVector{<:EegData}, side::Symbol = :both) = (foreach(d -> unmirror!(d, side), data_vec); data_vec)
 
 ######################################
 ######### Internal Functions #########
@@ -137,6 +75,25 @@ end
 
 @inline _validate_mirror_side(side::Symbol) =
     side in (:pre, :post, :both) || @minimal_error("side must be :pre, :post, or :both, got :$side")
+
+@inline _mirror_log_target(::SingleDataFrameEeg) = "data"
+
+@inline _mirror_log_target(::EpochData) = "epoched data"
+
+_map_df_mirror(f::F, df::DataFrame) where {F} = f(df)
+
+function _map_df_mirror(f::F, dfs::Vector{DataFrame}) where {F}
+    n_ep = length(dfs)
+    out = Vector{DataFrame}(undef, n_ep)
+    if n_ep > 1
+        Threads.@threads :static for i = 1:n_ep
+            out[i] = f(dfs[i])
+        end
+    elseif n_ep == 1
+        out[1] = f(dfs[1])
+    end
+    return out
+end
 
 function _mirror_column(src::AbstractVector{T}, n::Int, pre_len::Int, post_len::Int) where {T}
     n_new = pre_len + n + post_len
@@ -179,7 +136,7 @@ function _mirror_time_column(t::AbstractVector, n::Int, pre_len::Int, post_len::
     return dst
 end
 
-function _mirror_dataframe!(df::DataFrame, side::Symbol)
+function _mirror_dataframe(df::DataFrame, side::Symbol)
     n = nrow(df)
     n <= 1 && return copy(df)
     pre_len = side == :post ? 0 : (n - 1)
@@ -194,7 +151,7 @@ function _mirror_dataframe!(df::DataFrame, side::Symbol)
     return DataFrame(out_cols, col_names; copycols = false)
 end
 
-function _unmirror_dataframe!(df::DataFrame, side::Symbol)
+function _unmirror_dataframe(df::DataFrame, side::Symbol)
     n = nrow(df)
     if side == :pre
         orig_len = div(n + 1, 2)

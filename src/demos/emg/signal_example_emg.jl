@@ -244,36 +244,7 @@ function signal_example_emg()
     text!(ax_anatomy, 0.75, y_skin + 0.38, text = "[+]", align = (:center, :center), font = :bold, fontsize = 11.5, color = "#dc2626")
 
     y_amp = -2.10f0
-    poly!(
-        ax_anatomy,
-        [Point2f(-0.70, y_amp + 0.45), Point2f(-0.70, y_amp - 0.45), Point2f(0.70, y_amp)],
-        color = "#f8fafc",
-        strokewidth = 2.0,
-        strokecolor = "#1e293b",
-    )
-    text!(ax_anatomy, -0.48, y_amp + 0.22, text = "+", align = (:center, :center), font = :bold, fontsize = 17, color = "#dc2626")
-    text!(ax_anatomy, -0.48, y_amp - 0.22, text = "–", align = (:center, :center), font = :bold, fontsize = 19, color = "#2563eb")
-    text!(
-        ax_anatomy,
-        0.0,
-        y_amp - 0.58,
-        text = "Difference Amplifier",
-        align = (:center, :top),
-        font = :bold,
-        fontsize = 11.0,
-        color = "#1e293b",
-    )
-    text!(
-        ax_anatomy,
-        0.0,
-        y_amp - 0.78,
-        text = "Vout = V(+) – V(-)",
-        align = (:center, :top),
-        font = :italic,
-        fontsize = 8.5,
-        color = "#64748b",
-    )
-
+    _demo_draw_diff_amp!(ax_anatomy, y_amp; half_h = 0.45, out_x = 1.50, label_above = false)
     lines!(
         ax_anatomy,
         [
@@ -293,38 +264,16 @@ function signal_example_emg()
         color = "#2563eb",
         linewidth = 2.0,
     )
-    lines!(ax_anatomy, [Point2f(0.70, y_amp), Point2f(1.50, y_amp)], color = "#1e293b", linewidth = 2.2)
-    scatter!(
-        ax_anatomy,
-        [Point2f(1.55, y_amp)],
-        marker = :circle,
-        markersize = 9,
-        color = :white,
-        strokecolor = "#1e293b",
-        strokewidth = 2.0,
-    )
     text!(ax_anatomy, 1.70, y_amp, text = "Vout", align = (:left, :center), font = :bold, fontsize = 12, color = "#0f172a")
 
     ctrl_layout = fig[2, 1] = GridLayout(tellwidth = false, halign = :center)
     slider_sub = ctrl_layout[1, 1] = GridLayout(tellwidth = false, halign = :center)
 
-    function _emg_slider(row::Int, lbl_str::String, rng, startv::Float64, unit_str::String)
-        Label(slider_sub[row, 1], text = lbl_str, font = :bold, fontsize = label_font, halign = :right)
-        sl = Slider(slider_sub[row, 2], range = rng, startvalue = startv, width = 210)
-        Label(
-            slider_sub[row, 3],
-            text = lift(v -> "$(round(Int, v)) $unit_str", sl.value),
-            width = 76,
-            halign = :left,
-            fontsize = label_font,
-        )
-        return sl
-    end
-
-    sl_force = _emg_slider(1, "Force:", 0.0:1.0:100.0, 45.0, "% MVC")
-    sl_dur = _emg_slider(2, "Duration:", 200.0:50.0:1400.0, 700.0, "ms")
-    sl_rms = _emg_slider(3, "RMS Win:", 20.0:5.0:250.0, 75.0, "ms")
-    sl_noise = _emg_slider(4, "Noise:", 0.0:1.0:100.0, 4.0, "µV")
+    emg_sl_kw = (; fontsize = label_font, sl_width = 210, val_width = 76, lbl_halign = :right)
+    sl_force = _demo_hslider!(slider_sub, 1, 1, "Force:", 0.0:1.0:100.0, 45.0, v -> "$(round(Int, v)) % MVC"; emg_sl_kw...)
+    _demo_hslider!(slider_sub, 2, 1, "Duration:", 200.0:50.0:1400.0, 700.0, v -> "$(round(Int, v)) ms"; obs = duration_ms, emg_sl_kw...)
+    _demo_hslider!(slider_sub, 3, 1, "RMS Win:", 20.0:5.0:250.0, 75.0, v -> "$(round(Int, v)) ms"; obs = rms_window_ms, emg_sl_kw...)
+    _demo_hslider!(slider_sub, 4, 1, "Noise:", 0.0:1.0:100.0, 4.0, v -> "$(round(Int, v)) µV"; obs = noise_amp, emg_sl_kw...)
 
     colgap!(slider_sub, 10)
     rowgap!(slider_sub, 4)
@@ -539,36 +488,18 @@ function signal_example_emg()
         target_force[] = val
         is_animating[] || (current_disp_force[] = val)
     end
-    on(val -> (duration_ms[] = val), sl_dur.value)
-    on(val -> (rms_window_ms[] = val), sl_rms.value)
-    on(val -> (noise_amp[] = val), sl_noise.value)
 
     on(btn_play.clicks) do _
-        is_animating[] && return
-        is_animating[] = true
-        @async begin
-            try
-                target = target_force[]
-                t_on = 0.40
-                t_off = t_on + duration_ms[] / 1000.0
-                n_frames = 65
-                dt_frame = 2.0 / n_frames
-                for frame = 0:n_frames
-                    (!is_animating[] || !events(fig).window_open[]) && break
-                    t_curr = frame * dt_frame
-                    playback_time[] = t_curr
-                    s_on = 1.0 / (1.0 + exp(-(t_curr - t_on) / 0.025))
-                    s_off = 1.0 / (1.0 + exp((t_curr - t_off) / 0.025))
-                    current_disp_force[] = target * s_on * s_off
-                    sleep(1.0 / 30.0)
-                end
-                if events(fig).window_open[]
-                    playback_time[] = -1.0
-                    current_disp_force[] = target
-                end
-            finally
-                is_animating[] = false
-            end
+        target = target_force[]
+        t_on = 0.40
+        t_off = t_on + duration_ms[] / 1000.0
+        dt_frame = 2.0 / 65
+        _demo_run_async!(fig, is_animating, 0:65; on_finish! = () -> (playback_time[] = -1.0; current_disp_force[] = target)) do frame
+            t_curr = frame * dt_frame
+            playback_time[] = t_curr
+            s_on = 1.0 / (1.0 + exp(-(t_curr - t_on) / 0.025))
+            s_off = 1.0 / (1.0 + exp((t_curr - t_off) / 0.025))
+            current_disp_force[] = target * s_on * s_off
         end
     end
 

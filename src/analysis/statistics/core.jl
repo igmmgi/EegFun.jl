@@ -155,27 +155,14 @@ end
     end
 end
 
-@inline function _fill_baselined_slice!(
+@inline _fill_baselined_slice!(
     data::Array{Float64,3},
     p::Int,
     e::Int,
     col::AbstractVector,
     rows::Vector{Int},
     bl_range::Union{Tuple{Int,Int},Nothing},
-)
-    bl_mean = 0.0
-    if !isnothing(bl_range)
-        bl_start, bl_stop = bl_range
-        bl_sum = 0.0
-        @inbounds for idx = bl_start:bl_stop
-            bl_sum += Float64(col[idx])
-        end
-        bl_mean = bl_sum / (bl_stop - bl_start + 1)
-    end
-    @inbounds for t in eachindex(rows)
-        data[p, e, t] = Float64(col[rows[t]]) - bl_mean
-    end
-end
+) = _fill_baselined_slice!(data, p, e, Float64[Float64(x) for x in col], rows, bl_range)
 
 function _extract_baselined_erp_array(
     erps::AbstractVector{<:ErpData},
@@ -271,27 +258,6 @@ function _compute_display_se(cond1::Array{Float64,3}, cond2::Array{Float64,3}, d
     return se1, se2, se_diff
 end
 
-function _validate_permutation_inputs(
-    prepared::StatisticalData,
-    n_permutations::Int,
-    alpha::Float64,
-    cluster_type::Symbol,
-    tail::Symbol;
-    cluster_alpha::Float64 = alpha,
-)
-    n_permutations < 1 && @minimal_error "n_permutations must be >= 1, got $n_permutations"
-    (alpha <= 0.0 || alpha >= 1.0) && @minimal_error "alpha must be between 0 and 1, got $alpha"
-    (cluster_alpha <= 0.0 || cluster_alpha >= 1.0) && @minimal_error "cluster_alpha must be between 0 and 1, got $cluster_alpha"
-    cluster_type ∉ (:spatial, :temporal, :spatiotemporal) &&
-        @minimal_error "cluster_type must be :spatial, :temporal, or :spatiotemporal, got :$cluster_type"
-    tail ∉ (:both, :left, :right) && @minimal_error "tail must be :both, :left, or :right, got :$tail"
-
-    if cluster_type ∈ (:spatial, :spatiotemporal) && isnothing(prepared.data[1].layout.neighbors)
-        @minimal_warning "Layout.neighbors is not set. Computing with default distance criterion (0.35)."
-    end
-    return nothing
-end
-
 function _t_stat_kernel!(
     t_flat::AbstractVector{Float64},
     se_flat::Union{Nothing,AbstractVector{Float64}},
@@ -371,19 +337,20 @@ function _t_stat_kernel!(
 end
 
 function _compute_t_matrix(
-    data1::Array{Float64,3},
-    data2::Array{Float64,3},
+    data1::Array{Float64,M},
+    data2::Array{Float64,M},
     design::Symbol;
     tail::Symbol = :both,
-    t_matrix_buffer::Union{Nothing,Array{Float64,2}} = nothing,
+    t_matrix_buffer::Union{Nothing,Array{Float64}} = nothing,
     compute_p_values::Bool = true,
     compute_se::Bool = true,
-)
-    _, n_electrodes, n_time = size(data1)
-    n_voxels = n_electrodes * n_time
+) where {M}
+    grid_dims = Base.tail(size(data1))
+    empty_dims = ntuple(_ -> 0, Val(M - 1))
+    n_voxels = prod(grid_dims)
 
-    t_matrix = isnothing(t_matrix_buffer) ? Matrix{Float64}(undef, n_electrodes, n_time) : t_matrix_buffer
-    se_matrix = compute_se ? Matrix{Float64}(undef, n_electrodes, n_time) : Matrix{Float64}(undef, 0, 0)
+    t_matrix = isnothing(t_matrix_buffer) ? Array{Float64,M - 1}(undef, grid_dims) : t_matrix_buffer
+    se_matrix = compute_se ? Array{Float64,M - 1}(undef, grid_dims) : Array{Float64,M - 1}(undef, empty_dims)
 
     df = _t_stat_kernel!(
         vec(t_matrix),
@@ -393,7 +360,7 @@ function _compute_t_matrix(
         design,
     )
 
-    p_matrix = compute_p_values ? _compute_p_matrix(t_matrix, df, tail) : Matrix{Float64}(undef, 0, 0)
+    p_matrix = compute_p_values ? _compute_p_matrix(t_matrix, df, tail) : Array{Float64,M - 1}(undef, empty_dims)
     return t_matrix, df, p_matrix, se_matrix
 end
 

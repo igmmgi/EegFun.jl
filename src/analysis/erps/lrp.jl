@@ -84,11 +84,24 @@ function lrp(
     output_dir::Union{String,Nothing} = nothing,
 )
     _with_batch_logging("LRP calculation", "lrp.log", input_dir, output_dir) do ctx
+        _ = output_dir
         @log_call "lrp"
         _validate_lrp_pairs(condition_pairs)
-        output_dir = _prepare_output_dir!(ctx, _default_lrp_output_dir(input_dir, condition_pairs))
-        process_fn = (input_path, output_path) -> _process_lrp_file(input_path, output_path, condition_pairs, channel_selection)
-        batch_process(process_fn, file_pattern, input_dir, output_dir, participant_selection, "Calculating LRP")
+        default_dir = joinpath(input_dir, "lrp_" * join(["$(l)-$(r)" for (l, r) in condition_pairs], "_"))
+        return _batch_jld2_files(
+            Vector{<:ErpData},
+            ctx,
+            default_dir,
+            file_pattern,
+            input_dir,
+            participant_selection,
+            "Calculating LRP";
+            expected_label = "Vector{ErpData}",
+        ) do erps_data
+            isempty(erps_data) && return BatchResult(false, "", "Empty erps array")
+            res = lrp(erps_data, condition_pairs; channel_selection = channel_selection)
+            return (res, "Calculated LRP for $(length(res)) pair(s)")
+        end
     end
 end
 
@@ -136,26 +149,6 @@ function _get_channel_pairs_from_selection(erp_left::ErpData, erp_right::ErpData
     return pairs
 end
 
-function _create_lrp_layout(original_layout::Layout, lrp_channels::AbstractVector{Symbol})::Layout
-    keep_set = Set(lrp_channels)
-    mask = Bool[label ∈ keep_set for label in original_layout.data.label]
-    filtered_layout_df = original_layout.data[mask, :]
-
-    filtered_neighbors = if !isnothing(original_layout.neighbors)
-        filtered_dict = Dict{Symbol,Neighbors}()
-        for channel in lrp_channels
-            if haskey(original_layout.neighbors, channel)
-                filtered_dict[channel] = _subset_neighbors(original_layout.neighbors[channel], keep_set)
-            end
-        end
-        isempty(filtered_dict) ? nothing : filtered_dict
-    else
-        nothing
-    end
-
-    return Layout(filtered_layout_df, filtered_neighbors, original_layout.criterion, original_layout.criterion_type)
-end
-
 function _calculate_lrp(erp_left::ErpData, erp_right::ErpData, pairs::Vector{Tuple{Symbol,Symbol}})::ErpData
     lrp_df = DataFrame(; copycols = false)
     for col in meta_labels(erp_left)
@@ -181,7 +174,7 @@ function _calculate_lrp(erp_left::ErpData, erp_right::ErpData, pairs::Vector{Tup
         erp_left.condition,
         "lrp",
         lrp_df,
-        _create_lrp_layout(erp_left.layout, lrp_labels),
+        subset_layout(erp_left.layout; channel_selection = channels(lrp_labels)),
         erp_left.sample_rate,
         copy(erp_left.analysis_info),
         min(erp_left.n_epochs, erp_right.n_epochs),
@@ -201,25 +194,4 @@ function _resolve_lrp_cond_idx(erps::AbstractVector{<:ErpData}, cond_nums::Vecto
     isnothing(idx) &&
         @minimal_error("$side condition $cond not found (available conditions: $(use_cond_field ? cond_nums : collect(1:length(erps))))")
     return idx
-end
-
-_default_lrp_output_dir(input_dir::String, condition_pairs::AbstractVector{<:Tuple{Integer,Integer}}) =
-    joinpath(input_dir, "lrp_" * join(["$(l)-$(r)" for (l, r) in condition_pairs], "_"))
-
-function _process_lrp_file(
-    filepath::String,
-    output_path::String,
-    condition_pairs::AbstractVector{<:Tuple{Integer,Integer}},
-    channel_selection,
-)
-    filename = basename(filepath)
-    erps_data = read_data(filepath)
-    isnothing(erps_data) && return BatchResult(false, filename, "No data variables found")
-    erps_data isa Vector{<:ErpData} ||
-        return BatchResult(false, filename, "Invalid data type: expected Vector{ErpData}, got $(typeof(erps_data))")
-    isempty(erps_data) && return BatchResult(false, filename, "Empty erps array")
-
-    lrp_results = lrp(erps_data, condition_pairs; channel_selection = channel_selection)
-    jldsave(output_path; data = lrp_results, format_version = EEGFUN_FORMAT_VERSION)
-    return BatchResult(true, filename, "Calculated LRP for $(length(lrp_results)) pair(s)")
 end

@@ -174,14 +174,6 @@ end
 ######### Internal Functions #########
 ######################################
 
-function _copy_selected_col!(dest::Array{Float64,3}, ch_idx::Int, trial_idx::Int, col::Vector{Float64}, samples::UnitRange{Int})
-    offset = first(samples) - 1
-    @inbounds @simd for t = 1:length(samples)
-        dest[ch_idx, t, trial_idx] = col[offset+t]
-    end
-    return nothing
-end
-
 function _copy_selected_col!(dest::Array{Float64,3}, ch_idx::Int, trial_idx::Int, col::Vector{Float64}, samples::AbstractVector{Int})
     @inbounds @simd for t in eachindex(samples)
         dest[ch_idx, t, trial_idx] = col[samples[t]]
@@ -249,30 +241,6 @@ function _extract_epoch_arrays(
     end
 
     return data_arrays, n_trials_per_condition
-end
-
-function _copy_tf_trial_features!(
-    dest::Array{Float64,3},
-    trial_idx::Int,
-    cols::Vector{Vector{Float64}},
-    rows::UnitRange{Int},
-    n_times::Int,
-    n_freqs::Int,
-)
-    n_ch = length(cols)
-    row_offset = first(rows) - 1
-    @inbounds for t_idx = 1:n_times
-        base_row = row_offset + (t_idx - 1) * n_freqs
-        feature_idx = 1
-        for f_idx = 1:n_freqs
-            row_idx = base_row + f_idx
-            for ch_idx = 1:n_ch
-                dest[feature_idx, t_idx, trial_idx] = cols[ch_idx][row_idx]
-                feature_idx += 1
-            end
-        end
-    end
-    return nothing
 end
 
 function _copy_tf_trial_features!(
@@ -552,33 +520,8 @@ function _decode_iteration!(
                 fill!(class_total, 0)
             end
 
-            l1 = labels_buf[1]
-            l2 = nr_c >= 2 ? labels_buf[2] : l1
-            b_bin = nr_c == 2 ? w[n_features+1] : 0.0
-
             @inbounds for i = 1:n_test
-                pred = if nr_c == 2
-                    val = b_bin
-                    @simd for f = 1:n_features
-                        val += w[f] * X_test_buf[f, i]
-                    end
-                    val > 0.0 ? l1 : l2
-                else
-                    best_c = 1
-                    max_val = -Inf
-                    for c = 1:nr_c
-                        val = w[n_features*nr_c+c]
-                        for f = 1:n_features
-                            val += w[(f-1)*nr_c+c] * X_test_buf[f, i]
-                        end
-                        if val > max_val
-                            max_val = val
-                            best_c = c
-                        end
-                    end
-                    Int(labels_buf[best_c])
-                end
-
+                pred = _predict_liblinear_sample(@view(X_test_buf[:, i]), w, labels_buf, nr_c, 1.0)
                 y_true = y_test_buf[i]
                 is_hit = y_true == pred
                 n_correct += is_hit

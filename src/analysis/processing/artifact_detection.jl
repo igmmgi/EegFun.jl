@@ -288,25 +288,3 @@ function _count_artifacts(
     combined_sel = _combine_interval_sample(interval_selection, sample_selection)
     return _count_artifacts_dfs(make_detector(), @view(dat.data[selected_epochs]), selected_channels, combined_sel, count_col, mode)
 end
-
-include("artifact_detection/eog_onsets.jl")
-
-include("artifact_detection/extreme.jl")
-
-include("artifact_detection/step.jl")
-
-include("artifact_detection/flatline.jl")
-
-include("artifact_detection/peak_to_peak.jl")
-
-include("artifact_detection/bridged.jl")
-
-include("artifact_detection/epoch_rejection_types.jl")
-
-include("artifact_detection/epoch_detection.jl")
-
-include("artifact_detection/repair.jl")
-
-include("artifact_detection/subset_bad_data.jl")
-
-include("artifact_detection/autoreject.jl")

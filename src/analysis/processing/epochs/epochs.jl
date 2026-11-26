@@ -209,8 +209,7 @@ function mark_epoch_intervals!(
     all_reference_indices = Int[]
     n_trig = length(dat.data.trigger)
     for condition in epoch_conditions
-        filtered_triggers, valid_indices = _apply_trigger_mask(dat.data.trigger, condition)
-        matches = _map_valid_indices(search_sequence(filtered_triggers, condition.trigger_sequences), valid_indices)
+        matches = _raw_condition_matches(dat.data.trigger, condition)
         if isempty(matches)
             @minimal_warning "No triggers found for condition '$(condition.name)'"
             continue
@@ -259,8 +258,7 @@ function extract_epochs(dat::ContinuousData, condition::Integer, epoch_condition
     start_time, end_time = _interval_endpoints(epoch_interval)
     start_time <= end_time || @minimal_error("Epoch interval start ($start_time) must be less than or equal to end ($end_time)")
 
-    filtered_triggers, valid_indices = _apply_trigger_mask(dat.data.trigger, epoch_condition)
-    matches = _map_valid_indices(search_sequence(filtered_triggers, epoch_condition.trigger_sequences), valid_indices)
+    matches = _raw_condition_matches(dat.data.trigger, epoch_condition)
     isempty(matches) && @minimal_error("None of the trigger sequences $(epoch_condition.trigger_sequences) found!")
 
     matches = _filter_matches(matches, epoch_condition, dat.data.trigger, dat.data.time)
@@ -394,19 +392,23 @@ function average_epochs(
     output_dir::Union{String,Nothing} = nothing,
 )
     _with_batch_logging("epoch averaging", "average_epochs.log", input_dir, output_dir) do ctx
+        _ = output_dir
         @log_call "average_epochs"
         error_msg = _validate_epochs_pattern(file_pattern)
         !isnothing(error_msg) && @minimal_error(error_msg)
-        output_dir = _prepare_output_dir!(ctx, _default_average_output_dir(input_dir, file_pattern))
-        process_fn = (input_path, output_path) -> _process_average_file(input_path, output_path, condition_selection)
-        batch_process(
-            process_fn,
+        default_dir = joinpath(input_dir, "averaged_$(_clean_pattern(file_pattern))")
+        return _batch_jld2_files(
+            epochs_data -> (erps_data = average_epochs.(epochs_data); (erps_data, "Averaged $(length(erps_data)) condition(s)")),
+            AbstractVector{<:EpochData},
+            ctx,
+            default_dir,
             file_pattern,
             input_dir,
-            output_dir,
             participant_selection,
             "Averaging";
+            condition_selection = condition_selection,
             filename_modifier = fn -> replace(fn, "epochs" => "erps"),
+            expected_label = "Vector{EpochData}",
         )
     end
 end
@@ -420,18 +422,9 @@ end
 Non-mutating version of [`reject_epochs!`](@ref).
 """
 function reject_epochs(dat::EpochData, info::EpochRejectionInfo)::EpochData
-    if isempty(info.rejected)
-        @info "No epochs to reject"
-        return copy(dat)
-    end
-    n_eps = n_epochs(dat)
-    rejected_indices = unique(Int[r.epoch for r in info.rejected])
-    keep_mask = trues(n_eps)
-    for ep in rejected_indices
-        1 <= ep <= n_eps && (keep_mask[ep] = false)
-    end
-    kept_dfs = DataFrame[copy(dat.data[i]) for i = 1:n_eps if keep_mask[i]]
-    @info "Condition $(dat.condition) ($(dat.condition_name)) - Rejected $(length(rejected_indices)) of $(info.info.n) epochs."
+    kept = _kept_indices_from_info(dat, info)
+    isnothing(kept) && return copy(dat)
+    kept_dfs = DataFrame[copy(dat.data[i]) for i in kept]
     return EpochData(dat.file, dat.condition, dat.condition_name, kept_dfs, copy(dat.layout), dat.sample_rate, copy(dat.analysis_info))
 end
 
@@ -442,41 +435,16 @@ function reject_epochs(dat::AbstractVector{<:EpochData}, info::AbstractVector{<:
 end
 
 function reject_epochs(dat::EpochData, bad_columns::AbstractVector{Symbol})::EpochData
-    isempty(dat.data) && @minimal_error("Cannot remove bad epochs from empty EpochData")
-    isempty(bad_columns) && return copy(dat)
-    first_epoch = first(dat.data)
-    col_indices = Vector{Int}(undef, length(bad_columns))
-    for (i, col) in enumerate(bad_columns)
-        hasproperty(first_epoch, col) || @minimal_error("Column '$col' not found in epoch data")
-        col_indices[i] = columnindex(first_epoch, col)
-        col_type = eltype(first_epoch[!, col_indices[i]])
-        col_type != Bool && @minimal_warning("Column '$col' is not Boolean type ($(col_type)). Non-zero values will be treated as 'true'")
-    end
-    n_eps = n_epochs(dat)
-    good_epochs = sizehint!(DataFrame[], n_eps)
-    n_removed = 0
-    for epoch_df in dat.data
-        has_bad = false
-        for col_idx in col_indices
-            col_vals = epoch_df[!, col_idx]
-            if eltype(col_vals) == Bool ? any(col_vals) : any(!iszero, col_vals)
-                has_bad = true
-                break
-            end
-        end
-        has_bad ? (n_removed += 1) : push!(good_epochs, copy(epoch_df))
-    end
-    if n_removed > 0
-        @info "Condition $(dat.condition) ($(dat.condition_name)) removed $n_removed of $n_eps epochs ($(round(100*n_removed/n_eps, digits=1))%)"
-    end
-    return EpochData(dat.file, dat.condition, dat.condition_name, good_epochs, copy(dat.layout), dat.sample_rate, copy(dat.analysis_info))
+    kept = _kept_indices_from_cols(dat, bad_columns)
+    isnothing(kept) && return copy(dat)
+    kept_dfs = DataFrame[copy(dat.data[i]) for i in kept]
+    return EpochData(dat.file, dat.condition, dat.condition_name, kept_dfs, copy(dat.layout), dat.sample_rate, copy(dat.analysis_info))
 end
 
 reject_epochs(dat::EpochData, bad_column::Symbol) = reject_epochs(dat, [bad_column])
 
-reject_epochs(dat::AbstractVector{<:EpochData}, bad_column::Symbol) = [reject_epochs(d, bad_column) for d in dat]
-
-reject_epochs(dat::AbstractVector{<:EpochData}, bad_columns::AbstractVector{Symbol}) = [reject_epochs(d, bad_columns) for d in dat]
+reject_epochs(dat::AbstractVector{<:EpochData}, bad_columns::Union{Symbol,AbstractVector{Symbol}}) =
+    [reject_epochs(d, bad_columns) for d in dat]
 
 """
     reject_epochs!(dat::EpochData, info::EpochRejectionInfo) -> EpochData
@@ -487,81 +455,28 @@ reject_epochs(dat::AbstractVector{<:EpochData}, bad_columns::AbstractVector{Symb
 Remove bad epochs from `dat` in-place using `EpochRejectionInfo` or one or more boolean flag columns.
 """
 function reject_epochs!(dat::EpochData, info::EpochRejectionInfo)::EpochData
-    if isempty(info.rejected)
-        @info "No epochs to reject"
-        return dat
-    end
-
-    n_eps = n_epochs(dat)
-    rejected_indices = unique(Int[r.epoch for r in info.rejected])
-    keep_mask = trues(n_eps)
-    for ep in rejected_indices
-        1 <= ep <= n_eps && (keep_mask[ep] = false)
-    end
-    dat.data = dat.data[keep_mask]
-    @info "Condition $(dat.condition) ($(dat.condition_name)) - Rejected $(length(rejected_indices)) of $(info.info.n) epochs."
+    kept = _kept_indices_from_info(dat, info)
+    !isnothing(kept) && (dat.data = dat.data[kept])
     return dat
 end
 
 function reject_epochs!(dat::AbstractVector{<:EpochData}, info::AbstractVector{<:EpochRejectionInfo})
     length(dat) == length(info) ||
         @minimal_error("Length of EpochData vector ($(length(dat))) must match EpochRejectionInfo vector ($(length(info)))")
-    for (d, inf) in zip(dat, info)
-        reject_epochs!(d, inf)
-    end
+    foreach(splat(reject_epochs!), zip(dat, info))
     return dat
 end
 
 function reject_epochs!(dat::EpochData, bad_columns::AbstractVector{Symbol})::EpochData
-    isempty(dat.data) && @minimal_error("Cannot remove bad epochs from empty EpochData")
-    isempty(bad_columns) && return dat
-
-    first_epoch = first(dat.data)
-    col_indices = Vector{Int}(undef, length(bad_columns))
-    for (i, col) in enumerate(bad_columns)
-        hasproperty(first_epoch, col) || @minimal_error("Column '$col' not found in epoch data")
-        col_indices[i] = columnindex(first_epoch, col)
-        col_type = eltype(first_epoch[!, col_indices[i]])
-        col_type != Bool && @minimal_warning("Column '$col' is not Boolean type ($(col_type)). Non-zero values will be treated as 'true'")
-    end
-
-    n_eps = n_epochs(dat)
-    good_epochs = sizehint!(DataFrame[], n_eps)
-    n_removed = 0
-    for epoch_df in dat.data
-        has_bad = false
-        for col_idx in col_indices
-            col_vals = epoch_df[!, col_idx]
-            if eltype(col_vals) == Bool ? any(col_vals) : any(!iszero, col_vals)
-                has_bad = true
-                break
-            end
-        end
-        has_bad ? (n_removed += 1) : push!(good_epochs, epoch_df)
-    end
-
-    if n_removed > 0
-        @info "Condition $(dat.condition) ($(dat.condition_name)) removed $n_removed of $n_eps epochs ($(round(100*n_removed/n_eps, digits=1))%)"
-    end
-    dat.data = good_epochs
+    kept = _kept_indices_from_cols(dat, bad_columns)
+    !isnothing(kept) && (dat.data = dat.data[kept])
     return dat
 end
 
 reject_epochs!(dat::EpochData, bad_column::Symbol)::EpochData = reject_epochs!(dat, [bad_column])
 
-function reject_epochs!(dat::AbstractVector{<:EpochData}, bad_column::Symbol)
-    for d in dat
-        reject_epochs!(d, bad_column)
-    end
-    return dat
-end
-
-function reject_epochs!(dat::AbstractVector{<:EpochData}, bad_columns::AbstractVector{Symbol})
-    for d in dat
-        reject_epochs!(d, bad_columns)
-    end
-    return dat
-end
+reject_epochs!(dat::AbstractVector{<:EpochData}, bad_columns::Union{Symbol,AbstractVector{Symbol}}) =
+    (foreach(d -> reject_epochs!(d, bad_columns), dat); dat)
 
 """
     epochs_count(dat::ContinuousData, toml_file::String; print_table::Bool = true) -> DataFrame
@@ -579,9 +494,7 @@ function epochs_count(dat::ContinuousData, conditions::Vector{EpochCondition}; p
 
     for (idx, condition) in enumerate(conditions)
         names[idx] = condition.name
-        filtered_triggers, valid_indices = _apply_trigger_mask(dat.data.trigger, condition)
-        matches = _map_valid_indices(search_sequence(filtered_triggers, condition.trigger_sequences), valid_indices)
-        matches = _filter_matches(matches, condition, dat.data.trigger, dat.data.time)
+        matches = _filter_matches(_raw_condition_matches(dat.data.trigger, condition), condition, dat.data.trigger, dat.data.time)
         counts[idx] = count(m -> condition.reference_index <= length(m), matches)
     end
 
@@ -875,19 +788,60 @@ function _build_base_epochs_df(epochs::AbstractVector{<:EpochData})::DataFrame
     )
 end
 
+function _raw_condition_matches(triggers::Vector, condition::EpochCondition)
+    filtered_triggers, valid_indices = _apply_trigger_mask(triggers, condition)
+    return _map_valid_indices(search_sequence(filtered_triggers, condition.trigger_sequences), valid_indices)
+end
+
+function _kept_indices_from_info(dat::EpochData, info::EpochRejectionInfo)::Union{Nothing,Vector{Int}}
+    if isempty(info.rejected)
+        @info "No epochs to reject"
+        return nothing
+    end
+    n_eps = n_epochs(dat)
+    rejected_indices = unique(Int[r.epoch for r in info.rejected])
+    keep_mask = trues(n_eps)
+    for ep in rejected_indices
+        1 <= ep <= n_eps && (keep_mask[ep] = false)
+    end
+    @info "Condition $(dat.condition) ($(dat.condition_name)) - Rejected $(length(rejected_indices)) of $(info.info.n) epochs."
+    return findall(keep_mask)
+end
+
+function _kept_indices_from_cols(dat::EpochData, bad_columns::AbstractVector{Symbol})::Union{Nothing,Vector{Int}}
+    isempty(dat.data) && @minimal_error("Cannot remove bad epochs from empty EpochData")
+    isempty(bad_columns) && return nothing
+
+    first_epoch = first(dat.data)
+    col_indices = Vector{Int}(undef, length(bad_columns))
+    for (i, col) in enumerate(bad_columns)
+        hasproperty(first_epoch, col) || @minimal_error("Column '$col' not found in epoch data")
+        col_indices[i] = columnindex(first_epoch, col)
+        col_type = eltype(first_epoch[!, col_indices[i]])
+        col_type != Bool && @minimal_warning("Column '$col' is not Boolean type ($(col_type)). Non-zero values will be treated as 'true'")
+    end
+
+    n_eps = n_epochs(dat)
+    kept = sizehint!(Int[], n_eps)
+    for (ep_idx, epoch_df) in enumerate(dat.data)
+        has_bad = false
+        for col_idx in col_indices
+            col_vals = epoch_df[!, col_idx]
+            if eltype(col_vals) == Bool ? any(col_vals) : any(!iszero, col_vals)
+                has_bad = true
+                break
+            end
+        end
+        !has_bad && push!(kept, ep_idx)
+    end
+
+    n_removed = n_eps - length(kept)
+    if n_removed > 0
+        @info "Condition $(dat.condition) ($(dat.condition_name)) removed $n_removed of $n_eps epochs ($(round(100 * n_removed / n_eps, digits = 1))%)"
+        return kept
+    end
+    return nothing
+end
+
 _validate_epochs_pattern(pattern::String) =
     contains(pattern, "epochs") ? nothing : "average_epochs only works with epoch data. File pattern must contain 'epochs', got: '$pattern'"
-
-_default_average_output_dir(input_dir::String, pattern::String) = joinpath(input_dir, "averaged_$(_clean_pattern(pattern))")
-
-function _process_average_file(filepath::String, output_path::String, condition_selection::Function)
-    filename = basename(filepath)
-    epochs_data = read_data(filepath)
-    isnothing(epochs_data) && return BatchResult(false, filename, "No data variables found")
-    epochs_data isa AbstractVector{<:EpochData} || return BatchResult(false, filename, "Invalid data type: expected Vector{EpochData}")
-
-    epochs_data = _condition_select(epochs_data, condition_selection)
-    erps_data = average_epochs.(epochs_data)
-    jldsave(output_path; data = erps_data, format_version = EEGFUN_FORMAT_VERSION)
-    return BatchResult(true, filename, "Averaged $(length(erps_data)) condition(s)")
-end

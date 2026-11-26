@@ -211,14 +211,63 @@ function signal_example_ica_separation()
 
     ctrl = GridLayout(fig[4, 1:3]; colgap = 120)
     rowgap!(ctrl, 0)
-    sl_m, lbl_m = _demo_labelled_slider(ctrl, 1, "Mix Amount", 0.0:0.05:1.0, 0.5, v -> "$(round(v; digits=2))", ctrl_sz_obs; height = 10)
-    sl_f, lbl_f = _demo_labelled_slider(ctrl, 2, "Brain Freq", 4.0:1.0:20.0, 10.0, v -> "$(Int(v)) Hz", ctrl_sz_obs; height = 10)
-    sl_b, lbl_b = _demo_labelled_slider(ctrl, 3, "Blink Size", 0.5:0.5:5.0, 3.0, v -> "$(round(v; digits=1))", ctrl_sz_obs; height = 10)
-    sl_n, lbl_n = _demo_labelled_slider(ctrl, 4, "Noise", 0.0:0.05:1.0, 0.05, v -> "$(round(v; digits=2))", ctrl_sz_obs; height = 10)
-    sl_w1, lbl_w1 =
-        _demo_labelled_slider(ctrl, 5, "Subtract E2→E1", 0.0:0.05:1.5, 0.0, v -> "$(round(v; digits=2))", ctrl_sz_obs; height = 10)
-    sl_w2, lbl_w2 =
-        _demo_labelled_slider(ctrl, 6, "Subtract E1→E2", 0.0:0.05:1.5, 0.0, v -> "$(round(v; digits=2))", ctrl_sz_obs; height = 10)
+    _demo_labelled_slider(
+        ctrl,
+        1,
+        "Mix Amount",
+        0.0:0.05:1.0,
+        0.5,
+        v -> "$(round(v; digits=2))",
+        ctrl_sz_obs;
+        obs = mix_amount_obs,
+        height = 10,
+    )
+    _demo_labelled_slider(ctrl, 2, "Brain Freq", 4.0:1.0:20.0, 10.0, v -> "$(Int(v)) Hz", ctrl_sz_obs; obs = brain_freq_obs, height = 10)
+    _demo_labelled_slider(
+        ctrl,
+        3,
+        "Blink Size",
+        0.5:0.5:5.0,
+        3.0,
+        v -> "$(round(v; digits=1))",
+        ctrl_sz_obs;
+        obs = blink_size_obs,
+        height = 10,
+    )
+    _demo_labelled_slider(
+        ctrl,
+        4,
+        "Noise",
+        0.0:0.05:1.0,
+        0.05,
+        v -> "$(round(v; digits=2))",
+        ctrl_sz_obs;
+        obs = noise_lvl_obs,
+        on_change = _ -> (randn!(noise1_buf); randn!(noise2_buf)),
+        height = 10,
+    )
+    sl_w1, _ = _demo_labelled_slider(
+        ctrl,
+        5,
+        "Subtract E2→E1",
+        0.0:0.05:1.5,
+        0.0,
+        v -> "$(round(v; digits=2))",
+        ctrl_sz_obs;
+        obs = manual_w1_obs,
+        height = 10,
+    )
+    sl_w2, _ = _demo_labelled_slider(
+        ctrl,
+        6,
+        "Subtract E1→E2",
+        0.0:0.05:1.5,
+        0.0,
+        v -> "$(round(v; digits=2))",
+        ctrl_sz_obs;
+        obs = manual_w2_obs,
+        height = 10,
+    )
 
     rowsize!(ctrl, 1, Fixed(28))
     rowsize!(ctrl, 2, Fixed(12))
@@ -236,33 +285,6 @@ function signal_example_ica_separation()
     rowsize!(fig.layout, 4, Relative(0.18))
     for c = 1:3
         colsize!(fig.layout, c, Relative(0.33))
-    end
-
-    on(sl_m.value) do v
-        mix_amount_obs[] = v
-        lbl_m.text = "$(round(v; digits=2))"
-    end
-    on(sl_f.value) do v
-        brain_freq_obs[] = v
-        lbl_f.text = "$(Int(v)) Hz"
-    end
-    on(sl_b.value) do v
-        blink_size_obs[] = v
-        lbl_b.text = "$(round(v; digits=1))"
-    end
-    on(sl_n.value) do v
-        noise_lvl_obs[] = v
-        lbl_n.text = "$(round(v; digits=2))"
-        randn!(noise1_buf)
-        randn!(noise2_buf)
-    end
-    on(sl_w1.value) do v
-        manual_w1_obs[] = v
-        lbl_w1.text = "$(round(v; digits=2))"
-    end
-    on(sl_w2.value) do v
-        manual_w2_obs[] = v
-        lbl_w2.text = "$(round(v; digits=2))"
     end
 
     in_programmatic_update = Ref(false)
@@ -295,26 +317,18 @@ function signal_example_ica_separation()
         w1e = clamp(-W[1, 2] / W[1, 1], 0.0, 1.5)
         w2e = clamp(-W[2, 1] / W[2, 2], 0.0, 1.5)
         use_ica_obs[] = true
-        in_programmatic_update[] = true
-        try
+        _demo_batch_update!(in_programmatic_update, update) do
             set_close_to!(sl_w1, w1e)
             set_close_to!(sl_w2, w2e)
-        finally
-            in_programmatic_update[] = false
         end
-        update()
     end
 
     on(btn_reset.clicks) do _
         use_ica_obs[] = false
-        in_programmatic_update[] = true
-        try
+        _demo_batch_update!(in_programmatic_update, update) do
             set_close_to!(sl_w1, 0.0)
             set_close_to!(sl_w2, 0.0)
-        finally
-            in_programmatic_update[] = false
         end
-        update()
     end
 
     update()

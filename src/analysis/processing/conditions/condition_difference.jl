@@ -49,13 +49,24 @@ function condition_difference(
     output_dir::Union{String,Nothing} = nothing,
 )
     _with_batch_logging("condition differencing", "condition_difference.log", input_dir, output_dir) do ctx
+        _ = output_dir
         @log_call "condition_difference"
         error_msg = _validate_condition_pairs(condition_pairs)
         !isnothing(error_msg) && @minimal_error(error_msg)
 
-        output_dir = _prepare_output_dir!(ctx, _condition_difference_default_output_dir(input_dir, file_pattern, condition_pairs))
-        process_fn = (input_path, output_path) -> _condition_difference_process_file(input_path, output_path, condition_pairs)
-        return batch_process(process_fn, file_pattern, input_dir, output_dir, participant_selection, "Creating differences")
+        pairs_str = join([join(pair, "-") for pair in condition_pairs], "_")
+        default_dir = joinpath(input_dir, "differences_$(_clean_pattern(file_pattern))_$(pairs_str)")
+        return _batch_jld2_files(
+            data -> (diffs = condition_difference(data, condition_pairs); (diffs, "Created $(length(diffs)) difference(s)")),
+            Union{AbstractVector{<:ErpData},AbstractVector{<:TimeFreqData}},
+            ctx,
+            default_dir,
+            file_pattern,
+            input_dir,
+            participant_selection,
+            "Creating differences";
+            expected_label = "Vector{ErpData} or Vector{TimeFreqData}",
+        )
     end
 end
 
@@ -69,39 +80,13 @@ condition_difference(file_pattern::String, condition_pair::AbstractVector{<:Inte
 ######### Internal Functions #########
 ######################################
 
-function _condition_difference_default_output_dir(
-    input_dir::String,
-    pattern::String,
-    pairs::Union{AbstractVector{<:Tuple{Integer,Integer}},AbstractVector{<:AbstractVector{<:Integer}}},
-)
-    pairs_str = join([join(pair, "-") for pair in pairs], "_")
-    return joinpath(input_dir, "differences_$(_clean_pattern(pattern))_$(pairs_str)")
-end
-
 function _subtract_df(df1::DataFrame, df2::DataFrame, cond_chs::Set{Symbol})::DataFrame
     col_names = propertynames(df1)
     n_rows = nrow(df1)
     out_cols = Vector{Any}(undef, length(col_names))
     for (j, col) in enumerate(col_names)
         c1 = df1[!, j]
-        if col in cond_chs
-            c2 = df2[!, col]
-            out = Vector{Float64}(undef, n_rows)
-            if c1 isa Vector{Float64} && c2 isa Vector{Float64}
-                v1 = c1::Vector{Float64}
-                v2 = c2::Vector{Float64}
-                @inbounds @simd for i = 1:n_rows
-                    out[i] = v1[i] - v2[i]
-                end
-            else
-                @inbounds @simd for i = 1:n_rows
-                    out[i] = Float64(c1[i]) - Float64(c2[i])
-                end
-            end
-            out_cols[j] = out
-        else
-            out_cols[j] = copy(c1)
-        end
+        out_cols[j] = col in cond_chs ? _sub_col!(Vector{Float64}(undef, n_rows), c1, df2[!, col]) : copy(c1)
     end
     return DataFrame(out_cols, col_names; copycols = false)
 end
@@ -122,23 +107,6 @@ function _create_difference_wave(dat1::T, dat2::T, cond1::Int, cond2::Int, diff_
     diff_frames = map((df1, df2) -> _subtract_df(df1, df2, cond_chs), frames1, frames2)
     n_epochs = dat1 isa ErpData ? min(dat1.n_epochs, dat2.n_epochs) : 0
     return _derive_condition(dat1, diff_cond, "difference_$(cond1)_$(cond2)", diff_frames; n_epochs = n_epochs)
-end
-
-function _condition_difference_process_file(
-    filepath::String,
-    output_path::String,
-    condition_pairs::Union{AbstractVector{<:Tuple{Integer,Integer}},AbstractVector{<:AbstractVector{<:Integer}}},
-)
-    filename = basename(filepath)
-    file_data = read_data(filepath)
-    isnothing(file_data) && return BatchResult(false, filename, "No data variables found")
-
-    if file_data isa AbstractVector{<:ErpData} || file_data isa AbstractVector{<:TimeFreqData}
-        difference_waves = condition_difference(file_data, condition_pairs)
-        jldsave(output_path; data = difference_waves, format_version = EEGFUN_FORMAT_VERSION)
-        return BatchResult(true, filename, "Created $(length(difference_waves)) difference(s)")
-    end
-    return BatchResult(false, filename, "Invalid data type: expected Vector{ErpData} or Vector{TimeFreqData}, got $(typeof(file_data))")
 end
 
 function _condition_difference_single!(difference_waves::Vector{T}, data::AbstractVector{T}, pairs) where {T<:ConditionAverageData}

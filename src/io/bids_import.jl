@@ -143,15 +143,11 @@ function read_bids(
 
     dat = if matched_ext == ".set"
         loaded = read_eeglab(binary_path)
-        eeg_dat = loaded isa Tuple ? loaded[1] : loaded
-        !isnothing(layout) && _align_bids_layout!(eeg_dat, layout)
-        eeg_dat
+        loaded isa Tuple ? loaded[1] : loaded
     else
-        raw_data = read_raw_data(binary_path)
-        d = create_eegfun_data(raw_data)
-        !isnothing(layout) && _align_bids_layout!(d, layout)
-        d
+        create_eegfun_data(read_raw_data(binary_path))
     end
+    !isnothing(layout) && _align_bids_layout!(dat, layout)
 
     events_file = joinpath(eeg_dir, "$(recording_prefix)_events.tsv")
     if !isfile(events_file) && run > 0
@@ -229,11 +225,6 @@ function _try_parse_bids_event_int(v)::Union{Int,Nothing}
         !isnothing(mc) && mc != 0 && return mc
     end
     return nothing
-end
-
-function _parse_bids_event_value(v)::Int
-    c = _try_parse_bids_event_int(v)
-    return isnothing(c) ? 1 : c
 end
 
 function _parse_bids_event_label(tt_raw, val_raw)::String

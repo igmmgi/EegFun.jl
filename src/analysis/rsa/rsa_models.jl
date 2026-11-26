@@ -62,15 +62,7 @@ function create_rdm(distances::AbstractVector{<:Real}, n_conditions::Integer)
     length(distances) != expected_length &&
         @minimal_error("Distances vector has length $(length(distances)), expected $expected_length for $n_conditions conditions")
 
-    rdm = zeros(Float64, n_conditions, n_conditions)
-    idx = 1
-    @inbounds for i = 1:n_conditions, j = (i+1):n_conditions
-        v = Float64(distances[idx])
-        rdm[i, j] = v
-        rdm[j, i] = v
-        idx += 1
-    end
-    return rdm
+    return _pack_symmetric_upper!(zeros(Float64, n_conditions, n_conditions), distances)
 end
 
 function create_rdm(values::AbstractVector{<:AbstractFloat}; method::Symbol = :difference)

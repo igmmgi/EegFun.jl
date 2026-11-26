@@ -1,9 +1,7 @@
 # CUDA.jl backend extension for EegFun GPU acceleration.
-
 module EegFunCUDAExt
 
 using EegFun
-
 using CUDA
 
 ######################################

@@ -56,42 +56,9 @@ function libsvm_classifier(
         C = Float64(cost),
         bias = 1.0,
     )
-    w = model.w
-    labels = model.labels
+    bias_scale = model.bias >= 0 ? model.bias : 0.0
     nr_c = Int(model.nr_class)
-    n_features = size(X_test, 2)
-    has_bias = model.bias >= 0
-    y_pred = Vector{Int}(undef, n_test)
-
-    if nr_c == 2
-        l1, l2 = labels[1], labels[2]
-        b = has_bias ? w[n_features+1] * model.bias : 0.0
-        @inbounds for i = 1:n_test
-            val = b
-            @simd for f = 1:n_features
-                val += w[f] * X_test[i, f]
-            end
-            y_pred[i] = val > 0.0 ? l1 : l2
-        end
-    else
-        @inbounds for i = 1:n_test
-            best_c = 1
-            max_val = -Inf
-            for c = 1:nr_c
-                val = has_bias ? w[n_features*nr_c+c] * model.bias : 0.0
-                for f = 1:n_features
-                    val += w[(f-1)*nr_c+c] * X_test[i, f]
-                end
-                if val > max_val
-                    max_val = val
-                    best_c = c
-                end
-            end
-            y_pred[i] = labels[best_c]
-        end
-    end
-
-    return y_pred
+    return Int[_predict_liblinear_sample(@view(X_test[i, :]), model.w, model.labels, nr_c, bias_scale) for i = 1:n_test]
 end
 
 function LiblinearWorkspace(max_features::Int, max_samples::Int, cost::Real, max_classes::Int = 2)
@@ -132,6 +99,37 @@ end
 ######################################
 ######### Internal Functions #########
 ######################################
+
+@inline function _predict_liblinear_sample(
+    x::AbstractVector{Float64},
+    w::AbstractVector{Float64},
+    labels::AbstractVector,
+    nr_c::Int,
+    bias_scale::Float64 = 1.0,
+)::Int
+    n_features = length(x)
+    has_bias = bias_scale > 0.0
+    if nr_c <= 2
+        val = has_bias ? w[n_features+1] * bias_scale : 0.0
+        @inbounds @simd for f = 1:n_features
+            val += w[f] * x[f]
+        end
+        return Int(val > 0.0 ? labels[1] : labels[min(2, nr_c)])
+    end
+    best_c = 1
+    max_val = -Inf
+    @inbounds for c = 1:nr_c
+        val = has_bias ? w[n_features*nr_c+c] * bias_scale : 0.0
+        for f = 1:n_features
+            val += w[(f-1)*nr_c+c] * x[f]
+        end
+        if val > max_val
+            max_val = val
+            best_c = c
+        end
+    end
+    return Int(labels[best_c])
+end
 
 function _train_prealloc_zero!(ws::LiblinearWorkspace, X_tr::AbstractMatrix{Float64}, y_tr::AbstractVector{Int})
     n_feat, n_samp = size(X_tr)

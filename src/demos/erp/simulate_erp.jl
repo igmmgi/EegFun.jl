@@ -74,16 +74,34 @@ function simulate_erp()
     ctrl_layout = gl[2, 1:2] = GridLayout()
 
     trials = Observable(1)
-    Label(ctrl_layout[1, 1], "Number of Trials", halign = :right)
-    sl_trials = Slider(ctrl_layout[1, 2], range = 1:1:500, startvalue = 1)
-    Label(ctrl_layout[1, 3], lift(x -> string(Int(x)), trials), halign = :left)
-    connect!(trials, sl_trials.value)
+    _demo_hslider!(
+        ctrl_layout,
+        1,
+        1,
+        "Number of Trials",
+        1:1:500,
+        1,
+        x -> string(Int(x));
+        obs = trials,
+        sl_width = nothing,
+        lbl_halign = :right,
+        bold = false,
+    )
 
     noise_amp = Observable(0.0)
-    Label(ctrl_layout[1, 4], "Noise Amplitude", halign = :right)
-    sl_noise = Slider(ctrl_layout[1, 5], range = 0.0:1:20.0, startvalue = 0.0)
-    Label(ctrl_layout[1, 6], lift(x -> string(round(x, digits = 1)), noise_amp), halign = :left)
-    connect!(noise_amp, sl_noise.value)
+    _demo_hslider!(
+        ctrl_layout,
+        1,
+        4,
+        "Noise Amplitude",
+        0.0:1:20.0,
+        0.0,
+        x -> string(round(x, digits = 1));
+        obs = noise_amp,
+        sl_width = nothing,
+        lbl_halign = :right,
+        bold = false,
+    )
 
     btn_regen = Button(ctrl_layout[1, 7], label = "Regenerate", width = 120)
 
@@ -97,37 +115,26 @@ function simulate_erp()
 
     components = _SimulatedErpComponent[]
 
+    function _comp_slider!(parent, row, col, rng, startv, fmt)
+        obs = Observable(Float64(startv))
+        sl = Slider(parent[row, col], range = rng, startvalue = startv)
+        Label(parent[row, col+1], lift(fmt, obs), halign = :left)
+        connect!(obs, sl.value)
+        return obs
+    end
+
     function create_component(parent, row)
         active = Observable(false)
-        freq = Observable(3.0)
-        amp = Observable(5.0)
-        latency = Observable(100.0)
-        jitter_amp = Observable(0.0)
-        jitter_lat = Observable(0.0)
-
         tb = Toggle(parent[row, 1], halign = :center)
         tb.active[] = false
         connect!(active, tb.active)
 
-        sl_freq = Slider(parent[row, 2], range = 0.1:0.1:20.0, startvalue = 3.0)
-        Label(parent[row, 3], lift(x -> string(round(x, digits = 1)), freq), halign = :left)
-        connect!(freq, sl_freq.value)
-
-        sl_amp = Slider(parent[row, 4], range = -20.0:1.0:20.0, startvalue = 5.0)
-        Label(parent[row, 5], lift(x -> string(round(x, digits = 1)), amp), halign = :left)
-        connect!(amp, sl_amp.value)
-
-        sl_latency = Slider(parent[row, 6], range = 0.0:10.0:1000.0, startvalue = 100.0)
-        Label(parent[row, 7], lift(x -> string(Int(round(x))), latency), halign = :left)
-        connect!(latency, sl_latency.value)
-
-        sl_jitter_amp = Slider(parent[row, 8], range = 0.0:1.0:20.0, startvalue = 0.0)
-        Label(parent[row, 9], lift(x -> string(round(x, digits = 1)), jitter_amp), halign = :left)
-        connect!(jitter_amp, sl_jitter_amp.value)
-
-        sl_jitter_lat = Slider(parent[row, 10], range = 0.0:1.0:150.0, startvalue = 0.0)
-        Label(parent[row, 11], lift(x -> string(round(x, digits = 1)), jitter_lat), halign = :left)
-        connect!(jitter_lat, sl_jitter_lat.value)
+        fmt_1d = x -> string(round(x, digits = 1))
+        freq = _comp_slider!(parent, row, 2, 0.1:0.1:20.0, 3.0, fmt_1d)
+        amp = _comp_slider!(parent, row, 4, -20.0:1.0:20.0, 5.0, fmt_1d)
+        latency = _comp_slider!(parent, row, 6, 0.0:10.0:1000.0, 100.0, x -> string(Int(round(x))))
+        jitter_amp = _comp_slider!(parent, row, 8, 0.0:1.0:20.0, 0.0, fmt_1d)
+        jitter_lat = _comp_slider!(parent, row, 10, 0.0:1.0:150.0, 0.0, fmt_1d)
 
         return _SimulatedErpComponent(active, freq, amp, latency, jitter_amp, jitter_lat)
     end

@@ -62,22 +62,28 @@ end
 ######### Internal Functions #########
 ######################################
 
-@inline function _subtract_shifted!(dest::AbstractVector{T}, src::AbstractVector{T}, shift::Int) where {T}
+@inline function _accum_shifted!(dest::AbstractVector{T}, src::AbstractVector{T}, shift::Int, ::Val{Sign}) where {T,Sign}
     n = length(dest)
     abs(shift) >= n && return dest
+    s_sgn = T(Sign)
     if shift > 0
         @inbounds @simd for s = 1:(n-shift)
-            dest[s+shift] -= src[s]
+            dest[s+shift] += s_sgn * src[s]
         end
     elseif shift < 0
         s_val = -shift
         @inbounds @simd for s = 1:(n-s_val)
-            dest[s] -= src[s+s_val]
+            dest[s] += s_sgn * src[s+s_val]
         end
     else
         @inbounds @simd for s = 1:n
-            dest[s] -= src[s]
+            dest[s] += s_sgn * src[s]
         end
     end
     return dest
 end
+
+@inline _subtract_shifted!(dest::AbstractVector{T}, src::AbstractVector{T}, shift::Int) where {T} =
+    _accum_shifted!(dest, src, shift, Val(-1))
+
+@inline _add_shifted!(dest::AbstractVector{T}, src::AbstractVector{T}, shift::Int) where {T} = _accum_shifted!(dest, src, shift, Val(1))

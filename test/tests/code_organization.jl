@@ -198,6 +198,10 @@ using EegFun
         @test length(included_src) == length(unique(included_src))
         @test Set(included_src) == Set(all_src)
 
+        # All src/ includes live exclusively in src/EegFun.jl
+        nested_include_files = filter(f -> f != src_entry && !isempty(_collect_includes!(String[], f)), all_src)
+        @test isempty(nested_include_files)
+
         runtests_path = normpath(joinpath(pkg_root, "test", "runtests.jl"))
         included_tests = _collect_includes!(String[], runtests_path)
         all_test_files = String[]
@@ -247,14 +251,6 @@ using EegFun
             (children === nothing || isempty(children)) && continue
 
             exprs = [Expr(ch) for ch in children]
-            # Pure include(...) hub files have no code sections or banners
-            if all(ex -> (c = _unwrap_expr(ex); c isa Expr && c.head === :call && c.args[1] === :include), exprs)
-                if occursin("######################################", content)
-                    push!(banner_violations, "$rel_norm (unexpected banner in include hub)")
-                end
-                continue
-            end
-
             local_internals = Set{Symbol}()
             imported_ext = Set{Symbol}()
             for ex in exprs
@@ -281,8 +277,6 @@ using EegFun
                 cur = _unwrap_expr(ex)
                 rk = if cur isa Expr && (cur.head === :using || cur.head === :import)
                     0
-                elseif cur isa Expr && cur.head === :call && cur.args[1] === :include
-                    4
                 elseif cur isa Expr && cur.head in (:struct, :abstract, :primitive, :macro)
                     1
                 elseif cur isa Expr && cur.head === :const

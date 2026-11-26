@@ -47,19 +47,6 @@ function signal_example_eda_habituation()
     t_vec = collect(range(0.0, t_max, length = 900))
     n_trials = 6
     trials_x = collect(1:n_trials)
-    a_half = 1.6783469900166605
-
-    function eval_scr_unit(t::Real, t_on::Real, t_r::Real, t_h::Real)
-        u = t - t_on
-        if u <= 0.0
-            return 0.0
-        elseif u <= t_r
-            return 0.5 * (1.0 - cos(π * u / t_r))
-        else
-            x = (u - t_r) / t_h
-            return (1.0 + a_half * x) * exp(-a_half * x)
-        end
-    end
 
     # Fixed candidate onset times and amplitudes for Spontaneous Fluctuations (NS-SCRs / SFs)
     sf_specs = [(6.5, 0.28), (28.0, 0.24), (52.5, 0.30), (74.0, 0.25)]
@@ -95,14 +82,14 @@ function signal_example_eda_habituation()
             amp_k = true_amps[k]
             t_on = ts + lat
             @inbounds for i in eachindex(t_vec)
-                phasic_er_vec[i] += amp_k * eval_scr_unit(t_vec[i], t_on, rise, rec_half)
+                phasic_er_vec[i] += amp_k * _demo_eval_scr_unit(t_vec[i], t_on, rise, rec_half)
             end
         end
 
         sf_peaks = Point2f[]
         for (t_sf, amp_sf) in active_sfs
             @inbounds for i in eachindex(t_vec)
-                sf_vec[i] += amp_sf * eval_scr_unit(t_vec[i], t_sf, 1.6, 3.2)
+                sf_vec[i] += amp_sf * _demo_eval_scr_unit(t_vec[i], t_sf, 1.6, 3.2)
             end
         end
 
@@ -341,25 +328,71 @@ function signal_example_eda_habituation()
     ctrl_layout = fig[4, 1:2] = GridLayout(tellwidth = false, halign = :center)
     sl_grid = ctrl_layout[1, 1] = GridLayout(tellwidth = false, halign = :center)
 
-    Label(sl_grid[1, 1], text = "Initial SCR (S1):", font = :bold, fontsize = label_font)
-    sl_scr1 = Slider(sl_grid[1, 2], range = 0.0:0.05:2.5, startvalue = 1.20, width = 105)
-    Label(sl_grid[1, 3], text = lift(v -> "$(round(v, digits=2)) µS", sl_scr1.value), width = 65, fontsize = label_font, halign = :left)
-
-    Label(sl_grid[1, 4], text = "Habituation:", font = :bold, fontsize = label_font)
-    sl_hab = Slider(sl_grid[1, 5], range = 0.0:5.0:100.0, startvalue = 45.0, width = 105)
-    Label(sl_grid[1, 6], text = lift(v -> "$(round(Int, v))%", sl_hab.value), width = 48, fontsize = label_font, halign = :left)
-
-    Label(sl_grid[1, 7], text = "Stimulus ISI:", font = :bold, fontsize = label_font)
-    sl_isi = Slider(sl_grid[1, 8], range = 4.0:0.5:14.0, startvalue = 12.0, width = 105)
-    Label(sl_grid[1, 9], text = lift(v -> "$(round(v, digits=1)) s", sl_isi.value), width = 52, fontsize = label_font, halign = :left)
-
-    Label(sl_grid[1, 10], text = "Tonic Drift:", font = :bold, fontsize = label_font)
-    sl_drift = Slider(sl_grid[1, 11], range = -3.0:0.25:2.0, startvalue = -1.0, width = 95)
-    Label(sl_grid[1, 12], text = lift(v -> "$(round(v, digits=1)) µS/m", sl_drift.value), width = 72, fontsize = label_font, halign = :left)
-
-    Label(sl_grid[1, 13], text = "SFs/min:", font = :bold, fontsize = label_font)
-    sl_sf = Slider(sl_grid[1, 14], range = 0.0:1.0:4.0, startvalue = 1.0, width = 75)
-    Label(sl_grid[1, 15], text = lift(v -> "$(round(Int, v))", sl_sf.value), width = 28, fontsize = label_font, halign = :left)
+    sl_scr1 = _demo_hslider!(
+        sl_grid,
+        1,
+        1,
+        "Initial SCR (S1):",
+        0.0:0.05:2.5,
+        1.20,
+        v -> "$(round(v, digits=2)) µS";
+        obs = obs_scr1,
+        fontsize = label_font,
+        sl_width = 105,
+        val_width = 65,
+    )
+    sl_hab = _demo_hslider!(
+        sl_grid,
+        1,
+        4,
+        "Habituation:",
+        0.0:5.0:100.0,
+        45.0,
+        v -> "$(round(Int, v))%";
+        obs = obs_hab_rate,
+        fontsize = label_font,
+        sl_width = 105,
+        val_width = 48,
+    )
+    sl_isi = _demo_hslider!(
+        sl_grid,
+        1,
+        7,
+        "Stimulus ISI:",
+        4.0:0.5:14.0,
+        12.0,
+        v -> "$(round(v, digits=1)) s";
+        obs = obs_isi,
+        fontsize = label_font,
+        sl_width = 105,
+        val_width = 52,
+    )
+    sl_drift = _demo_hslider!(
+        sl_grid,
+        1,
+        10,
+        "Tonic Drift:",
+        -3.0:0.25:2.0,
+        -1.0,
+        v -> "$(round(v, digits=1)) µS/m";
+        obs = obs_drift,
+        fontsize = label_font,
+        sl_width = 95,
+        val_width = 72,
+    )
+    sl_sf = _demo_hslider!(
+        sl_grid,
+        1,
+        13,
+        "SFs/min:",
+        0.0:1.0:4.0,
+        1.0,
+        v -> "$(round(Int, v))";
+        obs = obs_sf_rate,
+        fontsize = label_font,
+        sl_width = 75,
+        val_width = 28,
+    )
 
     colgap!(sl_grid, 7)
     rowgap!(ctrl_layout, 12)
@@ -380,34 +413,18 @@ function signal_example_eda_habituation()
     Label(btn_grid[1, 6], text = "Novel Stimulus at S6 (Dishabituation)", font = :bold, fontsize = label_font)
     colgap!(btn_grid, 10)
 
-    on(val -> (obs_scr1[] = val), sl_scr1.value)
-    on(val -> (obs_hab_rate[] = val), sl_hab.value)
-    on(val -> (obs_isi[] = val), sl_isi.value)
-    on(val -> (obs_drift[] = val), sl_drift.value)
-    on(val -> (obs_sf_rate[] = val), sl_sf.value)
     on(val -> (obs_novel_s6[] = val), chk_novel.checked)
 
-    on(btn_std.clicks) do _
-        set_close_to!(sl_scr1, 1.20)
-        set_close_to!(sl_hab, 45.0)
-        set_close_to!(sl_isi, 12.0)
-        set_close_to!(sl_drift, -1.0)
-        set_close_to!(sl_sf, 1.0)
+    function _set_hab_preset!(s1, hab, isi, dr, sf)
+        set_close_to!(sl_scr1, s1)
+        set_close_to!(sl_hab, hab)
+        set_close_to!(sl_isi, isi)
+        set_close_to!(sl_drift, dr)
+        set_close_to!(sl_sf, sf)
     end
-    on(btn_ovl.clicks) do _
-        set_close_to!(sl_scr1, 1.35)
-        set_close_to!(sl_hab, 15.0)
-        set_close_to!(sl_isi, 4.5)
-        set_close_to!(sl_drift, 0.0)
-        set_close_to!(sl_sf, 0.0)
-    end
-    on(btn_non.clicks) do _
-        set_close_to!(sl_scr1, 0.0)
-        set_close_to!(sl_hab, 50.0)
-        set_close_to!(sl_isi, 12.0)
-        set_close_to!(sl_drift, -1.25)
-        set_close_to!(sl_sf, 0.0)
-    end
+    on(_ -> _set_hab_preset!(1.20, 45.0, 12.0, -1.0, 1.0), btn_std.clicks)
+    on(_ -> _set_hab_preset!(1.35, 15.0, 4.5, 0.0, 0.0), btn_ovl.clicks)
+    on(_ -> _set_hab_preset!(0.0, 50.0, 12.0, -1.25, 0.0), btn_non.clicks)
 
     rowsize!(fig.layout, 1, Fixed(26))
     rowsize!(fig.layout, 2, Relative(0.45))

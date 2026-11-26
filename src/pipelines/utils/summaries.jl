@@ -87,27 +87,16 @@ function summarize_electrode_repairs(continuous_repairs::Vector{ContinuousRepair
 end
 
 function summarize_electrode_repairs(file_pattern::String; input_dir::String = pwd())
-    files = sort!(_find_batch_files(file_pattern, input_dir); by = _natural_sort_key)
-    if isempty(files)
-        @minimal_warning "No JLD2 files found matching pattern '$file_pattern' in $input_dir"
+    loaded = _load_artifact_infos(file_pattern, input_dir)
+    isnothing(loaded) &&
         return DataFrame(file = String[], repaired = String[], skipped = String[]), DataFrame(electrode = Symbol[], n_participants = Int[])
-    end
 
     files_col = String[]
     rep_col = String[]
     skip_col = String[]
     continuous_repairs = ContinuousRepairInfo[]
 
-    for file in files
-        file_path = joinpath(input_dir, file)
-        isfile(file_path) || continue
-        artifact_info = try
-            read_data(file_path)
-        catch e
-            @minimal_warning "Failed to load artifact info from $file_path: $(sprint(showerror, e))"
-            continue
-        end
-
+    for (stem, artifact_info) in loaded
         file_repaired = Symbol[]
         file_skipped = Symbol[]
         if !isnothing(artifact_info)
@@ -117,7 +106,7 @@ function summarize_electrode_repairs(file_pattern::String; input_dir::String = p
                 !isempty(repair_info.repaired) && push!(continuous_repairs, repair_info)
             end
         end
-        push!(files_col, replace(file, "_artifact_info.jld2" => ""))
+        push!(files_col, stem)
         push!(rep_col, isempty(file_repaired) ? "none" : join(sort!(string.(unique!(file_repaired))), ", "))
         push!(skip_col, isempty(file_skipped) ? "" : join(sort!(string.(unique!(file_skipped))), ", "))
     end
@@ -177,26 +166,15 @@ function summarize_ica_components(ica_components::Vector{ArtifactComponents})
 end
 
 function summarize_ica_components(file_pattern::String; input_dir::String = pwd())
-    files = _find_batch_files(file_pattern, input_dir)
-    if isempty(files)
-        @minimal_warning "No JLD2 files found matching pattern '$file_pattern' in $input_dir"
-        return _empty_ica_summary()
-    end
+    loaded = _load_artifact_infos(file_pattern, input_dir)
+    isnothing(loaded) && return _empty_ica_summary()
 
     ica_components = ArtifactComponents[]
     filenames = String[]
-    for file in files
-        file_path = joinpath(input_dir, file)
-        isfile(file_path) || continue
-        artifact_info = try
-            read_data(file_path)
-        catch e
-            @minimal_warning "Failed to load artifact info from $file_path: $(sprint(showerror, e))"
-            continue
-        end
+    for (stem, artifact_info) in loaded
         if !isnothing(artifact_info) && !isnothing(artifact_info.ica_components)
             push!(ica_components, artifact_info.ica_components)
-            push!(filenames, replace(file, "_artifact_info.jld2" => ""))
+            push!(filenames, stem)
         end
     end
 
@@ -211,6 +189,27 @@ end
 ######################################
 ######### Internal Functions #########
 ######################################
+
+function _load_artifact_infos(file_pattern::String, input_dir::String)
+    files = sort!(_find_batch_files(file_pattern, input_dir); by = _natural_sort_key)
+    if isempty(files)
+        @minimal_warning "No JLD2 files found matching pattern '$file_pattern' in $input_dir"
+        return nothing
+    end
+    loaded = Tuple{String,Any}[]
+    for file in files
+        file_path = joinpath(input_dir, file)
+        isfile(file_path) || continue
+        artifact_info = try
+            read_data(file_path)
+        catch e
+            @minimal_warning "Failed to load artifact info from $file_path: $(sprint(showerror, e))"
+            continue
+        end
+        push!(loaded, (replace(file, "_artifact_info.jld2" => ""), artifact_info))
+    end
+    return loaded
+end
 
 function _file_percentage_summary(files::AbstractVector{S}, pcts::AbstractVector{<:Real}) where {S}
     file_idx = Dict{S,Int}()

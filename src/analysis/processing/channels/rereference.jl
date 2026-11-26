@@ -39,12 +39,8 @@ function rereference!(dat::EegData, reference_selection; channel_selection = cha
     return dat
 end
 
-function rereference!(dat::AbstractVector{<:EegData}, reference_selection; channel_selection = channels())
-    for d in dat
-        rereference!(d, reference_selection; channel_selection = channel_selection)
-    end
-    return dat
-end
+rereference!(dat::AbstractVector{<:EegData}, reference_selection; channel_selection = channels()) =
+    (foreach(d -> rereference!(d, reference_selection; channel_selection = channel_selection), dat); dat)
 
 function rereference(
     file_pattern::String;
@@ -55,13 +51,26 @@ function rereference(
     output_dir::Union{String,Nothing} = nothing,
 )
     _with_batch_logging("rereferencing", "rereference.log", input_dir, output_dir) do ctx
+        _ = output_dir
         @log_call "rereference"
-        output_dir = _prepare_output_dir!(ctx, _default_rereference_output_dir(input_dir, file_pattern, reference_selection))
-        ref_str = reference_selection isa Symbol ? string(reference_selection) : join(reference_selection, ", ")
-        @info "Reference settings: $ref_str"
-        process_fn =
-            (input_path, output_path) -> _process_rereference_file(input_path, output_path, reference_selection, condition_selection)
-        batch_process(process_fn, file_pattern, input_dir, output_dir, participant_selection, "Rereferencing")
+        ref_dir_str = reference_selection isa Symbol ? string(reference_selection) : join(reference_selection, "_")
+        ref_msg_str = reference_selection isa Symbol ? string(reference_selection) : join(reference_selection, ", ")
+        @info "Reference settings: $ref_msg_str"
+        default_dir = joinpath(input_dir, "rereferenced_$(_clean_pattern(file_pattern))_$(ref_dir_str)")
+        return _batch_jld2_files(
+            data ->
+                isempty(data) ? (data, "Rereferenced to $ref_msg_str (empty data)") :
+                (rereference!(data, reference_selection), "Rereferenced to $ref_msg_str"),
+            AbstractVector{<:Union{ErpData,EpochData}},
+            ctx,
+            default_dir,
+            file_pattern,
+            input_dir,
+            participant_selection,
+            "Rereferencing";
+            condition_selection = condition_selection,
+            expected_label = "Vector{ErpData} or Vector{EpochData}",
+        )
     end
 end
 
@@ -69,56 +78,23 @@ end
 ######### Internal Functions #########
 ######################################
 
-function _calculate_reference!(reference::Vector{Float64}, dat::DataFrame, ref_indices::AbstractVector{<:Integer})
-    n = length(reference)
-    if isempty(ref_indices)
-        fill!(reference, 0.0)
-        return reference
-    end
-    c1 = dat[!, ref_indices[1]]
-    if c1 isa Vector{Float64}
-        v1 = c1::Vector{Float64}
-        @inbounds @simd for i = 1:n
-            reference[i] = v1[i]
-        end
-    else
-        @inbounds for i = 1:n
-            reference[i] = Float64(c1[i])
-        end
-    end
-    @inbounds for k = 2:length(ref_indices)
-        col = dat[!, ref_indices[k]]
-        if col isa Vector{Float64}
-            col_f64 = col::Vector{Float64}
-            @simd for i = 1:n
-                reference[i] += col_f64[i]
-            end
-        else
-            reference .+= col
-        end
-    end
-    inv_refs = 1.0 / length(ref_indices)
-    @inbounds @simd for i = 1:n
-        reference[i] *= inv_refs
-    end
-    return reference
-end
+_calculate_reference!(reference::Vector{Float64}, dat::DataFrame, ref_indices::AbstractVector{<:Integer}) =
+    _fill_colmeans_idx!(reference, dat, ref_indices)
 
 _calculate_reference!(reference::Vector{Float64}, dat::DataFrame, reference_channels::AbstractVector{Symbol}) =
-    _calculate_reference!(reference, dat, Int[columnindex(dat, ch) for ch in reference_channels])
+    _fill_colmeans_idx!(reference, dat, Int[columnindex(dat, ch) for ch in reference_channels])
 
-@inline function _subtract_reference_col!(df::DataFrame, col_idx::Int, reference::Vector{Float64}, n::Int)
-    col = df[!, col_idx]
-    if col isa Vector{Float64}
-        col_f64 = col::Vector{Float64}
-        @inbounds @simd for i = 1:n
-            col_f64[i] -= reference[i]
-        end
-    else
-        df[!, col_idx] .-= reference
+@inline function _sub_ref_vec!(col::Vector{Float64}, reference::Vector{Float64}, n::Int)
+    @inbounds @simd for i = 1:n
+        col[i] -= reference[i]
     end
     return nothing
 end
+
+@inline _sub_ref_vec!(col::AbstractVector, reference::Vector{Float64}, ::Int) = (col .-= reference; nothing)
+
+@inline _subtract_reference_col!(df::DataFrame, col_idx::Int, reference::Vector{Float64}, n::Int) =
+    _sub_ref_vec!(df[!, col_idx], reference, n)
 
 function _apply_rereference!(dat::DataFrame, channel_selection::AbstractVector{Symbol}, reference_selection::AbstractVector{Symbol})
     n = n_samples(dat)
@@ -180,27 +156,3 @@ _get_reference_channels(dat, ref::AbstractString; avg_channels::Union{Nothing,Ve
 
 _get_reference_channels(dat, refs::AbstractVector{<:AbstractString}; avg_channels::Union{Nothing,Vector{Symbol}} = nothing) =
     _get_reference_channels(dat, Symbol.(refs); avg_channels = avg_channels)
-
-function _default_rereference_output_dir(input_dir::String, pattern::String, ref_selection)
-    ref_str = ref_selection isa Symbol ? string(ref_selection) : join(ref_selection, "_")
-    return joinpath(input_dir, "rereferenced_$(_clean_pattern(pattern))_$(ref_str)")
-end
-
-function _process_rereference_file(filepath::String, output_path::String, reference_selection, condition_selection::Function)
-    fname = basename(filepath)
-    data = read_data(filepath)
-    isnothing(data) && return BatchResult(false, fname, "No data variables found")
-    data isa AbstractVector{<:Union{ErpData,EpochData}} ||
-        return BatchResult(false, fname, "Invalid data type: expected Vector{ErpData} or Vector{EpochData}")
-
-    data = _condition_select(data, condition_selection)
-    ref_str = reference_selection isa Symbol ? string(reference_selection) : join(reference_selection, ", ")
-    if isempty(data)
-        jldsave(output_path; data = data, format_version = EEGFUN_FORMAT_VERSION)
-        return BatchResult(true, fname, "Rereferenced to $ref_str (empty data)")
-    end
-
-    rereference!(data, reference_selection)
-    jldsave(output_path; data = data, format_version = EEGFUN_FORMAT_VERSION)
-    return BatchResult(true, fname, "Rereferenced to $ref_str")
-end

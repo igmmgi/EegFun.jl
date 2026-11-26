@@ -545,56 +545,22 @@ function Base.copy(layout::Layout)::Layout
     return Layout(copy(layout.data; copycols = true), neighbors_copy, layout.criterion, layout.criterion_type)
 end
 
-Base.getproperty(tf_data::TimeFreqData, name::Symbol) = name === :data ? getfield(tf_data, :data_power) : getfield(tf_data, name)
+Base.getproperty(tf_data::Union{TimeFreqData,TimeFreqEpochData}, name::Symbol) =
+    name === :data ? getfield(tf_data, :data_power) : getfield(tf_data, name)
 
-Base.propertynames(tf::TimeFreqData, private::Bool = false) = (fieldnames(typeof(tf))..., :data)
+Base.propertynames(tf::Union{TimeFreqData,TimeFreqEpochData}, private::Bool = false) = (fieldnames(typeof(tf))..., :data)
 
-function Base.copy(tf_data::TimeFreqData)::TimeFreqData
-    return TimeFreqData(
-        tf_data.file,
-        tf_data.condition,
-        tf_data.condition_name,
-        copy(tf_data.data_power; copycols = true),
-        copy(tf_data.data_phase; copycols = true),
-        copy(tf_data.layout),
-        tf_data.sample_rate,
-        tf_data.method,
-        tf_data.baseline,
-        copy(tf_data.analysis_info),
-    )
-end
+Base.copy(info::AnalysisInfo)::AnalysisInfo = AnalysisInfo(
+    reference = info.reference,
+    hp_filter = info.hp_filter,
+    lp_filter = info.lp_filter,
+    sample_rate = info.sample_rate,
+    n_ica_components_removed = info.n_ica_components_removed,
+    n_channels_repaired = info.n_channels_repaired,
+    repaired_channels = copy(info.repaired_channels),
+)
 
-Base.getproperty(tf_data::TimeFreqEpochData, name::Symbol) = name === :data ? getfield(tf_data, :data_power) : getfield(tf_data, name)
-
-Base.propertynames(tf::TimeFreqEpochData, private::Bool = false) = (fieldnames(typeof(tf))..., :data)
-
-function Base.copy(tf_data::TimeFreqEpochData)::TimeFreqEpochData
-    return TimeFreqEpochData(
-        tf_data.file,
-        tf_data.condition,
-        tf_data.condition_name,
-        [copy(df; copycols = true) for df in tf_data.data_power],
-        [copy(df; copycols = true) for df in tf_data.data_phase],
-        copy(tf_data.layout),
-        tf_data.sample_rate,
-        tf_data.method,
-        tf_data.baseline,
-        copy(tf_data.analysis_info),
-    )
-end
-
-function Base.copy(spectrum_data::SpectrumData)::SpectrumData
-    return SpectrumData(
-        spectrum_data.file,
-        spectrum_data.condition,
-        spectrum_data.condition_name,
-        copy(spectrum_data.data; copycols = true),
-        copy(spectrum_data.layout),
-        spectrum_data.sample_rate,
-        spectrum_data.method,
-        copy(spectrum_data.analysis_info),
-    )
-end
+Base.copy(dat::T) where {T<:EegData} = _create_subset(dat, map(_copy_df_container, _data_frames(dat))..., copy(dat.layout))
 
 function Base.show(io::IO, result::ErpMeasurementsResult)
     println(io, "ErpMeasurementsResult")
@@ -692,29 +658,13 @@ function Base.show(io::IO, ::MIME"text/plain", neighbors_dict::Dict{Symbol,Neigh
     end
 end
 
-function Base.show(io::IO, dat::MultiDataFrameEeg)
-    n_rows = isempty(dat.data) ? 0 : nrow(dat.data[1])
+function Base.show(io::IO, dat::EegData)
     println(io, "File: $(filename(dat))")
     println(io, "Type: $(typeof(dat))")
-    println(io, "Condition $(condition_number(dat)): $(condition_name(dat))")
-    println(io, "Size: $(n_epochs(dat)) (epoch) x $(n_rows) (rows) x $(n_channels(dat)) (columns)")
-    println(io, "Labels: ", _print_vector(channel_labels(dat)))
-    println(io, "Duration: ", duration(dat), " S")
-    println(io, "Sample Rate: ", sample_rate(dat))
-end
-
-function Base.show(io::IO, dat::ContinuousData)
-    println(io, "File: $(filename(dat))")
-    println(io, "Type: $(typeof(dat))")
-    println(io, "Labels: ", _print_vector(channel_labels(dat)))
-    println(io, "Duration: ", duration(dat), " S")
-    println(io, "Sample Rate: ", sample_rate(dat))
-end
-
-function Base.show(io::IO, dat::SingleDataFrameEeg)
-    println(io, "File: $(filename(dat))")
-    println(io, "Type: $(typeof(dat))")
-    println(io, "Condition $(condition_number(dat)): $(condition_name(dat))")
+    dat isa ContinuousData || println(io, "Condition $(condition_number(dat)): $(condition_name(dat))")
+    if dat isa MultiDataFrameEeg
+        println(io, "Size: $(n_epochs(dat)) (epoch) x $(n_samples(dat)) (rows) x $(n_channels(dat)) (columns)")
+    end
     println(io, "Labels: ", _print_vector(channel_labels(dat)))
     println(io, "Duration: ", duration(dat), " S")
     println(io, "Sample Rate: ", sample_rate(dat))
@@ -767,6 +717,9 @@ end
 ######################################
 ######### Internal Functions #########
 ######################################
+
+_copy_df_container(df::DataFrame) = copy(df; copycols = true)
+_copy_df_container(dfs::Vector{DataFrame}) = DataFrame[copy(df; copycols = true) for df in dfs]
 
 function _format_layout_rows(df::DataFrame)
     out = DataFrame()

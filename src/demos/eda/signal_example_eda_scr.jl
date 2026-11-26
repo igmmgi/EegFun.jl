@@ -43,19 +43,6 @@ function signal_example_eda_scr()
     t_stim = 2.0
     t_max = 18.0
     t_vec = collect(range(0.0, t_max, length = 720))
-    a_half = 1.6783469900166605
-
-    function eval_scr_unit(t::Real, t_on::Real, t_r::Real, t_h::Real)
-        u = t - t_on
-        if u <= 0.0
-            return 0.0
-        elseif u <= t_r
-            return 0.5 * (1.0 - cos(π * u / t_r))
-        else
-            x = (u - t_r) / t_h
-            return (1.0 + a_half * x) * exp(-a_half * x)
-        end
-    end
 
     # Left panel: Eccrine sweat glands, poral valve & parallel conductance
     ax_anatomy =
@@ -139,7 +126,7 @@ function signal_example_eda_scr()
     # Dynamic sweat filling level & pore opening (Edelberg's Poral Valve Model)
     duct_state = lift(scl_base, scr_amp, scr_lat, scr_rise, scr_rec_half, playback_time) do base_g, amp_g, lat, rise, rec_h, pt
         t_on = t_stim + lat
-        phasic_frac = pt < 0.0 ? 1.0 : eval_scr_unit(pt, t_on, rise, rec_h)
+        phasic_frac = pt < 0.0 ? 1.0 : _demo_eval_scr_unit(pt, t_on, rise, rec_h)
         curr_g = base_g + amp_g * phasic_frac
 
         # Base filling from tonic SCL (2–20 µS -> 0.22 to 0.68 of duct) + phasic SCR surge (0.1–1.0 µS -> up to +0.35)
@@ -226,7 +213,7 @@ function signal_example_eda_scr()
         t_pk = t_on + rise
         t_50 = t_pk + rec_h
 
-        y_vec = [base_g + amp_g * eval_scr_unit(t, t_on, rise, rec_h) for t in t_vec]
+        y_vec = [base_g + amp_g * _demo_eval_scr_unit(t, t_on, rise, rec_h) for t in t_vec]
         y_base = base_g
         y_pk = base_g + amp_g
         y_50 = base_g + 0.5 * amp_g
@@ -359,69 +346,41 @@ function signal_example_eda_scr()
         fontsize = 12,
         color = "#334155",
     )
-    text!(
-        ax_scr,
-        lift(d -> Point2f(d.t_on, d.y_arrow_row - 0.075 * d.span), scr_plot_data),
-        text = "R onset",
-        align = (:center, :top),
-        font = :bold,
-        fontsize = 12,
-        color = "#0284c7",
+    for (pt_fn, txt_obs, al, fs, col) in (
+        (d -> Point2f(d.t_on, d.y_arrow_row - 0.075 * d.span), "R onset", (:center, :top), 12, "#0284c7"),
+        (d -> Point2f(d.t_pk, d.y_pk + 0.04 * d.span), "R-peak", (:center, :bottom), 13, "#be123c"),
+        (
+            d -> Point2f(0.5 * (t_stim + d.t_on), d.y_arrow_row + 0.025 * d.span),
+            lift(_ -> "Lat. ($(round(scr_lat[], digits=1)) s)", scr_plot_data),
+            (:center, :bottom),
+            11.5,
+            "#0369a1",
+        ),
+        (
+            d -> Point2f(0.5 * (d.t_on + d.t_pk), d.y_arrow_row + 0.025 * d.span),
+            lift(_ -> "Rise ($(round(scr_rise[], digits=1)) s)", scr_plot_data),
+            (:center, :bottom),
+            11.5,
+            "#0369a1",
+        ),
+        (
+            d -> Point2f(0.5 * (d.t_pk + d.t_50), d.y_arrow_row + 0.025 * d.span),
+            lift(_ -> "Rec t/2 ($(round(scr_rec_half[], digits=1)) s)", scr_plot_data),
+            (:center, :bottom),
+            11.5,
+            "#0369a1",
+        ),
+        (
+            d -> Point2f(d.t_on + 0.28 * scr_rise[], 0.5 * (d.y_base + d.y_pk)),
+            lift(d -> d.amp_str, scr_plot_data),
+            (:right, :center),
+            11.5,
+            "#0f172a",
+        ),
+        (d -> Point2f(d.t_50 + 0.25, d.y_50), "50% Recovery", (:left, :center), 11.5, "#059669"),
     )
-    text!(
-        ax_scr,
-        lift(d -> Point2f(d.t_pk, d.y_pk + 0.04 * d.span), scr_plot_data),
-        text = "R-peak",
-        align = (:center, :bottom),
-        font = :bold,
-        fontsize = 13,
-        color = "#be123c",
-    )
-    text!(
-        ax_scr,
-        lift(d -> Point2f(0.5 * (t_stim + d.t_on), d.y_arrow_row + 0.025 * d.span), scr_plot_data),
-        text = lift(_ -> "Lat. ($(round(scr_lat[], digits=1)) s)", scr_plot_data),
-        align = (:center, :bottom),
-        font = :bold,
-        fontsize = 11.5,
-        color = "#0369a1",
-    )
-    text!(
-        ax_scr,
-        lift(d -> Point2f(0.5 * (d.t_on + d.t_pk), d.y_arrow_row + 0.025 * d.span), scr_plot_data),
-        text = lift(_ -> "Rise ($(round(scr_rise[], digits=1)) s)", scr_plot_data),
-        align = (:center, :bottom),
-        font = :bold,
-        fontsize = 11.5,
-        color = "#0369a1",
-    )
-    text!(
-        ax_scr,
-        lift(d -> Point2f(0.5 * (d.t_pk + d.t_50), d.y_arrow_row + 0.025 * d.span), scr_plot_data),
-        text = lift(_ -> "Rec t/2 ($(round(scr_rec_half[], digits=1)) s)", scr_plot_data),
-        align = (:center, :bottom),
-        font = :bold,
-        fontsize = 11.5,
-        color = "#0369a1",
-    )
-    text!(
-        ax_scr,
-        lift(d -> Point2f(d.t_on + 0.28 * scr_rise[], 0.5 * (d.y_base + d.y_pk)), scr_plot_data),
-        text = lift(d -> d.amp_str, scr_plot_data),
-        align = (:right, :center),
-        font = :bold,
-        fontsize = 11.5,
-        color = "#0f172a",
-    )
-    text!(
-        ax_scr,
-        lift(d -> Point2f(d.t_50 + 0.25, d.y_50), scr_plot_data),
-        text = "50% Recovery",
-        align = (:left, :center),
-        font = :bold,
-        fontsize = 11.5,
-        color = "#059669",
-    )
+        text!(ax_scr, lift(pt_fn, scr_plot_data), text = txt_obs, align = al, font = :bold, fontsize = fs, color = col)
+    end
 
     # Playback cursor
     lines!(
@@ -436,25 +395,12 @@ function signal_example_eda_scr()
     ctrl_layout = fig[2, 1] = GridLayout(tellwidth = false, halign = :center)
     sl_grid = ctrl_layout[1, 1] = GridLayout(tellwidth = false, halign = :center)
 
-    Label(sl_grid[1, 1], text = "Baseline SCL:", font = :bold, fontsize = label_font, halign = :right)
-    sl_scl = Slider(sl_grid[1, 2], range = 2.0:0.5:20.0, startvalue = 10.0, width = 110)
-    Label(sl_grid[1, 3], text = lift(v -> "$(round(v, digits=1)) µS", sl_scl.value), width = 62, fontsize = label_font, halign = :left)
-
-    Label(sl_grid[1, 4], text = "SCR Ampl.:", font = :bold, fontsize = label_font, halign = :right)
-    sl_amp = Slider(sl_grid[1, 5], range = 0.1:0.05:1.0, startvalue = 0.5, width = 110)
-    Label(sl_grid[1, 6], text = lift(v -> "$(round(v, digits=2)) µS", sl_amp.value), width = 62, fontsize = label_font, halign = :left)
-
-    Label(sl_grid[2, 1], text = "Latency:", font = :bold, fontsize = label_font, halign = :right)
-    sl_lat = Slider(sl_grid[2, 2], range = 1.0:0.1:3.0, startvalue = 1.5, width = 110)
-    Label(sl_grid[2, 3], text = lift(v -> "$(round(v, digits=1)) s", sl_lat.value), width = 62, fontsize = label_font, halign = :left)
-
-    Label(sl_grid[2, 4], text = "Rise Time:", font = :bold, fontsize = label_font, halign = :right)
-    sl_rise = Slider(sl_grid[2, 5], range = 1.0:0.1:3.0, startvalue = 2.0, width = 110)
-    Label(sl_grid[2, 6], text = lift(v -> "$(round(v, digits=1)) s", sl_rise.value), width = 62, fontsize = label_font, halign = :left)
-
-    Label(sl_grid[3, 1], text = "Rec t/2 (50%):", font = :bold, fontsize = label_font, halign = :right)
-    sl_rec = Slider(sl_grid[3, 2], range = 2.0:0.5:10.0, startvalue = 4.0, width = 110)
-    Label(sl_grid[3, 3], text = lift(v -> "$(round(v, digits=1)) s", sl_rec.value), width = 62, fontsize = label_font, halign = :left)
+    sl_kw = (; fontsize = label_font, sl_width = 110, val_width = 62, lbl_halign = :right)
+    sl_scl = _demo_hslider!(sl_grid, 1, 1, "Baseline SCL:", 2.0:0.5:20.0, 10.0, v -> "$(round(v, digits=1)) µS"; obs = scl_base, sl_kw...)
+    sl_amp = _demo_hslider!(sl_grid, 1, 4, "SCR Ampl.:", 0.1:0.05:1.0, 0.5, v -> "$(round(v, digits=2)) µS"; obs = scr_amp, sl_kw...)
+    _demo_hslider!(sl_grid, 2, 1, "Latency:", 1.0:0.1:3.0, 1.5, v -> "$(round(v, digits=1)) s"; obs = scr_lat, sl_kw...)
+    _demo_hslider!(sl_grid, 2, 4, "Rise Time:", 1.0:0.1:3.0, 2.0, v -> "$(round(v, digits=1)) s"; obs = scr_rise, sl_kw...)
+    _demo_hslider!(sl_grid, 3, 1, "Rec t/2 (50%):", 2.0:0.5:10.0, 4.0, v -> "$(round(v, digits=1)) s"; obs = scr_rec_half, sl_kw...)
 
     colgap!(sl_grid, 8)
     rowgap!(sl_grid, 8)
@@ -480,40 +426,14 @@ function signal_example_eda_scr()
     )
     colgap!(btn_grid, 10)
 
-    on(val -> (scl_base[] = val), sl_scl.value)
-    on(val -> (scr_amp[] = val), sl_amp.value)
-    on(val -> (scr_lat[] = val), sl_lat.value)
-    on(val -> (scr_rise[] = val), sl_rise.value)
-    on(val -> (scr_rec_half[] = val), sl_rec.value)
-
-    on(btn_subj_a.clicks) do _
-        set_close_to!(sl_scl, 5.0)
-        set_close_to!(sl_amp, 0.5)
-    end
-    on(btn_subj_b.clicks) do _
-        set_close_to!(sl_scl, 20.0)
-        set_close_to!(sl_amp, 0.5)
-    end
+    on(_ -> (set_close_to!(sl_scl, 5.0); set_close_to!(sl_amp, 0.5)), btn_subj_a.clicks)
+    on(_ -> (set_close_to!(sl_scl, 20.0); set_close_to!(sl_amp, 0.5)), btn_subj_b.clicks)
 
     is_animating = Ref(false)
     on(btn_play.clicks) do _
-        is_animating[] && return
-        is_animating[] = true
-        @async begin
-            try
-                n_frames = 90
-                dt = t_max / n_frames
-                for frame = 0:n_frames
-                    (!is_animating[] || !events(fig).window_open[]) && break
-                    playback_time[] = frame * dt
-                    sleep(1.0 / 30.0)
-                end
-                if events(fig).window_open[]
-                    playback_time[] = -1.0
-                end
-            finally
-                is_animating[] = false
-            end
+        dt = t_max / 90
+        _demo_run_async!(fig, is_animating, 0:90; on_finish! = () -> (playback_time[] = -1.0)) do frame
+            playback_time[] = frame * dt
         end
     end
 

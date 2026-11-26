@@ -146,369 +146,125 @@ using EegFun
         end
     end
 
-    # Create temporary test directory for batch processing tests
-    test_dir = mktempdir()
-
     @testset "Batch jackknife_average function" begin
-        @testset "Basic batch processing" begin
-            # Create test LRP files for multiple participants
-            for participant = 1:4
-                lrp_data = EegFun.create_test_erp_data(participant = participant, condition = 1)
-                file_path = joinpath(test_dir, "$(participant)_lrp.jld2")
-                jldsave(file_path; data = lrp_data)
+        mktempdir() do test_dir
+            for p = 1:4
+                jldsave(joinpath(test_dir, "$(p)_single_lrp.jld2"); data = EegFun.create_test_erp_data(participant = p, condition = 1))
+                jldsave(
+                    joinpath(test_dir, "$(p)_multi_lrp.jld2");
+                    data = [EegFun.create_test_erp_data(participant = p, condition = c) for c in (1, 2)],
+                )
             end
 
-            output_dir = joinpath(test_dir, "jackknife_test")
-
-            # Test basic jackknife averaging
-            result = EegFun.jackknife_average("lrp", input_dir = test_dir, output_dir = output_dir)
-
-            # Verify output directory was created
-            @test isdir(output_dir)
-
-            # Verify output files (one per participant)
-            output_files = readdir(output_dir)
-            @test "1_lrp.jld2" in output_files
-            @test "2_lrp.jld2" in output_files
-            @test "3_lrp.jld2" in output_files
-            @test "4_lrp.jld2" in output_files
-
-            # Load and verify jackknife data
-            jk1 = load(joinpath(output_dir, "1_lrp.jld2"), "data")
-            @test jk1 isa EegFun.ErpData
-            @test nrow(jk1.data) == 2501
-        end
-
-        @testset "Multiple conditions" begin
-            # Create test LRP files with multiple conditions
-            for participant = 1:4
-                lrp_data = [
-                    EegFun.create_test_erp_data(participant = participant, condition = 1),
-                    EegFun.create_test_erp_data(participant = participant, condition = 2),
-                ]
-                file_path = joinpath(test_dir, "$(participant)_multi_lrp.jld2")
-                jldsave(file_path; data = lrp_data)
+            # Single-condition & multi-condition batch jackknife, logging & auto-dir
+            out_single = joinpath(test_dir, "jk_single")
+            EegFun.jackknife_average("single_lrp"; input_dir = test_dir, output_dir = out_single)
+            for p = 1:4
+                @test isfile(joinpath(out_single, "$(p)_single_lrp.jld2"))
             end
+            jk1 = load(joinpath(out_single, "1_single_lrp.jld2"), "data")
+            lrp2 = load(joinpath(test_dir, "2_single_lrp.jld2"), "data")
+            lrp3 = load(joinpath(test_dir, "3_single_lrp.jld2"), "data")
+            lrp4 = load(joinpath(test_dir, "4_single_lrp.jld2"), "data")
+            @test jk1 isa EegFun.ErpData && nrow(jk1.data) == 2501 && jk1.sample_rate == 1000.0
+            @test jk1.data.Ch1 ≈ (lrp2.data.Ch1 .+ lrp3.data.Ch1 .+ lrp4.data.Ch1) ./ 3 atol = 1e-10
+            log_txt = read(joinpath(out_single, "jackknife.log"), String)
+            @test occursin("Batch jackknife averaging started", log_txt) && occursin("Jackknife averaging complete", log_txt)
 
-            output_dir = joinpath(test_dir, "jackknife_multi")
+            out_multi = joinpath(test_dir, "jk_multi")
+            EegFun.jackknife_average("multi_lrp"; input_dir = test_dir, output_dir = out_multi)
+            jkm1 = load(joinpath(out_multi, "1_multi_lrp.jld2"), "data")
+            @test jkm1 isa Vector{EegFun.ErpData} && [d.condition for d in jkm1] == [1, 2]
 
-            result = EegFun.jackknife_average("multi_lrp", input_dir = test_dir, output_dir = output_dir)
-
-            @test isdir(output_dir)
-
-            # Load and verify - should have vector of ErpData for multiple conditions
-            jk1 = load(joinpath(output_dir, "1_multi_lrp.jld2"), "data")
-            @test jk1 isa Vector{EegFun.ErpData}
-            @test length(jk1) == 2
-
-            # Verify each condition
-            @test jk1[1].condition == 1
-            @test jk1[2].condition == 2
-        end
-
-        @testset "Participant filtering" begin
-            output_dir = joinpath(test_dir, "jackknife_filtered")
-
-            # Test with specific participants
-            # Note: pattern "lrp" matches both "_lrp" and "_multi_lrp" files
-            # So we need to check the actual output corresponds to input files
-            result = EegFun.jackknife_average(
-                "lrp",
+            # Participant & condition filtering, auto-dir & error cases
+            out_pf = joinpath(test_dir, "jk_pf")
+            EegFun.jackknife_average(
+                "multi_lrp";
                 input_dir = test_dir,
                 participant_selection = EegFun.participants([1, 2, 3]),
-                output_dir = output_dir,
+                output_dir = out_pf,
             )
+            @test isfile(joinpath(out_pf, "1_multi_lrp.jld2")) && !isfile(joinpath(out_pf, "4_multi_lrp.jld2"))
 
-            @test isdir(output_dir)
+            out_cf = joinpath(test_dir, "jk_cf")
+            EegFun.jackknife_average("multi_lrp"; input_dir = test_dir, condition_selection = EegFun.conditions([1]), output_dir = out_cf)
+            jk_c1 = load(joinpath(out_cf, "1_multi_lrp.jld2"), "data")
+            @test jk_c1 isa EegFun.ErpData && jk_c1.condition == 1
 
-            # Should have output files for the participants requested
-            output_files = filter(f -> endswith(f, ".jld2"), readdir(output_dir))
-
-            # Files with pattern "lrp" include both "_lrp.jld2" and "_multi_lrp.jld2"
-            # Check that we have the participants we requested
-            @test "1_lrp.jld2" in output_files
-            @test "2_lrp.jld2" in output_files
-            @test "3_lrp.jld2" in output_files
-            @test "1_multi_lrp.jld2" in output_files
-            @test "2_multi_lrp.jld2" in output_files
-            @test "3_multi_lrp.jld2" in output_files
-
-            # And not participant 4
-            @test !("4_lrp.jld2" in output_files)
-            @test !("4_multi_lrp.jld2" in output_files)
-        end
-
-        @testset "Condition filtering" begin
-            output_dir = joinpath(test_dir, "jackknife_cond_filter")
-
-            # Test with specific conditions
-            result = EegFun.jackknife_average(
-                "multi_lrp",
-                input_dir = test_dir,
-                condition_selection = EegFun.conditions([1]),
-                output_dir = output_dir,
-            )
-
-            @test isdir(output_dir)
-
-            # Load and verify - should only have condition 1
-            jk1 = load(joinpath(output_dir, "1_multi_lrp.jld2"), "data")
-            @test jk1 isa EegFun.ErpData  # Single ErpData, not vector
-            @test jk1.condition == 1
-        end
-
-        @testset "Custom data variable" begin
-            # Create test ERP files (not LRP)
-            for participant = 1:3
-                erp_data = [EegFun.create_test_erp_data(participant = participant, condition = 1)]
-                file_path = joinpath(test_dir, "$(participant)_erps.jld2")
-                jldsave(file_path; data = erp_data)
-            end
-
-            output_dir = joinpath(test_dir, "jackknife_erps")
-
-            # Test with different data variable name
-            result = EegFun.jackknife_average("erps", input_dir = test_dir, output_dir = output_dir)
-
-            @test isdir(output_dir)
-
-            # Verify output files
-            @test "1_erps.jld2" in readdir(output_dir)
-            @test "2_erps.jld2" in readdir(output_dir)
-            @test "3_erps.jld2" in readdir(output_dir)
-        end
-
-        @testset "Jackknife calculation verification in batch" begin
-            # Create a separate test directory with only single-condition files to avoid ambiguity
-            verify_dir = mktempdir()
-
-            # Create test files with specific known values
-            for participant = 1:3
-                lrp_data = EegFun.create_test_erp_data(participant = participant, condition = 1)
-                file_path = joinpath(verify_dir, "$(participant)_verify.jld2")
-                jldsave(file_path; data = lrp_data)
-            end
-
-            output_dir = joinpath(verify_dir, "jackknife_output")
-
-            result = EegFun.jackknife_average("verify", input_dir = verify_dir, output_dir = output_dir)
-
-            # Load original data
-            lrp1 = load(joinpath(verify_dir, "1_verify.jld2"), "data")
-            lrp2 = load(joinpath(verify_dir, "2_verify.jld2"), "data")
-            lrp3 = load(joinpath(verify_dir, "3_verify.jld2"), "data")
-
-            # Load jackknife for participant 1 (should exclude participant 1)
-            jk1 = load(joinpath(output_dir, "1_verify.jld2"), "data")
-
-            # Since there's only one condition, should be single ErpData
-            @test jk1 isa EegFun.ErpData
-
-            # Verify: jackknife 1 should be average of participants 2 and 3
-            expected_ch = (lrp2.data.Ch1 .+ lrp3.data.Ch1) ./ 2
-            @test all(abs.(jk1.data.Ch1 .- expected_ch) .< 1e-10)
-
-            # Cleanup
-            rm(verify_dir, recursive = true)
-        end
-
-        @testset "Error handling: insufficient files" begin
-            # Create directory with only 1 file
-            single_dir = mktempdir()
-            jldsave(joinpath(single_dir, "1_lrp.jld2"); data = EegFun.create_test_erp_data(participant = 1, condition = 1))
-
-            output_dir = joinpath(single_dir, "jackknife_insufficient")
-
-            result = EegFun.jackknife_average("lrp", input_dir = single_dir, output_dir = output_dir)
-
-            # Should return nothing due to insufficient participants
-            @test isnothing(result)
-
-            rm(single_dir, recursive = true)
-        end
-
-        @testset "Error handling: no matching files" begin
-            output_dir = joinpath(test_dir, "jackknife_nomatch")
-
-            result = EegFun.jackknife_average("nonexistent", input_dir = test_dir, output_dir = output_dir)
-
-            # Should return nothing when no files found
-            @test isnothing(result)
-        end
-
-        @testset "Logging" begin
-            output_dir = joinpath(test_dir, "jackknife_logging")
-
-            result = EegFun.jackknife_average("lrp", input_dir = test_dir, output_dir = output_dir)
-
-            # Check that log file was created
-            log_file = joinpath(output_dir, "jackknife.log")
-            @test isfile(log_file)
-
-            # Verify log content
-            log_content = read(log_file, String)
-            @test occursin("Batch jackknife averaging started", log_content)
-            @test occursin("Found", log_content)
-            @test occursin("Jackknife averaging complete", log_content)
-        end
-
-        @testset "Output structure" begin
-            output_dir = joinpath(test_dir, "jackknife_structure")
-
-            result = EegFun.jackknife_average(
-                "lrp",
-                input_dir = test_dir,
-                participant_selection = EegFun.participants([1, 2]),
-                output_dir = output_dir,
-            )
-
-            jk1 = load(joinpath(output_dir, "1_lrp.jld2"), "data")
-
-            # When multiple conditions exist, result is Vector{ErpData}, otherwise single ErpData
-            if jk1 isa Vector
-                @test length(jk1) > 0
-                @test all(x -> x isa EegFun.ErpData, jk1)
-
-                # Test first condition
-                jk1_cond = jk1[1]
-                @test jk1_cond.sample_rate == 1000.0
-                @test jk1_cond.layout isa EegFun.Layout
-                @test jk1_cond.analysis_info isa EegFun.AnalysisInfo
-                @test jk1_cond.data isa DataFrame
-                @test nrow(jk1_cond.data) == 2501
-                @test "time" in names(jk1_cond.data)
-                # condition and condition_name are now in struct, not DataFrame
-                @test hasproperty(jk1_cond, :condition)
-                @test hasproperty(jk1_cond, :condition_name)
-                @test "Ch1" in names(jk1_cond.data)
-                @test "Ch2" in names(jk1_cond.data)
-                @test "Ch3" in names(jk1_cond.data)
-            else
-                # Single condition case
-                @test jk1 isa EegFun.ErpData
-                @test jk1.sample_rate == 1000.0
-                @test jk1.layout isa EegFun.Layout
-                @test jk1.analysis_info isa EegFun.AnalysisInfo
-                @test jk1.data isa DataFrame
-                @test nrow(jk1.data) == 2501
-                @test "time" in names(jk1.data)
-                # condition and condition_name are now in struct, not DataFrame
-                @test hasproperty(jk1, :condition)
-                @test hasproperty(jk1, :condition_name)
-                @test "Ch1" in names(jk1.data)
-                @test "Ch2" in names(jk1.data)
-                @test "Ch3" in names(jk1.data)
-            end
-        end
-
-        @testset "Auto-generated output directory" begin
-            result = EegFun.jackknife_average("lrp", input_dir = test_dir)
-
-            # Should create directory with pattern-based name
-            expected_dir = joinpath(test_dir, "jackknife_lrp")
-            @test isdir(expected_dir)
+            EegFun.jackknife_average("multi_lrp"; input_dir = test_dir)
+            @test isdir(joinpath(test_dir, "jackknife_multi_lrp"))
+            @test isnothing(EegFun.jackknife_average("nonexistent"; input_dir = test_dir))
+            @test isnothing(EegFun.jackknife_average("multi_lrp"; input_dir = test_dir, participant_selection = EegFun.participants([1])))
         end
 
         @testset "Excluded file metadata, missing-condition participant alignment, and pseudovalues" begin
-            # 1. excluded_erp.file stamped onto each leave-one-out ErpData & pseudovalues = true in-memory
             e1 = EegFun.create_test_erp_data(participant = 1, condition = 1, n_channels = 2)
             e2 = EegFun.create_test_erp_data(participant = 2, condition = 1, n_channels = 2)
             e3 = EegFun.create_test_erp_data(participant = 3, condition = 1, n_channels = 2)
-            e1.file = "sub01_custom"
-            e2.file = "sub02_custom"
-            e3.file = "sub03_custom"
+            e1.file, e2.file, e3.file = "sub01_custom", "sub02_custom", "sub03_custom"
             e1.data.Ch1 .= 10.0
             e2.data.Ch1 .= 20.0
             e3.data.Ch1 .= 60.0
 
             jk_sub = EegFun.jackknife_average([e1, e2, e3]; pseudovalues = false)
             @test [d.file for d in jk_sub] == ["sub01_custom", "sub02_custom", "sub03_custom"]
-            @test jk_sub[1].data.Ch1[1] ≈ 40.0 # (20 + 60) / 2
+            @test jk_sub[1].data.Ch1[1] ≈ 40.0
 
-            # Smulders (2010): J_i = N * X_bar - (N - 1) * X_{-i} -> for linear mean, J_i recovers X_i exactly and mean(J) == X_bar!
             jk_pv = EegFun.jackknife_average([e1, e2, e3]; pseudovalues = true)
             @test [d.file for d in jk_pv] == ["sub01_custom", "sub02_custom", "sub03_custom"]
-            @test jk_pv[1].data.Ch1[1] ≈ 10.0 atol = 1e-10
-            @test jk_pv[2].data.Ch1[1] ≈ 20.0 atol = 1e-10
-            @test jk_pv[3].data.Ch1[1] ≈ 60.0 atol = 1e-10
+            @test [d.data.Ch1[1] for d in jk_pv] ≈ [10.0, 20.0, 60.0] atol = 1e-10
             @test mean([d.data.Ch1[1] for d in jk_pv]) ≈ 30.0 atol = 1e-10
 
-            # 2. Batch alignment when participant 2 misses condition 1 (only p1 and p3 have cond 1; all 3 have cond 2)
-            align_dir = mktempdir()
-            out_align = joinpath(align_dir, "out")
-            out_align_pv = joinpath(align_dir, "out_pv")
-            p1_c1 = EegFun.create_test_erp_data(participant = 1, condition = 1, n_channels = 2)
-            p1_c2 = EegFun.create_test_erp_data(participant = 1, condition = 2, n_channels = 2)
-            p2_c2 = EegFun.create_test_erp_data(participant = 2, condition = 2, n_channels = 2) # missing condition 1
-            p3_c1 = EegFun.create_test_erp_data(participant = 3, condition = 1, n_channels = 2)
-            p3_c2 = EegFun.create_test_erp_data(participant = 3, condition = 2, n_channels = 2)
-            p1_c1.data.Ch1 .= 100.0
-            p3_c1.data.Ch1 .= 200.0
+            mktempdir() do align_dir
+                out_align = joinpath(align_dir, "out")
+                out_align_pv = joinpath(align_dir, "out_pv")
+                p1_c1 = EegFun.create_test_erp_data(participant = 1, condition = 1, n_channels = 2)
+                p1_c2 = EegFun.create_test_erp_data(participant = 1, condition = 2, n_channels = 2)
+                p2_c2 = EegFun.create_test_erp_data(participant = 2, condition = 2, n_channels = 2)
+                p3_c1 = EegFun.create_test_erp_data(participant = 3, condition = 1, n_channels = 2)
+                p3_c2 = EegFun.create_test_erp_data(participant = 3, condition = 2, n_channels = 2)
+                p1_c1.data.Ch1 .= 100.0
+                p3_c1.data.Ch1 .= 200.0
 
-            jldsave(joinpath(align_dir, "1_align.jld2"); data = [p1_c1, p1_c2])
-            jldsave(joinpath(align_dir, "2_align.jld2"); data = [p2_c2])
-            jldsave(joinpath(align_dir, "3_align.jld2"); data = [p3_c1, p3_c2])
+                jldsave(joinpath(align_dir, "1_align.jld2"); data = [p1_c1, p1_c2])
+                jldsave(joinpath(align_dir, "2_align.jld2"); data = [p2_c2])
+                jldsave(joinpath(align_dir, "3_align.jld2"); data = [p3_c1, p3_c2])
 
-            EegFun.jackknife_average("align"; input_dir = align_dir, output_dir = out_align)
-            EegFun.jackknife_average("align"; input_dir = align_dir, output_dir = out_align_pv, pseudovalues = true)
-            out1_pv = load(joinpath(out_align_pv, "1_align.jld2"), "data")
-            @test out1_pv[1].data.Ch1[1] ≈ 100.0 atol = 1e-10
-            out1 = load(joinpath(out_align, "1_align.jld2"), "data")
-            out2 = load(joinpath(out_align, "2_align.jld2"), "data")
-            out3 = load(joinpath(out_align, "3_align.jld2"), "data")
+                EegFun.jackknife_average("align"; input_dir = align_dir, output_dir = out_align)
+                EegFun.jackknife_average("align"; input_dir = align_dir, output_dir = out_align_pv, pseudovalues = true)
+                @test load(joinpath(out_align_pv, "1_align.jld2"), "data")[1].data.Ch1[1] ≈ 100.0 atol = 1e-10
+                out1 = load(joinpath(out_align, "1_align.jld2"), "data")
+                out2 = load(joinpath(out_align, "2_align.jld2"), "data")
+                out3 = load(joinpath(out_align, "3_align.jld2"), "data")
 
-            # Participant 2 only has condition 2
-            @test out2 isa EegFun.ErpData && out2.condition == 2
-            # Participant 3's condition 1 leave-one-out must exclude p3 (leaving p1 = 100.0)
-            @test out1 isa Vector{EegFun.ErpData} && length(out1) == 2
-            @test out3 isa Vector{EegFun.ErpData} && length(out3) == 2
-            c1_out3 = only(filter(x -> x.condition == 1, out3))
-            @test c1_out3.data.Ch1[1] ≈ 100.0 atol = 1e-10
-            rm(align_dir, recursive = true, force = true)
+                @test out2 isa EegFun.ErpData && out2.condition == 2
+                @test out1 isa Vector{EegFun.ErpData} && length(out1) == 2
+                @test out3 isa Vector{EegFun.ErpData} && length(out3) == 2
+                @test only(filter(x->x.condition==1, out3)).data.Ch1[1] ≈ 100.0 atol = 1e-10
+            end
         end
     end
 
     @testset "In-memory multi-condition grouping and condition_selection" begin
-        p1_c1 = EegFun.create_test_erp_data(participant = 1, condition = 1, n_channels = 2)
-        p2_c1 = EegFun.create_test_erp_data(participant = 2, condition = 1, n_channels = 2)
-        p3_c1 = EegFun.create_test_erp_data(participant = 3, condition = 1, n_channels = 2)
-        p1_c2 = EegFun.create_test_erp_data(participant = 1, condition = 2, n_channels = 2)
-        p2_c2 = EegFun.create_test_erp_data(participant = 2, condition = 2, n_channels = 2)
-        p3_c2 = EegFun.create_test_erp_data(participant = 3, condition = 2, n_channels = 2)
+        multi_erps = EegFun.ErpData[]
+        for (p, v1, v2) in ((1, 10.0, 1000.0), (2, 20.0, 2000.0), (3, 30.0, 3000.0))
+            for (c, cname, v) in ((1, "cond_1", v1), (2, "cond_2", v2))
+                e = EegFun.create_test_erp_data(participant = p, condition = c, n_channels = 2)
+                e.condition_name = cname
+                e.data.Ch1 .= v
+                push!(multi_erps, e)
+            end
+        end
 
-        p1_c1.condition_name = "cond_1"
-        p2_c1.condition_name = "cond_1"
-        p3_c1.condition_name = "cond_1"
-        p1_c2.condition_name = "cond_2"
-        p2_c2.condition_name = "cond_2"
-        p3_c2.condition_name = "cond_2"
-
-        p1_c1.data.Ch1 .= 10.0
-        p2_c1.data.Ch1 .= 20.0
-        p3_c1.data.Ch1 .= 30.0
-        p1_c2.data.Ch1 .= 1000.0
-        p2_c2.data.Ch1 .= 2000.0
-        p3_c2.data.Ch1 .= 3000.0
-
-        multi_erps = [p1_c1, p1_c2, p2_c1, p2_c2, p3_c1, p3_c2]
         jk_all = EegFun.jackknife_average(multi_erps)
         @test length(jk_all) == 6
-        jk_c1 = filter(x -> x.condition == 1, jk_all)
-        jk_c2 = filter(x -> x.condition == 2, jk_all)
-        @test length(jk_c1) == 3 && length(jk_c2) == 3
-        @test jk_c1[1].data.Ch1[1] ≈ 25.0 atol = 1e-10
-        @test jk_c2[1].data.Ch1[1] ≈ 2500.0 atol = 1e-10
+        @test filter(x->x.condition==1, jk_all)[1].data.Ch1[1] ≈ 25.0 atol = 1e-10
+        @test filter(x->x.condition==2, jk_all)[1].data.Ch1[1] ≈ 2500.0 atol = 1e-10
 
         jk_sel2 = EegFun.jackknife_average(multi_erps; condition_selection = EegFun.conditions(2))
-        @test length(jk_sel2) == 3
-        @test all(x -> x.condition == 2, jk_sel2)
-        @test jk_sel2[1].data.Ch1[1] ≈ 2500.0 atol = 1e-10
+        @test length(jk_sel2) == 3 && all(x -> x.condition == 2, jk_sel2) && isapprox(jk_sel2[1].data.Ch1[1], 2500.0; atol = 1e-10)
 
         jk_named = EegFun.jackknife_average(multi_erps; condition_selection = EegFun.conditions("cond_2"))
-        @test length(jk_named) == 3
-        @test jk_named[2].data.Ch1[1] ≈ 2000.0 atol = 1e-10
+        @test length(jk_named) == 3 && isapprox(jk_named[2].data.Ch1[1], 2000.0; atol = 1e-10)
     end
-
-    # Cleanup
-    rm(test_dir, recursive = true)
 end

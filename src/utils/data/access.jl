@@ -10,13 +10,9 @@
 Return the underlying tabular data as a `DataFrame`.
 """
 all_data(dat::SingleDataFrameEeg)::DataFrame = dat.data
-
 all_data(dat::MultiDataFrameEeg)::DataFrame = to_data_frame(dat)
-
 all_data(dat::Vector{<:MultiDataFrameEeg})::DataFrame = to_data_frame(dat)
-
 all_data(dat::DataFrame)::DataFrame = dat
-
 all_data(dat::Vector{DataFrame})::DataFrame = isempty(dat) ? DataFrame() : reduce(vcat, dat)
 
 function all_data(dat::Vector{<:SingleDataFrameEeg})::DataFrame
@@ -115,9 +111,10 @@ extra_data(dat::MultiDataFrameEeg)::DataFrame = _get_cols_data(dat, :extra)
 
 Return all column names of `dat`.
 """
-all_labels(dat::SingleDataFrameEeg)::Vector{Symbol} = propertynames(dat.data)
-
-all_labels(dat::MultiDataFrameEeg)::Vector{Symbol} = isempty(dat.data) ? Symbol[] : propertynames(dat.data[1])
+function all_labels(dat::EegData)::Vector{Symbol}
+    df = _first_df(dat)
+    return isnothing(df) ? Symbol[] : propertynames(df)
+end
 
 all_labels(dat::MultiDataFrameEeg, epoch::Int)::Vector{Symbol} = propertynames(dat.data[epoch])
 
@@ -128,13 +125,12 @@ all_labels(dat::DataFrame)::Vector{Symbol} = propertynames(dat)
 
 Return the `:time` vector in seconds from `dat` (or its first epoch for `MultiDataFrameEeg`).
 """
-time_vector(dat::SingleDataFrameEeg)::Vector{Float64} = hasproperty(dat.data, :time) ? dat.data[!, :time] : Float64[]
+function time_vector(dat::EegData)::Vector{Float64}
+    df = _first_df(dat)
+    return isnothing(df) ? Float64[] : time_vector(df)
+end
 
-time_vector(dat::MultiDataFrameEeg)::Vector{Float64} =
-    !isempty(dat.data) && hasproperty(dat.data[1], :time) ? dat.data[1][!, :time] : Float64[]
-
-time_vector(dat::MultiDataFrameEeg, epoch::Int)::Vector{Float64} =
-    hasproperty(dat.data[epoch], :time) ? dat.data[epoch][!, :time] : Float64[]
+time_vector(dat::MultiDataFrameEeg, epoch::Int)::Vector{Float64} = time_vector(dat.data[epoch])
 
 time_vector(dat::Vector{T}) where {T<:EegData} = isempty(dat) ? Float64[] : time_vector(dat[1])
 
@@ -237,9 +233,10 @@ filter_info(dat::AnalysisInfo)::Vector{Float64} = [dat.hp_filter, dat.lp_filter]
 
 Return the number of time/frequency samples per epoch or DataFrame.
 """
-n_samples(dat::SingleDataFrameEeg)::Int = nrow(dat.data)
-
-n_samples(dat::MultiDataFrameEeg)::Int = isempty(dat.data) ? 0 : nrow(dat.data[1])
+function n_samples(dat::EegData)::Int
+    df = _first_df(dat)
+    return isnothing(df) ? 0 : nrow(df)
+end
 
 n_samples(dat::MultiDataFrameEeg, epoch::Int)::Int = nrow(dat.data[epoch])
 
@@ -286,8 +283,6 @@ n_epochs(dat::SingleDataFrameEeg)::Int = 1
 
 n_epochs(dat::MultiDataFrameEeg)::Int = length(dat.data)
 
-n_epochs(dat::TimeFreqEpochData)::Int = length(dat.data_power)
-
 n_epochs(dat::ErpData)::Int = dat.n_epochs
 
 """
@@ -324,15 +319,12 @@ end
 
 Return the time span in seconds (`last(time) - first(time)`).
 """
-duration(dat::SingleDataFrameEeg)::Float64 =
-    hasproperty(dat.data, :time) && !isempty(dat.data.time) ? last(dat.data.time) - first(dat.data.time) : 0.0
+function duration(dat::EegData)::Float64
+    df = _first_df(dat)
+    return isnothing(df) ? 0.0 : _df_duration(df)
+end
 
-duration(dat::MultiDataFrameEeg)::Float64 =
-    !isempty(dat.data) && hasproperty(dat.data[1], :time) && !isempty(dat.data[1].time) ? last(dat.data[1].time) - first(dat.data[1].time) :
-    0.0
-
-duration(dat::MultiDataFrameEeg, epoch::Int)::Float64 =
-    hasproperty(dat.data[epoch], :time) && !isempty(dat.data[epoch].time) ? last(dat.data[epoch].time) - first(dat.data[epoch].time) : 0.0
+duration(dat::MultiDataFrameEeg, epoch::Int)::Float64 = _df_duration(dat.data[epoch])
 
 duration(dat::Vector{T}) where {T<:EegData} = isempty(dat) ? 0.0 : duration(dat[1])
 
@@ -366,6 +358,8 @@ end
 ######################################
 ######### Internal Functions #########
 ######################################
+
+_df_duration(df::DataFrame)::Float64 = hasproperty(df, :time) && !isempty(df.time) ? last(df.time) - first(df.time) : 0.0
 
 function _get_cols_data(dat::SingleDataFrameEeg, group::Symbol)
     cols = _get_cols_by_group(dat, group)

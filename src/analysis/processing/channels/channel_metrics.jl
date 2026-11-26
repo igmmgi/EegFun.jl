@@ -222,115 +222,67 @@ end
     return first_s:last_s
 end
 
-function _extract_channel_sample_matrix(dat::DataFrame, selected_samples::Vector{Int}, selected_channels::Vector{Symbol})::Matrix{Float64}
-    n_s = length(selected_samples)
-    n_ch = length(selected_channels)
-    X = Matrix{Float64}(undef, n_s, n_ch)
-    contig = _contiguous_sample_range(selected_samples)
-
-    for (c, ch) in enumerate(selected_channels)
-        col = dat[!, ch]
-        if col isa Vector{Float64}
-            col_f = col::Vector{Float64}
-            if !isnothing(contig)
-                @inbounds copyto!(X, (c - 1) * n_s + 1, col_f, first(contig), n_s)
-            else
-                @inbounds @simd for s = 1:n_s
-                    X[s, c] = col_f[selected_samples[s]]
-                end
-            end
-        elseif !isnothing(contig)
-            s0 = first(contig) - 1
-            @inbounds for s = 1:n_s
-                X[s, c] = Float64(col[s0+s])
-            end
-        else
-            @inbounds for s = 1:n_s
-                X[s, c] = Float64(col[selected_samples[s]])
-            end
+@inline function _copy_selected_samples!(
+    dst::AbstractVector{Float64},
+    col::AbstractVector,
+    contig::Union{Nothing,UnitRange{Int}},
+    selected_samples::Vector{Int},
+)
+    if col isa Vector{Float64} && !isnothing(contig)
+        @inbounds copyto!(dst, 1, col, first(contig), length(dst))
+    elseif !isnothing(contig)
+        s0 = first(contig) - 1
+        @inbounds @simd for s in eachindex(dst)
+            dst[s] = Float64(col[s0+s])
         end
+    else
+        @inbounds @simd for s in eachindex(dst)
+            dst[s] = Float64(col[selected_samples[s]])
+        end
+    end
+    return dst
+end
+
+function _extract_channel_sample_matrix(dat::DataFrame, selected_samples::Vector{Int}, selected_channels::Vector{Symbol})::Matrix{Float64}
+    X = Matrix{Float64}(undef, length(selected_samples), length(selected_channels))
+    contig = _contiguous_sample_range(selected_samples)
+    for (c, ch) in enumerate(selected_channels)
+        _copy_selected_samples!(@view(X[:, c]), dat[!, ch], contig, selected_samples)
     end
     return X
 end
 
-function _extract_unit_centered_matrix(dat::DataFrame, selected_samples::Vector{Int}, selected_channels::Vector{Symbol})::Matrix{Float64}
-    n_s = length(selected_samples)
-    n_ch = length(selected_channels)
-    Z = Matrix{Float64}(undef, n_s, n_ch)
-    contig = _contiguous_sample_range(selected_samples)
-    inv_n = 1.0 / n_s
+@inline function _unit_center_slice!(zcol::AbstractVector{Float64}, src::AbstractVector)
+    n_s = length(zcol)
+    sum_x = 0.0
+    @inbounds @simd for s = 1:n_s
+        sum_x += Float64(src[s])
+    end
+    μ = sum_x / n_s
+    ss = 0.0
+    @inbounds @simd for s = 1:n_s
+        d = Float64(src[s]) - μ
+        zcol[s] = d
+        ss = muladd(d, d, ss)
+    end
+    if ss > 0.0
+        inv_norm = 1.0 / sqrt(ss)
+        @inbounds @simd for s = 1:n_s
+            zcol[s] *= inv_norm
+        end
+    else
+        @inbounds fill!(zcol, NaN)
+    end
+    return nothing
+end
 
+function _extract_unit_centered_matrix(dat::DataFrame, selected_samples::Vector{Int}, selected_channels::Vector{Symbol})::Matrix{Float64}
+    Z = Matrix{Float64}(undef, length(selected_samples), length(selected_channels))
+    contig = _contiguous_sample_range(selected_samples)
     for (c, ch) in enumerate(selected_channels)
         col = dat[!, ch]
-        if col isa Vector{Float64} && !isnothing(contig)
-            col_f = col::Vector{Float64}
-            s0 = first(contig) - 1
-            sum_x = 0.0
-            @inbounds @simd for s = 1:n_s
-                sum_x += col_f[s0+s]
-            end
-            μ = sum_x * inv_n
-            ss = 0.0
-            @inbounds @simd for s = 1:n_s
-                d = col_f[s0+s] - μ
-                Z[s, c] = d
-                ss = muladd(d, d, ss)
-            end
-            if ss > 0.0
-                inv_norm = 1.0 / sqrt(ss)
-                @inbounds @simd for s = 1:n_s
-                    Z[s, c] *= inv_norm
-                end
-            else
-                @inbounds fill!(@view(Z[:, c]), NaN)
-            end
-        else
-            sum_x = 0.0
-            if col isa Vector{Float64}
-                col_f = col::Vector{Float64}
-                @inbounds @simd for s = 1:n_s
-                    sum_x += col_f[selected_samples[s]]
-                end
-                μ = sum_x * inv_n
-                ss = 0.0
-                @inbounds @simd for s = 1:n_s
-                    d = col_f[selected_samples[s]] - μ
-                    Z[s, c] = d
-                    ss = muladd(d, d, ss)
-                end
-            elseif !isnothing(contig)
-                s0 = first(contig) - 1
-                @inbounds for s = 1:n_s
-                    sum_x += Float64(col[s0+s])
-                end
-                μ = sum_x * inv_n
-                ss = 0.0
-                @inbounds for s = 1:n_s
-                    d = Float64(col[s0+s]) - μ
-                    Z[s, c] = d
-                    ss = muladd(d, d, ss)
-                end
-            else
-                @inbounds for s = 1:n_s
-                    sum_x += Float64(col[selected_samples[s]])
-                end
-                μ = sum_x * inv_n
-                ss = 0.0
-                @inbounds for s = 1:n_s
-                    d = Float64(col[selected_samples[s]]) - μ
-                    Z[s, c] = d
-                    ss = muladd(d, d, ss)
-                end
-            end
-            if ss > 0.0
-                inv_norm = 1.0 / sqrt(ss)
-                @inbounds @simd for s = 1:n_s
-                    Z[s, c] *= inv_norm
-                end
-            else
-                @inbounds fill!(@view(Z[:, c]), NaN)
-            end
-        end
+        src = !isnothing(contig) ? @view(col[contig]) : @view(col[selected_samples])
+        _unit_center_slice!(@view(Z[:, c]), src)
     end
     return Z
 end

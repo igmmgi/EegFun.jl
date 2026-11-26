@@ -291,18 +291,8 @@ function signal_example_composition()
     btn_saw = Button(preset_layout[2, 2], label = "Sawtooth", width = 120)
     btn_scramble = Button(preset_layout[3, 1:2], label = "Scramble Phase (Keep Power)", width = 240)
 
-    function _apply_preset!(f::F) where {F}
-        is_applying_preset[] = true
-        try
-            f()
-        finally
-            is_applying_preset[] = false
-        end
-        update_signals()
-    end
-
     on(btn_square.clicks) do _
-        _apply_preset!() do
+        _demo_batch_update!(is_applying_preset, update_signals) do
             for (i, fval, aval) in ((1, 5.0, 5.0), (2, 15.0, 5.0 / 3.0), (3, 25.0, 1.0))
                 set_close_to!(freq_sliders[i], fval)
                 set_close_to!(amp_sliders[i], aval)
@@ -314,7 +304,7 @@ function signal_example_composition()
     end
 
     on(btn_saw.clicks) do _
-        _apply_preset!() do
+        _demo_batch_update!(is_applying_preset, update_signals) do
             for (i, fval, aval, pval) in ((1, 5.0, 5.0, 0.0), (2, 10.0, 2.5, π), (3, 15.0, 5.0 / 3.0, 0.0))
                 set_close_to!(freq_sliders[i], fval)
                 set_close_to!(amp_sliders[i], aval)
@@ -326,7 +316,7 @@ function signal_example_composition()
     end
 
     on(btn_scramble.clicks) do _
-        _apply_preset!() do
+        _demo_batch_update!(is_applying_preset, update_signals) do
             for i = 1:3
                 set_close_to!(phase_sliders[i], rand() * 2π - π)
             end
